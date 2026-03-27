@@ -154,6 +154,22 @@ body {
 .nav-item-tag.wip { background: rgba(96,165,250,.1); color: var(--blue); }
 .nav-item-tag.ref { background: rgba(148,163,184,.06); color: var(--text-faint); }
 
+/* Timestamp */
+.nav-item-time {
+  font-size: 9px; color: var(--text-faint); flex-shrink: 0;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.nav-item-time.fresh { color: var(--green); }
+.nav-item-time.recent { color: var(--text-muted); }
+
+.topbar-time {
+  font-size: 10px; color: var(--text-faint); font-variant-numeric: tabular-nums;
+  display: flex; align-items: center; gap: 4px;
+}
+.topbar-time .dot {
+  width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0;
+}
+
 /* Archive nav items — more compact */
 .nav-item.archive { padding: 3px 8px 3px 12px; font-size: 11px; }
 
@@ -189,6 +205,7 @@ body {
   <div class="topbar-crumb" id="crumb">
     <span class="file-label">UI Component Dashboard</span>
   </div>
+  <div class="topbar-time" id="topbar-time"></div>
   <div class="topbar-spacer"></div>
   <div class="topbar-nav">
     <button class="topbar-btn" id="btn-prev" title="Previous (Left arrow)" disabled>&#9664;</button>
@@ -222,28 +239,30 @@ body {
 // ===================================================================
 const AGENTS = [
   {
-    id: 'agent-1', name: 'Agent 1', role: 'Sidebar & Nav',
+    id: 'agent-1', name: 'Agent 1', role: 'Advanced Layouts',
     color: '#a78bfa', colorVar: 'purple', live: true,
+    components: [
+      { file: 'adv_layout_c.html', name: 'Layout C — 3-Panel', desc: 'Glass sidebar + Messages + Swappable panel', tag: 'new' },
+      { file: 'adv_layout_a.html', name: 'Layout A — Split', desc: 'Messages + Stats side panel', tag: 'wip' },
+      { file: 'adv_layout_b.html', name: 'Layout B — Full Feed', desc: 'Full messages + filter tabs + stats strip', tag: 'wip' },
+      { file: 'adv_viewer.html', name: 'Layout Viewer', desc: 'Tabbed viewer for all layouts', tag: 'ref' },
+      { file: 'glass_sidebar.html', name: 'Glass Sidebar', desc: 'Frosted glass with tree + particles', tag: 'ref' },
+    ],
+  },
+  {
+    id: 'agent-2', name: 'Agent 2', role: 'Sidebar & Nav',
+    color: '#60a5fa', colorVar: 'blue', live: true,
     components: [
       { file: 'sidebar_variants.html', name: 'Sidebar — Dark (8)', desc: 'Dark glassmorphism variants', tag: 'new' },
       { file: 'sidebar_light.html', name: 'Sidebar — Light (8)', desc: 'Light modern variants', tag: 'new' },
-      { file: 'glass_sidebar.html', name: 'Glass Sidebar', desc: 'Frosted glass with tree', tag: 'wip' },
-      { file: 'v4.html', name: 'V4 Full Layout', desc: 'Header + sidebar + cards', tag: 'ref' },
       { file: 'v4_cards.html', name: 'V4 Module Cards (10)', desc: 'Progress rings, sparklines', tag: 'ref' },
       { file: 'best_03.html', name: 'Best 03 — Sidebar Ref', desc: 'Glass sidebar + tree + particles', tag: 'ref' },
     ],
   },
   {
-    id: 'agent-2', name: 'Agent 2', role: 'Cards & Progress',
-    color: '#60a5fa', colorVar: 'blue', live: false, components: [],
-  },
-  {
-    id: 'agent-3', name: 'Agent 3', role: 'Advanced Layouts',
-    color: '#34d399', colorVar: 'green', live: true,
+    id: 'agent-3', name: 'Agent 3', role: 'Feeds & Panels',
+    color: '#34d399', colorVar: 'green', live: false,
     components: [
-      { file: 'adv_layout_c.html', name: 'Layout C — 3-Panel', desc: 'Glass sidebar + Messages + Swappable panel', tag: 'new' },
-      { file: 'adv_layout_a.html', name: 'Layout A — Split', desc: 'Messages + Stats side panel', tag: 'wip' },
-      { file: 'adv_layout_b.html', name: 'Layout B — Full Feed', desc: 'Full messages + filter tabs + stats strip', tag: 'wip' },
       { file: 'adv_viewer.html', name: 'Layout Viewer', desc: 'Tabbed viewer for all layouts', tag: 'ref' },
     ],
   },
@@ -302,6 +321,50 @@ Object.entries(ARCHIVE).forEach(([group, files]) => {
 
 let currentIndex = -1;
 let currentFile = null;
+let timestamps = {};
+
+// Load timestamps
+fetch('timestamps.json?' + Date.now())
+  .then(r => r.json())
+  .then(data => {
+    timestamps = data;
+    // Update nav items with timestamps
+    document.querySelectorAll('.nav-item[data-file]').forEach(el => {
+      const ts = timestamps[el.dataset.file];
+      if (ts) {
+        const timeEl = document.createElement('span');
+        timeEl.className = 'nav-item-time ' + freshness(ts);
+        timeEl.textContent = relTime(ts);
+        timeEl.title = ts;
+        el.appendChild(timeEl);
+      }
+    });
+  })
+  .catch(() => {});
+
+function parseTS(ts) {
+  // "2026-03-27 23:01:16 +0100" -> Date
+  return new Date(ts.replace(' ', 'T').replace(/ ([+-]\d{4})/, '$1'));
+}
+function relTime(ts) {
+  const d = parseTS(ts);
+  const diff = (Date.now() - d.getTime()) / 1000;
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return Math.floor(diff/60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff/3600) + 'h ago';
+  if (diff < 604800) return Math.floor(diff/86400) + 'd ago';
+  return d.toLocaleDateString('en-GB', { day:'numeric', month:'short' });
+}
+function freshness(ts) {
+  const diff = (Date.now() - parseTS(ts).getTime()) / 1000;
+  if (diff < 600) return 'fresh';    // < 10 min = green
+  if (diff < 3600) return 'recent';  // < 1 hr = lighter
+  return '';
+}
+function fullTime(ts) {
+  const d = parseTS(ts);
+  return d.toLocaleString('en-GB', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
+}
 
 // ===================================================================
 // BUILD NAV
@@ -402,6 +465,17 @@ function loadFile(file) {
     <span style="color:var(--text-faint)">/</span>
     <span class="file-label">${item.name}</span>
   `;
+
+  // Update timestamp in topbar
+  const topTime = document.getElementById('topbar-time');
+  const ts = timestamps[file];
+  if (ts) {
+    const fr = freshness(ts);
+    const dotColor = fr === 'fresh' ? 'var(--green)' : fr === 'recent' ? 'var(--blue)' : 'var(--text-faint)';
+    topTime.innerHTML = `<span class="dot" style="background:${dotColor}"></span> Updated ${relTime(ts)} &middot; ${fullTime(ts)}`;
+  } else {
+    topTime.innerHTML = '';
+  }
 
   // Update counter + buttons
   counter.textContent = `${currentIndex + 1} / ${allItems.length}`;
