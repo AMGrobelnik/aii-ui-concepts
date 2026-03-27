@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Advanced View — Layout D: v22 Messages + Vertical Panels</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --bg: #f8f9fb; --surface: #ffffff; --surface-hi: #f3f4f7;
+  --border: rgba(0,0,0,.08); --border-hi: rgba(0,0,0,.13);
+  --text: #1a1d26; --text-dim: #4b5563; --text-muted: #9ca3af;
+  --green: #16a34a; --purple: #7c3aed; --blue: #2563eb; --orange: #d97706; --cyan: #0891b2; --red: #dc2626;
+  --card-bg: #ffffff; --muted-bg: #f3f4f6;
+  --primary: #4f46e5; --primary-light: rgba(79,70,229,.06); --primary-border: rgba(79,70,229,.15);
+  --success-light: rgba(22,163,74,.06); --success-border: rgba(22,163,74,.15);
+}
+body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text-dim); height: 100vh; overflow: hidden; display: flex; -webkit-font-smoothing: antialiased; }
+
+/* ── SIDEBAR ── */
+.sidebar-frame { width: 264px; min-width: 264px; border: none; border-right: 1px solid var(--border); }
+
+/* ── MESSAGES (middle) ── */
+.messages-col { flex: 1; display: flex; flex-direction: column; min-width: 0; background: var(--bg); transition: flex .25s ease; border-right: 1px solid var(--border); }
+.messages-col.hidden { flex: 0; min-width: 0; max-width: 0; overflow: hidden; border: 0; }
+/* messages header removed — cleaner look */
+.messages-scroll { flex: 1; overflow-y: auto; padding: 8px 0; }
+
+/* ── v22 Message Components ── */
+
+/* Container: max-w-prose mr-auto py-1 (from v22) */
+.msg-wrap { max-width: 65ch; padding: 2px 16px; }
+
+/* System pill: centered, rounded-full, primary bg (v22 SystemMessage) */
+.msg-pill { display: flex; justify-content: center; padding: 8px 16px; }
+.msg-pill-inner { display: inline-flex; align-items: center; gap: 6px; padding: 5px 14px; border-radius: 999px; font-size: 11px; cursor: pointer; transition: background .15s; }
+.msg-pill-inner.system { background: var(--primary-light); border: 1px solid var(--primary-border); }
+.msg-pill-inner.system:hover { background: rgba(79,70,229,.1); }
+.msg-pill-inner.summary { background: var(--success-light); border: 1px solid var(--success-border); }
+.msg-pill-inner.summary:hover { background: rgba(22,163,74,.1); }
+.msg-pill-inner svg { width: 14px; height: 14px; flex-shrink: 0; }
+.pill-sep { color: var(--text-muted); opacity: .4; }
+.pill-bold { font-weight: 600; color: var(--text); }
+.pill-primary { color: var(--primary); font-weight: 500; }
+.pill-success { color: var(--green); }
+.pill-chevron { width: 12px; height: 12px; transition: transform .15s; }
+.pill-chevron.open { transform: rotate(90deg); }
+
+/* Pill detail (v22: bg-muted/30 border rounded-lg) */
+.pill-detail { display: none; max-width: 560px; margin: 6px auto 4px; background: var(--muted-bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; font-size: 11px; font-family: 'JetBrains Mono', monospace; color: var(--text-dim); line-height: 1.6; white-space: pre-wrap; }
+.pill-detail.visible { display: block; }
+
+/* Tool header: inline-flex icon + label + code + chevron (v22 BashMessage etc) */
+.msg-tool-header { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); cursor: pointer; padding: 4px 0; transition: color .15s; }
+.msg-tool-header:hover { color: var(--text); }
+.msg-tool-header svg { width: 14px; height: 14px; flex-shrink: 0; }
+.tool-label { font-size: 12px; white-space: nowrap; flex-shrink: 0; }
+/* Code pill: bg-muted px-1.5 py-0.5 rounded font-mono (exact v22) */
+.tool-code { font-size: 11px; background: var(--muted-bg); padding: 2px 8px; border-radius: 4px; font-family: 'JetBrains Mono', monospace; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: middle; color: var(--text-dim); }
+.tool-chevron { width: 12px; height: 12px; flex-shrink: 0; transition: transform .15s; }
+.tool-chevron.open { transform: rotate(90deg); }
+
+/* Tool card: bg-card border border-border rounded-lg p-3 (exact v22) */
+.msg-tool-card { display: none; margin: 6px 0 4px 20px; background: var(--card-bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-size: 12px; line-height: 1.6; color: var(--text-dim); cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+.msg-tool-card:hover { border-color: var(--border-hi); }
+.msg-tool-card.visible { display: block; }
+/* Code block: bg-background/80 rounded p-2 (v22) */
+.msg-tool-card pre { font-family: 'JetBrains Mono', monospace; font-size: 11px; background: var(--muted-bg); border-radius: 6px; padding: 8px 10px; margin: 6px 0; white-space: pre-wrap; word-break: break-word; color: var(--text); }
+.msg-tool-card p { margin: 3px 0; }
+.msg-tool-card .card-label { font-size: 10px; color: var(--text-muted); font-weight: 500; margin-top: 8px; }
+/* Expand hint: text-muted-foreground/60 border-t border-border/50 (v22) */
+.msg-tool-card .card-hint { display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--text-muted); opacity: .5; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+
+/* Thinking: brain icon + preview (v22 ThinkingMessage) */
+.msg-think-header { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); cursor: pointer; padding: 4px 0; transition: color .15s; }
+.msg-think-header:hover { color: var(--text); }
+.msg-think-header svg { width: 14px; height: 14px; flex-shrink: 0; }
+.think-preview { color: var(--text-dim); max-width: 380px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; vertical-align: middle; }
+.think-chevron { width: 12px; height: 12px; flex-shrink: 0; transition: transform .15s; }
+.think-chevron.open { transform: rotate(90deg); }
+/* Thinking body: text-sm text-muted-foreground (v22) */
+.msg-think-body { display: none; margin: 6px 0 4px 20px; font-size: 13px; line-height: 1.7; color: var(--text-dim); }
+.msg-think-body.visible { display: block; }
+.msg-think-body p { margin: 4px 0; }
+.msg-think-body b { color: var(--text); font-weight: 600; }
+
+/* Dim noise */
+.msg-dim { padding: 2px 16px; font-size: 10px; color: var(--text-muted); opacity: .4; }
+.msg-dim:hover { opacity: .7; }
+
+/* Status line */
+.msg-status { padding: 3px 16px; font-size: 11px; color: var(--text-dim); display: flex; align-items: center; gap: 6px; }
+.msg-status.success { color: var(--green); font-weight: 500; }
+
+/* ── RIGHT PANEL (vertical tabs) ── */
+.panel-col { flex: 1; display: flex; flex-direction: row-reverse; min-width: 0; transition: all .25s ease; background: var(--bg); overflow: hidden; }
+.panel-col.wide { flex: 2; }
+.panel-col.closed { flex: 0 0 36px; min-width: 36px; max-width: 36px; }
+.panel-col.closed .panel-body { display: none; }
+.panel-col.closed .panel-close { display: none; }
+
+/* Vertical tab bar on left edge */
+.panel-vtabs { width: 36px; min-width: 36px; border-left: 1px solid var(--border); background: var(--surface); display: flex; flex-direction: column; align-items: center; padding: 6px 0; gap: 2px; flex-shrink: 0; }
+.panel-vtab { width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text-muted); font-size: 12px; transition: all .12s; border: 1px solid transparent; }
+.panel-vtab:hover { background: var(--surface-hi); color: var(--text-dim); }
+.panel-vtab.active { background: var(--primary-light); color: var(--primary); border-color: var(--primary-border); }
+.panel-vtab svg { width: 14px; height: 14px; }
+.panel-vtab[title]::after { content: attr(title); }
+
+/* Panel header — minimal with close */
+.panel-header { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.panel-header h3 { font-size: 11px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: .5px; }
+.panel-close { width: 20px; height: 20px; border-radius: 4px; display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text-muted); font-size: 11px; transition: all .1s; border: none; background: none; }
+.panel-close:hover { color: var(--text); background: rgba(0,0,0,.05); }
+
+/* Panel content */
+.panel-body { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+.panel-scroll { flex: 1; overflow-y: auto; padding: 14px; }
+.panel-view { display: none; }
+.panel-view.active { display: block; }
+
+/* Stats */
+.stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+.stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+.stat-label { font-size: 9px; text-transform: uppercase; letter-spacing: .5px; color: var(--text-muted); font-weight: 600; }
+.stat-value { font-size: 18px; font-weight: 700; color: var(--text); margin-top: 2px; font-variant-numeric: tabular-nums; }
+.stat-sub { font-size: 9px; color: var(--text-muted); margin-top: 2px; }
+.section-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .7px; color: var(--text-muted); margin: 14px 0 8px; }
+.section-label:first-child { margin-top: 0; }
+.cost-list { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; }
+.cost-row { display: flex; align-items: center; justify-content: space-between; padding: 5px 0; font-size: 11px; border-bottom: 1px solid var(--border); }
+.cost-row:last-child { border: 0; }
+.cost-name { display: flex; align-items: center; gap: 8px; color: var(--text-dim); }
+.cost-dot { width: 7px; height: 7px; border-radius: 50%; }
+.cost-val { font-family: 'JetBrains Mono', monospace; color: var(--text); font-size: 11px; font-weight: 500; }
+
+/* TODO */
+.todo-summary { font-size: 12px; color: var(--text); line-height: 1.5; margin-bottom: 14px; }
+.todo-item { display: flex; align-items: center; gap: 8px; padding: 6px 0; font-size: 12px; }
+.todo-icon { width: 16px; height: 16px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 9px; flex-shrink: 0; }
+.todo-icon.done { background: rgba(22,163,74,.1); color: var(--green); }
+.todo-icon.run { background: rgba(37,99,235,.1); color: var(--blue); }
+.todo-icon.up { background: rgba(0,0,0,.04); color: var(--text-muted); }
+.todo-text.done { color: var(--text-muted); text-decoration: line-through; }
+.todo-text.run { color: var(--text); font-weight: 500; }
+.todo-text.up { color: var(--text-muted); }
+
+/* Artifacts */
+.artifact-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 6px; cursor: pointer; }
+.artifact-card:hover { border-color: var(--border-hi); }
+.artifact-head { display: flex; align-items: center; gap: 8px; }
+.artifact-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.artifact-name { font-size: 12px; font-weight: 600; color: var(--text); flex: 1; }
+.artifact-meta { font-size: 10px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; }
+.artifact-detail { font-size: 11px; color: var(--text-dim); line-height: 1.5; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); display: none; }
+.artifact-card.expanded .artifact-detail { display: block; }
+
+/* Gantt */
+.gantt-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 11px; }
+.gantt-label { width: 90px; flex-shrink: 0; color: var(--text-dim); }
+.gantt-track { flex: 1; height: 14px; background: rgba(0,0,0,.03); border-radius: 4px; position: relative; overflow: hidden; }
+.gantt-bar { position: absolute; top: 2px; bottom: 2px; border-radius: 3px; min-width: 4px; }
+.gantt-time { width: 45px; flex-shrink: 0; text-align: right; font-size: 10px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; }
+@keyframes barPulse { 0%,100% { opacity: 1; } 50% { opacity: .6; } }
+
+/* Files */
+.file-row { display: flex; align-items: center; gap: 8px; padding: 5px 8px; font-size: 11px; border-radius: 4px; cursor: pointer; }
+.file-row:hover { background: var(--surface-hi); }
+.file-icon { font-size: 12px; }
+.file-name { flex: 1; color: var(--text); }
+.file-size { color: var(--text-muted); font-family: 'JetBrains Mono', monospace; font-size: 10px; }
+
+/* Module summary cards */
+.summary-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px; margin-bottom: 8px; }
+.summary-card.active { border-color: rgba(37,99,235,.2); background: rgba(37,99,235,.02); }
+.summary-card.pending { opacity: .5; }
+.summary-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.summary-name { font-size: 12px; font-weight: 600; color: var(--text); flex: 1; }
+.summary-badge { font-size: 9px; font-weight: 600; padding: 2px 6px; border-radius: 4px; }
+.summary-text { font-size: 11px; color: var(--text-dim); line-height: 1.5; }
+.summary-stats { display: flex; gap: 12px; margin-top: 8px; font-size: 10px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; }
+
+/* Charts — SVG area charts */
+.chart-area { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 10px 4px; margin-bottom: 14px; }
+.chart-svg { width: 100%; height: auto; display: block; }
+.chart-labels { display: flex; justify-content: space-between; font-size: 9px; color: var(--text-muted); padding: 4px 2px 0; }
+
+/* Chart placeholders (fallback) */
+.chart-placeholder { display: flex; align-items: flex-end; gap: 3px; height: 80px; padding: 0 4px 4px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; margin-bottom: 14px; }
+.chart-placeholder.line { align-items: center; justify-content: center; }
+.chart-bar { flex: 1; background: rgba(37,99,235,.15); border-radius: 2px 2px 0 0; transition: height .3s; }
+.chart-bar.b { background: rgba(124,58,237,.12); }
+.chart-line { width: 90%; height: 2px; background: linear-gradient(90deg, var(--green), var(--blue), var(--purple)); border-radius: 1px; position: relative; }
+.chart-line::before { content: ''; position: absolute; top: -3px; right: 0; width: 6px; height: 6px; border-radius: 50%; background: var(--purple); }
+
+/* Footer bar (v22 style) */
+.footer-bar { display: flex; align-items: center; gap: 12px; padding: 6px 16px; border-top: 1px solid var(--border); background: var(--surface); font-size: 11px; color: var(--text-muted); flex-shrink: 0; }
+.footer-stat { display: flex; align-items: center; gap: 4px; }
+.footer-stat svg { width: 12px; height: 12px; }
+.footer-stat .val { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.footer-sep { width: 1px; height: 12px; background: var(--border); }
+.footer-progress { display: flex; align-items: center; gap: 6px; }
+.footer-progress-bar { width: 60px; height: 4px; background: rgba(0,0,0,.06); border-radius: 2px; overflow: hidden; }
+.footer-progress-fill { height: 100%; background: var(--blue); border-radius: 2px; }
+.footer-spacer { flex: 1; }
+.footer-status { display: flex; align-items: center; gap: 4px; font-weight: 500; }
+.footer-status.running { color: var(--blue); }
+.footer-status.running .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--blue); animation: statusPulse 2s infinite; }
+@keyframes statusPulse { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
+.footer-toggles { display: flex; gap: 2px; }
+.footer-btn { width: 26px; height: 26px; border-radius: 5px; border: 1px solid var(--border); background: none; color: var(--text-muted); font-size: 11px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .1s; }
+.footer-btn:hover { background: var(--surface-hi); color: var(--text-dim); }
+.footer-btn.active { background: var(--primary-light); color: var(--primary); border-color: var(--primary-border); }
+
+/* Chat */
+.chat-bar { padding: 8px 16px; border-top: 1px solid var(--border); background: var(--surface); flex-shrink: 0; }
+.chat-input { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; color: var(--text); font-size: 12px; outline: none; font-family: inherit; }
+.chat-input:focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(79,70,229,.1); }
+.chat-input::placeholder { color: var(--text-muted); }
+
+.layout-label { display: none; }
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<iframe src="glass_sidebar_light_v3.html" class="sidebar-frame"></iframe>
+
+<!-- MAIN AREA (messages + panel + chat) -->
+<div style="flex:1;display:flex;flex-direction:column;min-width:0">
+<div style="flex:1;display:flex;overflow:hidden">
+
+<!-- MESSAGES -->
+<div class="messages-col" id="messagesCol">
+  <div class="messages-scroll">
+
+    <!-- System pill -->
+    <div class="msg-pill" data-id="s1">
+      <div class="msg-pill-inner system" onclick="toggle('s1')">
+        <svg style="color:var(--primary)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="3"/><line x1="12" y1="8" x2="12" y2="11"/></svg>
+        <span class="pill-primary">Hypothesis Generation</span>
+        <span class="pill-sep">&middot;</span>
+        <span class="pill-bold">Claude Opus 4.5</span>
+        <span class="pill-sep">&middot;</span>
+        <span>00:37</span>
+        <svg class="pill-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+    </div>
+    <div class="pill-detail" data-card="s1">Model: claude-opus-4-5-20250929
+Module: gen_hypo | Iteration 1/3
+Tools: WebSearch, WebFetch, ToolSearch</div>
+
+    <div class="msg-dim">Ability server already running</div>
+    <div class="msg-dim">Running ability preflight...</div>
+    <div class="msg-status">Modules: hypo_loop → invention_loop → gen_paper_repo</div>
+
+    <!-- Search (v22 WebSearchMessage) -->
+    <div class="msg-wrap" data-id="t1">
+      <div class="msg-tool-header" onclick="toggle('t1')">
+        <svg style="color:var(--cyan)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <span class="tool-label">Search</span>
+        <span class="tool-code">"dependency distance minimization universal dependencies 2025"</span>
+        <svg class="tool-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+      <div class="msg-tool-card" data-card="t1">
+        <p style="font-size:10px;color:var(--text-muted)">12 results found</p>
+        <pre>1. aclanthology.org/2024.findings-acl.234
+2. arxiv.org/abs/2025.03421
+3. doi.org/10.1162/coli_a_00512</pre>
+        <div class="card-hint"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg> Click to expand</div>
+      </div>
+    </div>
+
+    <!-- Fetch (v22 WebFetchMessage) -->
+    <div class="msg-wrap" data-id="t2">
+      <div class="msg-tool-header" onclick="toggle('t2')">
+        <svg style="color:var(--cyan)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+        <span class="tool-label">Fetch</span>
+        <span class="tool-code">aclanthology.org/2024.findings-acl.234</span>
+        <svg class="tool-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+      <div class="msg-tool-card" data-card="t2">
+        <p>Fetched 12,483 chars — dependency distance patterns in typologically diverse languages.</p>
+        <p style="margin-top:4px;color:var(--text);font-weight:500">Key finding: SOV languages show 15% shorter mean dependency distances than SVO.</p>
+      </div>
+    </div>
+
+    <!-- Thinking (v22 ThinkingMessage) -->
+    <div class="msg-wrap" data-id="th1">
+      <div class="msg-think-header" onclick="toggle('th1')">
+        <svg style="color:var(--purple)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a8 8 0 0 0-8 8c0 3.4 2.1 6.3 5 7.5V20h6v-2.5c2.9-1.2 5-4.1 5-7.5a8 8 0 0 0-8-8z"/><path d="M9 22h6"/></svg>
+        <span class="think-preview">None apply ecological niche theory to dependency distances...</span>
+        <svg class="think-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+      <div class="msg-think-body" data-card="th1">
+        <p>I found several papers on dependency distance but none apply ecological niche theory. The concept of niche partitioning maps well: dependency types "compete" for short-distance slots in a sentence.</p>
+        <p>I'll define a <b>Niche Dependency Profile (NDP)</b> metric based on probability mass functions over distance distributions.</p>
+        <p style="color:var(--green)">This is genuinely novel — no prior work connects MacArthur's niche exclusion principle to syntactic dependency structures.</p>
+      </div>
+    </div>
+
+    <!-- Search -->
+    <div class="msg-wrap" data-id="t3">
+      <div class="msg-tool-header" onclick="toggle('t3')">
+        <svg style="color:var(--cyan)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+        <span class="tool-label">Search</span>
+        <span class="tool-code">"niche partitioning ecology applied to linguistics"</span>
+        <svg class="tool-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+      <div class="msg-tool-card" data-card="t3"><p style="color:var(--green)">0 results — confirms novelty</p></div>
+    </div>
+
+    <!-- Thinking -->
+    <div class="msg-wrap" data-id="th2">
+      <div class="msg-think-header" onclick="toggle('th2')">
+        <svg style="color:var(--purple)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a8 8 0 0 0-8 8c0 3.4 2.1 6.3 5 7.5V20h6v-2.5c2.9-1.2 5-4.1 5-7.5a8 8 0 0 0-8-8z"/><path d="M9 22h6"/></svg>
+        <span class="think-preview">Defining NDP: dependency types as species competing for slots...</span>
+        <svg class="think-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+      <div class="msg-think-body" data-card="th2">
+        <p>Dependency types = "species", short-distance positions = "resource".</p>
+        <p>I'll compute a discrete PMF per dependency relation, then measure overlap using <b>Pianka's index</b>.</p>
+      </div>
+    </div>
+
+    <!-- Bash (v22 BashMessage) -->
+    <div class="msg-wrap" data-id="t4">
+      <div class="msg-tool-header" onclick="toggle('t4')">
+        <svg style="color:var(--text-muted)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+        <span class="tool-label">Ran 1 command</span>
+        <svg class="tool-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+      <div class="msg-tool-card" data-card="t4">
+        <div class="card-label">Command</div>
+        <pre>python compute_ndp.py --treebank en_ewt --relations nsubj,obj,amod</pre>
+        <div class="card-label">Output</div>
+        <pre>Processing 16,622 sentences...
+  nsubj: μ=2.8, σ=2.1, niche_width=0.84
+  obj:   μ=2.3, σ=1.8, niche_width=0.72
+  amod:  μ=1.2, σ=0.9, niche_width=0.36
+Pianka overlap: nsubj-obj=0.71</pre>
+        <div class="card-hint"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg> Click to expand</div>
+      </div>
+    </div>
+
+    <div class="msg-status success">&#10003; NDP computation complete</div>
+
+    <!-- Summary pill (v22 SummaryMessage) -->
+    <div class="msg-pill" data-id="sum1">
+      <div class="msg-pill-inner summary" onclick="toggle('sum1')">
+        <svg class="pill-chevron" style="color:var(--green)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        <svg style="color:var(--green);width:14px;height:14px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        <span class="pill-bold">Hypothesis Generation</span>
+        <span class="pill-sep">&middot;</span>
+        <span>$2.79</span>
+        <span class="pill-sep">&middot;</span>
+        <span>24.1k tokens</span>
+      </div>
+    </div>
+    <div class="pill-detail" data-card="sum1">Task: hypo_it1__opus | Turns: 36
+Input:  1,524,312 | Output: 24,108
+Tools:  WebSearch(26) WebFetch(7)
+Token: $2.53 | Tool: $0.26 | Total: $2.79</div>
+
+    <!-- Next module -->
+    <div class="msg-pill">
+      <div class="msg-pill-inner system">
+        <svg style="color:var(--primary);width:14px;height:14px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a8 8 0 0 1 8 8v4a8 8 0 0 1-16 0v-4a8 8 0 0 1 8-8z"/><path d="M9 22h6"/></svg>
+        <span class="pill-primary">Hypothesis Review</span>
+        <span class="pill-sep">&middot;</span>
+        <span class="pill-bold">Claude Opus 4.5</span>
+        <span class="pill-sep">&middot;</span>
+        <span>00:52</span>
+      </div>
+    </div>
+
+    <!-- Thinking -->
+    <div class="msg-wrap" data-id="th3">
+      <div class="msg-think-header" onclick="toggle('th3')">
+        <svg style="color:var(--purple)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a8 8 0 0 0-8 8c0 3.4 2.1 6.3 5 7.5V20h6v-2.5c2.9-1.2 5-4.1 5-7.5a8 8 0 0 0-8-8z"/><path d="M9 22h6"/></svg>
+        <span class="think-preview">NDP formulation needs tighter mathematical grounding...</span>
+        <svg class="think-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+      </div>
+      <div class="msg-think-body" data-card="th3">
+        <p>1. Pianka's index assumes continuous distributions — need to justify discretization</p>
+        <p>2. "Niche width" (σ) doesn't account for multimodal distributions</p>
+        <p>3. Need a null model</p>
+        <p style="color:var(--orange)"><b>Recommend:</b> formal null model based on shuffled dependency assignments.</p>
+      </div>
+    </div>
+
+    <div class="msg-pill">
+      <div class="msg-pill-inner summary">
+        <svg style="color:var(--green);width:14px;height:14px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        <span class="pill-bold">Hypothesis Review</span>
+        <span class="pill-sep">&middot;</span>
+        <span>$0.72</span>
+        <span class="pill-sep">&middot;</span>
+        <span>4.9k tokens</span>
+      </div>
+    </div>
+
+    <div class="msg-pill">
+      <div class="msg-pill-inner system">
+        <svg style="color:var(--primary);width:14px;height:14px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a8 8 0 0 1 8 8v4a8 8 0 0 1-16 0v-4a8 8 0 0 1 8-8z"/><path d="M9 22h6"/></svg>
+        <span class="pill-primary">Hypothesis Generation</span>
+        <span class="pill-sep">&middot;</span>
+        <span>Iteration 2/3</span>
+      </div>
+    </div>
+    <div class="msg-dim" style="text-align:center;padding:12px">... 1,800+ more messages</div>
+  </div>
+</div>
+
+<!-- RIGHT PANEL — vertical tabs -->
+<div class="panel-col" id="panelCol">
+  <div class="panel-vtabs">
+    <div class="panel-vtab active" title="" onclick="switchPanel('stats')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg></div>
+    <div class="panel-vtab" onclick="switchPanel('todo')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>
+    <div class="panel-vtab" onclick="switchPanel('artifacts')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+    <div class="panel-vtab" onclick="switchPanel('gantt')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/></svg></div>
+    <div class="panel-vtab" onclick="switchPanel('files')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2z"/></svg></div>
+    <div style="height:1px;width:20px;background:var(--border);margin:4px 0"></div>
+    <div class="panel-vtab" onclick="switchPanel('summaries')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg></div>
+    <div class="panel-vtab" onclick="switchPanel('charts')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></div>
+  </div>
+  <div class="panel-body">
+    <div class="panel-header"><h3 id="panelTitle">Statistics</h3><div class="panel-close" onclick="closePanel()">&#10005;</div></div>
+    <div class="panel-scroll">
+    <!-- Stats (v22 stats-overlay style — overview + charts) -->
+    <div class="panel-view active" id="view-stats">
+      <!-- Summary stats row -->
+      <div class="stat-grid">
+        <div class="stat-card"><div class="stat-label">Total Cost</div><div class="stat-value">$16.39</div><div class="stat-sub">token: $14.12 &middot; tool: $2.27</div></div>
+        <div class="stat-card"><div class="stat-label">Runtime</div><div class="stat-value">1h 21m</div><div class="stat-sub">264 turns &middot; 31.4 tok/s</div></div>
+        <div class="stat-card"><div class="stat-label">Messages</div><div class="stat-value">2,127</div><div class="stat-sub">448 tool &middot; 177 think</div></div>
+        <div class="stat-card"><div class="stat-label">Artifacts</div><div class="stat-value">3 / 5</div><div class="stat-sub">ablation running</div></div>
+      </div>
+
+      <!-- Cost by module -->
+      <div class="section-label">Cost by Module</div>
+      <div class="cost-list">
+        <div class="cost-row"><div class="cost-name"><div class="cost-dot" style="background:var(--green)"></div>Seed Hypo</div><div class="cost-val">$4.63</div></div>
+        <div class="cost-row"><div class="cost-name"><div class="cost-dot" style="background:var(--purple)"></div>Hypo Loop</div><div class="cost-val">$5.78</div></div>
+        <div class="cost-row"><div class="cost-name"><div class="cost-dot" style="background:var(--blue)"></div>Invention</div><div class="cost-val">$6.59</div></div>
+        <div class="cost-row"><div class="cost-name"><div class="cost-dot" style="background:var(--orange)"></div>Paper</div><div class="cost-val">—</div></div>
+      </div>
+
+      <!-- Output tokens/s chart (v22) -->
+      <div class="section-label">Output Tokens per Second</div>
+      <div class="chart-area">
+        <svg viewBox="0 0 300 60" class="chart-svg">
+          <defs><linearGradient id="tpsGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--blue)" stop-opacity=".3"/><stop offset="100%" stop-color="var(--blue)" stop-opacity=".02"/></linearGradient></defs>
+          <polyline fill="url(#tpsGrad)" stroke="none" points="0,55 15,48 30,42 45,50 60,35 75,28 90,32 105,22 120,25 135,18 150,20 165,28 180,15 195,22 210,12 225,18 240,25 255,10 270,15 285,20 300,18 300,60 0,60"/>
+          <polyline fill="none" stroke="var(--blue)" stroke-width="1.5" stroke-linejoin="round" points="0,55 15,48 30,42 45,50 60,35 75,28 90,32 105,22 120,25 135,18 150,20 165,28 180,15 195,22 210,12 225,18 240,25 255,10 270,15 285,20 300,18"/>
+        </svg>
+        <div class="chart-labels"><span>00:36</span><span>00:45</span><span>00:55</span><span>01:05</span><span>01:15</span></div>
+      </div>
+
+      <!-- Messages per minute chart -->
+      <div class="section-label">Messages per Minute</div>
+      <div class="chart-area">
+        <svg viewBox="0 0 300 60" class="chart-svg">
+          <defs><linearGradient id="mpmGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--purple)" stop-opacity=".25"/><stop offset="100%" stop-color="var(--purple)" stop-opacity=".02"/></linearGradient></defs>
+          <polyline fill="url(#mpmGrad)" stroke="none" points="0,50 20,45 40,38 60,42 80,30 100,25 120,35 140,20 160,28 180,15 200,22 220,18 240,25 260,12 280,20 300,22 300,60 0,60"/>
+          <polyline fill="none" stroke="var(--purple)" stroke-width="1.5" stroke-linejoin="round" points="0,50 20,45 40,38 60,42 80,30 100,25 120,35 140,20 160,28 180,15 200,22 220,18 240,25 260,12 280,20 300,22"/>
+        </svg>
+        <div class="chart-labels"><span>00:36</span><span>00:45</span><span>00:55</span><span>01:05</span><span>01:15</span></div>
+      </div>
+
+      <!-- Message type distribution (v22 pie) -->
+      <div class="section-label">Message Distribution</div>
+      <div style="display:flex;gap:12px;align-items:center;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px">
+        <svg viewBox="0 0 80 80" width="80" height="80">
+          <circle cx="40" cy="40" r="30" fill="none" stroke="rgba(0,0,0,.04)" stroke-width="12"/>
+          <circle cx="40" cy="40" r="30" fill="none" stroke="var(--cyan)" stroke-width="12" stroke-dasharray="85 103" stroke-dashoffset="0" transform="rotate(-90 40 40)"/>
+          <circle cx="40" cy="40" r="30" fill="none" stroke="var(--purple)" stroke-width="12" stroke-dasharray="42 146" stroke-dashoffset="-85" transform="rotate(-90 40 40)"/>
+          <circle cx="40" cy="40" r="30" fill="none" stroke="var(--text-muted)" stroke-width="12" stroke-dasharray="31 157" stroke-dashoffset="-127" transform="rotate(-90 40 40)"/>
+          <circle cx="40" cy="40" r="30" fill="none" stroke="var(--green)" stroke-width="12" stroke-dasharray="12 176" stroke-dashoffset="-158" transform="rotate(-90 40 40)"/>
+          <text x="40" y="38" text-anchor="middle" fill="var(--text)" font-size="14" font-weight="700">2,127</text>
+          <text x="40" y="49" text-anchor="middle" fill="var(--text-muted)" font-size="7">messages</text>
+        </svg>
+        <div style="font-size:10px;display:flex;flex-direction:column;gap:3px">
+          <div style="display:flex;align-items:center;gap:5px"><div style="width:6px;height:6px;border-radius:2px;background:var(--cyan)"></div>Tool calls <span style="color:var(--text);font-weight:500">448</span></div>
+          <div style="display:flex;align-items:center;gap:5px"><div style="width:6px;height:6px;border-radius:2px;background:var(--purple)"></div>Thinking <span style="color:var(--text);font-weight:500">177</span></div>
+          <div style="display:flex;align-items:center;gap:5px"><div style="width:6px;height:6px;border-radius:2px;background:var(--text-muted)"></div>Status <span style="color:var(--text);font-weight:500">131</span></div>
+          <div style="display:flex;align-items:center;gap:5px"><div style="width:6px;height:6px;border-radius:2px;background:var(--green)"></div>Summaries <span style="color:var(--text);font-weight:500">25</span></div>
+        </div>
+      </div>
+    </div>
+    <!-- TODO -->
+    <div class="panel-view" id="view-todo">
+      <div class="todo-summary">I'm creating research artifacts — running experiments on the multilingual dataset to validate the ecological niche hypothesis.</div>
+      <div class="todo-item"><div class="todo-icon done">&#10003;</div><span class="todo-text done">Seed hypotheses from knowledge graph</span></div>
+      <div class="todo-item"><div class="todo-icon done">&#10003;</div><span class="todo-text done">Refine hypothesis through 3 review rounds</span></div>
+      <div class="todo-item"><div class="todo-icon run">&#9679;</div><span class="todo-text run">Create research artifacts (3/5)</span></div>
+      <div class="todo-item"><div class="todo-icon up">&#9675;</div><span class="todo-text up">Write paper draft</span></div>
+      <div class="todo-item"><div class="todo-icon up">&#9675;</div><span class="todo-text up">Generate final paper & repository</span></div>
+    </div>
+    <!-- Artifacts -->
+    <div class="panel-view" id="view-artifacts">
+      <div class="artifact-card" onclick="this.classList.toggle('expanded')"><div class="artifact-head"><div class="artifact-dot" style="background:var(--green)"></div><span class="artifact-name">Contrastive Baseline</span><span class="artifact-meta">acc: 0.847</span></div><div class="artifact-detail">Trained contrastive alignment on 2.1M pairs. Mean accuracy 0.847 (+17.5% over XLM-R). Largest gains: EN-Tamil (+22.3%).</div></div>
+      <div class="artifact-card" onclick="this.classList.toggle('expanded')"><div class="artifact-head"><div class="artifact-dot" style="background:var(--green)"></div><span class="artifact-name">Multilingual Pairs</span><span class="artifact-meta">2,400 ex</span></div><div class="artifact-detail">2,400 examples (200/lang × 12 langs) with code-switching at 5 ratios.</div></div>
+      <div class="artifact-card" onclick="this.classList.toggle('expanded')"><div class="artifact-head"><div class="artifact-dot" style="background:var(--green)"></div><span class="artifact-name">Convergence Proof</span><span class="artifact-meta">3 lemmas</span></div><div class="artifact-detail">Lean 4: Lipschitz, bound preservation, Banach convergence.</div></div>
+      <div class="artifact-card"><div class="artifact-head"><div class="artifact-dot" style="background:var(--blue)"></div><span class="artifact-name">Ablation Study</span><span class="artifact-meta" style="color:var(--blue)">running...</span></div></div>
+      <div class="artifact-card"><div class="artifact-head"><div class="artifact-dot" style="background:var(--text-muted);opacity:.3"></div><span class="artifact-name">Cross-lingual Eval</span><span class="artifact-meta">pending</span></div></div>
+    </div>
+    <!-- Gantt -->
+    <div class="panel-view" id="view-gantt">
+      <div class="section-label">Module Timeline</div>
+      <div class="gantt-row"><span class="gantt-label">Seed Hypo</span><div class="gantt-track"><div class="gantt-bar" style="left:0%;width:18%;background:var(--green)"></div></div><span class="gantt-time">14m</span></div>
+      <div class="gantt-row"><span class="gantt-label">Gen Hypo 1</span><div class="gantt-track"><div class="gantt-bar" style="left:18%;width:12%;background:var(--purple)"></div></div><span class="gantt-time">10m</span></div>
+      <div class="gantt-row"><span class="gantt-label">Review 1</span><div class="gantt-track"><div class="gantt-bar" style="left:30%;width:4%;background:var(--purple);opacity:.6"></div></div><span class="gantt-time">3m</span></div>
+      <div class="gantt-row"><span class="gantt-label">Gen Hypo 2</span><div class="gantt-track"><div class="gantt-bar" style="left:34%;width:10%;background:var(--purple)"></div></div><span class="gantt-time">8m</span></div>
+      <div class="gantt-row"><span class="gantt-label">Review 2</span><div class="gantt-track"><div class="gantt-bar" style="left:44%;width:4%;background:var(--purple);opacity:.6"></div></div><span class="gantt-time">3m</span></div>
+      <div class="gantt-row"><span class="gantt-label">Strategy</span><div class="gantt-track"><div class="gantt-bar" style="left:61%;width:3%;background:var(--blue)"></div></div><span class="gantt-time">2m</span></div>
+      <div class="gantt-row"><span class="gantt-label">Plan</span><div class="gantt-track"><div class="gantt-bar" style="left:64%;width:4%;background:var(--blue)"></div></div><span class="gantt-time">3m</span></div>
+      <div class="gantt-row"><span class="gantt-label">Artifacts</span><div class="gantt-track"><div class="gantt-bar" style="left:68%;width:22%;background:var(--blue);border-radius:3px 0 0 3px;animation:barPulse 2s infinite"></div></div><span class="gantt-time">18m+</span></div>
+      <div class="gantt-row"><span class="gantt-label">Paper</span><div class="gantt-track"></div><span class="gantt-time">—</span></div>
+    </div>
+    <!-- Files -->
+    <div class="panel-view" id="view-files">
+      <div class="section-label">Run Files (84)</div>
+      <div class="file-row"><span class="file-icon">&#128196;</span><span class="file-name">pipeline_messages.jsonl</span><span class="file-size">9.3MB</span></div>
+      <div class="file-row"><span class="file-icon">&#128193;</span><span class="file-name">2_gen_hypo/</span><span class="file-size">dir</span></div>
+      <div class="file-row"><span class="file-icon">&#128193;</span><span class="file-name">3_invention_loop/</span><span class="file-size">dir</span></div>
+      <div class="file-row"><span class="file-icon">&#128196;</span><span class="file-name">hypothesis_final.json</span><span class="file-size">24KB</span></div>
+      <div class="file-row"><span class="file-icon">&#128196;</span><span class="file-name">convergence_proof.lean</span><span class="file-size">3KB</span></div>
+      <div class="file-row"><span class="file-icon">&#128196;</span><span class="file-name">baseline_results.json</span><span class="file-size">18KB</span></div>
+    </div>
+
+    <!-- Module Summaries (v22 progress-summary) -->
+    <div class="panel-view" id="view-summaries">
+      <div class="section-label">Module Summaries</div>
+      <div class="summary-card done">
+        <div class="summary-head"><svg style="color:var(--green)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><circle cx="12" cy="12" r="10"/><polyline points="16 12 12 8 8 12"/><line x1="12" y1="16" x2="12" y2="8"/></svg><span class="summary-name">Seed Hypothesis</span><span class="summary-badge" style="background:rgba(22,163,74,.08);color:var(--green)">Complete</span></div>
+        <p class="summary-text">Mined 847 papers, built KG with 2,341 nodes, identified 12 research gaps. Selected top 5 seeds based on novelty + feasibility scores.</p>
+        <div class="summary-stats"><span>$4.63</span><span>14m</span><span>312 msgs</span></div>
+      </div>
+      <div class="summary-card done">
+        <div class="summary-head"><svg style="color:var(--purple)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M12 2a8 8 0 0 0-8 8c0 3.4 2.1 6.3 5 7.5V20h6v-2.5c2.9-1.2 5-4.1 5-7.5a8 8 0 0 0-8-8z"/></svg><span class="summary-name">Hypothesis Loop</span><span class="summary-badge" style="background:rgba(22,163,74,.08);color:var(--green)">Complete</span></div>
+        <p class="summary-text">3 iterations: initial 6.2/10 → refined 8.4/10. Addressed convergence, ablation, evaluation concerns. 0 major issues remaining.</p>
+        <div class="summary-stats"><span>$5.78</span><span>16m</span><span>421 msgs</span></div>
+      </div>
+      <div class="summary-card active">
+        <div class="summary-head"><svg style="color:var(--blue)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/></svg><span class="summary-name">Invention Loop</span><span class="summary-badge" style="background:rgba(37,99,235,.08);color:var(--blue)">Running</span></div>
+        <p class="summary-text">Strategy selected, 5 artifacts planned. 3/5 complete: baseline (+17.5%), multilingual pairs (2,400), convergence proof (3 lemmas). Ablation running.</p>
+        <div class="summary-stats"><span>$6.59</span><span>42m</span><span>847 msgs</span></div>
+      </div>
+      <div class="summary-card pending">
+        <div class="summary-head"><svg style="color:var(--text-muted)" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/></svg><span class="summary-name">Paper & Repo</span><span class="summary-badge" style="background:rgba(0,0,0,.04);color:var(--text-muted)">Pending</span></div>
+      </div>
+    </div>
+
+    <!-- Charts (v22 stats-overlay) -->
+    <div class="panel-view" id="view-charts">
+      <div class="section-label">Output Tokens per Second</div>
+      <div class="chart-placeholder"><div class="chart-bar" style="height:20%"></div><div class="chart-bar" style="height:45%"></div><div class="chart-bar" style="height:60%"></div><div class="chart-bar" style="height:35%"></div><div class="chart-bar" style="height:80%"></div><div class="chart-bar" style="height:55%"></div><div class="chart-bar" style="height:70%"></div><div class="chart-bar" style="height:40%"></div><div class="chart-bar" style="height:90%"></div><div class="chart-bar" style="height:50%"></div></div>
+      <div class="section-label">Messages per Minute</div>
+      <div class="chart-placeholder"><div class="chart-bar b" style="height:30%"></div><div class="chart-bar b" style="height:55%"></div><div class="chart-bar b" style="height:70%"></div><div class="chart-bar b" style="height:85%"></div><div class="chart-bar b" style="height:60%"></div><div class="chart-bar b" style="height:45%"></div><div class="chart-bar b" style="height:75%"></div><div class="chart-bar b" style="height:50%"></div></div>
+      <div class="section-label">Context Length</div>
+      <div class="chart-placeholder line"><div class="chart-line"></div></div>
+    </div>
+    </div><!-- end panel-scroll -->
+  </div>
+</div>
+
+</div><!-- end flex row -->
+
+<!-- Chat THEN Footer (user requested footer below chat) -->
+<div class="chat-bar"><input class="chat-input" placeholder="Ask about this run..." /></div>
+
+<div class="footer-bar">
+  <div class="footer-status running"><div class="status-dot"></div> Running</div>
+  <div class="footer-sep"></div>
+  <div class="footer-progress">
+    <div class="footer-progress-bar"><div class="footer-progress-fill" style="width:75%"></div></div>
+    <span>3/4</span>
+  </div>
+  <div class="footer-sep"></div>
+  <div class="footer-stat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg><span class="val">$16.39</span></div>
+  <div class="footer-stat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span class="val">2,127</span> msgs</div>
+  <div class="footer-stat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/></svg><span class="val">5.5M</span> tok</div>
+  <div class="footer-stat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><span class="val">1h 21m</span></div>
+  <div class="footer-spacer"></div>
+  <!-- v22 toggle buttons -->
+  <div class="footer-toggles">
+    <button class="footer-btn active" title="Chat">&#9993;</button>
+    <button class="footer-btn" title="Progress">&#9646;</button>
+    <button class="footer-btn" title="Summary">&#9776;</button>
+    <button class="footer-btn" title="Stats">&#9636;</button>
+    <button class="footer-btn" title="Files">&#128193;</button>
+  </div>
+</div>
+</div><!-- end main area -->
+
+<script>
+function toggle(id) {
+  const card = document.querySelector(`[data-card="${id}"]`);
+  if (!card) return;
+  card.classList.toggle('visible');
+  const parent = document.querySelector(`[data-id="${id}"]`);
+  if (parent) parent.querySelectorAll('.pill-chevron,.tool-chevron,.think-chevron').forEach(c => c.classList.toggle('open', card.classList.contains('visible')));
+}
+
+let currentPanel = 'stats';
+let panelOpen = true;
+const wideViews = new Set(['gantt']);
+const panelNames = {stats:'Statistics',todo:'TODO',artifacts:'Artifacts',gantt:'Timeline',files:'Files',summaries:'Module Summaries',charts:'Charts'};
+const tabOrder = ['stats','todo','artifacts','gantt','files','_sep','summaries','charts'];
+
+function switchPanel(id) {
+  const p = document.getElementById('panelCol');
+  const m = document.getElementById('messagesCol');
+
+  // Toggle: clicking same tab closes panel
+  if (currentPanel === id && panelOpen) {
+    closePanel();
+    return;
+  }
+
+  currentPanel = id;
+  panelOpen = true;
+  p.classList.remove('closed');
+  document.getElementById('panelTitle').textContent = panelNames[id] || id;
+
+  // Update tabs
+  document.querySelectorAll('.panel-vtab').forEach(t => t.classList.remove('active'));
+  const tabs = document.querySelectorAll('.panel-vtab');
+  const idx = tabOrder.filter(t => t !== '_sep').indexOf(id);
+  if (idx >= 0 && tabs[idx]) tabs[idx].classList.add('active');
+
+  // Show view
+  document.querySelectorAll('.panel-view').forEach(v => v.classList.toggle('active', v.id === 'view-' + id));
+
+  // Wide mode
+  if (wideViews.has(id)) { m.classList.add('hidden'); p.classList.add('wide'); }
+  else { m.classList.remove('hidden'); p.classList.remove('wide'); }
+}
+
+function closePanel() {
+  panelOpen = false;
+  const p = document.getElementById('panelCol');
+  const m = document.getElementById('messagesCol');
+  p.classList.add('closed');
+  p.classList.remove('wide');
+  m.classList.remove('hidden');
+  document.querySelectorAll('.panel-vtab').forEach(t => t.classList.remove('active'));
+}
+</script>
+</body>
+</html>
