@@ -1,0 +1,1347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Pipeline View (Glassmorphism)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #f5f6f8;
+    --surface: rgba(255,255,255,0.7);
+    --surface-solid: #ffffff;
+    --surface-hover: rgba(0,0,0,0.03);
+    --border: rgba(0,0,0,0.07);
+    --border-bright: rgba(0,0,0,0.12);
+    --text: #1e293b;
+    --text-muted: #64748b;
+    --green: #16a34a;
+    --purple: #7c3aed;
+    --blue: #2563eb;
+    --orange: #d97706;
+    --red: #dc2626;
+    --sidebar-bg: rgba(248,249,251,0.92);
+    --sidebar-w: 264px;
+    --glass-blur: 20px;
+    --glass-shine: linear-gradient(135deg, rgba(255,255,255,0.8) 0%, rgba(255,255,255,0) 50%);
+  }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+  }
+
+  /* ---- BACKGROUND PARTICLES CANVAS ---- */
+  #bgCanvas {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ---- SIDEBAR ---- */
+  .sidebar {
+    width: var(--sidebar-w);
+    min-width: var(--sidebar-w);
+    background: var(--sidebar-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    position: relative;
+    z-index: 2;
+  }
+
+  .sidebar-scroll {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 20px 14px 24px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0,0,0,0.1) transparent;
+  }
+  .sidebar-scroll::-webkit-scrollbar { width: 5px; }
+  .sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
+  .sidebar-scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 3px; }
+
+  /* ---- PROGRESS RING (compact, no label) ---- */
+  .ring-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 16px;
+    padding-top: 4px;
+  }
+
+  .ring-container {
+    position: relative;
+    width: 80px;
+    height: 80px;
+  }
+
+  .ring-container svg { width: 80px; height: 80px; transform: rotate(-90deg); }
+
+  .ring-bg {
+    fill: none;
+    stroke: rgba(0,0,0,0.04);
+    stroke-width: 5;
+  }
+
+  .ring-fill {
+    fill: none;
+    stroke-width: 5;
+    stroke-linecap: round;
+    stroke-dasharray: 226;
+    stroke-dashoffset: 79;
+    transition: stroke-dashoffset 0.8s ease;
+  }
+
+  .ring-endpoint {
+    position: absolute;
+    width: 7px;
+    height: 7px;
+    background: var(--blue);
+    border-radius: 50%;
+    box-shadow: 0 0 4px var(--blue), 0 0 8px rgba(37,99,235,0.15);
+    animation: endpointPulse 2.5s ease-in-out infinite;
+  }
+
+  @keyframes endpointPulse {
+    0%, 100% { box-shadow: 0 0 4px var(--blue), 0 0 8px rgba(37,99,235,0.15); }
+    50% { box-shadow: 0 0 6px var(--blue), 0 0 14px rgba(37,99,235,0.2); }
+  }
+
+  .ring-text {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: -0.5px;
+  }
+
+  /* ---- MINI RINGS (per-module) ---- */
+  .mini-ring-container {
+    position: relative;
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+    margin-right: 8px;
+  }
+  .mini-ring-container svg { width: 28px; height: 28px; transform: rotate(-90deg); }
+  .mini-ring-bg { fill: none; stroke: rgba(0,0,0,0.06); stroke-width: 3; }
+  .mini-ring-fill { fill: none; stroke-width: 3; stroke-linecap: round; transition: stroke-dashoffset 0.6s ease; }
+
+  /* ---- MODULE CARD — GLASSMORPHISM ---- */
+  .module-group { margin-bottom: 6px; position: relative; }
+
+  /* GLOW HALO — sits behind the card */
+  .module-card-halo {
+    position: absolute;
+    top: -4px; left: -4px; right: -4px; bottom: -4px;
+    border-radius: 12px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.4s ease;
+    z-index: 0;
+  }
+  .module-group.halo-active .module-card-halo {
+    opacity: 1;
+    animation: haloBreath 3s ease-in-out infinite;
+  }
+  @keyframes haloBreath {
+    0%, 100% { opacity: 0.55; }
+    50% { opacity: 1; }
+  }
+
+  .module-card {
+    position: relative;
+    z-index: 1;
+    background: var(--surface);
+    backdrop-filter: blur(var(--glass-blur));
+    -webkit-backdrop-filter: blur(var(--glass-blur));
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 11px 8px;
+    cursor: pointer;
+    transition: background 0.25s, border-color 0.25s, box-shadow 0.35s, transform 0.2s;
+    overflow: hidden;
+  }
+
+  /* Glass shine overlay */
+  .module-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--glass-shine);
+    border-radius: 10px;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  /* Left color accent bar */
+  .module-card::after {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    border-radius: 10px 0 0 10px;
+    background: var(--module-color);
+    z-index: 2;
+  }
+
+  .module-card:hover {
+    background: var(--surface-hover);
+    border-color: var(--border-bright);
+    transform: translateY(-1px);
+  }
+
+  .module-card.selected {
+    background: var(--surface-hover);
+    border-color: color-mix(in srgb, var(--module-color) 45%, var(--border));
+    box-shadow: 0 0 16px rgba(0,0,0,0.25);
+  }
+
+  .module-card[data-color="green"]  { --module-color: var(--green); }
+  .module-card[data-color="purple"] { --module-color: var(--purple); }
+  .module-card[data-color="blue"]   { --module-color: var(--blue); }
+  .module-card[data-color="orange"] { --module-color: var(--orange); }
+
+  .module-card.active-module {
+    border-color: rgba(37,99,235,0.25);
+    box-shadow: 0 0 20px rgba(37,99,235,0.08), inset 0 0 20px rgba(59,130,246,0.04);
+  }
+
+  .mc-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+    position: relative;
+    z-index: 2;
+  }
+
+  .mc-left {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .mc-name {
+    font-size: 12.5px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding-left: 2px;
+  }
+
+  .mc-badge {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-weight: 600;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 2;
+  }
+  .mc-badge.done  { background: rgba(22,163,74,0.08); color: var(--green); }
+  .mc-badge.run   { background: rgba(37,99,235,0.08); color: var(--blue); }
+  .mc-badge.pend  { background: rgba(0,0,0,0.04); color: var(--text-muted); }
+
+  .mc-metric {
+    font-size: 15px;
+    font-weight: 700;
+    padding-left: 38px;
+    margin-bottom: 6px;
+    position: relative;
+    z-index: 2;
+  }
+
+  .mc-bar {
+    height: 3px;
+    background: rgba(0,0,0,0.03);
+    border-radius: 2px;
+    overflow: hidden;
+    position: relative;
+    z-index: 2;
+  }
+  .mc-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.6s ease;
+  }
+
+  /* ---- TREE LINES (vertical + branch connectors) ---- */
+  .tree-line-container {
+    position: relative;
+    padding-left: 18px;
+  }
+  .tree-line-container::before {
+    content: '';
+    position: absolute;
+    left: 17px;
+    top: 0;
+    bottom: 12px;
+    width: 2px;
+    border-radius: 1px;
+    opacity: 0.6;
+  }
+  .module-group[data-color="green"] .tree-line-container::before  { background: linear-gradient(to bottom, var(--green), rgba(34,197,94,0.1)); }
+  .module-group[data-color="purple"] .tree-line-container::before { background: linear-gradient(to bottom, var(--purple), rgba(167,139,250,0.1)); }
+  .module-group[data-color="blue"] .tree-line-container::before   { background: linear-gradient(to bottom, var(--blue), rgba(59,130,246,0.1)); }
+  .module-group[data-color="orange"] .tree-line-container::before { background: linear-gradient(to bottom, var(--orange), rgba(245,158,11,0.1)); }
+
+  /* ---- SUB-MODULE ROWS ---- */
+  .sub-list {
+    padding: 4px 0 4px 0;
+    overflow: hidden;
+    transition: max-height 0.35s ease, opacity 0.25s ease;
+  }
+  .sub-list.collapsed {
+    max-height: 0 !important;
+    opacity: 0;
+    padding: 0;
+  }
+
+  .sub-row {
+    display: flex;
+    align-items: center;
+    height: 26px;
+    padding: 0 6px 0 10px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background 0.15s;
+    position: relative;
+  }
+  /* branch connector */
+  .sub-row::before {
+    content: '';
+    position: absolute;
+    left: -1px;
+    top: 50%;
+    width: 10px;
+    height: 2px;
+    border-radius: 1px;
+    opacity: 0.35;
+  }
+  .module-group[data-color="green"] .sub-row::before  { background: var(--green); }
+  .module-group[data-color="purple"] .sub-row::before { background: var(--purple); }
+  .module-group[data-color="blue"] .sub-row::before   { background: var(--blue); }
+  .module-group[data-color="orange"] .sub-row::before { background: var(--orange); }
+
+  .sub-row:hover { background: rgba(0,0,0,0.03); }
+  .sub-row.selected { background: rgba(0,0,0,0.04); }
+
+  .sub-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-right: 8px;
+    margin-left: 8px;
+    transition: background 0.2s, box-shadow 0.3s;
+  }
+
+  .sub-row.done .sub-dot    { background: var(--green); }
+  .sub-row.active .sub-dot  { background: var(--blue); box-shadow: 0 0 6px var(--blue), 0 0 12px rgba(59,130,246,0.35); animation: dotPulse 2s ease-in-out infinite; }
+  .sub-row.pending .sub-dot { background: #cbd5e1; opacity: 0.6; }
+
+  @keyframes dotPulse {
+    0%, 100% { box-shadow: 0 0 5px var(--blue), 0 0 10px rgba(59,130,246,0.3); }
+    50% { box-shadow: 0 0 8px var(--blue), 0 0 16px rgba(37,99,235,0.25); }
+  }
+
+  .sub-name {
+    font-size: 11px;
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .sub-row.done .sub-name    { color: #334155; }
+  .sub-row.active .sub-name  { color: #1e293b; }
+  .sub-row.pending .sub-name { color: #94a3b8; opacity: 0.7; }
+
+  .sub-metric {
+    font-size: 10.5px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+    margin-left: 6px;
+    font-variant-numeric: tabular-nums;
+  }
+  .sub-row.pending .sub-metric { opacity: 0.4; }
+
+  /* ---- TREE PARTICLE CANVAS ---- */
+  #particleCanvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  /* ---- COLLAPSE CHEVRON ---- */
+  .mc-collapse {
+    font-size: 9px;
+    color: var(--text-muted);
+    margin-left: 6px;
+    transition: transform 0.3s ease;
+    cursor: pointer;
+    position: relative;
+    z-index: 2;
+    opacity: 0.6;
+  }
+  .mc-collapse:hover { opacity: 1; }
+  .mc-collapse.open { transform: rotate(90deg); }
+
+  /* ---- MAIN CONTENT ---- */
+  .main {
+    flex: 1;
+    overflow-y: auto;
+    padding: 32px 40px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0,0,0,0.1) transparent;
+    position: relative;
+    z-index: 1;
+  }
+  .main::-webkit-scrollbar { width: 6px; }
+  .main::-webkit-scrollbar-track { background: transparent; }
+  .main::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 3px; }
+
+  .content-fade { animation: fadeIn 0.2s ease; }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ---- DASHBOARD ---- */
+  .dash-title { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+  .dash-subtitle { font-size: 14px; color: var(--text-muted); margin-bottom: 12px; }
+
+  .dash-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 5px;
+    margin-bottom: 28px;
+  }
+  .dash-status.done { background: rgba(34,197,94,0.12); color: var(--green); }
+  .dash-status.run  { background: rgba(59,130,246,0.12); color: var(--blue); }
+  .dash-status.pend { background: rgba(148,163,184,0.1); color: var(--text-muted); }
+
+  .dash-status.run .shimmer-text {
+    background: linear-gradient(90deg, var(--blue) 0%, #93c5fd 50%, var(--blue) 100%);
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: shimmer 2.5s linear infinite;
+  }
+  @keyframes shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  /* ---- SUMMARY ---- */
+  .section-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+  }
+  .summary-text {
+    font-size: 14px;
+    line-height: 1.7;
+    color: #cbd5e1;
+    margin-bottom: 32px;
+    max-width: 720px;
+  }
+
+  /* ---- STAT CARDS ---- */
+  .stat-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    margin-bottom: 32px;
+  }
+  .stat-card {
+    background: var(--surface);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 18px;
+    position: relative;
+    overflow: hidden;
+  }
+  .stat-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--glass-shine);
+    pointer-events: none;
+  }
+  .stat-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+  }
+  .stat-value {
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 10px;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat-bar-track {
+    height: 6px;
+    background: rgba(0,0,0,0.03);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .stat-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.5s ease;
+  }
+  .stat-bar-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-top: 5px;
+  }
+  .stacked-bar {
+    display: flex;
+    height: 6px;
+    border-radius: 3px;
+    overflow: hidden;
+    gap: 1px;
+  }
+  .stacked-bar > div { height: 100%; }
+  .stacked-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 6px;
+  }
+  .stacked-legend span {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+  .stacked-legend span::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+
+  /* ---- ITEM LIST (collapsible artifacts) ---- */
+  .item-list { margin-bottom: 24px; }
+  .item-card {
+    background: var(--surface);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 6px;
+    overflow: hidden;
+    transition: border-color 0.2s;
+    position: relative;
+  }
+  .item-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--glass-shine);
+    pointer-events: none;
+    border-radius: 8px;
+  }
+  .item-card:hover { border-color: rgba(100,116,139,0.6); }
+
+  .item-header {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    cursor: pointer;
+    gap: 10px;
+  }
+  .item-icon {
+    font-size: 13px;
+    flex-shrink: 0;
+    width: 20px;
+    text-align: center;
+  }
+  .item-icon.done { color: var(--green); }
+  .item-icon.run  { color: var(--blue); }
+  .item-icon.pend { color: var(--text-muted); opacity: 0.4; }
+
+  .item-title {
+    font-size: 13px;
+    font-weight: 600;
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .item-meta {
+    font-size: 11.5px;
+    color: var(--text-muted);
+    display: flex;
+    gap: 14px;
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+  }
+  .item-chevron {
+    color: var(--text-muted);
+    font-size: 11px;
+    transition: transform 0.25s;
+    flex-shrink: 0;
+  }
+  .item-card.expanded .item-chevron { transform: rotate(90deg); }
+
+  .item-detail {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease, padding 0.3s ease;
+  }
+  .item-card.expanded .item-detail {
+    max-height: 200px;
+    padding: 0 16px 14px 46px;
+  }
+  .item-detail p {
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: #94a3b8;
+  }
+
+  /* ---- OVERVIEW STATE ---- */
+  .overview-title { font-size: 24px; font-weight: 700; margin-bottom: 6px; }
+  .overview-sub { font-size: 15px; color: var(--text-muted); margin-bottom: 24px; }
+  .overview-text { font-size: 14px; line-height: 1.75; color: #94a3b8; max-width: 660px; }
+
+  /* ---- KEYBOARD HINT ---- */
+  .kbd-hint {
+    position: fixed;
+    bottom: 12px;
+    right: 16px;
+    display: flex;
+    gap: 12px;
+    font-size: 10.5px;
+    color: var(--text-muted);
+    opacity: 0.5;
+    z-index: 20;
+  }
+  .kbd-hint kbd {
+    display: inline-block;
+    background: var(--surface-solid);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-family: inherit;
+    font-size: 10px;
+    margin: 0 2px;
+  }
+
+  /* ---- TREE-GROW ANIMATION ---- */
+  @keyframes treeGrow {
+    from { max-height: 0; opacity: 0; }
+    to   { max-height: 500px; opacity: 1; }
+  }
+  .sub-list.tree-grow {
+    animation: treeGrow 0.4s ease forwards;
+  }
+</style>
+</head>
+<body>
+
+<!-- BACKGROUND PARTICLES CANVAS -->
+<canvas id="bgCanvas"></canvas>
+
+<!-- SIDEBAR -->
+<aside class="sidebar" id="sidebar">
+  <canvas id="particleCanvas"></canvas>
+  <div class="sidebar-scroll" id="sidebarScroll">
+
+    <!-- Progress Ring (compact, no label) -->
+    <div class="ring-wrap">
+      <div class="ring-container">
+        <svg viewBox="0 0 80 80">
+          <defs>
+            <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#16a34a"/>
+              <stop offset="50%" stop-color="#2563eb"/>
+              <stop offset="100%" stop-color="#7c3aed"/>
+            </linearGradient>
+          </defs>
+          <circle class="ring-bg" cx="40" cy="40" r="36"/>
+          <circle class="ring-fill" cx="40" cy="40" r="36" stroke="url(#ringGrad)"/>
+        </svg>
+        <div class="ring-endpoint" id="ringEndpoint"></div>
+        <div class="ring-text">65%</div>
+      </div>
+    </div>
+
+    <!-- Module Groups built by JS -->
+    <div id="moduleContainer"></div>
+  </div>
+</aside>
+
+<!-- MAIN CONTENT -->
+<div class="main" id="mainContent"></div>
+
+<!-- KEYBOARD HINTS -->
+<div class="kbd-hint">
+  <span><kbd>&uarr;</kbd><kbd>&darr;</kbd> navigate</span>
+  <span><kbd>&larr;</kbd><kbd>&rarr;</kbd> modules</span>
+</div>
+
+<script>
+// ==================================================================
+//  DATA
+// ==================================================================
+const DATA = [
+  {
+    id: 'create_hypo',
+    name: 'Create Hypothesis',
+    color: 'green',
+    status: 'done',
+    metric: '710 tok/s',
+    progress: 100,
+    collapsed: false,
+    subs: [
+      { id:'mine',   name:'Mine Papers',    status:'done', metric:'847 papers',  detail: { summary:"Ingested 847 papers from Semantic Scholar, filtered by citation count and relevance. Extracted claims, methods, and results to build knowledge graph.", duration:'4m 12s', cost:'$1.24', messages:'312', durPct:10, costPct:10, msgBreakdown:[45,28,18,1,8] } },
+      { id:'kg',     name:'Build KG',       status:'done', metric:'2,341 nodes', detail: { summary:"Knowledge graph with 2,341 nodes and 8,492 edges. Community detection found 23 research clusters. Identified under-explored connections between contrastive learning and code-switching.", duration:'6m 48s', cost:'$2.01', messages:'487', durPct:16, costPct:16, msgBreakdown:[40,35,16,1,8] } },
+      { id:'gaps',   name:'Find Gaps',      status:'done', metric:'12 gaps',     detail: { summary:"Identified 12 research gaps. Top gap: contrastive alignment for code-switching (6 supporting papers, no implementation). Scored by novelty, feasibility, impact.", duration:'3m 15s', cost:'$0.98', messages:'201', durPct:8, costPct:8, msgBreakdown:[50,25,15,2,8] } },
+      { id:'seeds',  name:'Select Seeds',   status:'done', metric:'5 seeds',     detail: { summary:"Selected top 5 gaps as seed hypotheses. Weighted by novelty (40%), feasibility (35%), impact (25%).", duration:'1m 52s', cost:'$0.41', messages:'94', durPct:4, costPct:3, msgBreakdown:[55,20,15,2,8] } },
+      { id:'gen1',   name:'Gen Hypo × 3',   status:'done', metric:'8.4/10',      detail: { summary:"3 iterations of hypothesis generation + adversarial review. Score improved 6.2 → 7.8 → 8.4. Added convergence proof, ablation plan, typological distance evaluation.", duration:'36m', cost:'$5.78', messages:'842', durPct:44, costPct:46, msgBreakdown:[46,30,16,1,7] } },
+      { id:'rev',    name:'Review × 3',     status:'done', metric:'0 major',     detail: { summary:"Three adversarial reviews: 3 major → 1 major → 0 major issues. Final score 8.4/10 with high confidence.", duration:'9m', cost:'$2.20', messages:'453', durPct:11, costPct:18, msgBreakdown:[51,23,17,2,7] } }
+    ]
+  },
+  {
+    id: 'test_hypo',
+    name: 'Test Hypothesis',
+    color: 'blue',
+    status: 'active',
+    metric: '3 / 5',
+    progress: 58,
+    collapsed: false,
+    subs: [
+      { id:'strat',    name:'Strategy',       status:'done',   metric:'Selected',  detail: { summary:"Selected contrastive alignment + code-switching. Added ablation experiments per reviewer feedback.", duration:'5m', cost:'$0.58', messages:'124', durPct:4, costPct:4, msgBreakdown:[50,25,18,0,7] } },
+      { id:'plan',     name:'Plan × 5',       status:'done',   metric:'5 plans',   detail: { summary:"5 artifact plans: baseline experiment, multilingual dataset, convergence proof, ablation study, cross-lingual eval.", duration:'8m', cost:'$6.59', messages:'138', durPct:5, costPct:5, msgBreakdown:[48,28,16,1,7] } },
+      { id:'artifacts',name:'Create Artifacts',status:'active', metric:'3/5 done',  detail: { summary:"3 complete: baseline (+17.5% accuracy), multilingual pairs (2,400 examples), convergence proof (3 Lean lemmas). Ablation running. Cross-lingual eval pending.", duration:'19m+', cost:'$5.41', messages:'847', durPct:29, costPct:43, msgBreakdown:[45,30,15,2,8],
+        items: [
+          { title:'Contrastive Baseline', status:'done',   metricText:'acc: 0.847 (+17.5%)', time:'4m 32s', cost:'$2.14', detail:'Evaluated on XNLI across 12 languages. Largest gains: EN-Tamil (+22.3%), EN-Yoruba (+19.8%).' },
+          { title:'Multilingual Pairs',   status:'done',   metricText:'2,400 ex, 12 langs',  time:'3m 15s', cost:'$1.02', detail:'200 examples per language, code-switching at 5 ratios (10-50%).' },
+          { title:'Convergence Proof',    status:'done',   metricText:'3 lemmas verified',    time:'2m 41s', cost:'$0.89', detail:'Lean 4: Lipschitz, bound preservation, Banach convergence.' },
+          { title:'Ablation Study',       status:'active', metricText:'running...',           time:'1m 20s', cost:'$1.36', detail:'Config A complete: 0.791 (+9.7%). Config B running.' },
+          { title:'Cross-lingual Eval',   status:'pending',metricText:'pending',              time:'\u2014', cost:'\u2014', detail:'XTREME benchmark across 40 languages.' }
+        ]
+      } },
+      { id:'paper',    name:'Write Paper',    status:'pending', metric:'\u2014' },
+      { id:'review_p', name:'Review Paper',   status:'pending', metric:'\u2014' },
+      { id:'update_h', name:'Update Hypo',    status:'pending', metric:'\u2014' }
+    ]
+  },
+  {
+    id: 'disseminate',
+    name: 'Disseminate Results',
+    color: 'orange',
+    status: 'pending',
+    metric: '\u2014',
+    progress: 0,
+    collapsed: false,
+    subs: [
+      { id:'repo',    name:'Gen Repo',       status:'pending', metric:'\u2014' },
+      { id:'demos',   name:'Demos + Viz',    status:'pending', metric:'\u2014' },
+      { id:'full',    name:'Full Paper',     status:'pending', metric:'\u2014' },
+      { id:'deploy_s',name:'Deploy Source', status:'pending', metric:'\u2014' },
+      { id:'deploy_p',name:'Deploy Paper',  status:'pending', metric:'\u2014' }
+    ]
+  }
+];
+
+// ==================================================================
+//  STATE
+// ==================================================================
+let selectedModuleIdx = 2;
+let selectedSubIdx = 2;
+let viewMode = 'sub';
+
+// ==================================================================
+//  HALO COLOR MAP
+// ==================================================================
+const HALO_COLORS = {
+  green:  'radial-gradient(ellipse at center, rgba(22,163,74,0.12) 0%, rgba(34,197,94,0) 70%)',
+  purple: 'radial-gradient(ellipse at center, rgba(124,58,237,0.1) 0%, rgba(167,139,250,0) 70%)',
+  blue:   'radial-gradient(ellipse at center, rgba(37,99,235,0.12) 0%, rgba(59,130,246,0) 70%)',
+  orange: 'radial-gradient(ellipse at center, rgba(217,119,6,0.1) 0%, rgba(245,158,11,0) 70%)'
+};
+
+// ==================================================================
+//  BUILD SIDEBAR
+// ==================================================================
+function buildSidebar() {
+  const container = document.getElementById('moduleContainer');
+  container.innerHTML = '';
+
+  DATA.forEach((mod, mi) => {
+    const group = document.createElement('div');
+    group.className = 'module-group';
+    group.dataset.moduleIdx = mi;
+    group.dataset.color = mod.color;
+
+    // Halo active state
+    if (mod.status === 'active' || (viewMode === 'module' && selectedModuleIdx === mi) ||
+        (viewMode === 'sub' && selectedModuleIdx === mi)) {
+      group.classList.add('halo-active');
+    }
+
+    // -- Glow halo element
+    const halo = document.createElement('div');
+    halo.className = 'module-card-halo';
+    halo.style.background = HALO_COLORS[mod.color];
+    group.appendChild(halo);
+
+    // -- Module Card
+    const card = document.createElement('div');
+    card.className = 'module-card' +
+      (mod.status === 'active' ? ' active-module' : '') +
+      (viewMode === 'module' && selectedModuleIdx === mi ? ' selected' : '');
+    card.dataset.color = mod.color;
+    card.dataset.mi = mi;
+
+    const badgeClass = mod.status === 'done' ? 'done' : mod.status === 'active' ? 'run' : 'pend';
+    const badgeIcon  = mod.status === 'done' ? '&#10003;' : mod.status === 'active' ? '&#9654;' : '&#9675;';
+    const barColor = `var(--${mod.color})`;
+
+    // Mini ring SVG
+    const circumference = 2 * Math.PI * 9;
+    const miniOffset = circumference - (mod.progress / 100) * circumference;
+    const miniRingColor = `var(--${mod.color})`;
+
+    card.innerHTML = `
+      <div class="mc-header">
+        <div class="mc-left">
+          <div class="mini-ring-container">
+            <svg viewBox="0 0 24 24">
+              <circle class="mini-ring-bg" cx="12" cy="12" r="9"/>
+              <circle class="mini-ring-fill" cx="12" cy="12" r="9"
+                stroke="${miniRingColor}"
+                stroke-dasharray="${circumference}"
+                stroke-dashoffset="${miniOffset}"
+                fill="none"/>
+            </svg>
+          </div>
+          <span class="mc-name">${mod.name}</span>
+        </div>
+        <span class="mc-badge ${badgeClass}">${badgeIcon}</span>
+        <span class="mc-collapse ${mod.collapsed ? '' : 'open'}" data-mi="${mi}">&#9656;</span>
+      </div>
+      <div class="mc-metric">${mod.metric}</div>
+      <div class="mc-bar">
+        <div class="mc-bar-fill" style="width:${mod.progress}%;background:${barColor}"></div>
+      </div>
+    `;
+
+    card.addEventListener('click', (e) => {
+      // Check if collapse chevron was clicked
+      if (e.target.closest('.mc-collapse')) {
+        mod.collapsed = !mod.collapsed;
+        refresh();
+        return;
+      }
+      selectedModuleIdx = mi;
+      viewMode = 'module';
+      selectedSubIdx = -1;
+      refresh();
+    });
+    group.appendChild(card);
+
+    // -- Sub rows with tree lines
+    const treeWrap = document.createElement('div');
+    treeWrap.className = 'tree-line-container';
+
+    const subList = document.createElement('div');
+    subList.className = 'sub-list' + (mod.collapsed ? ' collapsed' : ' tree-grow');
+
+    mod.subs.forEach((sub, si) => {
+      const row = document.createElement('div');
+      row.className = 'sub-row ' + sub.status +
+        (viewMode === 'sub' && selectedModuleIdx === mi && selectedSubIdx === si ? ' selected' : '');
+      row.dataset.mi = mi;
+      row.dataset.si = si;
+
+      row.innerHTML = `
+        <div class="sub-dot"></div>
+        <span class="sub-name">${sub.name}</span>
+        <span class="sub-metric">${sub.metric}</span>
+      `;
+      row.addEventListener('click', () => {
+        selectedModuleIdx = mi;
+        selectedSubIdx = si;
+        viewMode = 'sub';
+        refresh();
+      });
+      subList.appendChild(row);
+    });
+
+    treeWrap.appendChild(subList);
+    group.appendChild(treeWrap);
+    container.appendChild(group);
+  });
+}
+
+// ==================================================================
+//  RENDER MAIN CONTENT
+// ==================================================================
+function renderContent() {
+  const main = document.getElementById('mainContent');
+  const mod = DATA[selectedModuleIdx];
+
+  if (viewMode === 'module' || selectedSubIdx < 0) {
+    main.innerHTML = renderModuleOverview(mod);
+  } else {
+    const sub = mod.subs[selectedSubIdx];
+    main.innerHTML = renderSubDashboard(mod, sub);
+  }
+}
+
+function renderModuleOverview(mod) {
+  const statusBadge = mod.status === 'done' ? 'done' : mod.status === 'active' ? 'run' : 'pend';
+  const statusLabel = mod.status === 'done' ? '&#10003; Complete' : mod.status === 'active' ? '&#9654; In Progress' : '&#9675; Pending';
+
+  const activeSub = mod.subs.find(s => s.status === 'active');
+  const doneSubs = mod.subs.filter(s => s.status === 'done').length;
+
+  const overviewTexts = {
+    'seed': 'The seed hypothesis phase is complete. I mined 847 papers from the target research domain, constructed a knowledge graph with 2,341 nodes capturing claims, methods, and results, and identified 12 significant research gaps. From these, I selected the 5 most promising gaps as seed hypotheses based on novelty, feasibility, and potential impact scores. The strongest seed \u2014 contrastive alignment for cross-lingual transfer \u2014 scored 8.7/10 on combined metrics and was advanced to the hypothesis refinement loop.',
+    'hypo': 'The hypothesis refinement loop is complete after 3 iterations. The initial hypothesis scored 6.2/10 with 3 major issues identified in review. Through iterative refinement, I addressed concerns about optimistic performance claims, missing ablation plans, and convergence guarantees. The final hypothesis \u2014 contrastive alignment with synthetic code-switching augmentation for cross-lingual transfer \u2014 achieved 8.4/10 with 0 major issues and high confidence (4/5). It is now being validated in the invention loop.',
+    'inv': `The invention loop is in its second iteration, currently generating research artifacts. ${doneSubs} of ${mod.subs.length} steps are complete. ${activeSub ? 'Currently running: ' + activeSub.name + ' (' + activeSub.metric + ').' : ''} The strategy phase selected contrastive alignment as the primary approach. The planning phase defined 5 artifacts for empirical validation. Three artifacts are complete (baseline experiment, multilingual dataset, convergence proof), one is running (ablation study), and one is pending (cross-lingual evaluation).`,
+    'paper_repo': 'The paper and repository generation phase has not started yet. Once the invention loop completes with a passing review, this phase will generate the research repository, create interactive demos and visualizations, compile the full paper, and deploy both the source code and the formatted paper. Estimated duration: 8-12 minutes.'
+  };
+
+  return `<div class="content-fade">
+    <div class="overview-title">${mod.name}</div>
+    <div class="overview-sub">${mod.status === 'active' ? 'Iteration 2 of 3' : mod.status === 'done' ? 'All iterations complete' : 'Waiting to start'}</div>
+    <div class="dash-status ${statusBadge}">${mod.status === 'active' ? '<span class="shimmer-text">' + statusLabel + '</span>' : statusLabel}</div>
+    <div style="margin-top:8px">
+      <div class="section-label">Summary</div>
+      <div class="overview-text">${overviewTexts[mod.id]}</div>
+    </div>
+  </div>`;
+}
+
+function renderSubDashboard(mod, sub) {
+  if (!sub.detail) {
+    return `<div class="content-fade">
+      <div class="dash-title">${sub.name}</div>
+      <div class="dash-subtitle">${mod.name}</div>
+      <div class="dash-status pend">&#9675; Pending</div>
+      <div style="margin-top:8px">
+        <div class="section-label">Status</div>
+        <div class="summary-text">This step has not started yet. It will begin once the preceding steps are complete.</div>
+      </div>
+    </div>`;
+  }
+
+  const d = sub.detail;
+  const statusBadge = sub.status === 'done' ? 'done' : sub.status === 'active' ? 'run' : 'pend';
+  const statusLabel = sub.status === 'done' ? '&#10003; Complete' : sub.status === 'active' ? '&#9654; Running' : '&#9675; Pending';
+
+  const totalDur = '42m 10s';
+  const totalCost = '$12.47';
+
+  const bd = d.msgBreakdown || [45,30,15,2,8];
+  const bdColors = ['var(--blue)','var(--purple)','var(--green)','var(--red)','#475569'];
+  const bdLabels = ['Agent','Tools','Status','Errors','Other'];
+
+  let itemsHtml = '';
+  if (d.items) {
+    itemsHtml = `
+      <div class="section-label" style="margin-top:4px">Artifacts</div>
+      <div class="item-list">
+        ${d.items.map((it, idx) => {
+          const ic = it.status === 'done' ? 'done' : it.status === 'active' ? 'run' : 'pend';
+          const icon = it.status === 'done' ? '&#10003;' : it.status === 'active' ? '&#9654;' : '&#9675;';
+          return `<div class="item-card" data-item="${idx}">
+            <div class="item-header">
+              <span class="item-icon ${ic}">${icon}</span>
+              <span class="item-title">${it.title}</span>
+              <span class="item-meta">
+                <span>${it.metricText}</span>
+                <span>${it.time}</span>
+                <span>${it.cost}</span>
+              </span>
+              <span class="item-chevron">&#9656;</span>
+            </div>
+            <div class="item-detail"><p>${it.detail}</p></div>
+          </div>`;
+        }).join('')}
+      </div>`;
+  }
+
+  return `<div class="content-fade">
+    <div class="dash-title">${sub.name}</div>
+    <div class="dash-subtitle">${mod.name}${mod.id === 'inv' ? ' \u2014 Iteration 2' : mod.id === 'hypo' ? ' \u2014 Iteration ' + (Math.floor(DATA[1].subs.indexOf(sub)/2)+1) : ''}</div>
+    <div class="dash-status ${statusBadge}">${sub.status === 'active' ? '<span class="shimmer-text">' + statusLabel + '</span>' : statusLabel}</div>
+
+    <div style="margin-top:20px">
+      <div class="section-label">What happened</div>
+      <div class="summary-text">${d.summary}</div>
+    </div>
+
+    <div class="section-label">Key Statistics</div>
+    <div class="stat-row">
+      <div class="stat-card">
+        <div class="stat-label">Duration</div>
+        <div class="stat-value">${d.duration}</div>
+        <div class="stat-bar-track">
+          <div class="stat-bar-fill" style="width:${d.durPct}%;background:var(--blue)"></div>
+        </div>
+        <div class="stat-bar-label"><span>of ${totalDur} total</span><span>${d.durPct}%</span></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Cost</div>
+        <div class="stat-value">${d.cost}</div>
+        <div class="stat-bar-track">
+          <div class="stat-bar-fill" style="width:${d.costPct}%;background:var(--${mod.color})"></div>
+        </div>
+        <div class="stat-bar-label"><span>of ${totalCost} total</span><span>${d.costPct}%</span></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Messages</div>
+        <div class="stat-value">${d.messages}</div>
+        <div class="stacked-bar">
+          ${bd.map((v,i) => `<div style="width:${v}%;background:${bdColors[i]}"></div>`).join('')}
+        </div>
+        <div class="stacked-legend">
+          ${bd.map((v,i) => `<span style="--dot:${bdColors[i]}">${bdLabels[i]} ${v}%</span>`).join('')}
+        </div>
+      </div>
+    </div>
+
+    ${itemsHtml}
+  </div>`;
+}
+
+// ==================================================================
+//  ITEM EXPAND/COLLAPSE
+// ==================================================================
+document.getElementById('mainContent').addEventListener('click', (e) => {
+  const header = e.target.closest('.item-header');
+  if (!header) return;
+  const card = header.closest('.item-card');
+  card.classList.toggle('expanded');
+});
+
+// ==================================================================
+//  REFRESH
+// ==================================================================
+function refresh() {
+  buildSidebar();
+  renderContent();
+  positionRingEndpoint();
+}
+
+// ==================================================================
+//  RING ENDPOINT POSITION (65% along the arc)
+// ==================================================================
+function positionRingEndpoint() {
+  const pct = 0.65;
+  const angle = -90 + pct * 360;
+  const rad = angle * Math.PI / 180;
+  const cx = 40 + 36 * Math.cos(rad);
+  const cy = 40 + 36 * Math.sin(rad);
+  const ep = document.getElementById('ringEndpoint');
+  ep.style.left = (cx - 3.5) + 'px';
+  ep.style.top  = (cy - 3.5) + 'px';
+}
+
+// inject legend dot color rule
+const legendStyle = document.createElement('style');
+legendStyle.textContent = `.stacked-legend span::before { background: var(--dot); }`;
+document.head.appendChild(legendStyle);
+
+// ==================================================================
+//  TREE PARTICLE FLOW (properly positioned with getBoundingClientRect)
+// ==================================================================
+const treeCanvas = document.getElementById('particleCanvas');
+const treeCtx = treeCanvas.getContext('2d');
+let treeParticles = [];
+let treeAnimFrame;
+
+function resizeTreeCanvas() {
+  const sidebar = document.getElementById('sidebar');
+  treeCanvas.width = sidebar.offsetWidth;
+  treeCanvas.height = sidebar.offsetHeight;
+}
+
+function getTreeParticleEndpoints() {
+  const activeModuleIdx = DATA.findIndex(m => m.status === 'active');
+  if (activeModuleIdx < 0) return null;
+
+  const mod = DATA[activeModuleIdx];
+  const activeSubIdx = mod.subs.findIndex(s => s.status === 'active');
+  if (activeSubIdx < 0) return null;
+
+  const group = document.querySelector(`.module-group[data-module-idx="${activeModuleIdx}"]`);
+  if (!group) return null;
+
+  const card = group.querySelector('.module-card');
+  const subRows = group.querySelectorAll('.sub-row');
+  const targetRow = subRows[activeSubIdx];
+
+  if (!card || !targetRow) return null;
+
+  const sidebarBCR = document.getElementById('sidebar').getBoundingClientRect();
+  const cardRect = card.getBoundingClientRect();
+  const dot = targetRow.querySelector('.sub-dot');
+  const dotRect = dot.getBoundingClientRect();
+
+  return {
+    startX: cardRect.left - sidebarBCR.left + 16,
+    startY: cardRect.bottom - sidebarBCR.top,
+    endX:   dotRect.left - sidebarBCR.left + 4,
+    endY:   dotRect.top - sidebarBCR.top + 4
+  };
+}
+
+let treeLastSpawn = 0;
+const TREE_SPAWN_INTERVAL = 550;
+
+function spawnTreeParticle(ep) {
+  if (!ep) return;
+  treeParticles.push({
+    startX: ep.startX, startY: ep.startY,
+    endX: ep.endX, endY: ep.endY,
+    progress: 0,
+    speed: 0.008 + Math.random() * 0.005,
+    size: 1.5 + Math.random() * 1.5,
+    opacity: 0.6 + Math.random() * 0.4,
+    wobble: (Math.random() - 0.5) * 3
+  });
+}
+
+function animateTreeParticles(timestamp) {
+  treeCtx.clearRect(0, 0, treeCanvas.width, treeCanvas.height);
+
+  const ep = getTreeParticleEndpoints();
+
+  if (ep && treeParticles.length < 5 && timestamp - treeLastSpawn > TREE_SPAWN_INTERVAL) {
+    spawnTreeParticle(ep);
+    treeLastSpawn = timestamp;
+  }
+
+  treeParticles = treeParticles.filter(p => {
+    p.progress += p.speed;
+    if (p.progress >= 1) return false;
+
+    const t = p.progress;
+
+    // L-shaped path: straight down the tree line, then 90° right to the dot
+    // Phase 1 (0→0.6): travel vertically down from startY to endY at startX
+    // Phase 2 (0.6→1): travel horizontally right from startX to endX at endY
+    const turnPoint = 0.6;
+    let cx, cy;
+    if (t < turnPoint) {
+      const vertT = t / turnPoint;
+      cx = p.startX;
+      cy = p.startY + (p.endY - p.startY) * vertT;
+    } else {
+      const horizT = (t - turnPoint) / (1 - turnPoint);
+      cx = p.startX + (p.endX - p.startX) * horizT;
+      cy = p.endY;
+    }
+
+    const fade = t < 0.1 ? t / 0.1 : t > 0.85 ? (1 - t) / 0.15 : 1;
+
+    // Glow
+    const grad = treeCtx.createRadialGradient(cx, cy, 0, cx, cy, p.size * 5);
+    grad.addColorStop(0, `rgba(37, 99, 235, ${p.opacity * 0.2 * fade})`);
+    grad.addColorStop(1, 'rgba(59, 130, 246, 0)');
+    treeCtx.fillStyle = grad;
+    treeCtx.beginPath();
+    treeCtx.arc(cx, cy, p.size * 5, 0, Math.PI * 2);
+    treeCtx.fill();
+
+    // Core
+    treeCtx.fillStyle = `rgba(37, 99, 235, ${p.opacity * 0.6 * fade})`;
+    treeCtx.beginPath();
+    treeCtx.arc(cx, cy, p.size, 0, Math.PI * 2);
+    treeCtx.fill();
+
+    return true;
+  });
+
+  treeAnimFrame = requestAnimationFrame(animateTreeParticles);
+}
+
+// ==================================================================
+//  BACKGROUND PARTICLES (full-screen ambient)
+// ==================================================================
+const bgCanvas = document.getElementById('bgCanvas');
+const bgCtx = bgCanvas.getContext('2d');
+let bgParticles = [];
+
+function resizeBgCanvas() {
+  bgCanvas.width = window.innerWidth;
+  bgCanvas.height = window.innerHeight;
+}
+
+function initBgParticles() {
+  bgParticles = [];
+  const count = Math.floor((window.innerWidth * window.innerHeight) / 18000);
+  for (let i = 0; i < count; i++) {
+    bgParticles.push({
+      x: Math.random() * bgCanvas.width,
+      y: Math.random() * bgCanvas.height,
+      vx: (Math.random() - 0.5) * 0.15,
+      vy: (Math.random() - 0.5) * 0.1,
+      size: 0.6 + Math.random() * 1.2,
+      opacity: 0.08 + Math.random() * 0.18,
+      pulse: Math.random() * Math.PI * 2,
+      pulseSpeed: 0.005 + Math.random() * 0.01
+    });
+  }
+}
+
+function animateBgParticles() {
+  bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
+
+  bgParticles.forEach(p => {
+    p.x += p.vx;
+    p.y += p.vy;
+    p.pulse += p.pulseSpeed;
+
+    // Wrap
+    if (p.x < -10) p.x = bgCanvas.width + 10;
+    if (p.x > bgCanvas.width + 10) p.x = -10;
+    if (p.y < -10) p.y = bgCanvas.height + 10;
+    if (p.y > bgCanvas.height + 10) p.y = -10;
+
+    const alpha = p.opacity * (0.6 + 0.4 * Math.sin(p.pulse));
+
+    bgCtx.fillStyle = `rgba(148, 163, 184, ${alpha})`;
+    bgCtx.beginPath();
+    bgCtx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    bgCtx.fill();
+  });
+
+  // Draw subtle connections between close particles
+  for (let i = 0; i < bgParticles.length; i++) {
+    for (let j = i + 1; j < bgParticles.length; j++) {
+      const dx = bgParticles[i].x - bgParticles[j].x;
+      const dy = bgParticles[i].y - bgParticles[j].y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 100) {
+        const lineAlpha = 0.04 * (1 - dist / 100);
+        bgCtx.strokeStyle = `rgba(148, 163, 184, ${lineAlpha})`;
+        bgCtx.lineWidth = 0.5;
+        bgCtx.beginPath();
+        bgCtx.moveTo(bgParticles[i].x, bgParticles[i].y);
+        bgCtx.lineTo(bgParticles[j].x, bgParticles[j].y);
+        bgCtx.stroke();
+      }
+    }
+  }
+
+  requestAnimationFrame(animateBgParticles);
+}
+
+// ==================================================================
+//  KEYBOARD NAVIGATION
+// ==================================================================
+document.addEventListener('keydown', (e) => {
+  const mod = DATA[selectedModuleIdx];
+
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    if (viewMode === 'module') {
+      viewMode = 'sub';
+      selectedSubIdx = 0;
+    } else {
+      if (selectedSubIdx < mod.subs.length - 1) {
+        selectedSubIdx++;
+      }
+    }
+    refresh();
+  }
+
+  if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (viewMode === 'sub') {
+      if (selectedSubIdx > 0) {
+        selectedSubIdx--;
+      } else {
+        viewMode = 'module';
+        selectedSubIdx = -1;
+      }
+    }
+    refresh();
+  }
+
+  if (e.key === 'ArrowRight') {
+    e.preventDefault();
+    if (selectedModuleIdx < DATA.length - 1) {
+      selectedModuleIdx++;
+      viewMode = 'module';
+      selectedSubIdx = -1;
+      refresh();
+    }
+  }
+
+  if (e.key === 'ArrowLeft') {
+    e.preventDefault();
+    if (selectedModuleIdx > 0) {
+      selectedModuleIdx--;
+      viewMode = 'module';
+      selectedSubIdx = -1;
+      refresh();
+    }
+  }
+});
+
+// ==================================================================
+//  INIT
+// ==================================================================
+window.addEventListener('resize', () => {
+  resizeTreeCanvas();
+  resizeBgCanvas();
+});
+
+resizeTreeCanvas();
+resizeBgCanvas();
+initBgParticles();
+refresh();
+requestAnimationFrame(animateTreeParticles);
+requestAnimationFrame(animateBgParticles);
+</script>
+</body>
+</html>
