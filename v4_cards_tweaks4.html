@@ -166,6 +166,27 @@ body {
 .sparkline-path { fill: none; stroke-width: 1.5; stroke-linecap: round; opacity: .7; }
 .sparkline-area { opacity: .06; }
 
+/* Sparkline tooltip */
+.spark-wrap { position: relative; cursor: crosshair; }
+.spark-wrap svg { overflow: visible; }
+.spark-tip {
+  position: absolute; top: -34px; padding: 4px 8px; border-radius: 6px;
+  background: #fff; border: 1px solid #e5e7eb;
+  font-size: 11px; font-weight: 500; color: #111827; white-space: nowrap;
+  pointer-events: none; opacity: 0; transition: opacity .1s;
+  font-family: 'Inter', sans-serif; transform: translateX(-50%);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1); z-index: 10;
+  line-height: 1.4;
+}
+.spark-tip.vis { opacity: 1; }
+.spark-dot {
+  position: absolute; width: 7px; height: 7px; border-radius: 50%;
+  pointer-events: none; opacity: 0; transition: opacity .1s;
+  transform: translate(-3.5px, -3.5px); border: 2px solid #fff;
+  box-shadow: 0 0 4px rgba(0,0,0,0.15); z-index: 10;
+}
+.spark-dot.vis { opacity: 1; }
+
 /* Progress bar */
 .mc-progress { height: 3px; border-radius: 2px; background: #f0f0f1; overflow: hidden; margin-bottom: 10px; }
 .mc-progress-fill { height: 100%; border-radius: 2px; transition: width .8s var(--ease); }
@@ -181,15 +202,14 @@ body {
 /* ===== RING SPIN-PAUSE ANIMATION ===== */
 @keyframes ringSpinShow {
   0%   { transform: rotate(0deg); }
-  25%  { transform: rotate(0deg); }
-  35%  { transform: rotate(360deg); }
-  45%  { transform: rotate(720deg); }
-  55%  { transform: rotate(1080deg); }
+  20%  { transform: rotate(360deg); }
+  40%  { transform: rotate(720deg); }
   60%  { transform: rotate(1080deg); }
+  62%  { transform: rotate(1080deg); }
   100% { transform: rotate(1080deg); }
 }
 .ring-spin-wrap {
-  animation: ringSpinShow 6s ease-in-out infinite;
+  animation: ringSpinShow 5s ease-in-out infinite;
 }
 </style>
 </head>
@@ -336,7 +356,7 @@ function graphPanel(card, gh, opts) {
   var bgStyle = hasBg ? 'background:var(--graph-bg);border-radius:6px;padding:2px;' : '';
   var bleed = opts.bleed ? 'margin:0 -20px;' : '';
   var borderStyle = opts.border ? 'border:1px solid ' + (opts.borderColor || 'var(--border)') + ';border-radius:8px;padding:4px;' : '';
-  var h = '<div style="position:relative;height:'+gh+'px;margin-bottom:'+(opts.mb||10)+'px;' + bgStyle + bleed + borderStyle + 'overflow:hidden">';
+  var h = '<div class="spark-wrap" style="position:relative;height:'+gh+'px;margin-bottom:'+(opts.mb||10)+'px;' + bgStyle + bleed + borderStyle + '">';
   h += '<span style="position:absolute;top:2px;left:6px;font-size:9px;color:#9ca3af;z-index:1">tok/s</span>';
   if (opts.extraOverlay) h += opts.extraOverlay;
   h += '<div style="height:100%">' + buildSparkline(card.sparkline, c.main, 200, gh - (hasBg || opts.border ? 4 : 0)) + '</div>';
@@ -833,6 +853,51 @@ VARIANTS.forEach(function(v) {
   html += '</div>';
   section.innerHTML = html;
   rowsEl.appendChild(section);
+});
+
+// =====================================================================
+// SPARKLINE HOVER TOOLTIPS
+// =====================================================================
+const tokData = {
+  purple: [120,340,580,620,710,780,850,900,940,960],
+  blue: [80,180,290,380,450,520,570,600,620,640],
+  orange: [0,0,0,0,0,0,0,0,0,0]
+};
+const timeLabels = ['0s','6s','12s','18s','24s','30s','36s','42s','48s','54s'];
+
+document.querySelectorAll('.spark-wrap').forEach(el => {
+  const tip = document.createElement('div'); tip.className = 'spark-tip'; el.appendChild(tip);
+  const dot = document.createElement('div'); dot.className = 'spark-dot'; el.appendChild(dot);
+  const card = el.closest('.mod-card');
+  const col = card ? card.dataset.color : 'blue';
+  const hex = col === 'purple' ? '#a78bfa' : col === 'blue' ? '#60a5fa' : '#fb923c';
+  const toks = tokData[col] || tokData.blue;
+  dot.style.background = hex;
+
+  el.addEventListener('mousemove', function(e) {
+    const r = el.getBoundingClientRect();
+    const x = e.clientX - r.left;
+    const pct = Math.max(0, Math.min(1, x / r.width));
+    const idx = Math.min(toks.length - 1, Math.floor(pct * toks.length));
+    const val = toks[idx];
+    const t = timeLabels[idx] || '';
+    if (val > 0) {
+      tip.innerHTML = '<b>' + val + ' tokens/s</b><br><span style="color:#9ca3af;font-size:10px">' + t + '</span>';
+    } else {
+      tip.textContent = '--';
+    }
+    tip.style.left = x + 'px';
+    tip.classList.add('vis');
+    const max = Math.max(...toks, 1);
+    const yPct = 1 - val / max;
+    dot.style.left = x + 'px';
+    dot.style.top = (4 + yPct * (r.height - 8)) + 'px';
+    dot.classList.add('vis');
+  });
+  el.addEventListener('mouseleave', function() {
+    tip.classList.remove('vis');
+    dot.classList.remove('vis');
+  });
 });
 </script>
 </body>
