@@ -1,0 +1,2085 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Ultra Pipeline Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ================================================================
+   RESET & VARIABLES
+   ================================================================ */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #0f1117;
+  --surface: #181b22;
+  --surface-raised: #1e222b;
+  --border: #262b36;
+  --border-light: #333a48;
+  --text: #e2e4e9;
+  --text-muted: #8b919a;
+  --text-dim: #5e6572;
+
+  --green: #22c55e;
+  --green-glow: rgba(34, 197, 94, 0.35);
+  --green-dim: rgba(34, 197, 94, 0.12);
+  --purple: #a78bfa;
+  --purple-glow: rgba(167, 139, 250, 0.35);
+  --purple-dim: rgba(167, 139, 250, 0.12);
+  --blue: #3b82f6;
+  --blue-glow: rgba(59, 130, 246, 0.35);
+  --blue-dim: rgba(59, 130, 246, 0.12);
+  --orange: #f59e0b;
+  --orange-glow: rgba(245, 158, 11, 0.35);
+  --orange-dim: rgba(245, 158, 11, 0.12);
+  --red: #ef4444;
+
+  --glass-bg: rgba(24, 27, 34, 0.7);
+  --glass-border: rgba(148, 163, 184, 0.10);
+  --glass-blur: 16px;
+  --radius: 14px;
+  --radius-sm: 10px;
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-smooth: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --sidebar-collapsed: 48px;
+  --sidebar-expanded: 240px;
+}
+
+html {
+  font-size: 14px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+}
+
+/* ================================================================
+   BACKGROUND AMBIENT CANVAS
+   ================================================================ */
+#bgCanvas {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* subtle dot grid */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(circle, rgba(100,116,155,0.04) 1px, transparent 1px);
+  background-size: 32px 32px;
+}
+
+/* ================================================================
+   SIDEBAR -- Collapsed (48px) / Expanded (240px)
+   ================================================================ */
+.sidebar {
+  width: var(--sidebar-collapsed);
+  min-width: var(--sidebar-collapsed);
+  height: 100vh;
+  background: linear-gradient(180deg, #151820 0%, var(--bg) 100%);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px 0;
+  transition: width 300ms var(--ease-out-expo), min-width 300ms var(--ease-out-expo);
+  overflow: hidden;
+  position: relative;
+  z-index: 100;
+  flex-shrink: 0;
+}
+.sidebar.expanded {
+  width: var(--sidebar-expanded);
+  min-width: var(--sidebar-expanded);
+}
+
+/* Logo */
+.sidebar-logo {
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--blue) 0%, var(--purple) 100%);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 12px; color: #fff;
+  letter-spacing: -0.5px;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: transform 200ms ease;
+}
+.sidebar-logo:hover { transform: scale(1.08); }
+
+.sidebar-title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateX(-8px);
+  transition: opacity 250ms ease 100ms, transform 250ms ease 100ms;
+  margin-left: 10px;
+}
+.sidebar.expanded .sidebar-title {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 0 8px;
+  margin-bottom: 24px;
+  justify-content: center;
+}
+.sidebar.expanded .sidebar-header {
+  justify-content: flex-start;
+  padding: 0 16px;
+}
+
+/* Module dots (collapsed) */
+.sidebar-dots {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: auto;
+}
+.sidebar-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform 200ms ease, box-shadow 200ms ease;
+  position: relative;
+}
+.sidebar-dot:hover { transform: scale(1.4); }
+.sidebar-dot.active {
+  box-shadow: 0 0 8px currentColor;
+  transform: scale(1.3);
+}
+.sidebar-dot[data-module="seed"] { background: var(--green); color: var(--green); }
+.sidebar-dot[data-module="hypo"] { background: var(--purple); color: var(--purple); }
+.sidebar-dot[data-module="invention"] { background: var(--blue); color: var(--blue); }
+.sidebar-dot[data-module="paper"] { background: var(--orange); color: var(--orange); }
+
+/* Expanded nav items */
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 0 8px;
+  margin-bottom: auto;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms ease;
+}
+.sidebar.expanded .sidebar-nav {
+  opacity: 1;
+  pointer-events: auto;
+}
+.sidebar.expanded .sidebar-dots { display: none; }
+
+.sidebar-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+  transition: background 150ms ease, color 150ms ease;
+  white-space: nowrap;
+}
+.sidebar-nav-item:hover {
+  background: rgba(255,255,255,0.05);
+  color: var(--text);
+}
+.sidebar-nav-item.active {
+  color: var(--text);
+  background: rgba(255,255,255,0.07);
+}
+.sidebar-nav-item .nav-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* Sidebar progress ring */
+.sidebar-progress {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding-top: 16px;
+}
+.sidebar-ring-wrap {
+  position: relative;
+  width: 32px; height: 32px;
+  transition: width 300ms var(--ease-out-expo), height 300ms var(--ease-out-expo);
+}
+.sidebar.expanded .sidebar-ring-wrap {
+  width: 80px; height: 80px;
+}
+.sidebar-ring-wrap svg {
+  width: 100%; height: 100%;
+  transform: rotate(-90deg);
+}
+.ring-track { fill: none; stroke: var(--border); stroke-width: 3; }
+.ring-fill { fill: none; stroke: var(--green); stroke-width: 3; stroke-linecap: round;
+  transition: stroke-dashoffset 1.2s var(--ease-smooth); }
+.ring-text { fill: var(--text); font-size: 9px; font-weight: 600;
+  text-anchor: middle; dominant-baseline: central; font-family: 'Inter', sans-serif;
+  transition: font-size 300ms ease; }
+.sidebar.expanded .ring-text { font-size: 16px; }
+.ring-endpoint {
+  position: absolute; width: 5px; height: 5px;
+  background: var(--green); border-radius: 50%;
+  box-shadow: 0 0 6px var(--green);
+  animation: ringEndGlow 2s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes ringEndGlow {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.4); }
+}
+
+/* Expanded stats */
+.sidebar-stats {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 200ms ease 150ms, transform 200ms ease 150ms;
+  text-align: center;
+  line-height: 1.6;
+}
+.sidebar.expanded .sidebar-stats {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ================================================================
+   MAIN CONTENT AREA
+   ================================================================ */
+.main {
+  flex: 1;
+  height: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+  z-index: 1;
+  padding: 20px 24px 80px;
+}
+
+/* ================================================================
+   MODULE CARDS (horizontal row) -- 28px rings
+   ================================================================ */
+.module-cards {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 4px;
+  position: relative;
+}
+
+.module-card {
+  flex: 1;
+  min-width: 0;
+  height: 82px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: border-color 300ms ease, box-shadow 300ms ease, transform 150ms ease;
+}
+.module-card::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  border-radius: 3px 0 0 3px;
+}
+.module-card[data-module="seed"]::before { background: var(--green); }
+.module-card[data-module="hypo"]::before { background: var(--purple); }
+.module-card[data-module="invention"]::before { background: var(--blue); }
+.module-card[data-module="paper"]::before { background: var(--orange); }
+
+.module-card:hover { transform: translateY(-1px); }
+
+/* Active state: glow + shimmer */
+.module-card.active[data-module="seed"] { border-color: rgba(34,197,94,0.25); box-shadow: 0 0 20px rgba(34,197,94,0.08); }
+.module-card.active[data-module="hypo"] { border-color: rgba(167,139,250,0.25); box-shadow: 0 0 20px rgba(167,139,250,0.08); }
+.module-card.active[data-module="invention"] { border-color: rgba(59,130,246,0.25); box-shadow: 0 0 20px rgba(59,130,246,0.08); }
+.module-card.active[data-module="paper"] { border-color: rgba(245,158,11,0.25); box-shadow: 0 0 20px rgba(245,158,11,0.08); }
+
+/* Shimmer sweep */
+.module-card.active::after {
+  content: '';
+  position: absolute;
+  top: 0; left: -100%; width: 50%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.03), transparent);
+  animation: shimmerSweep 4s ease-in-out infinite;
+}
+@keyframes shimmerSweep {
+  0% { left: -100%; }
+  50% { left: 200%; }
+  100% { left: 200%; }
+}
+
+/* Pulse glow for active card */
+.module-card.active.glow-pulse {
+  animation: glowPulse 2.5s ease-in-out infinite;
+}
+@keyframes glowPulse {
+  0%, 100% { box-shadow: 0 0 15px var(--glow-color); }
+  50% { box-shadow: 0 0 25px var(--glow-color); }
+}
+.module-card[data-module="seed"] { --glow-color: rgba(34,197,94,0.1); }
+.module-card[data-module="hypo"] { --glow-color: rgba(167,139,250,0.1); }
+.module-card[data-module="invention"] { --glow-color: rgba(59,130,246,0.1); }
+.module-card[data-module="paper"] { --glow-color: rgba(245,158,11,0.1); }
+
+/* ---- MODULE CARD RING: 28px ---- */
+.card-ring {
+  width: 28px; height: 28px;
+  flex-shrink: 0;
+  position: relative;
+}
+.card-ring svg {
+  width: 100%; height: 100%;
+  transform: rotate(-90deg);
+}
+.card-ring .cr-track { fill: none; stroke: var(--border); stroke-width: 3; }
+.card-ring .cr-fill { fill: none; stroke-width: 3; stroke-linecap: round;
+  transition: stroke-dashoffset 0.8s var(--ease-smooth); }
+.card-ring .cr-text { fill: var(--text-muted); font-size: 7px; font-weight: 600;
+  text-anchor: middle; dominant-baseline: central; font-family: 'Inter'; }
+
+/* Ring endpoint dot on card rings */
+.card-ring-endpoint {
+  position: absolute;
+  width: 4px; height: 4px;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: ringEndGlow 2.5s ease-in-out infinite;
+}
+
+.card-info { flex: 1; min-width: 0; }
+.card-name { font-size: 13px; font-weight: 600; margin-bottom: 2px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; }
+.card-metric { font-size: 11px; color: var(--text-muted); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; }
+
+.card-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.badge-done { background: var(--green-dim); color: var(--green); }
+.badge-active { background: var(--blue-dim); color: var(--blue); }
+.badge-pending { background: rgba(139,145,154,0.12); color: var(--text-muted); }
+
+/* Card progress bar */
+.card-progress {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 2px;
+  background: rgba(255,255,255,0.04);
+}
+.card-progress-fill {
+  height: 100%;
+  border-radius: 0 2px 2px 0;
+  transition: width 600ms var(--ease-smooth);
+}
+
+/* ================================================================
+   TREE CONTAINER
+   ================================================================ */
+.tree-area {
+  display: flex;
+  gap: 12px;
+  margin-top: 0;
+  position: relative;
+}
+
+.tree-column {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+}
+
+/* Vertical connector from card to tree */
+.tree-stem {
+  width: 2px;
+  height: 12px;
+  margin: 0 auto;
+  border-radius: 1px;
+}
+.tree-stem[data-module="seed"] { background: var(--green-dim); }
+.tree-stem[data-module="hypo"] { background: var(--purple-dim); }
+.tree-stem[data-module="invention"] { background: var(--blue-dim); }
+.tree-stem[data-module="paper"] { background: var(--orange-dim); }
+
+/* Tree branch container */
+.tree-branches {
+  padding: 4px 0;
+  position: relative;
+}
+
+/* ================================================================
+   SUB-MODULE ROW -- 20px rings
+   ================================================================ */
+.sub-module {
+  display: flex;
+  align-items: center;
+  height: 38px;
+  padding: 0 10px 0 28px;
+  position: relative;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background 150ms ease;
+  font-size: 13px;
+}
+.sub-module:hover { background: rgba(255,255,255,0.03); }
+
+/* Tree lines (L-shaped connectors) */
+.sub-module::before {
+  content: '';
+  position: absolute;
+  left: 10px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  border-radius: 1px;
+}
+.sub-module::after {
+  content: '';
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  width: 10px;
+  height: 2px;
+  border-radius: 1px;
+}
+/* Last sub-module: stop vertical line at center */
+.sub-module:last-child::before {
+  bottom: 50%;
+}
+
+/* Module-specific tree colors */
+.tree-column[data-module="seed"] .sub-module::before,
+.tree-column[data-module="seed"] .sub-module::after { background: var(--green-dim); }
+.tree-column[data-module="hypo"] .sub-module::before,
+.tree-column[data-module="hypo"] .sub-module::after { background: var(--purple-dim); }
+.tree-column[data-module="invention"] .sub-module::before,
+.tree-column[data-module="invention"] .sub-module::after { background: var(--blue-dim); }
+.tree-column[data-module="paper"] .sub-module::before,
+.tree-column[data-module="paper"] .sub-module::after { background: var(--orange-dim); }
+
+/* Active branch GLOW */
+.sub-module.active::before { box-shadow: 0 0 6px var(--branch-glow); }
+.sub-module.active::after { box-shadow: 0 0 6px var(--branch-glow); }
+.tree-column[data-module="seed"] .sub-module.active { --branch-glow: var(--green-glow); }
+.tree-column[data-module="seed"] .sub-module.active::before,
+.tree-column[data-module="seed"] .sub-module.active::after { background: var(--green); }
+.tree-column[data-module="hypo"] .sub-module.active { --branch-glow: var(--purple-glow); }
+.tree-column[data-module="hypo"] .sub-module.active::before,
+.tree-column[data-module="hypo"] .sub-module.active::after { background: var(--purple); }
+.tree-column[data-module="invention"] .sub-module.active { --branch-glow: var(--blue-glow); }
+.tree-column[data-module="invention"] .sub-module.active::before,
+.tree-column[data-module="invention"] .sub-module.active::after { background: var(--blue); }
+.tree-column[data-module="paper"] .sub-module.active { --branch-glow: var(--orange-glow); }
+.tree-column[data-module="paper"] .sub-module.active::before,
+.tree-column[data-module="paper"] .sub-module.active::after { background: var(--orange); }
+
+/* ---- SUB-MODULE RING: 20px ---- */
+.sub-ring {
+  width: 20px; height: 20px;
+  flex-shrink: 0;
+  margin-right: 8px;
+  position: relative;
+}
+.sub-ring svg {
+  width: 100%; height: 100%;
+  transform: rotate(-90deg);
+}
+.sub-ring .sr-track { fill: none; stroke: var(--border); stroke-width: 2.5; }
+.sub-ring .sr-fill { fill: none; stroke-width: 2.5; stroke-linecap: round;
+  transition: stroke-dashoffset 0.6s var(--ease-smooth); }
+
+/* Inner icon inside sub-ring */
+.sub-ring-icon {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.sub-ring-icon .check-svg {
+  width: 9px; height: 9px;
+}
+.sub-ring-icon .dot-inner {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+}
+.sub-ring-icon .pulse-dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  animation: subDotPulse 2s ease-in-out infinite;
+}
+@keyframes subDotPulse {
+  0%, 100% { box-shadow: 0 0 0 0 var(--glow); opacity: 0.8; }
+  50% { box-shadow: 0 0 0 4px transparent; opacity: 1; }
+}
+
+/* Ring endpoint for sub-rings */
+.sub-ring-endpoint {
+  position: absolute;
+  width: 3px; height: 3px;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: ringEndGlow 2.5s ease-in-out infinite;
+}
+
+.sub-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sub-name.done { color: var(--text-muted); }
+.sub-name.active { color: var(--text); font-weight: 500; }
+.sub-name.pending { color: var(--text-dim); }
+
+.sub-check { font-size: 11px; color: var(--text-dim); margin-left: auto; flex-shrink: 0; padding-left: 6px; }
+
+/* Collapsed tree summary */
+.tree-collapsed-summary {
+  font-size: 11px;
+  color: var(--text-dim);
+  padding: 6px 10px 6px 28px;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background 150ms ease;
+}
+.tree-collapsed-summary:hover { background: rgba(255,255,255,0.03); }
+
+/* ================================================================
+   THIRD LEVEL: Item checklist -- 14px rings
+   ================================================================ */
+.sub-items {
+  overflow: hidden;
+  transition: max-height 400ms var(--ease-smooth), opacity 300ms ease;
+}
+.sub-items.collapsed { max-height: 0; opacity: 0; }
+.sub-items.expanded { opacity: 1; }
+
+.sub-item {
+  display: flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 10px 0 56px;
+  position: relative;
+  font-size: 12px;
+  cursor: default;
+}
+/* Nested tree lines */
+.sub-item::before {
+  content: '';
+  position: absolute;
+  left: 34px;
+  top: 0; bottom: 0;
+  width: 1.5px;
+  border-radius: 1px;
+}
+.sub-item::after {
+  content: '';
+  position: absolute;
+  left: 34px;
+  top: 50%;
+  width: 8px;
+  height: 1.5px;
+  border-radius: 1px;
+}
+.sub-item:last-child::before { bottom: 50%; }
+
+.tree-column[data-module="seed"] .sub-item::before,
+.tree-column[data-module="seed"] .sub-item::after { background: rgba(34,197,94,0.08); }
+.tree-column[data-module="hypo"] .sub-item::before,
+.tree-column[data-module="hypo"] .sub-item::after { background: rgba(167,139,250,0.08); }
+.tree-column[data-module="invention"] .sub-item::before,
+.tree-column[data-module="invention"] .sub-item::after { background: rgba(59,130,246,0.08); }
+.tree-column[data-module="paper"] .sub-item::before,
+.tree-column[data-module="paper"] .sub-item::after { background: rgba(245,158,11,0.08); }
+
+/* ---- ITEM RING: 14px ---- */
+.item-ring {
+  width: 14px; height: 14px;
+  flex-shrink: 0;
+  margin-right: 6px;
+  position: relative;
+}
+.item-ring svg {
+  width: 100%; height: 100%;
+  transform: rotate(-90deg);
+}
+.item-ring .ir-track { fill: none; stroke: var(--border); stroke-width: 2; }
+.item-ring .ir-fill { fill: none; stroke-width: 2; stroke-linecap: round;
+  transition: stroke-dashoffset 0.5s var(--ease-smooth); }
+
+/* Inner icon in item ring */
+.item-ring-icon {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.item-ring-icon .check-svg {
+  width: 6px; height: 6px;
+}
+.item-ring-icon .mini-spinner {
+  width: 6px; height: 6px;
+  border: 1px solid var(--border-light);
+  border-top-color: var(--blue);
+  border-radius: 50%;
+  animation: miniSpin 0.8s linear infinite;
+}
+@keyframes miniSpin { to { transform: rotate(360deg); } }
+
+.item-ring-icon .pending-hollow {
+  width: 4px; height: 4px;
+  border-radius: 50%;
+  border: 1px solid var(--border-light);
+}
+
+/* Ring endpoint for item rings */
+.item-ring-endpoint {
+  position: absolute;
+  width: 2px; height: 2px;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: ringEndGlow 2.5s ease-in-out infinite;
+}
+
+.item-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item-label.done { color: var(--text-muted); }
+.item-label.running { color: var(--text); font-weight: 500; }
+.item-label.pending { color: var(--text-dim); }
+
+.item-detail {
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-left: 6px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* ================================================================
+   TREE GROW ANIMATION
+   ================================================================ */
+.tree-branches .sub-module,
+.tree-branches .sub-item {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+.tree-branches.visible .sub-module,
+.tree-branches.visible .sub-item {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 350ms var(--ease-smooth), transform 350ms var(--ease-smooth);
+}
+/* Staggered delays */
+.tree-branches.visible .sub-module:nth-child(1) { transition-delay: 0ms; }
+.tree-branches.visible .sub-module:nth-child(2) { transition-delay: 60ms; }
+.tree-branches.visible .sub-module:nth-child(3) { transition-delay: 120ms; }
+.tree-branches.visible .sub-module:nth-child(4) { transition-delay: 180ms; }
+.tree-branches.visible .sub-module:nth-child(5) { transition-delay: 240ms; }
+.tree-branches.visible .sub-module:nth-child(6) { transition-delay: 300ms; }
+.tree-branches.visible .sub-module:nth-child(7) { transition-delay: 360ms; }
+.tree-branches.visible .sub-module:nth-child(8) { transition-delay: 420ms; }
+
+/* sub-items stagger (within expanded items container) */
+.sub-items.expanded .sub-item:nth-child(1) { transition-delay: 0ms; }
+.sub-items.expanded .sub-item:nth-child(2) { transition-delay: 50ms; }
+.sub-items.expanded .sub-item:nth-child(3) { transition-delay: 100ms; }
+.sub-items.expanded .sub-item:nth-child(4) { transition-delay: 150ms; }
+.sub-items.expanded .sub-item:nth-child(5) { transition-delay: 200ms; }
+.sub-items.expanded .sub-item:nth-child(6) { transition-delay: 250ms; }
+
+/* ================================================================
+   CONTENT DASHBOARD (below tree)
+   ================================================================ */
+.content-dashboard {
+  margin-top: 24px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  padding: 24px;
+  animation: contentFadeIn 400ms var(--ease-smooth);
+}
+@keyframes contentFadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.content-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.content-title { font-size: 16px; font-weight: 600; letter-spacing: -0.3px; }
+.content-badge {
+  font-size: 10px; font-weight: 600;
+  padding: 2px 10px; border-radius: 10px;
+}
+
+.content-summary {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-muted);
+  margin-bottom: 20px;
+  max-width: 720px;
+}
+
+.content-stats {
+  display: flex;
+  gap: 12px;
+}
+.stat-card {
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+}
+.stat-label { font-size: 11px; color: var(--text-dim); margin-bottom: 4px; text-transform: uppercase;
+  letter-spacing: 0.5px; }
+.stat-value { font-size: 20px; font-weight: 700; letter-spacing: -0.5px; }
+.stat-bar {
+  height: 3px;
+  background: var(--border);
+  border-radius: 2px;
+  margin-top: 8px;
+  overflow: hidden;
+}
+.stat-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  width: 0;
+  transition: width 600ms var(--ease-smooth) 200ms;
+}
+
+/* ================================================================
+   TOOLTIP
+   ================================================================ */
+.tooltip {
+  position: fixed;
+  z-index: 1000;
+  width: 280px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 200ms ease, transform 200ms ease;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.3);
+}
+.tooltip.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+.tooltip-title { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+.tooltip-text { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+
+/* ================================================================
+   TREE-PATH DOTS CANVAS
+   ================================================================ */
+#treeCanvas {
+  position: absolute;
+  top: 0; left: 0;
+  pointer-events: none;
+  z-index: 50;
+}
+
+/* ================================================================
+   KEYBOARD NAV HIGHLIGHT
+   ================================================================ */
+.kb-focus {
+  outline: 1px solid rgba(255,255,255,0.15);
+  outline-offset: -1px;
+  border-radius: 6px;
+}
+
+/* ================================================================
+   SCROLLBAR
+   ================================================================ */
+.main::-webkit-scrollbar { width: 6px; }
+.main::-webkit-scrollbar-track { background: transparent; }
+.main::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+.main::-webkit-scrollbar-thumb:hover { background: var(--border-light); }
+
+/* ================================================================
+   LIVE BADGE (optional top-right)
+   ================================================================ */
+.live-indicator {
+  position: fixed;
+  top: 12px;
+  right: 16px;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: rgba(239,68,68,0.08);
+  border: 1px solid rgba(239,68,68,0.15);
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--red);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.live-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--red);
+  animation: livePulse 1.5s ease-in-out infinite;
+}
+@keyframes livePulse {
+  0%, 100% { opacity: 0.5; box-shadow: 0 0 3px rgba(239,68,68,0.3); }
+  50% { opacity: 1; box-shadow: 0 0 8px rgba(239,68,68,0.6); }
+}
+</style>
+</head>
+<body>
+
+<!-- Background ambient particles -->
+<canvas id="bgCanvas"></canvas>
+
+<!-- Live indicator -->
+<div class="live-indicator">
+  <div class="live-dot"></div>
+  Live
+</div>
+
+<!-- ============================================================
+     SIDEBAR
+     ============================================================ -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-header">
+    <div class="sidebar-logo" id="sidebarToggle">AI</div>
+    <span class="sidebar-title">AI Inventor</span>
+  </div>
+
+  <!-- Collapsed: dots -->
+  <div class="sidebar-dots" id="sidebarDots">
+    <div class="sidebar-dot" data-module="seed"></div>
+    <div class="sidebar-dot" data-module="hypo"></div>
+    <div class="sidebar-dot active" data-module="invention"></div>
+    <div class="sidebar-dot" data-module="paper"></div>
+  </div>
+
+  <!-- Expanded: nav items -->
+  <nav class="sidebar-nav" id="sidebarNav">
+    <div class="sidebar-nav-item" data-module="seed">
+      <span class="nav-dot" style="background:var(--green)"></span>
+      Seed Hypotheses
+    </div>
+    <div class="sidebar-nav-item" data-module="hypo">
+      <span class="nav-dot" style="background:var(--purple)"></span>
+      Hypothesis Loop
+    </div>
+    <div class="sidebar-nav-item active" data-module="invention">
+      <span class="nav-dot" style="background:var(--blue)"></span>
+      Invention Loop
+    </div>
+    <div class="sidebar-nav-item" data-module="paper">
+      <span class="nav-dot" style="background:var(--orange)"></span>
+      Paper Generation
+    </div>
+  </nav>
+
+  <!-- Progress ring + stats -->
+  <div class="sidebar-progress">
+    <div class="sidebar-ring-wrap" id="sidebarRing">
+      <svg viewBox="0 0 36 36">
+        <circle class="ring-track" cx="18" cy="18" r="15.5"/>
+        <circle class="ring-fill" cx="18" cy="18" r="15.5"
+          stroke-dasharray="97.4" stroke-dashoffset="34.1"/>
+        <text class="ring-text" x="18" y="18" transform="rotate(90,18,18)">65%</text>
+      </svg>
+      <div class="ring-endpoint" id="ringEndpoint"></div>
+    </div>
+    <div class="sidebar-stats">
+      02:34:17 &bull; $12.47<br>847K tokens
+    </div>
+  </div>
+</aside>
+
+<!-- ============================================================
+     MAIN CONTENT
+     ============================================================ -->
+<div class="main" id="mainArea">
+  <!-- Dot canvas overlays the tree area -->
+  <canvas id="treeCanvas"></canvas>
+
+  <!-- MODULE CARDS with 28px rings -->
+  <div class="module-cards" id="moduleCards">
+
+    <!-- SEED CARD -->
+    <div class="module-card" data-module="seed" data-index="0">
+      <div class="card-ring" data-color="var(--green)" data-pct="100">
+        <svg viewBox="0 0 36 36">
+          <circle class="cr-track" cx="18" cy="18" r="15.5"/>
+          <circle class="cr-fill" cx="18" cy="18" r="15.5" stroke="var(--green)"
+            stroke-dasharray="97.4" stroke-dashoffset="0"/>
+          <text class="cr-text" x="18" y="19" transform="rotate(90,18,18)">4/4</text>
+        </svg>
+        <div class="card-ring-endpoint" style="background:var(--green);box-shadow:0 0 5px var(--green);"></div>
+      </div>
+      <div class="card-info">
+        <div class="card-name">Seed Hypotheses</div>
+        <div class="card-metric">847 papers &rarr; 12 gaps</div>
+      </div>
+      <span class="card-badge badge-done">Done</span>
+      <div class="card-progress"><div class="card-progress-fill" style="width:100%;background:var(--green)"></div></div>
+    </div>
+
+    <!-- HYPO CARD -->
+    <div class="module-card" data-module="hypo" data-index="1">
+      <div class="card-ring" data-color="var(--purple)" data-pct="100">
+        <svg viewBox="0 0 36 36">
+          <circle class="cr-track" cx="18" cy="18" r="15.5"/>
+          <circle class="cr-fill" cx="18" cy="18" r="15.5" stroke="var(--purple)"
+            stroke-dasharray="97.4" stroke-dashoffset="0"/>
+          <text class="cr-text" x="18" y="19" transform="rotate(90,18,18)">6/6</text>
+        </svg>
+        <div class="card-ring-endpoint" style="background:var(--purple);box-shadow:0 0 5px var(--purple);"></div>
+      </div>
+      <div class="card-info">
+        <div class="card-name">Hypothesis Loop</div>
+        <div class="card-metric">6.2 &rarr; 7.8 &rarr; 8.4</div>
+      </div>
+      <span class="card-badge badge-done">Done</span>
+      <div class="card-progress"><div class="card-progress-fill" style="width:100%;background:var(--purple)"></div></div>
+    </div>
+
+    <!-- INVENTION CARD -->
+    <div class="module-card active glow-pulse" data-module="invention" data-index="2">
+      <div class="card-ring" data-color="var(--blue)" data-pct="66">
+        <svg viewBox="0 0 36 36">
+          <circle class="cr-track" cx="18" cy="18" r="15.5"/>
+          <circle class="cr-fill" cx="18" cy="18" r="15.5" stroke="var(--blue)"
+            stroke-dasharray="97.4" stroke-dashoffset="33.1"/>
+          <text class="cr-text" x="18" y="19" transform="rotate(90,18,18)">4/6</text>
+        </svg>
+        <div class="card-ring-endpoint" style="background:var(--blue);box-shadow:0 0 5px var(--blue);"></div>
+      </div>
+      <div class="card-info">
+        <div class="card-name">Invention Iter 2</div>
+        <div class="card-metric">Artifacts: 3/5 complete</div>
+      </div>
+      <span class="card-badge badge-active">Active</span>
+      <div class="card-progress"><div class="card-progress-fill" style="width:66%;background:var(--blue)"></div></div>
+    </div>
+
+    <!-- PAPER CARD -->
+    <div class="module-card" data-module="paper" data-index="3">
+      <div class="card-ring" data-color="var(--orange)" data-pct="0">
+        <svg viewBox="0 0 36 36">
+          <circle class="cr-track" cx="18" cy="18" r="15.5"/>
+          <circle class="cr-fill" cx="18" cy="18" r="15.5" stroke="var(--orange)"
+            stroke-dasharray="97.4" stroke-dashoffset="97.4"/>
+          <text class="cr-text" x="18" y="19" transform="rotate(90,18,18)">0/5</text>
+        </svg>
+      </div>
+      <div class="card-info">
+        <div class="card-name">Paper Generation</div>
+        <div class="card-metric">Waiting for invention</div>
+      </div>
+      <span class="card-badge badge-pending">Pending</span>
+      <div class="card-progress"><div class="card-progress-fill" style="width:0%;background:var(--orange)"></div></div>
+    </div>
+  </div>
+
+  <!-- TREE AREA -->
+  <div class="tree-area" id="treeArea">
+
+    <!-- ======== SEED TREE ======== -->
+    <div class="tree-column" data-module="seed">
+      <div class="tree-stem" data-module="seed"></div>
+      <div class="tree-collapsed-summary" data-module="seed" id="seedCollapsed">4/4 done &#10003;</div>
+      <div class="tree-branches" id="seedBranches" style="display:none;">
+        <div class="sub-module" data-step="seed-0" data-tooltip="Scraped 847 papers from ArXiv, Semantic Scholar, and ACL Anthology. Filtered for relevance to cross-lingual NLP.">
+          <div class="sub-ring done" data-color="var(--green)" data-pct="100">
+            <svg viewBox="0 0 36 36">
+              <circle class="sr-track" cx="18" cy="18" r="15"/>
+              <circle class="sr-fill" cx="18" cy="18" r="15" stroke="var(--green)"
+                stroke-dasharray="94.2" stroke-dashoffset="0"/>
+            </svg>
+            <div class="sub-ring-icon"><svg class="check-svg" viewBox="0 0 10 10"><polyline points="2,5.5 4.2,7.8 8,2.8" fill="none" stroke="var(--green)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          </div>
+          <span class="sub-name done">Literature Scan</span>
+          <span class="sub-check">847 papers</span>
+        </div>
+        <div class="sub-module" data-step="seed-1" data-tooltip="Identified 12 research gaps via citation graph analysis and topic modeling. Prioritized by novelty and feasibility.">
+          <div class="sub-ring done" data-color="var(--green)" data-pct="100">
+            <svg viewBox="0 0 36 36">
+              <circle class="sr-track" cx="18" cy="18" r="15"/>
+              <circle class="sr-fill" cx="18" cy="18" r="15" stroke="var(--green)"
+                stroke-dasharray="94.2" stroke-dashoffset="0"/>
+            </svg>
+            <div class="sub-ring-icon"><svg class="check-svg" viewBox="0 0 10 10"><polyline points="2,5.5 4.2,7.8 8,2.8" fill="none" stroke="var(--green)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          </div>
+          <span class="sub-name done">Gap Analysis</span>
+          <span class="sub-check">12 gaps</span>
+        </div>
+        <div class="sub-module" data-step="seed-2" data-tooltip="Generated initial hypothesis candidates from each gap. Applied diversity filtering to ensure coverage across sub-domains.">
+          <div class="sub-ring done" data-color="var(--green)" data-pct="100">
+            <svg viewBox="0 0 36 36">
+              <circle class="sr-track" cx="18" cy="18" r="15"/>
+              <circle class="sr-fill" cx="18" cy="18" r="15" stroke="var(--green)"
+                stroke-dasharray="94.2" stroke-dashoffset="0"/>
+            </svg>
+            <div class="sub-ring-icon"><svg class="check-svg" viewBox="0 0 10 10"><polyline points="2,5.5 4.2,7.8 8,2.8" fill="none" stroke="var(--green)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          </div>
+          <span class="sub-name done">Hypothesis Seeding</span>
+          <span class="sub-check">36 candidates</span>
+        </div>
+        <div class="sub-module" data-step="seed-3" data-tooltip="Ranked hypotheses by expected impact, feasibility, and novelty. Top 6 selected for the hypothesis refinement loop.">
+          <div class="sub-ring done" data-color="var(--green)" data-pct="100">
+            <svg viewBox="0 0 36 36">
+              <circle class="sr-track" cx="18" cy="18" r="15"/>
+              <circle class="sr-fill" cx="18" cy="18" r="15" stroke="var(--green)"
+                stroke-dasharray="94.2" stroke-dashoffset="0"/>
+            </svg>
+            <div class="sub-ring-icon"><svg class="check-svg" viewBox="0 0 10 10"><polyline points="2,5.5 4.2,7.8 8,2.8" fill="none" stroke="var(--green)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          </div>
+          <span class="sub-name done">Ranking &amp; Selection</span>
+          <span class="sub-check">Top 6 selected</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ======== HYPOTHESIS TREE ======== -->
+    <div class="tree-column" data-module="hypo">
+      <div class="tree-stem" data-module="hypo"></div>
+      <div class="tree-collapsed-summary" data-module="hypo" id="hypoCollapsed">6/6 done &#10003;</div>
+      <div class="tree-branches" id="hypoBranches" style="display:none;">
+        <div class="sub-module" data-step="hypo-0" data-tooltip="Initial hypothesis formulation: contrastive alignment for cross-lingual embedding without parallel corpora.">
+          <div class="sub-ring done" data-color="var(--purple)" data-pct="100">
+            <svg viewBox="0 0 36 36">
+              <circle class="sr-track" cx="18" cy="18" r="15"/>
+              <circle class="sr-fill" cx="18" cy="18" r="15" stroke="var(--purple)"
+                stroke-dasharray="94.2" stroke-dashoffset="0"/>
+            </svg>
+            <div class="sub-ring-icon"><svg class="check-svg" viewBox="0 0 10 10"><polyline points="2,5.5 4.2,7.8 8,2.8" fill="none" stroke="var(--purple)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          </div>
+          <span class="sub-name done">Formulate v1</span>
+          <span class="sub-check">score: 6.2</span>
+        </div>
+        <div class="sub-module" data-step="hypo-1" data-tooltip="Reviewed for logical consistency and coverage. Added constraint on language-family diversity.">
+          <div class="sub-ring done" data-color="var(--purple)" data-pct="100">
+            <svg viewBox="0 0 36 36">
+              <circle class="sr-track" cx="18" cy="18" r="15"/>
+              <circle class="sr-fill" cx="18" cy="18" r="15" stroke="var(--purple)"
+                stroke-dasharray="94.2" stroke-dashoffset="0"/>
+            </svg>
+            <div class="sub-ring-icon"><svg class="check-svg" viewBox="0 0 10 10"><polyline points="2,5.5 4.2,7.8 8,2.8" fill="none" stroke="var(--purple)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          </div>
+          <span class="sub-name done">Review 1</span>
+          <span class="sub-check">3 issues</span>
+        </div>
+        <div class="sub-module" data-step="hypo-2" data-tooltip="Refined hypothesis incorporating reviewer feedback. Tightened scope to low-resource language pairs.">
+          <div class="sub-ring done" data-color="var(--purple)" data-pct="100">
+            <svg viewBox="0 0 36 36">
+              <circle class="sr-track" cx="18" cy="18" r="15"/>
+              <circle class="sr-fill" cx="18" cy="18" r="15" stroke="var(--purple)"
+                stroke-dasharray="94.2" stroke-dashoffset="0"/>
+            </svg>
+            <div class="sub-ring-icon"><svg class="check-svg" viewBox="0 0 10 10"><polyline points="2,5.5 4.2,7.8 8,2.8" fill="none" stroke="var(--purple)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          </div>
+          <span class="sub-name done">Refine v2</span>
+          <span class="sub-check">score: 7.8</span>
+        </div>
+        <div class="sub-module" data-step="hypo-3" data-tooltip="Second review pass. Validated novelty against 23 related works. Approved with minor suggestions.">
+          <div class="sub-ring done" data-color="var(--purple)" data-pct="100">
+            <svg viewBox="0 0 36 36">
+              <circle class="sr-track" cx="18" cy="18" r="15"/>
+              <circle class="sr-fill" cx="18" cy="18" r="15" stroke="var(--purple)"
+                stroke-dasharray="94.2" stroke-dashoffset="0"/>
+            </svg>
+            <div class="sub-ring-icon"><svg class="check-svg" viewBox="0 0 10 10"><polyline points="2,5.5 4.2,7.8 8,2.8" fill="none" stroke="var(--purple)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          </div>
+          <span class="sub-name done">Review 2</span>
+          <span class="sub-check">1 minor</span>
+        </div>
+        <div class="sub-module" data-step="hypo-4" data-tooltip="Final refinement: added ablation conditions and success criteria. Hypothesis ready for invention phase.">
+          <div class="sub-ring done" data-color="var(--purple)" data-pct="100">
+            <svg viewBox="0 0 36 36">
+              <circle class="sr-track" cx="18" cy="18" r="15"/>
+              <circle class="sr-fill" cx="18" cy="18" r="15" stroke="var(--purple)"
+                stroke-dasharray="94.2" stroke-dashoffset="0"/>
+            </svg>
+            <div class="sub-ring-icon"><svg class="check-svg" viewBox="0 0 10 10"><polyline points="2,5.5 4.2,7.8 8,2.8" fill="none" stroke="var(--purple)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          </div>
+          <span class="sub-name done">Refine v3</span>
+          <span class="sub-check">score: 8.4</span>
+        </div>
+        <div class="sub-module" data-step="hypo-5" data-tooltip="Final review confirmed hypothesis is well-scoped, novel, and testable. Passed to invention loop.">
+          <div class="sub-ring done" data-color="var(--purple)" data-pct="100">
+            <svg viewBox="0 0 36 36">
+              <circle class="sr-track" cx="18" cy="18" r="15"/>
+              <circle class="sr-fill" cx="18" cy="18" r="15" stroke="var(--purple)"
+                stroke-dasharray="94.2" stroke-dashoffset="0"/>
+            </svg>
+            <div class="sub-ring-icon"><svg class="check-svg" viewBox="0 0 10 10"><polyline points="2,5.5 4.2,7.8 8,2.8" fill="none" stroke="var(--purple)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          </div>
+          <span class="sub-name done">Review 3</span>
+          <span class="sub-check">approved</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ======== INVENTION TREE ======== -->
+    <div class="tree-column" data-module="invention">
+      <div class="tree-stem" data-module="invention"></div>
+      <div class="tree-branches visible" id="inventionBranches">
+        <div class="sub-module" data-step="inv-0" data-tooltip="Designed the research strategy: contrastive learning with language-agnostic anchors and curriculum training schedule.">
+          <div class="sub-ring done" data-color="var(--blue)" data-pct="100">
+            <svg viewBox="0 0 36 36">
+              <circle class="sr-track" cx="18" cy="18" r="15"/>
+              <circle class="sr-fill" cx="18" cy="18" r="15" stroke="var(--blue)"
+                stroke-dasharray="94.2" stroke-dashoffset="0"/>
+            </svg>
+            <div class="sub-ring-icon"><svg class="check-svg" viewBox="0 0 10 10"><polyline points="2,5.5 4.2,7.8 8,2.8" fill="none" stroke="var(--blue)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          </div>
+          <span class="sub-name done">Strategy</span>
+          <span class="sub-check">&#10003;</span>
+        </div>
+        <div class="sub-module" data-step="inv-1" data-tooltip="Detailed implementation plan covering model architecture, training pipeline, evaluation metrics, and ablation matrix.">
+          <div class="sub-ring done" data-color="var(--blue)" data-pct="100">
+            <svg viewBox="0 0 36 36">
+              <circle class="sr-track" cx="18" cy="18" r="15"/>
+              <circle class="sr-fill" cx="18" cy="18" r="15" stroke="var(--blue)"
+                stroke-dasharray="94.2" stroke-dashoffset="0"/>
+            </svg>
+            <div class="sub-ring-icon"><svg class="check-svg" viewBox="0 0 10 10"><polyline points="2,5.5 4.2,7.8 8,2.8" fill="none" stroke="var(--blue)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          </div>
+          <span class="sub-name done">Plan</span>
+          <span class="sub-check">&#10003;</span>
+        </div>
+        <div class="sub-module" data-step="inv-2" data-tooltip="Generated paper narrative: introduction, methodology, expected results. First-person academic writing style.">
+          <div class="sub-ring done" data-color="var(--blue)" data-pct="100">
+            <svg viewBox="0 0 36 36">
+              <circle class="sr-track" cx="18" cy="18" r="15"/>
+              <circle class="sr-fill" cx="18" cy="18" r="15" stroke="var(--blue)"
+                stroke-dasharray="94.2" stroke-dashoffset="0"/>
+            </svg>
+            <div class="sub-ring-icon"><svg class="check-svg" viewBox="0 0 10 10"><polyline points="2,5.5 4.2,7.8 8,2.8" fill="none" stroke="var(--blue)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          </div>
+          <span class="sub-name done">Paper Text</span>
+          <span class="sub-check">&#10003;</span>
+        </div>
+        <div class="sub-module active" data-step="inv-3" data-tooltip="Generating experimental artifacts: baseline comparisons, dataset samples, convergence proofs, ablation runs, and cross-lingual evaluations.">
+          <div class="sub-ring running" data-color="var(--blue)" data-pct="60">
+            <svg viewBox="0 0 36 36">
+              <circle class="sr-track" cx="18" cy="18" r="15"/>
+              <circle class="sr-fill" cx="18" cy="18" r="15" stroke="var(--blue)"
+                stroke-dasharray="94.2" stroke-dashoffset="37.7"/>
+            </svg>
+            <div class="sub-ring-icon"><div class="pulse-dot" style="background:var(--blue);--glow:var(--blue-glow);"></div></div>
+            <div class="sub-ring-endpoint" style="background:var(--blue);box-shadow:0 0 4px var(--blue);"></div>
+          </div>
+          <span class="sub-name active">Artifacts</span>
+          <span class="sub-check">3/5</span>
+        </div>
+        <!-- Sub-items for Artifacts with 14px rings -->
+        <div class="sub-items expanded" id="artifactItems" style="max-height:220px;">
+          <div class="sub-item" data-step="inv-3-0">
+            <div class="item-ring" data-color="var(--blue)" data-pct="100">
+              <svg viewBox="0 0 36 36">
+                <circle class="ir-track" cx="18" cy="18" r="15"/>
+                <circle class="ir-fill" cx="18" cy="18" r="15" stroke="var(--green)"
+                  stroke-dasharray="94.2" stroke-dashoffset="0"/>
+              </svg>
+              <div class="item-ring-icon"><svg class="check-svg" viewBox="0 0 10 10"><polyline points="2,5.5 4.2,7.8 8,2.8" fill="none" stroke="var(--green)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            </div>
+            <span class="item-label done">Contrastive Baseline</span>
+            <span class="item-detail">acc: 0.847</span>
+          </div>
+          <div class="sub-item" data-step="inv-3-1">
+            <div class="item-ring" data-color="var(--blue)" data-pct="100">
+              <svg viewBox="0 0 36 36">
+                <circle class="ir-track" cx="18" cy="18" r="15"/>
+                <circle class="ir-fill" cx="18" cy="18" r="15" stroke="var(--green)"
+                  stroke-dasharray="94.2" stroke-dashoffset="0"/>
+              </svg>
+              <div class="item-ring-icon"><svg class="check-svg" viewBox="0 0 10 10"><polyline points="2,5.5 4.2,7.8 8,2.8" fill="none" stroke="var(--green)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            </div>
+            <span class="item-label done">Multilingual Pairs</span>
+            <span class="item-detail">2,400 examples</span>
+          </div>
+          <div class="sub-item" data-step="inv-3-2">
+            <div class="item-ring" data-color="var(--blue)" data-pct="100">
+              <svg viewBox="0 0 36 36">
+                <circle class="ir-track" cx="18" cy="18" r="15"/>
+                <circle class="ir-fill" cx="18" cy="18" r="15" stroke="var(--green)"
+                  stroke-dasharray="94.2" stroke-dashoffset="0"/>
+              </svg>
+              <div class="item-ring-icon"><svg class="check-svg" viewBox="0 0 10 10"><polyline points="2,5.5 4.2,7.8 8,2.8" fill="none" stroke="var(--green)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            </div>
+            <span class="item-label done">Convergence Proof</span>
+            <span class="item-detail">verified</span>
+          </div>
+          <div class="sub-item" data-step="inv-3-3">
+            <div class="item-ring running" data-color="var(--blue)" data-pct="45">
+              <svg viewBox="0 0 36 36">
+                <circle class="ir-track" cx="18" cy="18" r="15"/>
+                <circle class="ir-fill" cx="18" cy="18" r="15" stroke="var(--blue)"
+                  stroke-dasharray="94.2" stroke-dashoffset="51.8"/>
+              </svg>
+              <div class="item-ring-icon"><div class="mini-spinner"></div></div>
+              <div class="item-ring-endpoint" style="background:var(--blue);box-shadow:0 0 3px var(--blue);"></div>
+            </div>
+            <span class="item-label running">Ablation Study</span>
+            <span class="item-detail">running...</span>
+          </div>
+          <div class="sub-item" data-step="inv-3-4">
+            <div class="item-ring pending" data-color="var(--blue)" data-pct="0">
+              <svg viewBox="0 0 36 36">
+                <circle class="ir-track" cx="18" cy="18" r="15"/>
+                <circle class="ir-fill" cx="18" cy="18" r="15" stroke="var(--blue)"
+                  stroke-dasharray="94.2" stroke-dashoffset="94.2"/>
+              </svg>
+              <div class="item-ring-icon"><div class="pending-hollow"></div></div>
+            </div>
+            <span class="item-label pending">Cross-lingual Eval</span>
+            <span class="item-detail">pending</span>
+          </div>
+        </div>
+        <div class="sub-module" data-step="inv-4" data-tooltip="Review and iterate on generated paper text and artifacts. Check for consistency and technical accuracy.">
+          <div class="sub-ring pending" data-color="var(--blue)" data-pct="0">
+            <svg viewBox="0 0 36 36">
+              <circle class="sr-track" cx="18" cy="18" r="15"/>
+              <circle class="sr-fill" cx="18" cy="18" r="15" stroke="var(--blue)"
+                stroke-dasharray="94.2" stroke-dashoffset="94.2"/>
+            </svg>
+            <div class="sub-ring-icon"><div class="dot-inner" style="border:1.5px solid var(--border-light);border-radius:50%;"></div></div>
+          </div>
+          <span class="sub-name pending">Review Paper</span>
+        </div>
+        <div class="sub-module" data-step="inv-5" data-tooltip="Final iteration incorporating review feedback. Polish paper text and finalize all artifacts.">
+          <div class="sub-ring pending" data-color="var(--blue)" data-pct="0">
+            <svg viewBox="0 0 36 36">
+              <circle class="sr-track" cx="18" cy="18" r="15"/>
+              <circle class="sr-fill" cx="18" cy="18" r="15" stroke="var(--blue)"
+                stroke-dasharray="94.2" stroke-dashoffset="94.2"/>
+            </svg>
+            <div class="sub-ring-icon"><div class="dot-inner" style="border:1.5px solid var(--border-light);border-radius:50%;"></div></div>
+          </div>
+          <span class="sub-name pending">Final Polish</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ======== PAPER TREE ======== -->
+    <div class="tree-column" data-module="paper">
+      <div class="tree-stem" data-module="paper"></div>
+      <div class="tree-collapsed-summary" data-module="paper" id="paperCollapsed">0/5 pending</div>
+      <div class="tree-branches" id="paperBranches" style="display:none;">
+        <div class="sub-module" data-step="paper-0" data-tooltip="Generate repository structure with code, configs, and documentation scaffold.">
+          <div class="sub-ring pending" data-color="var(--orange)" data-pct="0">
+            <svg viewBox="0 0 36 36">
+              <circle class="sr-track" cx="18" cy="18" r="15"/>
+              <circle class="sr-fill" cx="18" cy="18" r="15" stroke="var(--orange)"
+                stroke-dasharray="94.2" stroke-dashoffset="94.2"/>
+            </svg>
+            <div class="sub-ring-icon"><div class="dot-inner" style="border:1.5px solid var(--border-light);border-radius:50%;"></div></div>
+          </div>
+          <span class="sub-name pending">Gen Repo</span>
+        </div>
+        <div class="sub-module" data-step="paper-1" data-tooltip="Generate interactive artifact demonstrations and code samples.">
+          <div class="sub-ring pending" data-color="var(--orange)" data-pct="0">
+            <svg viewBox="0 0 36 36">
+              <circle class="sr-track" cx="18" cy="18" r="15"/>
+              <circle class="sr-fill" cx="18" cy="18" r="15" stroke="var(--orange)"
+                stroke-dasharray="94.2" stroke-dashoffset="94.2"/>
+            </svg>
+            <div class="sub-ring-icon"><div class="dot-inner" style="border:1.5px solid var(--border-light);border-radius:50%;"></div></div>
+          </div>
+          <span class="sub-name pending">Artifact Demos</span>
+        </div>
+        <div class="sub-module" data-step="paper-2" data-tooltip="Compile all visualizations: training curves, comparison tables, architecture diagrams.">
+          <div class="sub-ring pending" data-color="var(--orange)" data-pct="0">
+            <svg viewBox="0 0 36 36">
+              <circle class="sr-track" cx="18" cy="18" r="15"/>
+              <circle class="sr-fill" cx="18" cy="18" r="15" stroke="var(--orange)"
+                stroke-dasharray="94.2" stroke-dashoffset="94.2"/>
+            </svg>
+            <div class="sub-ring-icon"><div class="dot-inner" style="border:1.5px solid var(--border-light);border-radius:50%;"></div></div>
+          </div>
+          <span class="sub-name pending">Visualizations</span>
+        </div>
+        <div class="sub-module" data-step="paper-3" data-tooltip="Generate full paper text with citations, cross-references, and appendix materials.">
+          <div class="sub-ring pending" data-color="var(--orange)" data-pct="0">
+            <svg viewBox="0 0 36 36">
+              <circle class="sr-track" cx="18" cy="18" r="15"/>
+              <circle class="sr-fill" cx="18" cy="18" r="15" stroke="var(--orange)"
+                stroke-dasharray="94.2" stroke-dashoffset="94.2"/>
+            </svg>
+            <div class="sub-ring-icon"><div class="dot-inner" style="border:1.5px solid var(--border-light);border-radius:50%;"></div></div>
+          </div>
+          <span class="sub-name pending">Full Paper</span>
+        </div>
+        <div class="sub-module" data-step="paper-4" data-tooltip="Deploy to GitHub Pages with final review of complete paper and repository.">
+          <div class="sub-ring pending" data-color="var(--orange)" data-pct="0">
+            <svg viewBox="0 0 36 36">
+              <circle class="sr-track" cx="18" cy="18" r="15"/>
+              <circle class="sr-fill" cx="18" cy="18" r="15" stroke="var(--orange)"
+                stroke-dasharray="94.2" stroke-dashoffset="94.2"/>
+            </svg>
+            <div class="sub-ring-icon"><div class="dot-inner" style="border:1.5px solid var(--border-light);border-radius:50%;"></div></div>
+          </div>
+          <span class="sub-name pending">Deploy &amp; Review</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONTENT DASHBOARD -->
+  <div class="content-dashboard" id="contentDashboard">
+    <div class="content-header">
+      <span class="content-title" id="contentTitle">Artifacts Generation</span>
+      <span class="content-badge badge-active" id="contentBadge">Active</span>
+    </div>
+    <div class="content-summary" id="contentSummary">
+      I'm currently generating the experimental artifacts for our cross-lingual contrastive alignment paper.
+      The baseline comparison is complete (accuracy 0.847 on the standard benchmark), and I've built 2,400
+      multilingual training pairs spanning 12 language families. The convergence proof for our anchor-based
+      alignment has been formally verified. Right now I'm running the ablation study to isolate the contribution
+      of each component. Next up is the cross-lingual evaluation across 8 target languages.
+    </div>
+    <div class="content-stats" id="contentStats">
+      <div class="stat-card">
+        <div class="stat-label">Duration</div>
+        <div class="stat-value" id="statDuration">02:34:17</div>
+        <div class="stat-bar"><div class="stat-bar-fill" style="background:var(--green);" data-width="65%"></div></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Cost</div>
+        <div class="stat-value" id="statCost">$12.47</div>
+        <div class="stat-bar"><div class="stat-bar-fill" style="background:var(--blue);" data-width="42%"></div></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Messages</div>
+        <div class="stat-value" id="statMessages">847K tok</div>
+        <div class="stat-bar"><div class="stat-bar-fill" style="background:var(--purple);" data-width="57%"></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Tooltip -->
+<div class="tooltip" id="tooltip">
+  <div class="tooltip-title" id="tooltipTitle"></div>
+  <div class="tooltip-text" id="tooltipText"></div>
+</div>
+
+<script>
+/* ================================================================
+   DATA MODEL
+   ================================================================ */
+const MODULES = [
+  {
+    key: 'seed', name: 'Seed Hypotheses', color: '#22c55e',
+    status: 'done', progress: 100, metric: '847 papers -> 12 gaps',
+    steps: [
+      { name: 'Literature Scan', status: 'done', detail: '847 papers',
+        summary: 'I scanned 847 papers from ArXiv, Semantic Scholar, and ACL Anthology, filtering for cross-lingual NLP relevance. The citation graph revealed several underexplored connections between contrastive learning and low-resource alignment.' },
+      { name: 'Gap Analysis', status: 'done', detail: '12 gaps',
+        summary: 'I identified 12 significant research gaps through topic modeling and citation analysis. The most promising gaps involve contrastive alignment without parallel corpora, which currently lacks a principled framework.' },
+      { name: 'Hypothesis Seeding', status: 'done', detail: '36 candidates',
+        summary: 'I generated 36 hypothesis candidates from the 12 gaps, applying diversity filtering to ensure coverage across sub-domains including zero-shot transfer, anchor selection, and curriculum design.' },
+      { name: 'Ranking & Selection', status: 'done', detail: 'Top 6 selected',
+        summary: 'I ranked all candidates by expected impact, feasibility, and novelty. The top 6 hypotheses were selected, with the lead candidate focusing on language-agnostic anchor contrastive alignment.' }
+    ],
+    duration: '00:18:42', cost: '$1.23', messages: '124K tok'
+  },
+  {
+    key: 'hypo', name: 'Hypothesis Loop', color: '#a78bfa',
+    status: 'done', progress: 100, metric: '6.2 -> 7.8 -> 8.4',
+    steps: [
+      { name: 'Formulate v1', status: 'done', detail: 'score: 6.2',
+        summary: 'I formulated the initial hypothesis: contrastive alignment for cross-lingual embeddings without requiring parallel corpora, using language-agnostic anchor points derived from shared subword tokens.' },
+      { name: 'Review 1', status: 'done', detail: '3 issues',
+        summary: 'The first review identified 3 issues: insufficient language-family diversity in the evaluation plan, missing theoretical justification for anchor selection, and unclear scaling behavior.' },
+      { name: 'Refine v2', status: 'done', detail: 'score: 7.8',
+        summary: 'I refined the hypothesis incorporating all feedback. Tightened scope to low-resource language pairs and added a formal criterion for anchor quality based on cross-lingual mutual information.' },
+      { name: 'Review 2', status: 'done', detail: '1 minor',
+        summary: 'Second review validated novelty against 23 related works. Only one minor suggestion: add an explicit comparison condition against mBERT fine-tuning baseline.' },
+      { name: 'Refine v3', status: 'done', detail: 'score: 8.4',
+        summary: 'Final refinement added ablation conditions (anchor quality, curriculum schedule, language family diversity) and explicit success criteria. Hypothesis is now fully specified and testable.' },
+      { name: 'Review 3', status: 'done', detail: 'approved',
+        summary: 'Final review confirmed the hypothesis is well-scoped, novel, and testable. The contrastive anchor alignment approach has clear differentiation from existing methods. Passed to invention loop.' }
+    ],
+    duration: '00:47:31', cost: '$4.82', messages: '312K tok'
+  },
+  {
+    key: 'invention', name: 'Invention Iter 2', color: '#3b82f6',
+    status: 'active', progress: 66, metric: 'Artifacts: 3/5 complete',
+    steps: [
+      { name: 'Strategy', status: 'done', detail: null,
+        summary: 'I designed the research strategy: contrastive learning with language-agnostic anchors and a curriculum training schedule that gradually increases language diversity during training.' },
+      { name: 'Plan', status: 'done', detail: null,
+        summary: 'The detailed implementation plan covers model architecture (transformer encoder with projection head), training pipeline, 7 evaluation metrics, and a 4-condition ablation matrix.' },
+      { name: 'Paper Text', status: 'done', detail: null,
+        summary: 'I generated the paper narrative covering introduction, methodology, and expected results. The writing follows first-person academic style with proper citations to the 23 most relevant prior works.' },
+      { name: 'Artifacts', status: 'active', detail: '3/5',
+        summary: 'I\'m generating experimental artifacts. Baseline comparison is complete (acc 0.847), 2,400 multilingual pairs built, convergence proof verified. Currently running the ablation study. Cross-lingual eval is next.',
+        children: [
+          { name: 'Contrastive Baseline', status: 'done', detail: 'acc: 0.847' },
+          { name: 'Multilingual Pairs', status: 'done', detail: '2,400 examples' },
+          { name: 'Convergence Proof', status: 'done', detail: 'verified' },
+          { name: 'Ablation Study', status: 'running', detail: 'running...' },
+          { name: 'Cross-lingual Eval', status: 'pending', detail: 'pending' }
+        ]
+      },
+      { name: 'Review Paper', status: 'pending', detail: null,
+        summary: 'Pending: review and iterate on generated paper text and artifacts for consistency and technical accuracy.' },
+      { name: 'Final Polish', status: 'pending', detail: null,
+        summary: 'Pending: final iteration incorporating review feedback, polishing paper text and finalizing all artifacts.' }
+    ],
+    duration: '01:28:04', cost: '$6.42', messages: '411K tok'
+  },
+  {
+    key: 'paper', name: 'Paper Generation', color: '#f59e0b',
+    status: 'pending', progress: 0, metric: 'Waiting for invention',
+    steps: [
+      { name: 'Gen Repo', status: 'pending', detail: null,
+        summary: 'Pending: generate repository structure with code, configs, and documentation scaffold.' },
+      { name: 'Artifact Demos', status: 'pending', detail: null,
+        summary: 'Pending: generate interactive artifact demonstrations and code samples.' },
+      { name: 'Visualizations', status: 'pending', detail: null,
+        summary: 'Pending: compile all visualizations including training curves, comparison tables, and architecture diagrams.' },
+      { name: 'Full Paper', status: 'pending', detail: null,
+        summary: 'Pending: generate complete paper text with citations, cross-references, and appendix materials.' },
+      { name: 'Deploy & Review', status: 'pending', detail: null,
+        summary: 'Pending: deploy to GitHub Pages and final review of complete paper and repository.' }
+    ],
+    duration: '--:--:--', cost: '$0.00', messages: '0 tok'
+  }
+];
+
+/* ================================================================
+   STATE
+   ================================================================ */
+let activeModule = 2;   // invention
+let activeStep = 3;     // artifacts
+let kbModule = 2;
+let kbStep = 3;
+
+/* ================================================================
+   SIDEBAR LOGIC
+   ================================================================ */
+const sidebar = document.getElementById('sidebar');
+const sidebarToggle = document.getElementById('sidebarToggle');
+
+sidebarToggle.addEventListener('click', () => {
+  sidebar.classList.toggle('expanded');
+});
+
+// Hover expand/collapse
+sidebar.addEventListener('mouseenter', () => sidebar.classList.add('expanded'));
+sidebar.addEventListener('mouseleave', () => sidebar.classList.remove('expanded'));
+
+// Sidebar nav clicks
+document.querySelectorAll('.sidebar-dot, .sidebar-nav-item').forEach(el => {
+  el.addEventListener('click', () => {
+    const mod = el.dataset.module;
+    const idx = MODULES.findIndex(m => m.key === mod);
+    if (idx >= 0) selectModule(idx);
+  });
+});
+
+function updateSidebarActive() {
+  const key = MODULES[activeModule].key;
+  document.querySelectorAll('.sidebar-dot').forEach(d => d.classList.toggle('active', d.dataset.module === key));
+  document.querySelectorAll('.sidebar-nav-item').forEach(d => d.classList.toggle('active', d.dataset.module === key));
+}
+
+/* ================================================================
+   RING ENDPOINT POSITIONING (all levels)
+   ================================================================ */
+function positionEndpointOnRing(wrapEl, endpointEl, pct, ringRadius) {
+  if (!wrapEl || !endpointEl) return;
+  const rect = wrapEl.getBoundingClientRect();
+  const cx = rect.width / 2;
+  const cy = rect.height / 2;
+  // Scale from SVG coordinate space to element space
+  const svgSize = 36;
+  const scale = rect.width / svgSize;
+  const r = ringRadius * scale;
+  const angle = (pct / 100 * 360 - 90) * (Math.PI / 180);
+  const dotSize = parseFloat(getComputedStyle(endpointEl).width) || 4;
+  endpointEl.style.left = (cx + r * Math.cos(angle) - dotSize / 2) + 'px';
+  endpointEl.style.top = (cy + r * Math.sin(angle) - dotSize / 2) + 'px';
+}
+
+function positionAllRingEndpoints() {
+  // Sidebar ring
+  const sidebarWrap = document.getElementById('sidebarRing');
+  const sidebarEp = document.getElementById('ringEndpoint');
+  positionEndpointOnRing(sidebarWrap, sidebarEp, 65, 15.5);
+
+  // Card ring endpoints (28px rings)
+  document.querySelectorAll('.card-ring').forEach(ring => {
+    const ep = ring.querySelector('.card-ring-endpoint');
+    const pct = parseFloat(ring.dataset.pct) || 0;
+    if (ep && pct > 0 && pct < 100) {
+      ep.style.display = '';
+      positionEndpointOnRing(ring, ep, pct, 15.5);
+    } else if (ep && pct >= 100) {
+      // Full ring: hide endpoint or place at 360deg
+      ep.style.display = 'none';
+    } else if (ep) {
+      ep.style.display = 'none';
+    }
+  });
+
+  // Sub-ring endpoints (20px rings)
+  document.querySelectorAll('.sub-ring').forEach(ring => {
+    const ep = ring.querySelector('.sub-ring-endpoint');
+    const pct = parseFloat(ring.dataset.pct) || 0;
+    if (ep && pct > 0 && pct < 100) {
+      ep.style.display = '';
+      positionEndpointOnRing(ring, ep, pct, 15);
+    } else if (ep) {
+      ep.style.display = 'none';
+    }
+  });
+
+  // Item ring endpoints (14px rings)
+  document.querySelectorAll('.item-ring').forEach(ring => {
+    const ep = ring.querySelector('.item-ring-endpoint');
+    const pct = parseFloat(ring.dataset.pct) || 0;
+    if (ep && pct > 0 && pct < 100) {
+      ep.style.display = '';
+      positionEndpointOnRing(ring, ep, pct, 15);
+    } else if (ep) {
+      ep.style.display = 'none';
+    }
+  });
+}
+
+positionAllRingEndpoints();
+new ResizeObserver(positionAllRingEndpoints).observe(document.getElementById('sidebarRing'));
+
+/* ================================================================
+   MODULE CARD SELECTION
+   ================================================================ */
+document.querySelectorAll('.module-card').forEach(card => {
+  card.addEventListener('click', () => {
+    const idx = parseInt(card.dataset.index);
+    selectModule(idx);
+  });
+});
+
+function selectModule(idx) {
+  activeModule = idx;
+  kbModule = idx;
+  const mod = MODULES[idx];
+
+  // Update card states
+  document.querySelectorAll('.module-card').forEach((c, i) => {
+    c.classList.toggle('active', i === idx);
+    c.classList.toggle('glow-pulse', i === idx && MODULES[i].status === 'active');
+  });
+
+  // Toggle tree visibility
+  toggleTrees(mod.key);
+  updateSidebarActive();
+
+  // Find first active or first step
+  const firstActive = mod.steps.findIndex(s => s.status === 'active');
+  activeStep = firstActive >= 0 ? firstActive : 0;
+  kbStep = activeStep;
+
+  updateContent();
+  updateKbHighlight();
+  resizeTreeCanvas();
+  setTimeout(positionAllRingEndpoints, 50);
+}
+
+/* ================================================================
+   TREE TOGGLE
+   ================================================================ */
+function toggleTrees(activeKey) {
+  MODULES.forEach(mod => {
+    const branches = document.getElementById(mod.key + 'Branches');
+    const collapsed = document.getElementById(mod.key + 'Collapsed');
+    if (!branches) return;
+
+    if (mod.key === activeKey) {
+      branches.style.display = '';
+      if (collapsed) collapsed.style.display = 'none';
+      requestAnimationFrame(() => branches.classList.add('visible'));
+    } else {
+      branches.classList.remove('visible');
+      branches.style.display = 'none';
+      if (collapsed) collapsed.style.display = '';
+    }
+  });
+}
+
+// Collapsed summary clicks
+document.querySelectorAll('.tree-collapsed-summary').forEach(el => {
+  el.addEventListener('click', () => {
+    const mod = el.dataset.module;
+    const idx = MODULES.findIndex(m => m.key === mod);
+    if (idx >= 0) selectModule(idx);
+  });
+});
+
+/* ================================================================
+   SUB-MODULE CLICKS
+   ================================================================ */
+document.querySelectorAll('.sub-module').forEach(el => {
+  el.addEventListener('click', () => {
+    const step = el.dataset.step;
+    if (!step) return;
+    const parts = step.split('-');
+    const modKey = parts[0] === 'inv' ? 'invention' : parts[0];
+    const modIdx = MODULES.findIndex(m => m.key === modKey);
+    const stepIdx = parseInt(parts[1]);
+    if (modIdx >= 0) {
+      activeModule = modIdx;
+      kbModule = modIdx;
+      activeStep = stepIdx;
+      kbStep = stepIdx;
+      updateContent();
+      updateKbHighlight();
+    }
+  });
+});
+
+/* ================================================================
+   CONTENT DASHBOARD UPDATE
+   ================================================================ */
+function updateContent() {
+  const mod = MODULES[activeModule];
+  const step = mod.steps[activeStep];
+  if (!step) return;
+
+  const dash = document.getElementById('contentDashboard');
+  dash.style.animation = 'none';
+  dash.offsetHeight;
+  dash.style.animation = 'contentFadeIn 400ms var(--ease-smooth)';
+
+  document.getElementById('contentTitle').textContent = step.name + (mod.name ? ' -- ' + mod.name : '');
+
+  const badge = document.getElementById('contentBadge');
+  badge.textContent = step.status === 'done' ? 'Done' : step.status === 'active' ? 'Active' : 'Pending';
+  badge.className = 'content-badge ' + (step.status === 'done' ? 'badge-done' : step.status === 'active' ? 'badge-active' : 'badge-pending');
+
+  document.getElementById('contentSummary').textContent = step.summary || 'No details available yet.';
+
+  document.getElementById('statDuration').textContent = mod.duration;
+  document.getElementById('statCost').textContent = mod.cost;
+  document.getElementById('statMessages').textContent = mod.messages;
+
+  setTimeout(() => {
+    document.querySelectorAll('.stat-bar-fill').forEach(bar => {
+      bar.style.width = bar.dataset.width;
+    });
+  }, 50);
+}
+
+/* ================================================================
+   TOOLTIP ON SUB-MODULE HOVER
+   ================================================================ */
+const tooltip = document.getElementById('tooltip');
+const tooltipTitle = document.getElementById('tooltipTitle');
+const tooltipText = document.getElementById('tooltipText');
+
+document.querySelectorAll('.sub-module[data-tooltip]').forEach(el => {
+  el.addEventListener('mouseenter', () => {
+    tooltipTitle.textContent = el.querySelector('.sub-name').textContent;
+    tooltipText.textContent = el.dataset.tooltip;
+    const rect = el.getBoundingClientRect();
+    let left = rect.right + 12;
+    let top = rect.top - 10;
+    if (left + 290 > window.innerWidth) left = rect.left - 292;
+    if (top + 120 > window.innerHeight) top = window.innerHeight - 130;
+    if (top < 10) top = 10;
+    tooltip.style.left = left + 'px';
+    tooltip.style.top = top + 'px';
+    tooltip.classList.add('show');
+  });
+  el.addEventListener('mouseleave', () => {
+    tooltip.classList.remove('show');
+  });
+});
+
+/* ================================================================
+   KEYBOARD NAVIGATION
+   ================================================================ */
+function updateKbHighlight() {
+  document.querySelectorAll('.kb-focus').forEach(el => el.classList.remove('kb-focus'));
+  const mod = MODULES[kbModule];
+  const stepKey = mod.key === 'invention' ? 'inv' : mod.key;
+  const el = document.querySelector(`[data-step="${stepKey}-${kbStep}"]`);
+  if (el) {
+    el.classList.add('kb-focus');
+    el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowLeft') {
+    e.preventDefault();
+    kbModule = Math.max(0, kbModule - 1);
+    selectModule(kbModule);
+  } else if (e.key === 'ArrowRight') {
+    e.preventDefault();
+    kbModule = Math.min(MODULES.length - 1, kbModule + 1);
+    selectModule(kbModule);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    kbStep = Math.max(0, kbStep - 1);
+    activeStep = kbStep;
+    updateContent();
+    updateKbHighlight();
+  } else if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    const maxStep = MODULES[kbModule].steps.length - 1;
+    kbStep = Math.min(maxStep, kbStep + 1);
+    activeStep = kbStep;
+    updateContent();
+    updateKbHighlight();
+  }
+});
+
+/* ================================================================
+   BACKGROUND AMBIENT PARTICLES (canvas)
+   ================================================================ */
+const bgCanvas = document.getElementById('bgCanvas');
+const bgCtx = bgCanvas.getContext('2d');
+
+function resizeBgCanvas() {
+  bgCanvas.width = window.innerWidth;
+  bgCanvas.height = window.innerHeight;
+}
+resizeBgCanvas();
+window.addEventListener('resize', resizeBgCanvas);
+
+class AmbientParticle {
+  constructor() {
+    this.reset();
+  }
+  reset() {
+    this.x = Math.random() * bgCanvas.width;
+    this.y = Math.random() * bgCanvas.height;
+    this.vx = (Math.random() - 0.5) * 0.25;
+    this.vy = (Math.random() - 0.5) * 0.25;
+    this.r = Math.random() * 1.5 + 0.5;
+    this.opacity = Math.random() * 0.12 + 0.02;
+    this.hue = [142, 271, 220, 40][Math.floor(Math.random() * 4)];
+  }
+  update() {
+    this.x += this.vx;
+    this.y += this.vy;
+    if (this.x < -20 || this.x > bgCanvas.width + 20 ||
+        this.y < -20 || this.y > bgCanvas.height + 20) {
+      this.reset();
+    }
+  }
+}
+
+const ambientParticles = Array.from({ length: 40 }, () => new AmbientParticle());
+
+function drawAmbient() {
+  bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
+
+  ambientParticles.forEach(p => {
+    p.update();
+    bgCtx.beginPath();
+    bgCtx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    bgCtx.fillStyle = `hsla(${p.hue}, 60%, 65%, ${p.opacity})`;
+    bgCtx.fill();
+  });
+
+  // Connection lines
+  for (let i = 0; i < ambientParticles.length; i++) {
+    for (let j = i + 1; j < ambientParticles.length; j++) {
+      const a = ambientParticles[i];
+      const b = ambientParticles[j];
+      const dx = a.x - b.x;
+      const dy = a.y - b.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 140) {
+        const alpha = (1 - dist / 140) * 0.035;
+        bgCtx.beginPath();
+        bgCtx.moveTo(a.x, a.y);
+        bgCtx.lineTo(b.x, b.y);
+        bgCtx.strokeStyle = `rgba(148, 163, 184, ${alpha})`;
+        bgCtx.lineWidth = 0.5;
+        bgCtx.stroke();
+      }
+    }
+  }
+
+  requestAnimationFrame(drawAmbient);
+}
+drawAmbient();
+
+/* ================================================================
+   TREE-PATH DOTS: L-shaped dot animation (canvas overlay)
+   ================================================================ */
+const treeCanvas = document.getElementById('treeCanvas');
+const treeCtx = treeCanvas.getContext('2d');
+
+function resizeTreeCanvas() {
+  const main = document.getElementById('mainArea');
+  treeCanvas.width = main.scrollWidth;
+  treeCanvas.height = main.scrollHeight;
+  treeCanvas.style.width = main.scrollWidth + 'px';
+  treeCanvas.style.height = main.scrollHeight + 'px';
+}
+resizeTreeCanvas();
+window.addEventListener('resize', resizeTreeCanvas);
+
+// Dot class: travels along an array of {x,y} waypoints (L-shaped path)
+class TreeDot {
+  constructor(path, color, speed, opacity) {
+    this.path = path;
+    this.color = color;
+    this.speed = speed;
+    this.opacity = opacity;
+    this.totalLen = 0;
+    this.segments = [];
+    for (let i = 1; i < path.length; i++) {
+      const dx = path[i].x - path[i - 1].x;
+      const dy = path[i].y - path[i - 1].y;
+      const len = Math.sqrt(dx * dx + dy * dy);
+      this.segments.push(len);
+      this.totalLen += len;
+    }
+    this.progress = Math.random() * this.totalLen;
+  }
+  update() {
+    this.progress += this.speed;
+    if (this.progress > this.totalLen) this.progress -= this.totalLen;
+  }
+  getPosition() {
+    let remaining = this.progress;
+    for (let i = 0; i < this.segments.length; i++) {
+      if (remaining <= this.segments[i]) {
+        const t = remaining / this.segments[i];
+        return {
+          x: this.path[i].x + (this.path[i + 1].x - this.path[i].x) * t,
+          y: this.path[i].y + (this.path[i + 1].y - this.path[i].y) * t
+        };
+      }
+      remaining -= this.segments[i];
+    }
+    return this.path[this.path.length - 1];
+  }
+}
+
+let treeDots = [];
+let depDots = [];
+
+function buildTreeDots() {
+  treeDots = [];
+  depDots = [];
+
+  const main = document.getElementById('mainArea');
+  const mainRect = main.getBoundingClientRect();
+  const scrollLeft = main.scrollLeft;
+  const scrollTop = main.scrollTop;
+
+  // L-shaped path from active card to active sub-module
+  const activeCard = document.querySelector('.module-card.active');
+  const activeSub = document.querySelector('.sub-module.active');
+
+  if (activeCard && activeSub) {
+    const cardRect = activeCard.getBoundingClientRect();
+    const subRect = activeSub.getBoundingClientRect();
+
+    // Card bottom-center -> down -> horizontal -> sub-module left-center
+    const startX = cardRect.left + cardRect.width / 2 - mainRect.left + scrollLeft;
+    const startY = cardRect.bottom - mainRect.top + scrollTop;
+    const endX = subRect.left + 14 - mainRect.left + scrollLeft;
+    const endY = subRect.top + subRect.height / 2 - mainRect.top + scrollTop;
+
+    // L-shape: go down from card, then horizontal to align, then down to sub-module
+    const cornerY = startY + 12; // just past the tree-stem
+
+    const color = MODULES[activeModule].color;
+    const path = [
+      { x: startX, y: startY },
+      { x: startX, y: cornerY },
+      { x: endX, y: cornerY },
+      { x: endX, y: endY }
+    ];
+
+    for (let i = 0; i < 5; i++) {
+      treeDots.push(new TreeDot(path, color, 1.2 + Math.random() * 0.4, 0.6 + Math.random() * 0.2));
+    }
+  }
+
+  // Also create dots from active sub-module to running sub-item (if exists)
+  const runningItem = document.querySelector('.sub-item .item-ring.running');
+  if (activeSub && runningItem) {
+    const subRect = activeSub.getBoundingClientRect();
+    const itemEl = runningItem.closest('.sub-item');
+    const itemRect = itemEl.getBoundingClientRect();
+
+    const sx = subRect.left + 24 - mainRect.left + scrollLeft;
+    const sy = subRect.bottom - mainRect.top + scrollTop;
+    const ex = itemRect.left + 48 - mainRect.left + scrollLeft;
+    const ey = itemRect.top + itemRect.height / 2 - mainRect.top + scrollTop;
+
+    const path2 = [
+      { x: sx, y: sy },
+      { x: sx, y: ey },
+      { x: ex, y: ey }
+    ];
+
+    const color = MODULES[activeModule].color;
+    for (let i = 0; i < 3; i++) {
+      treeDots.push(new TreeDot(path2, color, 0.9 + Math.random() * 0.3, 0.35 + Math.random() * 0.15));
+    }
+  }
+
+  // Dependency dots: from hypo Review 3 to invention Strategy (cross-module link)
+  const depSource = document.querySelector('[data-step="hypo-5"]');
+  const depTarget = document.querySelector('[data-step="inv-0"]');
+
+  if (depSource && depTarget && depSource.offsetParent && depTarget.offsetParent) {
+    const srcRect = depSource.getBoundingClientRect();
+    const tgtRect = depTarget.getBoundingClientRect();
+
+    const sx = srcRect.right - mainRect.left + scrollLeft;
+    const sy = srcRect.top + srcRect.height / 2 - mainRect.top + scrollTop;
+    const ex = tgtRect.left - mainRect.left + scrollLeft;
+    const ey = tgtRect.top + tgtRect.height / 2 - mainRect.top + scrollTop;
+    const mx = sx + (ex - sx) * 0.5;
+
+    const depPath = [
+      { x: sx, y: sy },
+      { x: mx, y: sy },
+      { x: mx, y: ey },
+      { x: ex, y: ey }
+    ];
+
+    for (let i = 0; i < 3; i++) {
+      depDots.push(new TreeDot(depPath, '#a78bfa', 0.7 + Math.random() * 0.2, 0.2));
+    }
+  }
+}
+
+function drawTreeDots() {
+  treeCtx.clearRect(0, 0, treeCanvas.width, treeCanvas.height);
+
+  // Tree path dots
+  treeDots.forEach(dot => {
+    dot.update();
+    const pos = dot.getPosition();
+    // Core dot
+    treeCtx.beginPath();
+    treeCtx.arc(pos.x, pos.y, 1.5, 0, Math.PI * 2);
+    treeCtx.fillStyle = dot.color;
+    treeCtx.globalAlpha = dot.opacity;
+    treeCtx.fill();
+    // Glow halo
+    treeCtx.beginPath();
+    treeCtx.arc(pos.x, pos.y, 4, 0, Math.PI * 2);
+    treeCtx.fillStyle = dot.color;
+    treeCtx.globalAlpha = dot.opacity * 0.2;
+    treeCtx.fill();
+  });
+
+  // Dependency dots
+  depDots.forEach(dot => {
+    dot.update();
+    const pos = dot.getPosition();
+    treeCtx.beginPath();
+    treeCtx.arc(pos.x, pos.y, 1.5, 0, Math.PI * 2);
+    treeCtx.fillStyle = dot.color;
+    treeCtx.globalAlpha = dot.opacity;
+    treeCtx.fill();
+  });
+
+  treeCtx.globalAlpha = 1;
+  requestAnimationFrame(drawTreeDots);
+}
+
+// Rebuild dots when layout changes
+function rebuildDots() {
+  resizeTreeCanvas();
+  buildTreeDots();
+  positionAllRingEndpoints();
+}
+
+document.getElementById('mainArea').addEventListener('scroll', rebuildDots);
+window.addEventListener('resize', rebuildDots);
+
+// Initial build after layout settles
+setTimeout(() => {
+  rebuildDots();
+  drawTreeDots();
+}, 200);
+
+// Periodic rebuild for expand/collapse transitions
+setInterval(rebuildDots, 1200);
+
+/* ================================================================
+   STAT BAR ANIMATION ON LOAD
+   ================================================================ */
+setTimeout(() => {
+  document.querySelectorAll('.stat-bar-fill').forEach(bar => {
+    bar.style.width = bar.dataset.width;
+  });
+}, 300);
+
+/* ================================================================
+   INIT: Set default state
+   ================================================================ */
+toggleTrees('invention');
+updateSidebarActive();
+updateKbHighlight();
+
+</script>
+</body>
+</html>
