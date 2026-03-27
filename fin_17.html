@@ -1,0 +1,1473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Ring Gauges</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --clr-seed: #4ade80;
+    --clr-seed-dim: rgba(74,222,128,0.18);
+    --clr-seed-glow: rgba(74,222,128,0.35);
+    --clr-hypo: #a855f7;
+    --clr-hypo-dim: rgba(168,85,247,0.18);
+    --clr-hypo-glow: rgba(168,85,247,0.35);
+    --clr-inv: #60a5fa;
+    --clr-inv-dim: rgba(96,165,250,0.18);
+    --clr-inv-glow: rgba(96,165,250,0.35);
+    --clr-paper: #fb923c;
+    --clr-paper-dim: rgba(251,146,60,0.18);
+    --clr-paper-glow: rgba(251,146,60,0.35);
+    --bg-base: #0a0a0f;
+    --bg-surface: #0e1018;
+    --bg-card: #12141d;
+    --bg-card-hover: #181b26;
+    --text-primary: #e2e4e9;
+    --text-secondary: rgba(200,202,208,0.75);
+    --text-muted: rgba(200,202,208,0.4);
+    --border-subtle: rgba(255,255,255,0.05);
+    --sidebar-w-collapsed: 62px;
+    --sidebar-w-expanded: 220px;
+  }
+
+  body {
+    background: var(--bg-base);
+    color: #c8cad0;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+    display: flex;
+  }
+
+  /* ── Particles Canvas ── */
+  #particles-canvas {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.5;
+  }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    position: fixed;
+    top: 0; left: 0;
+    width: var(--sidebar-w-collapsed);
+    height: 100vh;
+    background: var(--bg-surface);
+    border-right: 1px solid var(--border-subtle);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px 0;
+    gap: 6px;
+    z-index: 100;
+    transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow: hidden;
+    user-select: none;
+  }
+
+  .sidebar:hover { width: var(--sidebar-w-expanded); }
+
+  .sidebar-brand {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: rgba(255,255,255,0.25);
+    text-transform: uppercase;
+    margin-bottom: 16px;
+    white-space: nowrap;
+    overflow: hidden;
+    width: 100%;
+    text-align: center;
+  }
+
+  .sidebar-brand .brand-full { display: none; }
+  .sidebar:hover .sidebar-brand .brand-short { display: none; }
+  .sidebar:hover .sidebar-brand .brand-full { display: inline; }
+
+  /* Sidebar nav items */
+  .sidebar-item {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    width: calc(100% - 16px);
+    padding: 10px 8px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.2s ease;
+    position: relative;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+
+  .sidebar-item:hover { background: rgba(255,255,255,0.04); }
+  .sidebar-item.active { background: rgba(255,255,255,0.06); }
+
+  /* Active color bar */
+  .sidebar-item.active::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 6px; bottom: 6px;
+    width: 3px;
+    border-radius: 0 2px 2px 0;
+  }
+
+  .sidebar-item[data-module="seed"].active::before { background: var(--clr-seed); }
+  .sidebar-item[data-module="hypothesis"].active::before { background: var(--clr-hypo); }
+  .sidebar-item[data-module="invention"].active::before { background: var(--clr-inv); }
+  .sidebar-item[data-module="paper"].active::before { background: var(--clr-paper); }
+
+  /* Big ring container in sidebar */
+  .sidebar-ring-wrap {
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .sidebar-ring-wrap svg { position: absolute; top: 0; left: 0; }
+  .sidebar-ring-wrap .ring-pct {
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--text-muted);
+    z-index: 1;
+  }
+
+  .sidebar-item.active .sidebar-ring-wrap .ring-pct { color: var(--text-secondary); }
+
+  .sidebar-item-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: rgba(255,255,255,0.5);
+    transition: color 0.2s;
+  }
+
+  .sidebar-item.active .sidebar-item-label { color: var(--text-primary); }
+
+  /* ── Main Content ── */
+  .main {
+    margin-left: var(--sidebar-w-collapsed);
+    flex: 1;
+    position: relative;
+    z-index: 1;
+    min-height: 100vh;
+  }
+
+  /* ── Top Progress Strip with Dependency Dots ── */
+  .progress-strip {
+    background: linear-gradient(180deg, #0c0e18 0%, var(--bg-base) 100%);
+    padding: 26px 0 14px;
+    position: relative;
+  }
+
+  .progress-strip::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06) 20%, rgba(255,255,255,0.06) 80%, transparent);
+  }
+
+  .dots-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    padding: 0 40px;
+  }
+
+  .module-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    position: relative;
+    padding: 0 16px;
+    cursor: pointer;
+  }
+
+  .module-group:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    right: 0; top: 50%;
+    width: 12px; height: 1px;
+    background: rgba(255,255,255,0.1);
+    transform: translateX(50%);
+  }
+
+  .module-group .line-bg {
+    position: absolute;
+    top: 50%;
+    left: 22px; right: 22px;
+    height: 1px;
+    transform: translateY(-0.5px);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .module-group[data-module="seed"] .line-bg { background: var(--clr-seed-dim); }
+  .module-group[data-module="hypothesis"] .line-bg { background: var(--clr-hypo-dim); }
+  .module-group[data-module="invention"] .line-bg { background: var(--clr-inv-dim); }
+  .module-group[data-module="paper"] .line-bg { background: var(--clr-paper-dim); }
+
+  .dot {
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    position: relative;
+    z-index: 1;
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+    flex-shrink: 0;
+  }
+
+  .dot.hollow { background: transparent !important; }
+  .dot.active-pulse { animation: dotPulse 2s ease-in-out infinite; }
+
+  .module-group[data-module="seed"] .dot.filled {
+    background: var(--clr-seed);
+    box-shadow: 0 0 6px var(--clr-seed-glow), 0 0 14px rgba(74,222,128,0.15);
+  }
+  .module-group[data-module="seed"] .dot.hollow { border: 1.5px solid rgba(74,222,128,0.25); }
+
+  .module-group[data-module="hypothesis"] .dot.filled {
+    background: var(--clr-hypo);
+    box-shadow: 0 0 6px var(--clr-hypo-glow), 0 0 14px rgba(168,85,247,0.15);
+  }
+  .module-group[data-module="hypothesis"] .dot.hollow { border: 1.5px solid rgba(168,85,247,0.25); }
+
+  .module-group[data-module="invention"] .dot.filled {
+    background: var(--clr-inv);
+    box-shadow: 0 0 6px var(--clr-inv-glow), 0 0 14px rgba(96,165,250,0.15);
+  }
+  .module-group[data-module="invention"] .dot.hollow { border: 1.5px solid rgba(96,165,250,0.25); }
+  .module-group[data-module="invention"] .dot.active-pulse {
+    background: #93bbfd;
+    box-shadow: 0 0 10px rgba(96,165,250,0.8), 0 0 24px rgba(96,165,250,0.45), 0 0 48px rgba(96,165,250,0.15);
+  }
+
+  .module-group[data-module="paper"] .dot.filled {
+    background: var(--clr-paper);
+    box-shadow: 0 0 6px var(--clr-paper-glow), 0 0 14px rgba(251,146,60,0.15);
+  }
+  .module-group[data-module="paper"] .dot.hollow { border: 1.5px solid rgba(251,146,60,0.18); }
+
+  .module-group .hover-label {
+    position: absolute;
+    top: -24px; left: 50%;
+    transform: translateX(-50%);
+    font-size: 11px; font-weight: 500;
+    letter-spacing: 0.04em;
+    color: rgba(255,255,255,0.55);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+
+  .module-group:hover .hover-label,
+  .module-group.selected .hover-label { opacity: 1; }
+
+  .module-group[data-module="seed"] .hover-label { color: rgba(74,222,128,0.7); }
+  .module-group[data-module="hypothesis"] .hover-label { color: rgba(168,85,247,0.7); }
+  .module-group[data-module="invention"] .hover-label { color: rgba(96,165,250,0.7); }
+  .module-group[data-module="paper"] .hover-label { color: rgba(251,146,60,0.7); }
+
+  .module-group.selected .dot.filled { transform: scale(1.12); }
+
+  @keyframes dotPulse {
+    0%, 100% {
+      box-shadow: 0 0 10px rgba(96,165,250,0.8), 0 0 24px rgba(96,165,250,0.45), 0 0 48px rgba(96,165,250,0.15);
+      transform: scale(1);
+    }
+    50% {
+      box-shadow: 0 0 14px rgba(96,165,250,1), 0 0 32px rgba(96,165,250,0.6), 0 0 60px rgba(96,165,250,0.25);
+      transform: scale(1.25);
+    }
+  }
+
+  /* ── Content Area ── */
+  .content-area {
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 32px 28px 60px;
+    position: relative;
+    min-height: 420px;
+  }
+
+  .module-content {
+    position: absolute;
+    top: 32px; left: 28px; right: 28px;
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    pointer-events: none;
+  }
+
+  .module-content.visible {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+    position: relative;
+    top: 0; left: 0; right: 0;
+  }
+
+  /* ── Module Header ── */
+  .module-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 8px;
+  }
+
+  .module-title {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .module-subtitle {
+    font-size: 15px;
+    font-weight: 400;
+    margin-bottom: 14px;
+  }
+
+  .module-content[data-module="seed"] .module-subtitle { color: var(--clr-seed); }
+  .module-content[data-module="hypothesis"] .module-subtitle { color: var(--clr-hypo); }
+  .module-content[data-module="invention"] .module-subtitle { color: var(--clr-inv); }
+  .module-content[data-module="paper"] .module-subtitle { color: var(--clr-paper); }
+
+  .module-summary {
+    font-size: 14px;
+    line-height: 1.65;
+    color: var(--text-secondary);
+    margin-bottom: 22px;
+  }
+
+  /* ── Cards (Level 2) — each sub-stage is a card with a 28px ring ── */
+  .cards-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    overflow: hidden;
+    transition: background 0.2s ease, border-color 0.25s ease;
+    position: relative;
+  }
+
+  .card::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    border-radius: 10px 0 0 10px;
+    opacity: 0;
+    transition: opacity 0.25s ease;
+  }
+
+  .card.expanded::before { opacity: 1; }
+
+  /* Color line per module */
+  [data-module="seed"] .card::before { background: var(--clr-seed); }
+  [data-module="hypothesis"] .card::before { background: var(--clr-hypo); }
+  [data-module="invention"] .card::before { background: var(--clr-inv); }
+  [data-module="paper"] .card::before { background: var(--clr-paper); }
+
+  .card:hover { background: var(--bg-card-hover); }
+  .card.expanded { border-color: rgba(255,255,255,0.08); }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  /* 28px ring gauge in cards */
+  .card-ring-wrap {
+    width: 28px; height: 28px;
+    flex-shrink: 0;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .card-ring-wrap svg { position: absolute; top: 0; left: 0; }
+  .card-ring-wrap .ring-pct {
+    font-size: 8px;
+    font-weight: 700;
+    z-index: 1;
+    color: var(--text-muted);
+  }
+
+  .card.expanded .card-ring-wrap .ring-pct { color: var(--text-secondary); }
+
+  .card-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .card-label.pending-label { color: rgba(255,255,255,0.3); }
+
+  .card-sep {
+    color: rgba(255,255,255,0.12);
+    font-size: 13px;
+    flex-shrink: 0;
+  }
+
+  .card-detail {
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  .card-detail.active-detail {
+    color: var(--clr-inv);
+    font-weight: 500;
+  }
+
+  /* Spinner for active cards */
+  .card-spinner {
+    width: 14px; height: 14px;
+    border: 2px solid transparent;
+    border-top-color: var(--clr-inv);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    flex-shrink: 0;
+    margin-left: auto;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .card-chevron {
+    margin-left: auto;
+    font-size: 11px;
+    color: rgba(255,255,255,0.2);
+    transition: transform 0.25s ease, color 0.25s ease;
+    flex-shrink: 0;
+  }
+
+  .card.expanded .card-chevron {
+    transform: rotate(90deg);
+    color: rgba(255,255,255,0.35);
+  }
+
+  /* Card body — the sub-module rows (level 3) */
+  .card-body {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.35s ease, padding 0.35s ease;
+    padding: 0 16px 0 56px;
+  }
+
+  .card.expanded .card-body {
+    max-height: 600px;
+    padding: 2px 16px 14px 56px;
+  }
+
+  /* ── Sub-module row (Level 3) — 20px tiny ring gauges ── */
+  .submod {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 0;
+    position: relative;
+  }
+
+  /* Connecting vertical line between sub-modules */
+  .submod:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    left: 9px;
+    top: 26px;
+    bottom: -6px;
+    width: 1px;
+  }
+
+  [data-module="seed"] .submod:not(:last-child)::after { background: var(--clr-seed-dim); }
+  [data-module="hypothesis"] .submod:not(:last-child)::after { background: var(--clr-hypo-dim); }
+  [data-module="invention"] .submod:not(:last-child)::after { background: var(--clr-inv-dim); }
+  [data-module="paper"] .submod:not(:last-child)::after { background: var(--clr-paper-dim); }
+
+  /* 20px tiny ring gauge */
+  .submod-ring-wrap {
+    width: 20px; height: 20px;
+    flex-shrink: 0;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1;
+  }
+
+  .submod-ring-wrap svg { position: absolute; top: 0; left: 0; }
+
+  .submod-label {
+    font-size: 13px;
+    color: rgba(200,202,208,0.7);
+  }
+
+  .submod-label.done-label { color: rgba(200,202,208,0.6); }
+  .submod-label.running-label { color: #93bbfd; font-weight: 500; }
+  .submod-label.pending-label { color: rgba(255,255,255,0.25); }
+
+  .submod-status {
+    margin-left: auto;
+    font-size: 12px;
+    color: rgba(255,255,255,0.22);
+  }
+
+  .submod-status.done-status { color: rgba(74,222,128,0.5); }
+  .submod-status.running-status {
+    color: var(--clr-inv);
+    animation: textPulse 2s ease-in-out infinite;
+  }
+
+  /* Tiny spinner on sub-modules */
+  .submod-spinner {
+    width: 10px; height: 10px;
+    border: 1.5px solid transparent;
+    border-top-color: var(--clr-inv);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    flex-shrink: 0;
+    margin-left: auto;
+  }
+
+  @keyframes textPulse {
+    0%, 100% { opacity: 0.7; }
+    50% { opacity: 1; }
+  }
+
+  /* Hypothesis iterations special */
+  .hypo-iter {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 0;
+    font-size: 13px;
+  }
+
+  .hypo-iter .iter-num {
+    font-weight: 600;
+    width: 22px;
+    color: rgba(168,85,247,0.6);
+  }
+
+  .hypo-iter .iter-score { color: var(--text-secondary); }
+
+  .hypo-iter .iter-badge {
+    margin-left: auto;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 500;
+  }
+
+  .hypo-iter .iter-badge.best {
+    background: rgba(168,85,247,0.15);
+    color: var(--clr-hypo);
+  }
+
+  /* ── Tooltips ── */
+  [data-tooltip] {
+    position: relative;
+  }
+
+  [data-tooltip]::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%) translateY(4px);
+    background: #1e2030;
+    color: var(--text-secondary);
+    font-size: 11px;
+    padding: 5px 10px;
+    border-radius: 6px;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    z-index: 200;
+    border: 1px solid rgba(255,255,255,0.08);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  }
+
+  [data-tooltip]:hover::after {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  /* ── Footer ── */
+  .module-footer {
+    display: flex;
+    gap: 16px;
+    margin-top: 24px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border-subtle);
+    font-size: 13px;
+    color: rgba(255,255,255,0.3);
+  }
+
+  .footer-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .footer-icon { font-size: 12px; }
+
+  /* ── Keyboard hint ── */
+  .key-hint {
+    position: fixed;
+    bottom: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: rgba(255,255,255,0.16);
+    user-select: none;
+    z-index: 10;
+  }
+
+  .key-hint kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px; height: 20px;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 4px;
+    font-family: 'Inter', sans-serif;
+    font-size: 11px;
+    color: rgba(255,255,255,0.28);
+    background: rgba(255,255,255,0.03);
+  }
+
+  /* ── Glow effect on active card ── */
+  .card.glow-seed { box-shadow: 0 0 20px rgba(74,222,128,0.06), inset 0 0 20px rgba(74,222,128,0.02); }
+  .card.glow-hypo { box-shadow: 0 0 20px rgba(168,85,247,0.06), inset 0 0 20px rgba(168,85,247,0.02); }
+  .card.glow-inv { box-shadow: 0 0 20px rgba(96,165,250,0.06), inset 0 0 20px rgba(96,165,250,0.02); }
+  .card.glow-paper { box-shadow: 0 0 20px rgba(251,146,60,0.06), inset 0 0 20px rgba(251,146,60,0.02); }
+
+  /* ── Dependency dot indicator ── */
+  .dep-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .dep-dot.met { background: rgba(74,222,128,0.5); }
+  .dep-dot.unmet { background: rgba(255,255,255,0.1); }
+  .dep-dot.blocked {
+    background: rgba(239,68,68,0.5);
+    box-shadow: 0 0 4px rgba(239,68,68,0.3);
+  }
+
+  /* ── Ring animation for active ── */
+  @keyframes ringDash {
+    to { stroke-dashoffset: 0; }
+  }
+
+  .ring-active-anim {
+    animation: ringDash 1.5s ease-out forwards;
+  }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.14); }
+</style>
+</head>
+<body>
+
+<!-- Particles -->
+<canvas id="particles-canvas"></canvas>
+
+<!-- ── Sidebar (collapsed, expands on hover) ── -->
+<nav class="sidebar">
+  <div class="sidebar-brand">
+    <span class="brand-short">AII</span>
+    <span class="brand-full">AI Inventor</span>
+  </div>
+
+  <div class="sidebar-item" data-module="seed" data-tooltip="Seed Hypotheses">
+    <div class="sidebar-ring-wrap" id="sidebar-ring-seed"></div>
+    <span class="sidebar-item-label">Seed</span>
+  </div>
+
+  <div class="sidebar-item" data-module="hypothesis" data-tooltip="Hypothesis Loop">
+    <div class="sidebar-ring-wrap" id="sidebar-ring-hypo"></div>
+    <span class="sidebar-item-label">Hypothesis</span>
+  </div>
+
+  <div class="sidebar-item active" data-module="invention" data-tooltip="Invention Loop">
+    <div class="sidebar-ring-wrap" id="sidebar-ring-inv"></div>
+    <span class="sidebar-item-label">Invention</span>
+  </div>
+
+  <div class="sidebar-item" data-module="paper" data-tooltip="Paper Generation">
+    <div class="sidebar-ring-wrap" id="sidebar-ring-paper"></div>
+    <span class="sidebar-item-label">Paper</span>
+  </div>
+</nav>
+
+<!-- ── Main ── -->
+<div class="main">
+
+  <!-- Progress Strip -->
+  <div class="progress-strip">
+    <div class="dots-row">
+      <div class="module-group" data-module="seed">
+        <div class="line-bg"></div>
+        <span class="hover-label">Seed</span>
+        <div class="dot filled" data-tooltip="Paper Collection"></div>
+        <div class="dot filled" data-tooltip="Knowledge Graph"></div>
+        <div class="dot filled" data-tooltip="Gap Ranking"></div>
+        <div class="dot filled" data-tooltip="Seed Generation"></div>
+      </div>
+
+      <div class="module-group" data-module="hypothesis">
+        <div class="line-bg"></div>
+        <span class="hover-label">Hypothesis</span>
+        <div class="dot filled" data-tooltip="Iteration 1"></div>
+        <div class="dot filled" data-tooltip="Iteration 2"></div>
+        <div class="dot filled" data-tooltip="Iteration 3"></div>
+        <div class="dot filled" data-tooltip="Gen Hypo"></div>
+        <div class="dot filled" data-tooltip="Review Hypo"></div>
+        <div class="dot filled" data-tooltip="Accept"></div>
+      </div>
+
+      <div class="module-group selected" data-module="invention">
+        <div class="line-bg"></div>
+        <span class="hover-label">Invention</span>
+        <div class="dot filled" data-tooltip="Strategy"></div>
+        <div class="dot filled" data-tooltip="Plan"></div>
+        <div class="dot filled" data-tooltip="Baseline"></div>
+        <div class="dot filled" data-tooltip="Main Exp"></div>
+        <div class="dot filled" data-tooltip="Viz Suite"></div>
+        <div class="dot filled" data-tooltip="Artifact 4"></div>
+        <div class="dot filled" data-tooltip="Artifact 5"></div>
+        <div class="dot filled active-pulse" data-tooltip="Ablation (running)"></div>
+        <div class="dot hollow" data-tooltip="Paper Draft"></div>
+        <div class="dot hollow" data-tooltip="Review"></div>
+        <div class="dot hollow" data-tooltip="Update Hypo"></div>
+        <div class="dot hollow" data-tooltip="Finalize"></div>
+      </div>
+
+      <div class="module-group" data-module="paper">
+        <div class="line-bg"></div>
+        <span class="hover-label">Paper</span>
+        <div class="dot hollow" data-tooltip="Artifact Demos"></div>
+        <div class="dot hollow" data-tooltip="Visualizations"></div>
+        <div class="dot hollow" data-tooltip="Full Paper"></div>
+        <div class="dot hollow" data-tooltip="Repository"></div>
+        <div class="dot hollow" data-tooltip="Final PDF"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Content Area ── -->
+  <div class="content-area">
+
+    <!-- ====== SEED ====== -->
+    <div class="module-content" data-module="seed">
+      <div class="module-header">
+        <div class="module-title">Seed Hypotheses</div>
+      </div>
+      <div class="module-subtitle">847 papers &#8594; 12 research gaps</div>
+      <div class="module-summary">
+        Scanned literature across three domains to identify under-explored
+        intersections. Knowledge graph built from 847 source papers, producing
+        12 distinct research gaps ranked by novelty and tractability.
+      </div>
+      <div class="cards-grid">
+        <!-- Card: Paper Collection — 100% -->
+        <div class="card" data-pct="100">
+          <div class="card-header">
+            <div class="card-ring-wrap" data-ring="28" data-pct="100" data-color="seed"></div>
+            <span class="card-label">Paper Collection</span>
+            <span class="card-sep">&mdash;</span>
+            <span class="card-detail">847 papers ingested</span>
+            <span class="dep-dot met" data-tooltip="No dependencies"></span>
+            <span class="card-chevron">&#9654;</span>
+          </div>
+          <div class="card-body">
+            <div class="submod">
+              <div class="submod-ring-wrap" data-ring="20" data-pct="100" data-color="seed"></div>
+              <span class="submod-label done-label">Semantic Scholar API crawl</span>
+              <span class="submod-status done-status">done</span>
+            </div>
+            <div class="submod">
+              <div class="submod-ring-wrap" data-ring="20" data-pct="100" data-color="seed"></div>
+              <span class="submod-label done-label">PDF extraction and chunking</span>
+              <span class="submod-status done-status">done</span>
+            </div>
+            <div class="submod">
+              <div class="submod-ring-wrap" data-ring="20" data-pct="100" data-color="seed"></div>
+              <span class="submod-label done-label">De-duplication (847 unique)</span>
+              <span class="submod-status done-status">done</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card: Knowledge Graph — 100% -->
+        <div class="card" data-pct="100">
+          <div class="card-header">
+            <div class="card-ring-wrap" data-ring="28" data-pct="100" data-color="seed"></div>
+            <span class="card-label">Knowledge Graph</span>
+            <span class="card-sep">&mdash;</span>
+            <span class="card-detail">2,341 entities, 5,890 edges</span>
+            <span class="dep-dot met" data-tooltip="Depends: Paper Collection"></span>
+            <span class="card-chevron">&#9654;</span>
+          </div>
+          <div class="card-body">
+            <div class="submod">
+              <div class="submod-ring-wrap" data-ring="20" data-pct="100" data-color="seed"></div>
+              <span class="submod-label done-label">Entity extraction (methods, datasets, metrics)</span>
+              <span class="submod-status done-status">done</span>
+            </div>
+            <div class="submod">
+              <div class="submod-ring-wrap" data-ring="20" data-pct="100" data-color="seed"></div>
+              <span class="submod-label done-label">Relation linking</span>
+              <span class="submod-status done-status">done</span>
+            </div>
+            <div class="submod">
+              <div class="submod-ring-wrap" data-ring="20" data-pct="100" data-color="seed"></div>
+              <span class="submod-label done-label">Gap detection via structural holes</span>
+              <span class="submod-status done-status">done</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card: Gap Ranking — 100% -->
+        <div class="card" data-pct="100">
+          <div class="card-header">
+            <div class="card-ring-wrap" data-ring="28" data-pct="100" data-color="seed"></div>
+            <span class="card-label">Gap Ranking</span>
+            <span class="card-sep">&mdash;</span>
+            <span class="card-detail">12 gaps prioritized</span>
+            <span class="dep-dot met" data-tooltip="Depends: Knowledge Graph"></span>
+            <span class="card-chevron">&#9654;</span>
+          </div>
+          <div class="card-body">
+            <div class="submod">
+              <div class="submod-ring-wrap" data-ring="20" data-pct="100" data-color="seed"></div>
+              <span class="submod-label done-label">Novelty scoring</span>
+              <span class="submod-status done-status">done</span>
+            </div>
+            <div class="submod">
+              <div class="submod-ring-wrap" data-ring="20" data-pct="100" data-color="seed"></div>
+              <span class="submod-label done-label">Tractability assessment</span>
+              <span class="submod-status done-status">done</span>
+            </div>
+            <div class="submod">
+              <div class="submod-ring-wrap" data-ring="20" data-pct="100" data-color="seed"></div>
+              <span class="submod-label done-label">Final ranking and selection</span>
+              <span class="submod-status done-status">done</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card: Seed Generation — 100% -->
+        <div class="card" data-pct="100">
+          <div class="card-header">
+            <div class="card-ring-wrap" data-ring="28" data-pct="100" data-color="seed"></div>
+            <span class="card-label">Seed Generation</span>
+            <span class="card-sep">&mdash;</span>
+            <span class="card-detail">12 seed hypotheses</span>
+            <span class="dep-dot met" data-tooltip="Depends: Gap Ranking"></span>
+            <span class="card-chevron">&#9654;</span>
+          </div>
+          <div class="card-body">
+            <div class="submod">
+              <div class="submod-ring-wrap" data-ring="20" data-pct="100" data-color="seed"></div>
+              <span class="submod-label done-label">Hypothesis formulation per gap</span>
+              <span class="submod-status done-status">done</span>
+            </div>
+            <div class="submod">
+              <div class="submod-ring-wrap" data-ring="20" data-pct="100" data-color="seed"></div>
+              <span class="submod-label done-label">Initial feasibility check</span>
+              <span class="submod-status done-status">done</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="module-footer">
+        <div class="footer-item"><span class="footer-icon">&#9202;</span> 18m</div>
+        <div class="footer-item"><span class="footer-icon">&#9830;</span> $4.21</div>
+      </div>
+    </div>
+
+    <!-- ====== HYPOTHESIS ====== -->
+    <div class="module-content" data-module="hypothesis">
+      <div class="module-header">
+        <div class="module-title">Hypothesis Loop</div>
+      </div>
+      <div class="module-subtitle">Score 6.2 &#8594; 7.8 &#8594; 8.4</div>
+      <div class="module-summary">
+        Iteratively refining the top hypothesis through structured review
+        and revision. Each iteration addresses weaknesses identified by the
+        review agent, improving specificity and grounding.
+      </div>
+      <div class="cards-grid">
+        <!-- Card: Iteration 1 — 100% -->
+        <div class="card" data-pct="100">
+          <div class="card-header">
+            <div class="card-ring-wrap" data-ring="28" data-pct="100" data-color="hypo"></div>
+            <span class="card-label">Iteration 1</span>
+            <span class="card-sep">&mdash;</span>
+            <span class="card-detail">Score 6.2</span>
+            <span class="dep-dot met" data-tooltip="Depends: Seed Generation"></span>
+            <span class="card-chevron">&#9654;</span>
+          </div>
+          <div class="card-body">
+            <div class="submod">
+              <div class="submod-ring-wrap" data-ring="20" data-pct="100" data-color="hypo"></div>
+              <span class="submod-label done-label">Review: lacks specificity in method section</span>
+            </div>
+            <div class="submod">
+              <div class="submod-ring-wrap" data-ring="20" data-pct="100" data-color="hypo"></div>
+              <span class="submod-label done-label">Revision: added contrastive loss formulation</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card: Iteration 2 — 100% -->
+        <div class="card" data-pct="100">
+          <div class="card-header">
+            <div class="card-ring-wrap" data-ring="28" data-pct="100" data-color="hypo"></div>
+            <span class="card-label">Iteration 2</span>
+            <span class="card-sep">&mdash;</span>
+            <span class="card-detail">Score 7.8</span>
+            <span class="dep-dot met" data-tooltip="Depends: Iteration 1"></span>
+            <span class="card-chevron">&#9654;</span>
+          </div>
+          <div class="card-body">
+            <div class="submod">
+              <div class="submod-ring-wrap" data-ring="20" data-pct="100" data-color="hypo"></div>
+              <span class="submod-label done-label">Review: needs stronger baseline justification</span>
+            </div>
+            <div class="submod">
+              <div class="submod-ring-wrap" data-ring="20" data-pct="100" data-color="hypo"></div>
+              <span class="submod-label done-label">Revision: cited 3 baselines, added expected gains</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card: Iteration 3 — 100% -->
+        <div class="card" data-pct="100">
+          <div class="card-header">
+            <div class="card-ring-wrap" data-ring="28" data-pct="100" data-color="hypo"></div>
+            <span class="card-label">Iteration 3</span>
+            <span class="card-sep">&mdash;</span>
+            <span class="card-detail">Score 8.4 &mdash; accepted</span>
+            <span class="dep-dot met" data-tooltip="Depends: Iteration 2"></span>
+            <span class="card-chevron">&#9654;</span>
+          </div>
+          <div class="card-body">
+            <div class="submod">
+              <div class="submod-ring-wrap" data-ring="20" data-pct="100" data-color="hypo"></div>
+              <span class="submod-label done-label">Review: minor clarity edits, threshold met</span>
+              <span class="submod-status" style="background:rgba(168,85,247,0.15);color:#a855f7;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:500;">best</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="module-footer">
+        <div class="footer-item"><span class="footer-icon">&#9202;</span> 31m</div>
+        <div class="footer-item"><span class="footer-icon">&#9830;</span> $8.73</div>
+      </div>
+    </div>
+
+    <!-- ====== INVENTION (default visible) ====== -->
+    <div class="module-content visible" data-module="invention">
+      <div class="module-header">
+        <div class="module-title">Invention Loop &mdash; Iteration 2 of 3</div>
+      </div>
+      <div class="module-subtitle">Generating Artifacts &mdash; 3 of 5 complete</div>
+      <div class="module-summary">
+        Building research artifacts to validate the hypothesis. Baseline shows
+        17.5% accuracy improvement. Ablation study running.
+      </div>
+      <div class="cards-grid">
+        <!-- Card: Strategy — 100% -->
+        <div class="card" data-pct="100">
+          <div class="card-header">
+            <div class="card-ring-wrap" data-ring="28" data-pct="100" data-color="inv"></div>
+            <span class="card-label">Strategy</span>
+            <span class="card-sep">&mdash;</span>
+            <span class="card-detail">Contrastive alignment</span>
+            <span class="dep-dot met" data-tooltip="Depends: Hypothesis accepted"></span>
+            <span class="card-chevron">&#9654;</span>
+          </div>
+          <div class="card-body">
+            <div class="submod">
+              <div class="submod-ring-wrap" data-ring="20" data-pct="100" data-color="inv"></div>
+              <span class="submod-label done-label">Selected contrastive learning approach</span>
+              <span class="submod-status done-status">done</span>
+            </div>
+            <div class="submod">
+              <div class="submod-ring-wrap" data-ring="20" data-pct="100" data-color="inv"></div>
+              <span class="submod-label done-label">Defined alignment loss function</span>
+              <span class="submod-status done-status">done</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card: Plan — 100% -->
+        <div class="card" data-pct="100">
+          <div class="card-header">
+            <div class="card-ring-wrap" data-ring="28" data-pct="100" data-color="inv"></div>
+            <span class="card-label">Plan</span>
+            <span class="card-sep">&mdash;</span>
+            <span class="card-detail">5 artifacts planned</span>
+            <span class="dep-dot met" data-tooltip="Depends: Strategy"></span>
+            <span class="card-chevron">&#9654;</span>
+          </div>
+          <div class="card-body">
+            <div class="submod">
+              <div class="submod-ring-wrap" data-ring="20" data-pct="100" data-color="inv"></div>
+              <span class="submod-label done-label">Baseline benchmark</span>
+              <span class="submod-status done-status">done</span>
+            </div>
+            <div class="submod">
+              <div class="submod-ring-wrap" data-ring="20" data-pct="100" data-color="inv"></div>
+              <span class="submod-label done-label">Main experiment</span>
+              <span class="submod-status done-status">done</span>
+            </div>
+            <div class="submod">
+              <div class="submod-ring-wrap" data-ring="20" data-pct="100" data-color="inv"></div>
+              <span class="submod-label done-label">Ablation study</span>
+              <span class="submod-status done-status">done</span>
+            </div>
+            <div class="submod">
+              <div class="submod-ring-wrap" data-ring="20" data-pct="100" data-color="inv"></div>
+              <span class="submod-label done-label">Visualization suite</span>
+              <span class="submod-status done-status">done</span>
+            </div>
+            <div class="submod">
+              <div class="submod-ring-wrap" data-ring="20" data-pct="100" data-color="inv"></div>
+              <span class="submod-label done-label">Supplementary analysis</span>
+              <span class="submod-status done-status">done</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card: Artifacts — 65% (active, expanded, glow) -->
+        <div class="card expanded glow-inv" data-pct="65">
+          <div class="card-header">
+            <div class="card-ring-wrap" data-ring="28" data-pct="65" data-color="inv"></div>
+            <span class="card-label">Artifacts</span>
+            <span class="card-sep">&mdash;</span>
+            <span class="card-detail active-detail">3/5, ablation running</span>
+            <span class="dep-dot met" data-tooltip="Depends: Plan"></span>
+            <div class="card-spinner"></div>
+            <span class="card-chevron">&#9654;</span>
+          </div>
+          <div class="card-body">
+            <div class="submod">
+              <div class="submod-ring-wrap" data-ring="20" data-pct="100" data-color="inv"></div>
+              <span class="submod-label done-label">Baseline benchmark</span>
+              <span class="submod-status done-status">complete</span>
+            </div>
+            <div class="submod">
+              <div class="submod-ring-wrap" data-ring="20" data-pct="100" data-color="inv"></div>
+              <span class="submod-label done-label">Main experiment</span>
+              <span class="submod-status done-status">+17.5% acc</span>
+            </div>
+            <div class="submod">
+              <div class="submod-ring-wrap" data-ring="20" data-pct="100" data-color="inv"></div>
+              <span class="submod-label done-label">Visualization suite</span>
+              <span class="submod-status done-status">4 figures</span>
+            </div>
+            <div class="submod">
+              <div class="submod-ring-wrap" data-ring="20" data-pct="42" data-color="inv"></div>
+              <span class="submod-label running-label">Ablation study</span>
+              <div class="submod-spinner"></div>
+              <span class="submod-status running-status">running...</span>
+            </div>
+            <div class="submod">
+              <div class="submod-ring-wrap" data-ring="20" data-pct="0" data-color="inv"></div>
+              <span class="submod-label pending-label">Supplementary analysis</span>
+              <span class="submod-status">pending</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card: Paper Draft — 0% -->
+        <div class="card" data-pct="0">
+          <div class="card-header">
+            <div class="card-ring-wrap" data-ring="28" data-pct="0" data-color="inv"></div>
+            <span class="card-label pending-label">Paper Draft</span>
+            <span class="card-sep">&mdash;</span>
+            <span class="card-detail"></span>
+            <span class="dep-dot unmet" data-tooltip="Blocked: Artifacts incomplete"></span>
+          </div>
+        </div>
+
+        <!-- Card: Review — 0% -->
+        <div class="card" data-pct="0">
+          <div class="card-header">
+            <div class="card-ring-wrap" data-ring="28" data-pct="0" data-color="inv"></div>
+            <span class="card-label pending-label">Review</span>
+            <span class="card-sep">&mdash;</span>
+            <span class="card-detail"></span>
+            <span class="dep-dot unmet" data-tooltip="Blocked: Paper Draft"></span>
+          </div>
+        </div>
+
+        <!-- Card: Update Hypo — 0% -->
+        <div class="card" data-pct="0">
+          <div class="card-header">
+            <div class="card-ring-wrap" data-ring="28" data-pct="0" data-color="inv"></div>
+            <span class="card-label pending-label">Update Hypo</span>
+            <span class="card-sep">&mdash;</span>
+            <span class="card-detail"></span>
+            <span class="dep-dot unmet" data-tooltip="Blocked: Review"></span>
+          </div>
+        </div>
+      </div>
+      <div class="module-footer">
+        <div class="footer-item"><span class="footer-icon">&#9202;</span> 42m</div>
+        <div class="footer-item"><span class="footer-icon">&#9830;</span> $12.47</div>
+      </div>
+    </div>
+
+    <!-- ====== PAPER ====== -->
+    <div class="module-content" data-module="paper">
+      <div class="module-header">
+        <div class="module-title">Paper Generation</div>
+      </div>
+      <div class="module-subtitle">Pending &mdash; waiting for invention loop</div>
+      <div class="module-summary">
+        Full paper generation will begin once the invention loop completes.
+        This stage compiles all artifacts, generates LaTeX, produces
+        visualizations, and assembles the final PDF.
+      </div>
+      <div class="cards-grid">
+        <div class="card" data-pct="0">
+          <div class="card-header">
+            <div class="card-ring-wrap" data-ring="28" data-pct="0" data-color="paper"></div>
+            <span class="card-label pending-label">Artifact Demos</span>
+            <span class="card-sep">&mdash;</span>
+            <span class="card-detail"></span>
+            <span class="dep-dot blocked" data-tooltip="Blocked: Invention Loop"></span>
+          </div>
+        </div>
+        <div class="card" data-pct="0">
+          <div class="card-header">
+            <div class="card-ring-wrap" data-ring="28" data-pct="0" data-color="paper"></div>
+            <span class="card-label pending-label">Visualizations</span>
+            <span class="card-sep">&mdash;</span>
+            <span class="card-detail"></span>
+            <span class="dep-dot blocked" data-tooltip="Blocked: Artifact Demos"></span>
+          </div>
+        </div>
+        <div class="card" data-pct="0">
+          <div class="card-header">
+            <div class="card-ring-wrap" data-ring="28" data-pct="0" data-color="paper"></div>
+            <span class="card-label pending-label">Full Paper</span>
+            <span class="card-sep">&mdash;</span>
+            <span class="card-detail"></span>
+            <span class="dep-dot blocked" data-tooltip="Blocked: Visualizations"></span>
+          </div>
+        </div>
+        <div class="card" data-pct="0">
+          <div class="card-header">
+            <div class="card-ring-wrap" data-ring="28" data-pct="0" data-color="paper"></div>
+            <span class="card-label pending-label">Repository</span>
+            <span class="card-sep">&mdash;</span>
+            <span class="card-detail"></span>
+            <span class="dep-dot blocked" data-tooltip="Blocked: Full Paper"></span>
+          </div>
+        </div>
+        <div class="card" data-pct="0">
+          <div class="card-header">
+            <div class="card-ring-wrap" data-ring="28" data-pct="0" data-color="paper"></div>
+            <span class="card-label pending-label">Final PDF</span>
+            <span class="card-sep">&mdash;</span>
+            <span class="card-detail"></span>
+            <span class="dep-dot blocked" data-tooltip="Blocked: Repository"></span>
+          </div>
+        </div>
+      </div>
+      <div class="module-footer">
+        <div class="footer-item"><span class="footer-icon">&#9202;</span> &mdash;</div>
+        <div class="footer-item"><span class="footer-icon">&#9830;</span> &mdash;</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Keyboard hint -->
+<div class="key-hint">
+  <kbd>&#8592;</kbd><kbd>&#8594;</kbd> navigate modules
+</div>
+
+<script>
+(function() {
+  /* ── Color map ── */
+  const COLORS = {
+    seed:  { main: '#4ade80', dim: 'rgba(74,222,128,0.18)',  ring: 'rgba(74,222,128,0.12)' },
+    hypo:  { main: '#a855f7', dim: 'rgba(168,85,247,0.18)', ring: 'rgba(168,85,247,0.12)' },
+    inv:   { main: '#60a5fa', dim: 'rgba(96,165,250,0.18)',  ring: 'rgba(96,165,250,0.12)' },
+    paper: { main: '#fb923c', dim: 'rgba(251,146,60,0.18)',  ring: 'rgba(251,146,60,0.12)' }
+  };
+
+  /* ── SVG Ring Gauge Generator ── */
+  function createRingGauge(size, pct, colorKey) {
+    const c = COLORS[colorKey] || COLORS.inv;
+    const strokeW = size <= 20 ? 2.5 : (size <= 28 ? 3 : 3.5);
+    const r = (size / 2) - (strokeW / 2) - 0.5;
+    const circ = 2 * Math.PI * r;
+    const offset = circ - (circ * Math.min(pct, 100) / 100);
+    const cx = size / 2;
+    const cy = size / 2;
+
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('width', size);
+    svg.setAttribute('height', size);
+    svg.setAttribute('viewBox', `0 0 ${size} ${size}`);
+    svg.style.transform = 'rotate(-90deg)';
+
+    // Background track
+    const bgCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    bgCircle.setAttribute('cx', cx);
+    bgCircle.setAttribute('cy', cy);
+    bgCircle.setAttribute('r', r);
+    bgCircle.setAttribute('fill', 'none');
+    bgCircle.setAttribute('stroke', c.ring);
+    bgCircle.setAttribute('stroke-width', strokeW);
+    svg.appendChild(bgCircle);
+
+    // Progress arc
+    if (pct > 0) {
+      const fgCircle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+      fgCircle.setAttribute('cx', cx);
+      fgCircle.setAttribute('cy', cy);
+      fgCircle.setAttribute('r', r);
+      fgCircle.setAttribute('fill', 'none');
+      fgCircle.setAttribute('stroke', c.main);
+      fgCircle.setAttribute('stroke-width', strokeW);
+      fgCircle.setAttribute('stroke-linecap', 'round');
+      fgCircle.setAttribute('stroke-dasharray', circ);
+      fgCircle.setAttribute('stroke-dashoffset', offset);
+
+      // Glow filter for active rings
+      if (pct > 0 && pct < 100) {
+        fgCircle.style.filter = `drop-shadow(0 0 3px ${c.main})`;
+      }
+
+      svg.appendChild(fgCircle);
+    }
+
+    return svg;
+  }
+
+  /* ── Render all ring gauges ── */
+  function renderAllRings() {
+    // Card rings (28px) and sub-module rings (20px)
+    document.querySelectorAll('[data-ring]').forEach(wrap => {
+      const size = parseInt(wrap.dataset.ring);
+      const pct = parseInt(wrap.dataset.pct);
+      const colorKey = wrap.dataset.color;
+
+      wrap.innerHTML = '';
+      wrap.appendChild(createRingGauge(size, pct, colorKey));
+
+      // Add percentage text for 28px rings
+      if (size >= 28) {
+        const txt = document.createElement('span');
+        txt.className = 'ring-pct';
+        txt.textContent = pct > 0 ? pct : '';
+        wrap.appendChild(txt);
+      }
+    });
+
+    // Sidebar rings (36px)
+    const sidebarData = [
+      { id: 'sidebar-ring-seed',  pct: 100, color: 'seed' },
+      { id: 'sidebar-ring-hypo',  pct: 100, color: 'hypo' },
+      { id: 'sidebar-ring-inv',   pct: 55,  color: 'inv' },
+      { id: 'sidebar-ring-paper', pct: 0,   color: 'paper' }
+    ];
+
+    sidebarData.forEach(d => {
+      const el = document.getElementById(d.id);
+      if (!el) return;
+      el.innerHTML = '';
+      el.appendChild(createRingGauge(36, d.pct, d.color));
+      const txt = document.createElement('span');
+      txt.className = 'ring-pct';
+      txt.textContent = d.pct > 0 ? d.pct + '%' : '0%';
+      el.appendChild(txt);
+    });
+  }
+
+  renderAllRings();
+
+  /* ── Module Navigation ── */
+  const MODULES = ['seed', 'hypothesis', 'invention', 'paper'];
+  let activeIndex = 2;
+
+  const sidebarItems = document.querySelectorAll('.sidebar-item');
+  const groups = document.querySelectorAll('.module-group');
+  const contents = document.querySelectorAll('.module-content');
+
+  function switchTo(index) {
+    if (index < 0 || index >= MODULES.length) return;
+    activeIndex = index;
+    const mod = MODULES[index];
+
+    sidebarItems.forEach(s => s.classList.toggle('active', s.dataset.module === mod));
+    groups.forEach(g => g.classList.toggle('selected', g.dataset.module === mod));
+    contents.forEach(c => {
+      if (c.dataset.module === mod) {
+        c.classList.add('visible');
+      } else {
+        c.classList.remove('visible');
+      }
+    });
+  }
+
+  // Sidebar clicks
+  sidebarItems.forEach(s => {
+    s.addEventListener('click', () => {
+      switchTo(MODULES.indexOf(s.dataset.module));
+    });
+  });
+
+  // Dot group clicks
+  groups.forEach(g => {
+    g.addEventListener('click', () => {
+      switchTo(MODULES.indexOf(g.dataset.module));
+    });
+  });
+
+  // Arrow keys
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowLeft')  { e.preventDefault(); switchTo(activeIndex - 1); }
+    if (e.key === 'ArrowRight') { e.preventDefault(); switchTo(activeIndex + 1); }
+  });
+
+  // Card expand/collapse
+  document.querySelectorAll('.card-header').forEach(header => {
+    header.addEventListener('click', () => {
+      const card = header.parentElement;
+      const body = card.querySelector('.card-body');
+      if (!body || body.children.length === 0) return;
+      card.classList.toggle('expanded');
+    });
+  });
+
+  /* ── Particles ── */
+  const canvas = document.getElementById('particles-canvas');
+  const ctx = canvas.getContext('2d');
+  let particles = [];
+  const PARTICLE_COUNT = 35;
+
+  function resizeCanvas() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+
+  resizeCanvas();
+  window.addEventListener('resize', resizeCanvas);
+
+  function initParticles() {
+    particles = [];
+    const moduleColors = ['#4ade80', '#a855f7', '#60a5fa', '#fb923c'];
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+      particles.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        vx: (Math.random() - 0.5) * 0.3,
+        vy: (Math.random() - 0.5) * 0.3,
+        r: Math.random() * 1.5 + 0.5,
+        color: moduleColors[Math.floor(Math.random() * moduleColors.length)],
+        alpha: Math.random() * 0.3 + 0.05,
+        pulsePhase: Math.random() * Math.PI * 2,
+        pulseSpeed: Math.random() * 0.01 + 0.005
+      });
+    }
+  }
+
+  initParticles();
+
+  function drawParticles() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    particles.forEach(p => {
+      p.x += p.vx;
+      p.y += p.vy;
+      p.pulsePhase += p.pulseSpeed;
+
+      if (p.x < 0) p.x = canvas.width;
+      if (p.x > canvas.width) p.x = 0;
+      if (p.y < 0) p.y = canvas.height;
+      if (p.y > canvas.height) p.y = 0;
+
+      const pulseFactor = 0.5 + 0.5 * Math.sin(p.pulsePhase);
+      const alpha = p.alpha * (0.6 + 0.4 * pulseFactor);
+
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = p.color;
+      ctx.globalAlpha = alpha;
+      ctx.fill();
+
+      // Glow
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r * 3, 0, Math.PI * 2);
+      ctx.fillStyle = p.color;
+      ctx.globalAlpha = alpha * 0.15;
+      ctx.fill();
+    });
+
+    // Connection lines between nearby particles
+    ctx.globalAlpha = 1;
+    for (let i = 0; i < particles.length; i++) {
+      for (let j = i + 1; j < particles.length; j++) {
+        const dx = particles[i].x - particles[j].x;
+        const dy = particles[i].y - particles[j].y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 120) {
+          ctx.beginPath();
+          ctx.moveTo(particles[i].x, particles[i].y);
+          ctx.lineTo(particles[j].x, particles[j].y);
+          ctx.strokeStyle = particles[i].color;
+          ctx.globalAlpha = 0.03 * (1 - dist / 120);
+          ctx.lineWidth = 0.5;
+          ctx.stroke();
+        }
+      }
+    }
+
+    ctx.globalAlpha = 1;
+    requestAnimationFrame(drawParticles);
+  }
+
+  drawParticles();
+})();
+</script>
+</body>
+</html>

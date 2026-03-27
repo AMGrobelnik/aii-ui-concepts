@@ -1,0 +1,1733 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Pipeline View</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --c-seed: #4ade80;
+    --c-seed-dim: rgba(74,222,128,0.18);
+    --c-seed-glow: rgba(74,222,128,0.5);
+    --c-hypo: #a855f7;
+    --c-hypo-dim: rgba(168,85,247,0.18);
+    --c-hypo-glow: rgba(168,85,247,0.5);
+    --c-inv: #60a5fa;
+    --c-inv-dim: rgba(96,165,250,0.18);
+    --c-inv-glow: rgba(96,165,250,0.5);
+    --c-paper: #fb923c;
+    --c-paper-dim: rgba(251,146,60,0.12);
+    --c-paper-glow: rgba(251,146,60,0.5);
+    --bg: #0a0a0f;
+    --bg-raised: #0c0e18;
+    --sidebar-w-collapsed: 52px;
+    --sidebar-w-expanded: 240px;
+    --row-h: 40px;
+  }
+
+  body {
+    background: var(--bg);
+    color: #c8cad0;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+    display: flex;
+  }
+
+  /* ── Collapsed Sidebar ── */
+  .sidebar {
+    width: var(--sidebar-w-collapsed);
+    min-height: 100vh;
+    background: var(--bg-raised);
+    border-right: 1px solid rgba(255,255,255,0.05);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px 0;
+    gap: 4px;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 10;
+    transition: width 0.3s ease;
+    overflow: hidden;
+  }
+
+  .sidebar:hover {
+    width: var(--sidebar-w-expanded);
+  }
+
+  .sidebar-logo {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, var(--c-inv), var(--c-hypo));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 13px;
+    color: #fff;
+    margin-bottom: 16px;
+    flex-shrink: 0;
+  }
+
+  /* Sidebar 3-level tree */
+  .sidebar-section {
+    width: 100%;
+    user-select: none;
+  }
+
+  .sidebar-l1 {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 36px;
+    padding: 0 14px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.2s ease;
+    position: relative;
+  }
+
+  .sidebar-l1:hover { background: rgba(255,255,255,0.03); }
+
+  .sidebar-l1-icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    flex-shrink: 0;
+    font-weight: 600;
+    position: relative;
+  }
+
+  .sidebar-l1[data-module="seed"] .sidebar-l1-icon {
+    background: rgba(74,222,128,0.12);
+    color: var(--c-seed);
+  }
+  .sidebar-l1[data-module="hypothesis"] .sidebar-l1-icon {
+    background: rgba(168,85,247,0.12);
+    color: var(--c-hypo);
+  }
+  .sidebar-l1[data-module="invention"] .sidebar-l1-icon {
+    background: rgba(96,165,250,0.12);
+    color: var(--c-inv);
+  }
+  .sidebar-l1[data-module="paper"] .sidebar-l1-icon {
+    background: rgba(251,146,60,0.12);
+    color: var(--c-paper);
+  }
+
+  /* Active glow on sidebar icon */
+  .sidebar-l1.active .sidebar-l1-icon::after {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: 8px;
+    opacity: 0.4;
+  }
+  .sidebar-l1[data-module="seed"].active .sidebar-l1-icon::after { box-shadow: 0 0 8px var(--c-seed-glow); }
+  .sidebar-l1[data-module="hypothesis"].active .sidebar-l1-icon::after { box-shadow: 0 0 8px var(--c-hypo-glow); }
+  .sidebar-l1[data-module="invention"].active .sidebar-l1-icon::after { box-shadow: 0 0 8px var(--c-inv-glow); }
+  .sidebar-l1[data-module="paper"].active .sidebar-l1-icon::after { box-shadow: 0 0 8px var(--c-paper-glow); }
+
+  .sidebar-l1-text {
+    font-size: 13px;
+    font-weight: 500;
+    color: rgba(255,255,255,0.5);
+    opacity: 0;
+    transition: opacity 0.2s ease 0.1s;
+  }
+
+  .sidebar:hover .sidebar-l1-text { opacity: 1; }
+
+  .sidebar-l1.active .sidebar-l1-text { color: rgba(255,255,255,0.85); }
+
+  /* L2 and L3 nested items (only visible when sidebar expanded) */
+  .sidebar-l2-group {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+  }
+
+  .sidebar:hover .sidebar-l1.active + .sidebar-l2-group {
+    max-height: 300px;
+  }
+
+  .sidebar-l2 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    height: 30px;
+    padding: 0 14px 0 48px;
+    font-size: 12px;
+    color: rgba(255,255,255,0.35);
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color 0.2s ease, background 0.2s ease;
+  }
+
+  .sidebar-l2:hover { color: rgba(255,255,255,0.6); background: rgba(255,255,255,0.02); }
+  .sidebar-l2.active { color: rgba(255,255,255,0.75); }
+
+  .sidebar-l2-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .sidebar-l2-dot.done { background: var(--c-seed); }
+  .sidebar-l2-dot.running { background: var(--c-inv); animation: dotBlink 1.5s ease-in-out infinite; }
+  .sidebar-l2-dot.pending { background: rgba(255,255,255,0.15); }
+
+  .sidebar-l3 {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 26px;
+    padding: 0 14px 0 66px;
+    font-size: 11px;
+    color: rgba(255,255,255,0.25);
+    white-space: nowrap;
+  }
+
+  @keyframes dotBlink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  /* ── Main Content ── */
+  .main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Progress Strip ── */
+  .progress-strip {
+    background: linear-gradient(180deg, var(--bg-raised) 0%, var(--bg) 100%);
+    padding: 28px 0 18px;
+    position: relative;
+    user-select: none;
+  }
+
+  .progress-strip::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06) 20%, rgba(255,255,255,0.06) 80%, transparent);
+  }
+
+  .dots-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    padding: 0 40px;
+    position: relative;
+  }
+
+  .module-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    position: relative;
+    padding: 0 16px;
+    cursor: pointer;
+  }
+
+  .module-group:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: 50%;
+    width: 12px;
+    height: 1px;
+    background: rgba(255,255,255,0.1);
+    transform: translateX(50%);
+  }
+
+  /* Connecting line within group */
+  .module-group .line-bg {
+    position: absolute;
+    top: 50%;
+    left: 22px;
+    right: 22px;
+    height: 1px;
+    transform: translateY(-0.5px);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Glow path overlay on connecting line */
+  .module-group .line-glow {
+    position: absolute;
+    top: 50%;
+    left: 22px;
+    height: 3px;
+    transform: translateY(-1.5px);
+    pointer-events: none;
+    z-index: 0;
+    border-radius: 2px;
+    filter: blur(2px);
+    opacity: 0;
+    transition: opacity 0.4s ease, width 0.4s ease;
+  }
+
+  .module-group.selected .line-glow,
+  .module-group:hover .line-glow {
+    opacity: 1;
+  }
+
+  .module-group[data-module="seed"] .line-bg { background: var(--c-seed-dim); }
+  .module-group[data-module="hypothesis"] .line-bg { background: var(--c-hypo-dim); }
+  .module-group[data-module="invention"] .line-bg { background: var(--c-inv-dim); }
+  .module-group[data-module="paper"] .line-bg { background: var(--c-paper-dim); }
+
+  .module-group[data-module="seed"] .line-glow { background: var(--c-seed); width: 100%; }
+  .module-group[data-module="hypothesis"] .line-glow { background: var(--c-hypo); width: 100%; }
+  .module-group[data-module="invention"] .line-glow { background: var(--c-inv); width: 60%; }
+  .module-group[data-module="paper"] .line-glow { background: var(--c-paper); width: 0%; }
+
+  .dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    position: relative;
+    z-index: 1;
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+    flex-shrink: 0;
+  }
+
+  .dot.filled { }
+  .dot.hollow { background: transparent !important; }
+  .dot.active-pulse { animation: dotPulse 2s ease-in-out infinite; }
+
+  /* Seed dots -- green */
+  .module-group[data-module="seed"] .dot.filled {
+    background: var(--c-seed);
+    box-shadow: 0 0 6px var(--c-seed-glow), 0 0 14px rgba(74,222,128,0.2);
+  }
+  .module-group[data-module="seed"] .dot.hollow {
+    border: 1.5px solid rgba(74,222,128,0.25);
+  }
+
+  /* Hypothesis dots -- purple */
+  .module-group[data-module="hypothesis"] .dot.filled {
+    background: var(--c-hypo);
+    box-shadow: 0 0 6px var(--c-hypo-glow), 0 0 14px rgba(168,85,247,0.2);
+  }
+  .module-group[data-module="hypothesis"] .dot.hollow {
+    border: 1.5px solid rgba(168,85,247,0.25);
+  }
+
+  /* Invention dots -- blue */
+  .module-group[data-module="invention"] .dot.filled {
+    background: var(--c-inv);
+    box-shadow: 0 0 6px var(--c-inv-glow), 0 0 14px rgba(96,165,250,0.2);
+  }
+  .module-group[data-module="invention"] .dot.hollow {
+    border: 1.5px solid rgba(96,165,250,0.25);
+  }
+  .module-group[data-module="invention"] .dot.active-pulse {
+    background: #93bbfd;
+    box-shadow: 0 0 10px rgba(96,165,250,0.8), 0 0 24px rgba(96,165,250,0.45), 0 0 48px rgba(96,165,250,0.15);
+  }
+
+  /* Paper dots -- orange */
+  .module-group[data-module="paper"] .dot.filled {
+    background: var(--c-paper);
+    box-shadow: 0 0 6px var(--c-paper-glow), 0 0 14px rgba(251,146,60,0.2);
+  }
+  .module-group[data-module="paper"] .dot.hollow {
+    border: 1.5px solid rgba(251,146,60,0.18);
+  }
+
+  /* Hover label */
+  .module-group .hover-label {
+    position: absolute;
+    top: -26px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    color: rgba(255,255,255,0.55);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+
+  .module-group:hover .hover-label,
+  .module-group.selected .hover-label {
+    opacity: 1;
+  }
+
+  .module-group[data-module="seed"] .hover-label { color: rgba(74,222,128,0.7); }
+  .module-group[data-module="hypothesis"] .hover-label { color: rgba(168,85,247,0.7); }
+  .module-group[data-module="invention"] .hover-label { color: rgba(96,165,250,0.7); }
+  .module-group[data-module="paper"] .hover-label { color: rgba(251,146,60,0.7); }
+
+  /* Selected group highlight */
+  .module-group.selected .dot.filled {
+    transform: scale(1.12);
+  }
+
+  @keyframes dotPulse {
+    0%, 100% {
+      box-shadow: 0 0 10px rgba(96,165,250,0.8), 0 0 24px rgba(96,165,250,0.45), 0 0 48px rgba(96,165,250,0.15);
+      transform: scale(1);
+    }
+    50% {
+      box-shadow: 0 0 14px rgba(96,165,250,1), 0 0 32px rgba(96,165,250,0.6), 0 0 60px rgba(96,165,250,0.25);
+      transform: scale(1.25);
+    }
+  }
+
+  /* Particle canvas behind dots */
+  .particle-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── Module Tabs ── */
+  .module-tabs {
+    display: flex;
+    justify-content: center;
+    gap: 32px;
+    padding: 16px 0 0;
+  }
+
+  .tab {
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    color: rgba(255,255,255,0.35);
+    cursor: pointer;
+    padding: 4px 2px 8px;
+    position: relative;
+    transition: color 0.25s ease;
+    user-select: none;
+  }
+
+  .tab:hover { color: rgba(255,255,255,0.6); }
+  .tab.active { color: rgba(255,255,255,0.88); }
+
+  .tab::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    border-radius: 1px;
+    background: transparent;
+    transition: background 0.25s ease;
+  }
+
+  .tab[data-module="seed"].active::after { background: var(--c-seed); }
+  .tab[data-module="hypothesis"].active::after { background: var(--c-hypo); }
+  .tab[data-module="invention"].active::after { background: var(--c-inv); }
+  .tab[data-module="paper"].active::after { background: var(--c-paper); }
+
+  /* ── Content Area ── */
+  .content-area {
+    max-width: 700px;
+    margin: 0 auto;
+    padding: 36px 24px 60px;
+    position: relative;
+    min-height: 420px;
+  }
+
+  .module-content {
+    position: absolute;
+    top: 36px;
+    left: 24px;
+    right: 24px;
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 0.25s ease, transform 0.25s ease;
+    pointer-events: none;
+  }
+
+  .module-content.visible {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+    position: relative;
+    top: 0;
+    left: 0;
+    right: 0;
+  }
+
+  .module-title {
+    font-size: 20px;
+    font-weight: 600;
+    color: #e2e4e9;
+    margin-bottom: 6px;
+  }
+
+  .module-subtitle {
+    font-size: 16px;
+    font-weight: 400;
+    margin-bottom: 16px;
+  }
+
+  .module-content[data-module="seed"] .module-subtitle { color: var(--c-seed); }
+  .module-content[data-module="hypothesis"] .module-subtitle { color: var(--c-hypo); }
+  .module-content[data-module="invention"] .module-subtitle { color: var(--c-inv); }
+  .module-content[data-module="paper"] .module-subtitle { color: var(--c-paper); }
+
+  .module-summary {
+    font-size: 14px;
+    line-height: 1.65;
+    color: rgba(200,202,208,0.75);
+    margin-bottom: 24px;
+  }
+
+  /* ── Sub-stage Rows (40px) ── */
+  .sub-stages {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .sub-row {
+    border-radius: 8px;
+    overflow: hidden;
+    transition: background 0.2s ease;
+  }
+
+  .sub-row-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 14px;
+    height: var(--row-h);
+    cursor: pointer;
+    border-radius: 8px;
+    transition: background 0.2s ease;
+    user-select: none;
+    position: relative;
+  }
+
+  .sub-row-header:hover { background: rgba(255,255,255,0.03); }
+  .sub-row.expanded .sub-row-header { background: rgba(255,255,255,0.03); }
+
+  .sub-row-icon {
+    font-size: 14px;
+    width: 20px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+
+  .icon-done { color: var(--c-seed); }
+  .icon-active { color: var(--c-inv); }
+  .icon-pending { color: rgba(255,255,255,0.2); }
+
+  /* Spinner for active icon */
+  .spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(96,165,250,0.2);
+    border-top-color: var(--c-inv);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .sub-row-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: #e2e4e9;
+    flex-shrink: 0;
+  }
+
+  .sub-row-label.pending-label {
+    color: rgba(255,255,255,0.3);
+  }
+
+  .sub-row-sep {
+    color: rgba(255,255,255,0.15);
+    font-size: 13px;
+    flex-shrink: 0;
+  }
+
+  .sub-row-detail {
+    font-size: 13px;
+    color: rgba(200,202,208,0.6);
+  }
+
+  .sub-row-detail.active-detail {
+    color: var(--c-inv);
+    font-weight: 500;
+  }
+
+  /* ── Status Badge Pills ── */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 10px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    flex-shrink: 0;
+    margin-left: auto;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .badge-done {
+    background: rgba(74,222,128,0.12);
+    color: var(--c-seed);
+    border: 1px solid rgba(74,222,128,0.15);
+  }
+
+  .badge-running {
+    background: rgba(96,165,250,0.12);
+    color: var(--c-inv);
+    border: 1px solid rgba(96,165,250,0.15);
+  }
+
+  /* Subtle shimmer on running badge */
+  .badge-running::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(96,165,250,0.15), transparent);
+    animation: shimmer 2s ease-in-out infinite;
+  }
+
+  @keyframes shimmer {
+    0% { left: -100%; }
+    100% { left: 200%; }
+  }
+
+  .badge-pending {
+    background: rgba(255,255,255,0.04);
+    color: rgba(255,255,255,0.3);
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+
+  .badge-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .badge-done .badge-dot { background: var(--c-seed); }
+  .badge-running .badge-dot { background: var(--c-inv); animation: dotBlink 1.5s ease-in-out infinite; }
+  .badge-pending .badge-dot { background: rgba(255,255,255,0.25); }
+
+  /* ── 3px Progress Bars ── */
+  .progress-bar-wrap {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: rgba(255,255,255,0.03);
+    border-radius: 0 0 8px 8px;
+    overflow: hidden;
+  }
+
+  .progress-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.6s ease;
+    position: relative;
+  }
+
+  .progress-bar-fill.fill-done {
+    width: 100%;
+    background: linear-gradient(90deg, rgba(74,222,128,0.3), rgba(74,222,128,0.5));
+  }
+
+  .progress-bar-fill.fill-running {
+    background: linear-gradient(90deg, rgba(96,165,250,0.3), rgba(96,165,250,0.6));
+    animation: barPulse 2s ease-in-out infinite;
+  }
+
+  .progress-bar-fill.fill-pending {
+    width: 0%;
+    background: rgba(255,255,255,0.05);
+  }
+
+  @keyframes barPulse {
+    0%, 100% { opacity: 0.7; }
+    50% { opacity: 1; }
+  }
+
+  .sub-row-chevron {
+    font-size: 11px;
+    color: rgba(255,255,255,0.2);
+    transition: transform 0.25s ease;
+    flex-shrink: 0;
+    margin-left: 8px;
+  }
+
+  .sub-row.expanded .sub-row-chevron {
+    transform: rotate(90deg);
+  }
+
+  .sub-row-body {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease, padding 0.3s ease;
+    padding: 0 14px 0 44px;
+  }
+
+  .sub-row.expanded .sub-row-body {
+    max-height: 300px;
+    padding: 4px 14px 14px 44px;
+  }
+
+  /* ── Dependency Dots ── */
+  .dep-dots {
+    display: inline-flex;
+    gap: 3px;
+    margin-left: 6px;
+    flex-shrink: 0;
+  }
+
+  .dep-dot {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    position: relative;
+    cursor: default;
+  }
+
+  .dep-dot.dep-met { background: var(--c-seed); opacity: 0.6; }
+  .dep-dot.dep-unmet { background: rgba(255,255,255,0.12); }
+
+  /* Tooltip on dependency dots */
+  .dep-dot .dep-tip {
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1a1c2a;
+    color: rgba(255,255,255,0.75);
+    font-size: 11px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    z-index: 20;
+    border: 1px solid rgba(255,255,255,0.08);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+  }
+
+  .dep-dot .dep-tip::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 4px solid transparent;
+    border-top-color: #1a1c2a;
+  }
+
+  .dep-dot:hover .dep-tip { opacity: 1; }
+
+  /* ── Artifact Items ── */
+  .artifact-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 0;
+    font-size: 13px;
+    color: rgba(200,202,208,0.6);
+  }
+
+  .artifact-item .art-icon {
+    font-size: 12px;
+    width: 16px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+
+  .artifact-item .art-icon.done { color: var(--c-seed); }
+  .artifact-item .art-icon.running { color: var(--c-inv); }
+  .artifact-item .art-icon.pending { color: rgba(255,255,255,0.15); }
+
+  .artifact-item .art-label {
+    color: rgba(200,202,208,0.7);
+  }
+
+  .artifact-item .art-label.running-label {
+    color: #93bbfd;
+    font-weight: 500;
+  }
+
+  .artifact-item .art-status {
+    margin-left: auto;
+    font-size: 12px;
+    color: rgba(255,255,255,0.25);
+  }
+
+  .artifact-item .art-status.done-status { color: rgba(74,222,128,0.5); }
+  .artifact-item .art-status.running-status {
+    color: var(--c-inv);
+    animation: textPulse 2s ease-in-out infinite;
+  }
+
+  @keyframes textPulse {
+    0%, 100% { opacity: 0.7; }
+    50% { opacity: 1; }
+  }
+
+  /* Hypothesis iterations */
+  .hypo-iter {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 0;
+    font-size: 13px;
+  }
+
+  .hypo-iter .iter-num {
+    font-weight: 600;
+    width: 20px;
+    color: rgba(168,85,247,0.6);
+  }
+
+  .hypo-iter .iter-score {
+    color: rgba(200,202,208,0.7);
+  }
+
+  .hypo-iter .iter-badge {
+    margin-left: auto;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 500;
+  }
+
+  .hypo-iter .iter-badge.best {
+    background: rgba(168,85,247,0.15);
+    color: var(--c-hypo);
+  }
+
+  /* Seed sub-steps */
+  .seed-step {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 0;
+    font-size: 13px;
+    color: rgba(200,202,208,0.6);
+  }
+
+  .seed-step .step-icon { color: var(--c-seed); width: 16px; text-align: center; }
+
+  /* ── Tooltips ── */
+  .tooltip-wrap {
+    position: relative;
+    display: inline-flex;
+  }
+
+  .tooltip-wrap .tooltip-text {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1a1c2a;
+    color: rgba(255,255,255,0.8);
+    font-size: 11px;
+    padding: 5px 10px;
+    border-radius: 5px;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    z-index: 25;
+    border: 1px solid rgba(255,255,255,0.08);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+  }
+
+  .tooltip-wrap .tooltip-text::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 4px solid transparent;
+    border-top-color: #1a1c2a;
+  }
+
+  .tooltip-wrap:hover .tooltip-text { opacity: 1; }
+
+  /* ── Footer ── */
+  .module-footer {
+    display: flex;
+    gap: 16px;
+    margin-top: 28px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(255,255,255,0.05);
+    font-size: 13px;
+    color: rgba(255,255,255,0.3);
+  }
+
+  .footer-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .footer-icon { font-size: 12px; }
+
+  /* ── Keyboard hint ── */
+  .key-hint {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: rgba(255,255,255,0.18);
+    user-select: none;
+  }
+
+  .key-hint kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 20px;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 4px;
+    font-family: 'Inter', sans-serif;
+    font-size: 11px;
+    color: rgba(255,255,255,0.3);
+    background: rgba(255,255,255,0.03);
+  }
+</style>
+</head>
+<body>
+
+<!-- ── Collapsed Sidebar (3-level tree) ── -->
+<nav class="sidebar">
+  <div class="sidebar-logo">Ai</div>
+
+  <!-- Seed -->
+  <div class="sidebar-section">
+    <div class="sidebar-l1" data-module="seed">
+      <div class="sidebar-l1-icon">S</div>
+      <span class="sidebar-l1-text">Seed</span>
+    </div>
+    <div class="sidebar-l2-group">
+      <div class="sidebar-l2"><span class="sidebar-l2-dot done"></span> Paper Collection</div>
+      <div class="sidebar-l2"><span class="sidebar-l2-dot done"></span> Knowledge Graph</div>
+      <div class="sidebar-l2"><span class="sidebar-l2-dot done"></span> Gap Ranking</div>
+      <div class="sidebar-l2"><span class="sidebar-l2-dot done"></span> Seed Generation</div>
+    </div>
+  </div>
+
+  <!-- Hypothesis -->
+  <div class="sidebar-section">
+    <div class="sidebar-l1" data-module="hypothesis">
+      <div class="sidebar-l1-icon">H</div>
+      <span class="sidebar-l1-text">Hypothesis</span>
+    </div>
+    <div class="sidebar-l2-group">
+      <div class="sidebar-l2"><span class="sidebar-l2-dot done"></span> Iteration 1</div>
+      <div class="sidebar-l2"><span class="sidebar-l2-dot done"></span> Iteration 2</div>
+      <div class="sidebar-l2"><span class="sidebar-l2-dot done"></span> Iteration 3</div>
+    </div>
+  </div>
+
+  <!-- Invention -->
+  <div class="sidebar-section">
+    <div class="sidebar-l1 active" data-module="invention">
+      <div class="sidebar-l1-icon">I</div>
+      <span class="sidebar-l1-text">Invention</span>
+    </div>
+    <div class="sidebar-l2-group">
+      <div class="sidebar-l2"><span class="sidebar-l2-dot done"></span> Strategy</div>
+      <div class="sidebar-l2"><span class="sidebar-l2-dot done"></span> Plan</div>
+      <div class="sidebar-l2 active"><span class="sidebar-l2-dot running"></span> Artifacts</div>
+      <div class="sidebar-l3"><span class="sidebar-l2-dot done"></span> Baseline</div>
+      <div class="sidebar-l3"><span class="sidebar-l2-dot done"></span> Main Exp</div>
+      <div class="sidebar-l3"><span class="sidebar-l2-dot running"></span> Ablation</div>
+      <div class="sidebar-l3"><span class="sidebar-l2-dot pending"></span> Supp.</div>
+      <div class="sidebar-l2"><span class="sidebar-l2-dot pending"></span> Paper Draft</div>
+      <div class="sidebar-l2"><span class="sidebar-l2-dot pending"></span> Review</div>
+      <div class="sidebar-l2"><span class="sidebar-l2-dot pending"></span> Update Hypo</div>
+    </div>
+  </div>
+
+  <!-- Paper -->
+  <div class="sidebar-section">
+    <div class="sidebar-l1" data-module="paper">
+      <div class="sidebar-l1-icon">P</div>
+      <span class="sidebar-l1-text">Paper</span>
+    </div>
+    <div class="sidebar-l2-group">
+      <div class="sidebar-l2"><span class="sidebar-l2-dot pending"></span> Artifact Demos</div>
+      <div class="sidebar-l2"><span class="sidebar-l2-dot pending"></span> Visualizations</div>
+      <div class="sidebar-l2"><span class="sidebar-l2-dot pending"></span> Full Paper</div>
+      <div class="sidebar-l2"><span class="sidebar-l2-dot pending"></span> Repository</div>
+      <div class="sidebar-l2"><span class="sidebar-l2-dot pending"></span> Final PDF</div>
+    </div>
+  </div>
+</nav>
+
+<!-- ── Main Panel ── -->
+<div class="main">
+
+  <!-- ── Progress Strip ── -->
+  <div class="progress-strip">
+    <canvas class="particle-canvas" id="particleCanvas"></canvas>
+    <div class="dots-row">
+      <!-- Seed: 4 green filled -->
+      <div class="module-group" data-module="seed">
+        <div class="line-bg"></div>
+        <div class="line-glow"></div>
+        <span class="hover-label">Seed</span>
+        <div class="tooltip-wrap">
+          <div class="dot filled"></div>
+          <span class="tooltip-text">Paper Collection</span>
+        </div>
+        <div class="tooltip-wrap">
+          <div class="dot filled"></div>
+          <span class="tooltip-text">Knowledge Graph</span>
+        </div>
+        <div class="tooltip-wrap">
+          <div class="dot filled"></div>
+          <span class="tooltip-text">Gap Ranking</span>
+        </div>
+        <div class="tooltip-wrap">
+          <div class="dot filled"></div>
+          <span class="tooltip-text">Seed Generation</span>
+        </div>
+      </div>
+
+      <!-- Hypothesis: 6 purple filled -->
+      <div class="module-group" data-module="hypothesis">
+        <div class="line-bg"></div>
+        <div class="line-glow"></div>
+        <span class="hover-label">Hypothesis</span>
+        <div class="tooltip-wrap">
+          <div class="dot filled"></div>
+          <span class="tooltip-text">Gen Hypo</span>
+        </div>
+        <div class="tooltip-wrap">
+          <div class="dot filled"></div>
+          <span class="tooltip-text">Review Hypo (1)</span>
+        </div>
+        <div class="tooltip-wrap">
+          <div class="dot filled"></div>
+          <span class="tooltip-text">Revise Hypo (1)</span>
+        </div>
+        <div class="tooltip-wrap">
+          <div class="dot filled"></div>
+          <span class="tooltip-text">Review Hypo (2)</span>
+        </div>
+        <div class="tooltip-wrap">
+          <div class="dot filled"></div>
+          <span class="tooltip-text">Revise Hypo (2)</span>
+        </div>
+        <div class="tooltip-wrap">
+          <div class="dot filled"></div>
+          <span class="tooltip-text">Final Review</span>
+        </div>
+      </div>
+
+      <!-- Invention: 12 dots, some filled, one active, rest hollow -->
+      <div class="module-group selected" data-module="invention">
+        <div class="line-bg"></div>
+        <div class="line-glow"></div>
+        <span class="hover-label">Invention</span>
+        <div class="tooltip-wrap">
+          <div class="dot filled"></div>
+          <span class="tooltip-text">Strategy</span>
+        </div>
+        <div class="tooltip-wrap">
+          <div class="dot filled"></div>
+          <span class="tooltip-text">Plan</span>
+        </div>
+        <div class="tooltip-wrap">
+          <div class="dot filled"></div>
+          <span class="tooltip-text">Baseline</span>
+        </div>
+        <div class="tooltip-wrap">
+          <div class="dot filled"></div>
+          <span class="tooltip-text">Main Experiment</span>
+        </div>
+        <div class="tooltip-wrap">
+          <div class="dot filled"></div>
+          <span class="tooltip-text">Viz Suite</span>
+        </div>
+        <div class="tooltip-wrap">
+          <div class="dot filled"></div>
+          <span class="tooltip-text">Artifact: Baseline</span>
+        </div>
+        <div class="tooltip-wrap">
+          <div class="dot filled"></div>
+          <span class="tooltip-text">Artifact: Main Exp</span>
+        </div>
+        <div class="tooltip-wrap">
+          <div class="dot filled active-pulse"></div>
+          <span class="tooltip-text">Ablation (running)</span>
+        </div>
+        <div class="tooltip-wrap">
+          <div class="dot hollow"></div>
+          <span class="tooltip-text">Supplementary</span>
+        </div>
+        <div class="tooltip-wrap">
+          <div class="dot hollow"></div>
+          <span class="tooltip-text">Paper Draft</span>
+        </div>
+        <div class="tooltip-wrap">
+          <div class="dot hollow"></div>
+          <span class="tooltip-text">Review</span>
+        </div>
+        <div class="tooltip-wrap">
+          <div class="dot hollow"></div>
+          <span class="tooltip-text">Update Hypo</span>
+        </div>
+      </div>
+
+      <!-- Paper: 5 orange hollow -->
+      <div class="module-group" data-module="paper">
+        <div class="line-bg"></div>
+        <div class="line-glow"></div>
+        <span class="hover-label">Paper</span>
+        <div class="tooltip-wrap">
+          <div class="dot hollow"></div>
+          <span class="tooltip-text">Artifact Demos</span>
+        </div>
+        <div class="tooltip-wrap">
+          <div class="dot hollow"></div>
+          <span class="tooltip-text">Visualizations</span>
+        </div>
+        <div class="tooltip-wrap">
+          <div class="dot hollow"></div>
+          <span class="tooltip-text">Full Paper</span>
+        </div>
+        <div class="tooltip-wrap">
+          <div class="dot hollow"></div>
+          <span class="tooltip-text">Repository</span>
+        </div>
+        <div class="tooltip-wrap">
+          <div class="dot hollow"></div>
+          <span class="tooltip-text">Final PDF</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Module Tabs -->
+    <div class="module-tabs">
+      <div class="tab" data-module="seed">Seed</div>
+      <div class="tab" data-module="hypothesis">Hypothesis</div>
+      <div class="tab active" data-module="invention">Invention</div>
+      <div class="tab" data-module="paper">Paper</div>
+    </div>
+  </div>
+
+  <!-- ── Content Area ── -->
+  <div class="content-area">
+
+    <!-- SEED -->
+    <div class="module-content" data-module="seed">
+      <div class="module-title">Seed Hypotheses</div>
+      <div class="module-subtitle">847 papers -> 12 research gaps</div>
+      <div class="module-summary">
+        Scanned literature across three domains to identify under-explored
+        intersections. Knowledge graph built from 847 source papers, producing
+        12 distinct research gaps ranked by novelty and tractability.
+      </div>
+      <div class="sub-stages">
+        <div class="sub-row">
+          <div class="sub-row-header">
+            <span class="sub-row-icon icon-done">&#10003;</span>
+            <span class="sub-row-label">Paper Collection</span>
+            <span class="sub-row-sep">&mdash;</span>
+            <span class="sub-row-detail">847 papers ingested</span>
+            <span class="badge badge-done"><span class="badge-dot"></span>Done</span>
+            <span class="sub-row-chevron">&#9654;</span>
+            <div class="progress-bar-wrap"><div class="progress-bar-fill fill-done"></div></div>
+          </div>
+          <div class="sub-row-body">
+            <div class="seed-step"><span class="step-icon">&#10003;</span> Semantic Scholar API crawl</div>
+            <div class="seed-step"><span class="step-icon">&#10003;</span> PDF extraction and chunking</div>
+            <div class="seed-step"><span class="step-icon">&#10003;</span> De-duplication (847 unique)</div>
+          </div>
+        </div>
+        <div class="sub-row">
+          <div class="sub-row-header">
+            <span class="sub-row-icon icon-done">&#10003;</span>
+            <span class="sub-row-label">Knowledge Graph</span>
+            <span class="sub-row-sep">&mdash;</span>
+            <span class="sub-row-detail">2,341 entities, 5,890 edges</span>
+            <span class="badge badge-done"><span class="badge-dot"></span>Done</span>
+            <div class="dep-dots">
+              <div class="dep-dot dep-met"><span class="dep-tip">Paper Collection</span></div>
+            </div>
+            <span class="sub-row-chevron">&#9654;</span>
+            <div class="progress-bar-wrap"><div class="progress-bar-fill fill-done"></div></div>
+          </div>
+          <div class="sub-row-body">
+            <div class="seed-step"><span class="step-icon">&#10003;</span> Entity extraction (methods, datasets, metrics)</div>
+            <div class="seed-step"><span class="step-icon">&#10003;</span> Relation linking</div>
+            <div class="seed-step"><span class="step-icon">&#10003;</span> Gap detection via structural holes</div>
+          </div>
+        </div>
+        <div class="sub-row">
+          <div class="sub-row-header">
+            <span class="sub-row-icon icon-done">&#10003;</span>
+            <span class="sub-row-label">Gap Ranking</span>
+            <span class="sub-row-sep">&mdash;</span>
+            <span class="sub-row-detail">12 gaps prioritized</span>
+            <span class="badge badge-done"><span class="badge-dot"></span>Done</span>
+            <div class="dep-dots">
+              <div class="dep-dot dep-met"><span class="dep-tip">Knowledge Graph</span></div>
+            </div>
+            <span class="sub-row-chevron">&#9654;</span>
+            <div class="progress-bar-wrap"><div class="progress-bar-fill fill-done"></div></div>
+          </div>
+          <div class="sub-row-body">
+            <div class="seed-step"><span class="step-icon">&#10003;</span> Novelty scoring</div>
+            <div class="seed-step"><span class="step-icon">&#10003;</span> Tractability assessment</div>
+            <div class="seed-step"><span class="step-icon">&#10003;</span> Final ranking and selection</div>
+          </div>
+        </div>
+        <div class="sub-row">
+          <div class="sub-row-header">
+            <span class="sub-row-icon icon-done">&#10003;</span>
+            <span class="sub-row-label">Seed Generation</span>
+            <span class="sub-row-sep">&mdash;</span>
+            <span class="sub-row-detail">12 seed hypotheses</span>
+            <span class="badge badge-done"><span class="badge-dot"></span>Done</span>
+            <div class="dep-dots">
+              <div class="dep-dot dep-met"><span class="dep-tip">Gap Ranking</span></div>
+            </div>
+            <span class="sub-row-chevron">&#9654;</span>
+            <div class="progress-bar-wrap"><div class="progress-bar-fill fill-done"></div></div>
+          </div>
+          <div class="sub-row-body">
+            <div class="seed-step"><span class="step-icon">&#10003;</span> Hypothesis formulation per gap</div>
+            <div class="seed-step"><span class="step-icon">&#10003;</span> Initial feasibility check</div>
+          </div>
+        </div>
+      </div>
+      <div class="module-footer">
+        <div class="footer-item"><span class="footer-icon">&#9202;</span> 18m</div>
+        <div class="footer-item"><span class="footer-icon">&#9830;</span> $4.21</div>
+      </div>
+    </div>
+
+    <!-- HYPOTHESIS -->
+    <div class="module-content" data-module="hypothesis">
+      <div class="module-title">Hypothesis Loop</div>
+      <div class="module-subtitle">Score 6.2 -> 7.8 -> 8.4</div>
+      <div class="module-summary">
+        Iteratively refining the top hypothesis through structured review
+        and revision. Each iteration addresses weaknesses identified by the
+        review agent, improving specificity and grounding.
+      </div>
+      <div class="sub-stages">
+        <div class="sub-row">
+          <div class="sub-row-header">
+            <span class="sub-row-icon icon-done">&#10003;</span>
+            <span class="sub-row-label">Iteration 1</span>
+            <span class="sub-row-sep">&mdash;</span>
+            <span class="sub-row-detail">Score 6.2</span>
+            <span class="badge badge-done"><span class="badge-dot"></span>Done</span>
+            <span class="sub-row-chevron">&#9654;</span>
+            <div class="progress-bar-wrap"><div class="progress-bar-fill fill-done"></div></div>
+          </div>
+          <div class="sub-row-body">
+            <div class="hypo-iter">
+              <span class="iter-num">1.1</span>
+              <span class="iter-score">Review: lacks specificity in method section</span>
+            </div>
+            <div class="hypo-iter">
+              <span class="iter-num">1.2</span>
+              <span class="iter-score">Revision: added contrastive loss formulation</span>
+            </div>
+          </div>
+        </div>
+        <div class="sub-row">
+          <div class="sub-row-header">
+            <span class="sub-row-icon icon-done">&#10003;</span>
+            <span class="sub-row-label">Iteration 2</span>
+            <span class="sub-row-sep">&mdash;</span>
+            <span class="sub-row-detail">Score 7.8</span>
+            <span class="badge badge-done"><span class="badge-dot"></span>Done</span>
+            <div class="dep-dots">
+              <div class="dep-dot dep-met"><span class="dep-tip">Iteration 1</span></div>
+            </div>
+            <span class="sub-row-chevron">&#9654;</span>
+            <div class="progress-bar-wrap"><div class="progress-bar-fill fill-done"></div></div>
+          </div>
+          <div class="sub-row-body">
+            <div class="hypo-iter">
+              <span class="iter-num">2.1</span>
+              <span class="iter-score">Review: needs stronger baseline justification</span>
+            </div>
+            <div class="hypo-iter">
+              <span class="iter-num">2.2</span>
+              <span class="iter-score">Revision: cited 3 baselines, added expected gains</span>
+            </div>
+          </div>
+        </div>
+        <div class="sub-row">
+          <div class="sub-row-header">
+            <span class="sub-row-icon icon-done">&#10003;</span>
+            <span class="sub-row-label">Iteration 3</span>
+            <span class="sub-row-sep">&mdash;</span>
+            <span class="sub-row-detail">Score 8.4 &mdash; accepted</span>
+            <span class="badge badge-done"><span class="badge-dot"></span>Done</span>
+            <div class="dep-dots">
+              <div class="dep-dot dep-met"><span class="dep-tip">Iteration 2</span></div>
+            </div>
+            <span class="sub-row-chevron">&#9654;</span>
+            <div class="progress-bar-wrap"><div class="progress-bar-fill fill-done"></div></div>
+          </div>
+          <div class="sub-row-body">
+            <div class="hypo-iter">
+              <span class="iter-num">3.1</span>
+              <span class="iter-score">Review: minor clarity edits, threshold met</span>
+              <span class="iter-badge best">best</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="module-footer">
+        <div class="footer-item"><span class="footer-icon">&#9202;</span> 31m</div>
+        <div class="footer-item"><span class="footer-icon">&#9830;</span> $8.73</div>
+      </div>
+    </div>
+
+    <!-- INVENTION (default visible) -->
+    <div class="module-content visible" data-module="invention">
+      <div class="module-title">Invention Loop &mdash; Iteration 2 of 3</div>
+      <div class="module-subtitle">Generating Artifacts &mdash; 3 of 5 complete</div>
+      <div class="module-summary">
+        Building research artifacts to validate the hypothesis. Baseline shows
+        17.5% accuracy improvement. Ablation study running.
+      </div>
+      <div class="sub-stages">
+        <div class="sub-row">
+          <div class="sub-row-header">
+            <span class="sub-row-icon icon-done">&#10003;</span>
+            <span class="sub-row-label">Strategy</span>
+            <span class="sub-row-sep">&mdash;</span>
+            <span class="sub-row-detail">Contrastive alignment</span>
+            <span class="badge badge-done"><span class="badge-dot"></span>Done</span>
+            <span class="sub-row-chevron">&#9654;</span>
+            <div class="progress-bar-wrap"><div class="progress-bar-fill fill-done"></div></div>
+          </div>
+          <div class="sub-row-body">
+            <div class="seed-step"><span class="step-icon">&#10003;</span> Selected contrastive learning approach</div>
+            <div class="seed-step"><span class="step-icon">&#10003;</span> Defined alignment loss function</div>
+          </div>
+        </div>
+        <div class="sub-row">
+          <div class="sub-row-header">
+            <span class="sub-row-icon icon-done">&#10003;</span>
+            <span class="sub-row-label">Plan</span>
+            <span class="sub-row-sep">&mdash;</span>
+            <span class="sub-row-detail">5 artifacts planned</span>
+            <span class="badge badge-done"><span class="badge-dot"></span>Done</span>
+            <div class="dep-dots">
+              <div class="dep-dot dep-met"><span class="dep-tip">Strategy</span></div>
+            </div>
+            <span class="sub-row-chevron">&#9654;</span>
+            <div class="progress-bar-wrap"><div class="progress-bar-fill fill-done"></div></div>
+          </div>
+          <div class="sub-row-body">
+            <div class="seed-step"><span class="step-icon">&#10003;</span> Baseline benchmark</div>
+            <div class="seed-step"><span class="step-icon">&#10003;</span> Main experiment</div>
+            <div class="seed-step"><span class="step-icon">&#10003;</span> Ablation study</div>
+            <div class="seed-step"><span class="step-icon">&#10003;</span> Visualization suite</div>
+            <div class="seed-step"><span class="step-icon">&#10003;</span> Supplementary analysis</div>
+          </div>
+        </div>
+        <div class="sub-row expanded">
+          <div class="sub-row-header">
+            <span class="sub-row-icon icon-active"><span class="spinner"></span></span>
+            <span class="sub-row-label">Artifacts</span>
+            <span class="sub-row-sep">&mdash;</span>
+            <span class="sub-row-detail active-detail">3/5, ablation running</span>
+            <span class="badge badge-running"><span class="badge-dot"></span>Running</span>
+            <div class="dep-dots">
+              <div class="dep-dot dep-met"><span class="dep-tip">Plan</span></div>
+              <div class="dep-dot dep-met"><span class="dep-tip">Strategy</span></div>
+            </div>
+            <span class="sub-row-chevron">&#9654;</span>
+            <div class="progress-bar-wrap"><div class="progress-bar-fill fill-running" style="width:60%"></div></div>
+          </div>
+          <div class="sub-row-body">
+            <div class="artifact-item">
+              <span class="art-icon done">&#10003;</span>
+              <span class="art-label">Baseline benchmark</span>
+              <span class="art-status done-status">complete</span>
+            </div>
+            <div class="artifact-item">
+              <span class="art-icon done">&#10003;</span>
+              <span class="art-label">Main experiment</span>
+              <span class="art-status done-status">+17.5% acc</span>
+            </div>
+            <div class="artifact-item">
+              <span class="art-icon done">&#10003;</span>
+              <span class="art-label">Visualization suite</span>
+              <span class="art-status done-status">4 figures</span>
+            </div>
+            <div class="artifact-item">
+              <span class="art-icon running">&#9672;</span>
+              <span class="art-label running-label">Ablation study</span>
+              <span class="art-status running-status">running...</span>
+            </div>
+            <div class="artifact-item">
+              <span class="art-icon pending">&#9675;</span>
+              <span class="art-label">Supplementary analysis</span>
+              <span class="art-status">pending</span>
+            </div>
+          </div>
+        </div>
+        <div class="sub-row">
+          <div class="sub-row-header">
+            <span class="sub-row-icon icon-pending">&#9675;</span>
+            <span class="sub-row-label pending-label">Paper Draft</span>
+            <span class="sub-row-sep">&mdash;</span>
+            <span class="sub-row-detail"></span>
+            <span class="badge badge-pending"><span class="badge-dot"></span>Pending</span>
+            <div class="dep-dots">
+              <div class="dep-dot dep-unmet"><span class="dep-tip">Artifacts (incomplete)</span></div>
+            </div>
+            <div class="progress-bar-wrap"><div class="progress-bar-fill fill-pending"></div></div>
+          </div>
+        </div>
+        <div class="sub-row">
+          <div class="sub-row-header">
+            <span class="sub-row-icon icon-pending">&#9675;</span>
+            <span class="sub-row-label pending-label">Review</span>
+            <span class="sub-row-sep">&mdash;</span>
+            <span class="sub-row-detail"></span>
+            <span class="badge badge-pending"><span class="badge-dot"></span>Pending</span>
+            <div class="dep-dots">
+              <div class="dep-dot dep-unmet"><span class="dep-tip">Paper Draft (pending)</span></div>
+            </div>
+            <div class="progress-bar-wrap"><div class="progress-bar-fill fill-pending"></div></div>
+          </div>
+        </div>
+        <div class="sub-row">
+          <div class="sub-row-header">
+            <span class="sub-row-icon icon-pending">&#9675;</span>
+            <span class="sub-row-label pending-label">Update Hypo</span>
+            <span class="sub-row-sep">&mdash;</span>
+            <span class="sub-row-detail"></span>
+            <span class="badge badge-pending"><span class="badge-dot"></span>Pending</span>
+            <div class="dep-dots">
+              <div class="dep-dot dep-unmet"><span class="dep-tip">Review (pending)</span></div>
+            </div>
+            <div class="progress-bar-wrap"><div class="progress-bar-fill fill-pending"></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="module-footer">
+        <div class="footer-item"><span class="footer-icon">&#9202;</span> 42m</div>
+        <div class="footer-item"><span class="footer-icon">&#9830;</span> $12.47</div>
+      </div>
+    </div>
+
+    <!-- PAPER -->
+    <div class="module-content" data-module="paper">
+      <div class="module-title">Paper Generation</div>
+      <div class="module-subtitle">Pending &mdash; waiting for invention loop</div>
+      <div class="module-summary">
+        Full paper generation will begin once the invention loop completes.
+        This stage compiles all artifacts, generates LaTeX, produces
+        visualizations, and assembles the final PDF.
+      </div>
+      <div class="sub-stages">
+        <div class="sub-row">
+          <div class="sub-row-header">
+            <span class="sub-row-icon icon-pending">&#9675;</span>
+            <span class="sub-row-label pending-label">Artifact Demos</span>
+            <span class="sub-row-sep">&mdash;</span>
+            <span class="sub-row-detail"></span>
+            <span class="badge badge-pending"><span class="badge-dot"></span>Pending</span>
+            <div class="dep-dots">
+              <div class="dep-dot dep-unmet"><span class="dep-tip">Invention Loop</span></div>
+            </div>
+            <div class="progress-bar-wrap"><div class="progress-bar-fill fill-pending"></div></div>
+          </div>
+        </div>
+        <div class="sub-row">
+          <div class="sub-row-header">
+            <span class="sub-row-icon icon-pending">&#9675;</span>
+            <span class="sub-row-label pending-label">Visualizations</span>
+            <span class="sub-row-sep">&mdash;</span>
+            <span class="sub-row-detail"></span>
+            <span class="badge badge-pending"><span class="badge-dot"></span>Pending</span>
+            <div class="dep-dots">
+              <div class="dep-dot dep-unmet"><span class="dep-tip">Artifact Demos</span></div>
+            </div>
+            <div class="progress-bar-wrap"><div class="progress-bar-fill fill-pending"></div></div>
+          </div>
+        </div>
+        <div class="sub-row">
+          <div class="sub-row-header">
+            <span class="sub-row-icon icon-pending">&#9675;</span>
+            <span class="sub-row-label pending-label">Full Paper</span>
+            <span class="sub-row-sep">&mdash;</span>
+            <span class="sub-row-detail"></span>
+            <span class="badge badge-pending"><span class="badge-dot"></span>Pending</span>
+            <div class="dep-dots">
+              <div class="dep-dot dep-unmet"><span class="dep-tip">Visualizations</span></div>
+              <div class="dep-dot dep-unmet"><span class="dep-tip">Artifact Demos</span></div>
+            </div>
+            <div class="progress-bar-wrap"><div class="progress-bar-fill fill-pending"></div></div>
+          </div>
+        </div>
+        <div class="sub-row">
+          <div class="sub-row-header">
+            <span class="sub-row-icon icon-pending">&#9675;</span>
+            <span class="sub-row-label pending-label">Repository</span>
+            <span class="sub-row-sep">&mdash;</span>
+            <span class="sub-row-detail"></span>
+            <span class="badge badge-pending"><span class="badge-dot"></span>Pending</span>
+            <div class="dep-dots">
+              <div class="dep-dot dep-unmet"><span class="dep-tip">Full Paper</span></div>
+            </div>
+            <div class="progress-bar-wrap"><div class="progress-bar-fill fill-pending"></div></div>
+          </div>
+        </div>
+        <div class="sub-row">
+          <div class="sub-row-header">
+            <span class="sub-row-icon icon-pending">&#9675;</span>
+            <span class="sub-row-label pending-label">Final PDF</span>
+            <span class="sub-row-sep">&mdash;</span>
+            <span class="sub-row-detail"></span>
+            <span class="badge badge-pending"><span class="badge-dot"></span>Pending</span>
+            <div class="dep-dots">
+              <div class="dep-dot dep-unmet"><span class="dep-tip">Repository</span></div>
+              <div class="dep-dot dep-unmet"><span class="dep-tip">Full Paper</span></div>
+            </div>
+            <div class="progress-bar-wrap"><div class="progress-bar-fill fill-pending"></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="module-footer">
+        <div class="footer-item"><span class="footer-icon">&#9202;</span> &mdash;</div>
+        <div class="footer-item"><span class="footer-icon">&#9830;</span> &mdash;</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Keyboard hint -->
+<div class="key-hint">
+  <kbd>&larr;</kbd><kbd>&rarr;</kbd> navigate modules
+</div>
+
+<script>
+(function() {
+  const MODULES = ['seed', 'hypothesis', 'invention', 'paper'];
+  let activeIndex = 2; // invention
+
+  const tabs = document.querySelectorAll('.tab');
+  const groups = document.querySelectorAll('.module-group');
+  const contents = document.querySelectorAll('.module-content');
+  const sidebarL1s = document.querySelectorAll('.sidebar-l1');
+
+  function switchTo(index) {
+    if (index < 0 || index >= MODULES.length) return;
+    activeIndex = index;
+    const mod = MODULES[index];
+
+    // Tabs
+    tabs.forEach(t => t.classList.toggle('active', t.dataset.module === mod));
+
+    // Dot groups
+    groups.forEach(g => g.classList.toggle('selected', g.dataset.module === mod));
+
+    // Content fade
+    contents.forEach(c => {
+      if (c.dataset.module === mod) {
+        c.classList.add('visible');
+      } else {
+        c.classList.remove('visible');
+      }
+    });
+
+    // Sidebar active
+    sidebarL1s.forEach(s => s.classList.toggle('active', s.dataset.module === mod));
+  }
+
+  // Tab clicks
+  tabs.forEach(t => {
+    t.addEventListener('click', () => {
+      switchTo(MODULES.indexOf(t.dataset.module));
+    });
+  });
+
+  // Dot group clicks
+  groups.forEach(g => {
+    g.addEventListener('click', () => {
+      switchTo(MODULES.indexOf(g.dataset.module));
+    });
+  });
+
+  // Sidebar L1 clicks
+  sidebarL1s.forEach(s => {
+    s.addEventListener('click', () => {
+      switchTo(MODULES.indexOf(s.dataset.module));
+    });
+  });
+
+  // Arrow keys
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      switchTo(activeIndex - 1);
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      switchTo(activeIndex + 1);
+    }
+  });
+
+  // Sub-row expand/collapse
+  document.querySelectorAll('.sub-row-header').forEach(header => {
+    header.addEventListener('click', (e) => {
+      // Don't toggle if clicking dependency dot tooltip area
+      if (e.target.closest('.dep-dot')) return;
+      const row = header.parentElement;
+      const body = row.querySelector('.sub-row-body');
+      if (!body || body.children.length === 0) return;
+      row.classList.toggle('expanded');
+    });
+  });
+
+  // ── Particle System ──
+  const canvas = document.getElementById('particleCanvas');
+  if (canvas) {
+    const ctx = canvas.getContext('2d');
+    let particles = [];
+    let animId;
+
+    function resizeCanvas() {
+      const strip = canvas.parentElement;
+      canvas.width = strip.offsetWidth;
+      canvas.height = strip.offsetHeight;
+    }
+
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+
+    const COLORS = {
+      seed: { r: 74, g: 222, b: 128 },
+      hypothesis: { r: 168, g: 85, b: 247 },
+      invention: { r: 96, g: 165, b: 250 },
+      paper: { r: 251, g: 146, b: 60 }
+    };
+
+    function spawnParticle() {
+      const mod = MODULES[activeIndex];
+      const group = document.querySelector(`.module-group[data-module="${mod}"]`);
+      if (!group) return;
+
+      const rect = group.getBoundingClientRect();
+      const stripRect = canvas.parentElement.getBoundingClientRect();
+      const cx = rect.left - stripRect.left + rect.width / 2;
+      const cy = rect.top - stripRect.top + rect.height / 2;
+
+      const c = COLORS[mod] || COLORS.invention;
+      particles.push({
+        x: cx + (Math.random() - 0.5) * rect.width * 0.8,
+        y: cy + (Math.random() - 0.5) * 20,
+        vx: (Math.random() - 0.5) * 0.3,
+        vy: -0.2 - Math.random() * 0.5,
+        life: 1,
+        decay: 0.005 + Math.random() * 0.008,
+        size: 1 + Math.random() * 1.5,
+        r: c.r,
+        g: c.g,
+        b: c.b
+      });
+    }
+
+    function updateParticles() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Spawn new particles intermittently
+      if (Math.random() < 0.3) spawnParticle();
+
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.life -= p.decay;
+
+        if (p.life <= 0) {
+          particles.splice(i, 1);
+          continue;
+        }
+
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${p.r},${p.g},${p.b},${p.life * 0.4})`;
+        ctx.fill();
+      }
+
+      // Limit particle count
+      if (particles.length > 60) {
+        particles = particles.slice(-60);
+      }
+
+      animId = requestAnimationFrame(updateParticles);
+    }
+
+    updateParticles();
+
+    // Cleanup on page hide
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        cancelAnimationFrame(animId);
+      } else {
+        updateParticles();
+      }
+    });
+  }
+})();
+</script>
+</body>
+</html>

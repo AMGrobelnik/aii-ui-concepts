@@ -1,0 +1,1674 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Pipeline Monitor</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --green: #4ade80;
+    --purple: #a855f7;
+    --blue: #60a5fa;
+    --orange: #fb923c;
+    --slate-bg: #0b0d14;
+    --slate-surface: #10131c;
+    --slate-border: rgba(255,255,255,0.06);
+    --text-primary: #e2e4e9;
+    --text-secondary: rgba(200,202,208,0.75);
+    --text-muted: rgba(255,255,255,0.3);
+    --sidebar-w-collapsed: 52px;
+    --sidebar-w-expanded: 220px;
+  }
+
+  body {
+    background: var(--slate-bg);
+    color: #c8cad0;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+    display: flex;
+  }
+
+  /* ── Collapsed Sidebar ── */
+  .sidebar {
+    width: var(--sidebar-w-collapsed);
+    min-height: 100vh;
+    background: var(--slate-surface);
+    border-right: 1px solid var(--slate-border);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px 0;
+    gap: 8px;
+    position: fixed;
+    left: 0;
+    top: 0;
+    z-index: 100;
+    transition: width 0.3s ease;
+    overflow: hidden;
+  }
+
+  .sidebar:hover {
+    width: var(--sidebar-w-expanded);
+  }
+
+  .sidebar-logo {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, var(--blue), var(--purple));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 16px;
+    flex-shrink: 0;
+  }
+
+  .sidebar-item {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+    flex-shrink: 0;
+    font-size: 15px;
+    gap: 12px;
+    white-space: nowrap;
+  }
+
+  .sidebar:hover .sidebar-item {
+    width: calc(var(--sidebar-w-expanded) - 16px);
+    justify-content: flex-start;
+    padding-left: 10px;
+  }
+
+  .sidebar-item:hover {
+    background: rgba(255,255,255,0.05);
+    color: rgba(255,255,255,0.7);
+  }
+
+  .sidebar-item.active {
+    background: rgba(96,165,250,0.1);
+    color: var(--blue);
+  }
+
+  .sidebar-item-label {
+    font-size: 13px;
+    font-weight: 500;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    pointer-events: none;
+  }
+
+  .sidebar:hover .sidebar-item-label {
+    opacity: 1;
+  }
+
+  /* Sidebar tooltip (collapsed state) */
+  .sidebar-item .sidebar-tooltip {
+    position: absolute;
+    left: 48px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: #1a1d28;
+    color: var(--text-primary);
+    font-size: 12px;
+    font-weight: 500;
+    padding: 4px 10px;
+    border-radius: 6px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+    border: 1px solid var(--slate-border);
+    z-index: 200;
+  }
+
+  .sidebar-item:hover .sidebar-tooltip {
+    opacity: 1;
+  }
+
+  .sidebar:hover .sidebar-tooltip {
+    display: none;
+  }
+
+  .sidebar-spacer { flex: 1; }
+
+  /* ── Main Content ── */
+  .main {
+    flex: 1;
+    margin-left: var(--sidebar-w-collapsed);
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+
+  /* ── Progress Strip ── */
+  .progress-strip {
+    background: linear-gradient(180deg, #0c0e18 0%, var(--slate-bg) 100%);
+    padding: 28px 0 18px;
+    position: relative;
+    user-select: none;
+  }
+
+  .progress-strip::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--slate-border) 20%, var(--slate-border) 80%, transparent);
+  }
+
+  .dots-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    padding: 0 40px;
+    position: relative;
+  }
+
+  .module-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    position: relative;
+    padding: 0 16px;
+    cursor: pointer;
+  }
+
+  .module-group:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: 50%;
+    width: 12px;
+    height: 1px;
+    background: rgba(255,255,255,0.1);
+    transform: translateX(50%);
+  }
+
+  /* Colored connecting lines within groups */
+  .module-group .line-bg {
+    position: absolute;
+    top: 50%;
+    left: 22px;
+    right: 22px;
+    height: 1px;
+    transform: translateY(-0.5px);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .module-group[data-module="seed"] .line-bg { background: rgba(74,222,128,0.18); }
+  .module-group[data-module="hypothesis"] .line-bg { background: rgba(168,85,247,0.18); }
+  .module-group[data-module="invention"] .line-bg { background: rgba(96,165,250,0.22); }
+  .module-group[data-module="paper"] .line-bg { background: rgba(251,146,60,0.12); }
+
+  /* Glow line for active module */
+  .module-group.selected .line-bg {
+    height: 2px;
+    filter: blur(0.5px);
+  }
+
+  .module-group[data-module="seed"].selected .line-bg {
+    background: rgba(74,222,128,0.35);
+    box-shadow: 0 0 8px rgba(74,222,128,0.15);
+  }
+  .module-group[data-module="hypothesis"].selected .line-bg {
+    background: rgba(168,85,247,0.35);
+    box-shadow: 0 0 8px rgba(168,85,247,0.15);
+  }
+  .module-group[data-module="invention"].selected .line-bg {
+    background: rgba(96,165,250,0.4);
+    box-shadow: 0 0 8px rgba(96,165,250,0.2);
+  }
+  .module-group[data-module="paper"].selected .line-bg {
+    background: rgba(251,146,60,0.3);
+    box-shadow: 0 0 8px rgba(251,146,60,0.12);
+  }
+
+  /* Dots */
+  .dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    position: relative;
+    z-index: 1;
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+    flex-shrink: 0;
+  }
+
+  .dot.filled { }
+  .dot.hollow { background: transparent !important; }
+  .dot.active-pulse { animation: dotPulse 2s ease-in-out infinite; }
+
+  /* Seed dots */
+  .module-group[data-module="seed"] .dot.filled {
+    background: var(--green);
+    box-shadow: 0 0 6px rgba(74,222,128,0.5), 0 0 14px rgba(74,222,128,0.2);
+  }
+  .module-group[data-module="seed"] .dot.hollow {
+    border: 1.5px solid rgba(74,222,128,0.25);
+  }
+
+  /* Hypothesis dots */
+  .module-group[data-module="hypothesis"] .dot.filled {
+    background: var(--purple);
+    box-shadow: 0 0 6px rgba(168,85,247,0.5), 0 0 14px rgba(168,85,247,0.2);
+  }
+  .module-group[data-module="hypothesis"] .dot.hollow {
+    border: 1.5px solid rgba(168,85,247,0.25);
+  }
+
+  /* Invention dots */
+  .module-group[data-module="invention"] .dot.filled {
+    background: var(--blue);
+    box-shadow: 0 0 6px rgba(96,165,250,0.5), 0 0 14px rgba(96,165,250,0.2);
+  }
+  .module-group[data-module="invention"] .dot.hollow {
+    border: 1.5px solid rgba(96,165,250,0.25);
+  }
+  .module-group[data-module="invention"] .dot.active-pulse {
+    background: #93bbfd;
+    box-shadow: 0 0 10px rgba(96,165,250,0.8), 0 0 24px rgba(96,165,250,0.45), 0 0 48px rgba(96,165,250,0.15);
+  }
+
+  /* Paper dots */
+  .module-group[data-module="paper"] .dot.filled {
+    background: var(--orange);
+    box-shadow: 0 0 6px rgba(251,146,60,0.5), 0 0 14px rgba(251,146,60,0.2);
+  }
+  .module-group[data-module="paper"] .dot.hollow {
+    border: 1.5px solid rgba(251,146,60,0.18);
+  }
+
+  /* Hover label on dot groups */
+  .module-group .hover-label {
+    position: absolute;
+    top: -26px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    color: rgba(255,255,255,0.55);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+
+  .module-group:hover .hover-label,
+  .module-group.selected .hover-label {
+    opacity: 1;
+  }
+
+  .module-group[data-module="seed"] .hover-label { color: rgba(74,222,128,0.7); }
+  .module-group[data-module="hypothesis"] .hover-label { color: rgba(168,85,247,0.7); }
+  .module-group[data-module="invention"] .hover-label { color: rgba(96,165,250,0.7); }
+  .module-group[data-module="paper"] .hover-label { color: rgba(251,146,60,0.7); }
+
+  .module-group.selected .dot.filled {
+    transform: scale(1.12);
+  }
+
+  @keyframes dotPulse {
+    0%, 100% {
+      box-shadow: 0 0 10px rgba(96,165,250,0.8), 0 0 24px rgba(96,165,250,0.45), 0 0 48px rgba(96,165,250,0.15);
+      transform: scale(1);
+    }
+    50% {
+      box-shadow: 0 0 14px rgba(96,165,250,1), 0 0 32px rgba(96,165,250,0.6), 0 0 60px rgba(96,165,250,0.25);
+      transform: scale(1.25);
+    }
+  }
+
+  /* ── Module Tabs ── */
+  .module-tabs {
+    display: flex;
+    justify-content: center;
+    gap: 32px;
+    padding: 16px 0 0;
+  }
+
+  .tab {
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    color: rgba(255,255,255,0.35);
+    cursor: pointer;
+    padding: 4px 2px 8px;
+    position: relative;
+    transition: color 0.25s ease;
+    user-select: none;
+  }
+
+  .tab:hover { color: rgba(255,255,255,0.6); }
+  .tab.active { color: rgba(255,255,255,0.88); }
+
+  .tab::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    border-radius: 1px;
+    background: transparent;
+    transition: background 0.25s ease;
+  }
+
+  .tab[data-module="seed"].active::after { background: var(--green); }
+  .tab[data-module="hypothesis"].active::after { background: var(--purple); }
+  .tab[data-module="invention"].active::after { background: var(--blue); }
+  .tab[data-module="paper"].active::after { background: var(--orange); }
+
+  /* ── Content Area ── */
+  .content-area {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 0 24px 60px;
+    position: relative;
+    min-height: 480px;
+  }
+
+  /* ── Module Section Colored Background Tints ── */
+  .module-content {
+    position: absolute;
+    top: 36px;
+    left: 24px;
+    right: 24px;
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 0.25s ease, transform 0.25s ease;
+    pointer-events: none;
+    border-radius: 12px;
+    padding: 28px 24px;
+  }
+
+  .module-content.visible {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+    position: relative;
+    top: 0;
+    left: 0;
+    right: 0;
+    margin-top: 24px;
+  }
+
+  /* Seed: green tint 0.03 */
+  .module-content[data-module="seed"] {
+    background: rgba(74, 222, 128, 0.03);
+    border: 1px solid rgba(74, 222, 128, 0.06);
+  }
+
+  /* Hypothesis: purple tint 0.03 */
+  .module-content[data-module="hypothesis"] {
+    background: rgba(168, 85, 247, 0.03);
+    border: 1px solid rgba(168, 85, 247, 0.06);
+  }
+
+  /* Invention: blue tint 0.05 (active) */
+  .module-content[data-module="invention"] {
+    background: rgba(96, 165, 250, 0.05);
+    border: 1px solid rgba(96, 165, 250, 0.08);
+  }
+
+  /* Paper: no tint */
+  .module-content[data-module="paper"] {
+    background: transparent;
+    border: 1px solid var(--slate-border);
+  }
+
+  .module-title {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+  }
+
+  .module-subtitle {
+    font-size: 16px;
+    font-weight: 400;
+    margin-bottom: 16px;
+  }
+
+  .module-content[data-module="seed"] .module-subtitle { color: var(--green); }
+  .module-content[data-module="hypothesis"] .module-subtitle { color: var(--purple); }
+  .module-content[data-module="invention"] .module-subtitle { color: var(--blue); }
+  .module-content[data-module="paper"] .module-subtitle { color: var(--orange); }
+
+  .module-summary {
+    font-size: 14px;
+    line-height: 1.65;
+    color: var(--text-secondary);
+    margin-bottom: 24px;
+  }
+
+  /* ── Sub-stage Rows (Level 1) ── */
+  .sub-stages {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .sub-row {
+    border-radius: 8px;
+    overflow: hidden;
+    transition: background 0.2s ease;
+  }
+
+  .sub-row-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: background 0.2s ease;
+    user-select: none;
+  }
+
+  .sub-row-header:hover { background: rgba(255,255,255,0.03); }
+  .sub-row.expanded > .sub-row-header { background: rgba(255,255,255,0.03); }
+
+  .sub-row-icon {
+    font-size: 14px;
+    width: 20px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+
+  .icon-done { color: var(--green); }
+  .icon-active { color: var(--blue); }
+  .icon-pending { color: rgba(255,255,255,0.2); }
+
+  .sub-row-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    flex-shrink: 0;
+  }
+
+  .sub-row-label.pending-label {
+    color: var(--text-muted);
+  }
+
+  .sub-row-sep {
+    color: rgba(255,255,255,0.15);
+    font-size: 13px;
+    flex-shrink: 0;
+  }
+
+  .sub-row-detail {
+    font-size: 13px;
+    color: rgba(200,202,208,0.6);
+  }
+
+  .sub-row-detail.active-detail {
+    color: var(--blue);
+    font-weight: 500;
+  }
+
+  .sub-row-chevron {
+    margin-left: auto;
+    font-size: 11px;
+    color: rgba(255,255,255,0.2);
+    transition: transform 0.25s ease;
+    flex-shrink: 0;
+  }
+
+  .sub-row.expanded > .sub-row-header .sub-row-chevron {
+    transform: rotate(90deg);
+  }
+
+  /* Level 2 body */
+  .sub-row-body {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease, padding 0.3s ease;
+    padding: 0 14px 0 44px;
+  }
+
+  .sub-row.expanded > .sub-row-body {
+    max-height: 600px;
+    padding: 4px 14px 14px 44px;
+  }
+
+  /* ── Level 3: Nested items within level 2 ── */
+  .l3-group {
+    margin: 6px 0 2px;
+  }
+
+  .l3-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+    cursor: pointer;
+    font-size: 12px;
+    color: rgba(255,255,255,0.4);
+    user-select: none;
+    transition: color 0.2s ease;
+  }
+
+  .l3-header:hover { color: rgba(255,255,255,0.6); }
+
+  .l3-chevron {
+    font-size: 9px;
+    transition: transform 0.2s ease;
+    width: 12px;
+    text-align: center;
+  }
+
+  .l3-group.expanded .l3-chevron {
+    transform: rotate(90deg);
+  }
+
+  .l3-label {
+    font-weight: 500;
+  }
+
+  .l3-body {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.25s ease;
+    padding-left: 20px;
+  }
+
+  .l3-group.expanded .l3-body {
+    max-height: 200px;
+  }
+
+  .l3-item {
+    font-size: 12px;
+    color: rgba(200,202,208,0.5);
+    padding: 2px 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .l3-item .l3-dot {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .l3-item .l3-dot.green { background: rgba(74,222,128,0.5); }
+  .l3-item .l3-dot.purple { background: rgba(168,85,247,0.5); }
+  .l3-item .l3-dot.blue { background: rgba(96,165,250,0.5); }
+  .l3-item .l3-dot.orange { background: rgba(251,146,60,0.5); }
+  .l3-item .l3-dot.muted { background: rgba(255,255,255,0.15); }
+
+  /* ── Artifact items ── */
+  .artifact-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 0;
+    font-size: 13px;
+    color: rgba(200,202,208,0.6);
+  }
+
+  .artifact-item .art-icon {
+    font-size: 12px;
+    width: 16px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+
+  .artifact-item .art-icon.done { color: var(--green); }
+  .artifact-item .art-icon.running { color: var(--blue); }
+  .artifact-item .art-icon.pending { color: rgba(255,255,255,0.15); }
+
+  .artifact-item .art-label {
+    color: rgba(200,202,208,0.7);
+  }
+
+  .artifact-item .art-label.running-label {
+    color: #93bbfd;
+    font-weight: 500;
+  }
+
+  .artifact-item .art-status {
+    margin-left: auto;
+    font-size: 12px;
+    color: rgba(255,255,255,0.25);
+  }
+
+  .artifact-item .art-status.done-status { color: rgba(74,222,128,0.5); }
+  .artifact-item .art-status.running-status {
+    color: var(--blue);
+    animation: textPulse 2s ease-in-out infinite;
+  }
+
+  /* Spinner */
+  .spinner {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border: 1.5px solid rgba(96,165,250,0.2);
+    border-top-color: var(--blue);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    flex-shrink: 0;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  @keyframes textPulse {
+    0%, 100% { opacity: 0.7; }
+    50% { opacity: 1; }
+  }
+
+  /* ── Hypothesis iterations ── */
+  .hypo-iter {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 0;
+    font-size: 13px;
+  }
+
+  .hypo-iter .iter-num {
+    font-weight: 600;
+    width: 20px;
+    color: rgba(168,85,247,0.6);
+  }
+
+  .hypo-iter .iter-score {
+    color: rgba(200,202,208,0.7);
+  }
+
+  .hypo-iter .iter-badge {
+    margin-left: auto;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 500;
+  }
+
+  .hypo-iter .iter-badge.best {
+    background: rgba(168,85,247,0.15);
+    color: var(--purple);
+  }
+
+  /* ── Seed sub-steps ── */
+  .seed-step {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 0;
+    font-size: 13px;
+    color: rgba(200,202,208,0.6);
+  }
+
+  .seed-step .step-icon { color: var(--green); width: 16px; text-align: center; }
+
+  /* ── Dependency dots ── */
+  .dep-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 10px;
+    padding: 6px 0;
+    border-top: 1px solid rgba(255,255,255,0.04);
+  }
+
+  .dep-label {
+    font-size: 11px;
+    color: rgba(255,255,255,0.25);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    margin-right: 4px;
+  }
+
+  .dep-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    position: relative;
+    cursor: default;
+  }
+
+  .dep-dot.green { background: var(--green); box-shadow: 0 0 4px rgba(74,222,128,0.3); }
+  .dep-dot.purple { background: var(--purple); box-shadow: 0 0 4px rgba(168,85,247,0.3); }
+  .dep-dot.blue { background: var(--blue); box-shadow: 0 0 4px rgba(96,165,250,0.3); }
+  .dep-dot.orange-dim { background: rgba(251,146,60,0.25); border: 1px solid rgba(251,146,60,0.15); }
+  .dep-dot.muted-dim { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.06); }
+
+  /* Dependency dot tooltip */
+  .dep-dot .dep-tip {
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1a1d28;
+    color: var(--text-primary);
+    font-size: 11px;
+    padding: 4px 8px;
+    border-radius: 5px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+    border: 1px solid var(--slate-border);
+    z-index: 50;
+  }
+
+  .dep-dot:hover .dep-tip {
+    opacity: 1;
+  }
+
+  /* ── Footer ── */
+  .module-footer {
+    display: flex;
+    gap: 16px;
+    margin-top: 28px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(255,255,255,0.05);
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  .footer-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .footer-icon { font-size: 12px; }
+
+  /* ── Particle Canvas ── */
+  #particle-canvas {
+    position: fixed;
+    top: 0;
+    left: var(--sidebar-w-collapsed);
+    width: calc(100% - var(--sidebar-w-collapsed));
+    height: 100%;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.5;
+  }
+
+  .main > *:not(#particle-canvas) {
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ── Keyboard hint ── */
+  .key-hint {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: rgba(255,255,255,0.18);
+    user-select: none;
+    z-index: 10;
+  }
+
+  .key-hint kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 20px;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 4px;
+    font-family: 'Inter', sans-serif;
+    font-size: 11px;
+    color: rgba(255,255,255,0.3);
+    background: rgba(255,255,255,0.03);
+  }
+
+  /* ── Tooltip generic ── */
+  .tooltip-wrap {
+    position: relative;
+    cursor: default;
+  }
+
+  .tooltip-wrap .tooltip-text {
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1a1d28;
+    color: var(--text-primary);
+    font-size: 11px;
+    padding: 5px 10px;
+    border-radius: 6px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+    border: 1px solid var(--slate-border);
+    z-index: 50;
+  }
+
+  .tooltip-wrap:hover .tooltip-text {
+    opacity: 1;
+  }
+
+  /* ── Active glow border on invention section ── */
+  .module-content[data-module="invention"].visible {
+    box-shadow: 0 0 30px rgba(96,165,250,0.04), inset 0 1px 0 rgba(96,165,250,0.06);
+  }
+
+  .module-content[data-module="seed"].visible {
+    box-shadow: 0 0 30px rgba(74,222,128,0.03), inset 0 1px 0 rgba(74,222,128,0.04);
+  }
+
+  .module-content[data-module="hypothesis"].visible {
+    box-shadow: 0 0 30px rgba(168,85,247,0.03), inset 0 1px 0 rgba(168,85,247,0.04);
+  }
+</style>
+</head>
+<body>
+
+<!-- ── Collapsed Sidebar ── -->
+<nav class="sidebar">
+  <div class="sidebar-logo">AI</div>
+  <div class="sidebar-item active">
+    <span>&#9656;</span>
+    <span class="sidebar-item-label">Pipeline</span>
+    <span class="sidebar-tooltip">Pipeline</span>
+  </div>
+  <div class="sidebar-item">
+    <span>&#9881;</span>
+    <span class="sidebar-item-label">Settings</span>
+    <span class="sidebar-tooltip">Settings</span>
+  </div>
+  <div class="sidebar-item">
+    <span>&#9776;</span>
+    <span class="sidebar-item-label">History</span>
+    <span class="sidebar-tooltip">History</span>
+  </div>
+  <div class="sidebar-item">
+    <span>&#128202;</span>
+    <span class="sidebar-item-label">Metrics</span>
+    <span class="sidebar-tooltip">Metrics</span>
+  </div>
+  <div class="sidebar-spacer"></div>
+  <div class="sidebar-item">
+    <span>&#63;</span>
+    <span class="sidebar-item-label">Help</span>
+    <span class="sidebar-tooltip">Help</span>
+  </div>
+</nav>
+
+<!-- ── Main Content ── -->
+<div class="main">
+
+  <canvas id="particle-canvas"></canvas>
+
+  <!-- ── Progress Strip ── -->
+  <div class="progress-strip">
+    <div class="dots-row">
+      <!-- Seed: 4 green filled -->
+      <div class="module-group" data-module="seed">
+        <div class="line-bg"></div>
+        <span class="hover-label">Seed</span>
+        <div class="dot filled"></div>
+        <div class="dot filled"></div>
+        <div class="dot filled"></div>
+        <div class="dot filled"></div>
+      </div>
+
+      <!-- Hypothesis: 6 purple filled -->
+      <div class="module-group" data-module="hypothesis">
+        <div class="line-bg"></div>
+        <span class="hover-label">Hypothesis</span>
+        <div class="dot filled"></div>
+        <div class="dot filled"></div>
+        <div class="dot filled"></div>
+        <div class="dot filled"></div>
+        <div class="dot filled"></div>
+        <div class="dot filled"></div>
+      </div>
+
+      <!-- Invention: 12 blue, some filled, one active, rest hollow -->
+      <div class="module-group selected" data-module="invention">
+        <div class="line-bg"></div>
+        <span class="hover-label">Invention</span>
+        <div class="dot filled"></div>
+        <div class="dot filled"></div>
+        <div class="dot filled"></div>
+        <div class="dot filled"></div>
+        <div class="dot filled"></div>
+        <div class="dot filled"></div>
+        <div class="dot filled"></div>
+        <div class="dot filled active-pulse"></div>
+        <div class="dot hollow"></div>
+        <div class="dot hollow"></div>
+        <div class="dot hollow"></div>
+        <div class="dot hollow"></div>
+      </div>
+
+      <!-- Paper: 5 orange hollow -->
+      <div class="module-group" data-module="paper">
+        <div class="line-bg"></div>
+        <span class="hover-label">Paper</span>
+        <div class="dot hollow"></div>
+        <div class="dot hollow"></div>
+        <div class="dot hollow"></div>
+        <div class="dot hollow"></div>
+        <div class="dot hollow"></div>
+      </div>
+    </div>
+
+    <!-- Module Tabs -->
+    <div class="module-tabs">
+      <div class="tab" data-module="seed">Seed</div>
+      <div class="tab" data-module="hypothesis">Hypothesis</div>
+      <div class="tab active" data-module="invention">Invention</div>
+      <div class="tab" data-module="paper">Paper</div>
+    </div>
+  </div>
+
+  <!-- ── Content Area ── -->
+  <div class="content-area">
+
+    <!-- SEED -->
+    <div class="module-content" data-module="seed">
+      <div class="module-title">Seed Hypotheses</div>
+      <div class="module-subtitle">847 papers &#8594; 12 research gaps</div>
+      <div class="module-summary">
+        Scanned literature across three domains to identify under-explored
+        intersections. Knowledge graph built from 847 source papers, producing
+        12 distinct research gaps ranked by novelty and tractability.
+      </div>
+      <div class="sub-stages">
+        <!-- Paper Collection -->
+        <div class="sub-row">
+          <div class="sub-row-header">
+            <span class="sub-row-icon icon-done">&#10003;</span>
+            <span class="sub-row-label">Paper Collection</span>
+            <span class="sub-row-sep">&mdash;</span>
+            <span class="sub-row-detail">847 papers ingested</span>
+            <span class="sub-row-chevron">&#9654;</span>
+          </div>
+          <div class="sub-row-body">
+            <div class="seed-step"><span class="step-icon">&#10003;</span> Semantic Scholar API crawl</div>
+            <div class="seed-step"><span class="step-icon">&#10003;</span> PDF extraction and chunking</div>
+            <div class="seed-step"><span class="step-icon">&#10003;</span> De-duplication (847 unique)</div>
+            <div class="l3-group">
+              <div class="l3-header">
+                <span class="l3-chevron">&#9654;</span>
+                <span class="l3-label">Source breakdown</span>
+              </div>
+              <div class="l3-body">
+                <div class="l3-item"><span class="l3-dot green"></span> ArXiv: 412 papers</div>
+                <div class="l3-item"><span class="l3-dot green"></span> Semantic Scholar: 289 papers</div>
+                <div class="l3-item"><span class="l3-dot green"></span> OpenReview: 146 papers</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- Knowledge Graph -->
+        <div class="sub-row">
+          <div class="sub-row-header">
+            <span class="sub-row-icon icon-done">&#10003;</span>
+            <span class="sub-row-label">Knowledge Graph</span>
+            <span class="sub-row-sep">&mdash;</span>
+            <span class="sub-row-detail">2,341 entities, 5,890 edges</span>
+            <span class="sub-row-chevron">&#9654;</span>
+          </div>
+          <div class="sub-row-body">
+            <div class="seed-step"><span class="step-icon">&#10003;</span> Entity extraction (methods, datasets, metrics)</div>
+            <div class="seed-step"><span class="step-icon">&#10003;</span> Relation linking</div>
+            <div class="seed-step"><span class="step-icon">&#10003;</span> Gap detection via structural holes</div>
+            <div class="l3-group">
+              <div class="l3-header">
+                <span class="l3-chevron">&#9654;</span>
+                <span class="l3-label">Entity categories</span>
+              </div>
+              <div class="l3-body">
+                <div class="l3-item"><span class="l3-dot green"></span> Methods: 891</div>
+                <div class="l3-item"><span class="l3-dot green"></span> Datasets: 423</div>
+                <div class="l3-item"><span class="l3-dot green"></span> Metrics: 317</div>
+                <div class="l3-item"><span class="l3-dot green"></span> Concepts: 710</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- Gap Ranking -->
+        <div class="sub-row">
+          <div class="sub-row-header">
+            <span class="sub-row-icon icon-done">&#10003;</span>
+            <span class="sub-row-label">Gap Ranking</span>
+            <span class="sub-row-sep">&mdash;</span>
+            <span class="sub-row-detail">12 gaps prioritized</span>
+            <span class="sub-row-chevron">&#9654;</span>
+          </div>
+          <div class="sub-row-body">
+            <div class="seed-step"><span class="step-icon">&#10003;</span> Novelty scoring</div>
+            <div class="seed-step"><span class="step-icon">&#10003;</span> Tractability assessment</div>
+            <div class="seed-step"><span class="step-icon">&#10003;</span> Final ranking and selection</div>
+          </div>
+        </div>
+        <!-- Seed Generation -->
+        <div class="sub-row">
+          <div class="sub-row-header">
+            <span class="sub-row-icon icon-done">&#10003;</span>
+            <span class="sub-row-label">Seed Generation</span>
+            <span class="sub-row-sep">&mdash;</span>
+            <span class="sub-row-detail">12 seed hypotheses</span>
+            <span class="sub-row-chevron">&#9654;</span>
+          </div>
+          <div class="sub-row-body">
+            <div class="seed-step"><span class="step-icon">&#10003;</span> Hypothesis formulation per gap</div>
+            <div class="seed-step"><span class="step-icon">&#10003;</span> Initial feasibility check</div>
+            <div class="l3-group">
+              <div class="l3-header">
+                <span class="l3-chevron">&#9654;</span>
+                <span class="l3-label">Top 3 gaps selected</span>
+              </div>
+              <div class="l3-body">
+                <div class="l3-item"><span class="l3-dot green"></span> Contrastive multimodal alignment (novelty 9.1)</div>
+                <div class="l3-item"><span class="l3-dot green"></span> Sparse mixture-of-experts scaling (novelty 8.7)</div>
+                <div class="l3-item"><span class="l3-dot green"></span> Temporal graph attention (novelty 8.3)</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Dependency dots -->
+      <div class="dep-row">
+        <span class="dep-label">deps</span>
+        <div class="dep-dot green"><span class="dep-tip">Seed: complete</span></div>
+        <div class="dep-dot muted-dim"><span class="dep-tip">No upstream</span></div>
+      </div>
+      <div class="module-footer">
+        <div class="footer-item tooltip-wrap">
+          <span class="footer-icon">&#9202;</span> 18m
+          <span class="tooltip-text">Wall-clock time for seed stage</span>
+        </div>
+        <div class="footer-item tooltip-wrap">
+          <span class="footer-icon">&#9830;</span> $4.21
+          <span class="tooltip-text">API cost: Claude + embeddings</span>
+        </div>
+        <div class="footer-item tooltip-wrap">
+          <span class="footer-icon">&#128196;</span> 847 papers
+          <span class="tooltip-text">Total papers ingested</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- HYPOTHESIS -->
+    <div class="module-content" data-module="hypothesis">
+      <div class="module-title">Hypothesis Loop</div>
+      <div class="module-subtitle">Score 6.2 &#8594; 7.8 &#8594; 8.4</div>
+      <div class="module-summary">
+        Iteratively refining the top hypothesis through structured review
+        and revision. Each iteration addresses weaknesses identified by the
+        review agent, improving specificity and grounding.
+      </div>
+      <div class="sub-stages">
+        <!-- Iteration 1 -->
+        <div class="sub-row">
+          <div class="sub-row-header">
+            <span class="sub-row-icon icon-done">&#10003;</span>
+            <span class="sub-row-label">Iteration 1</span>
+            <span class="sub-row-sep">&mdash;</span>
+            <span class="sub-row-detail">Score 6.2</span>
+            <span class="sub-row-chevron">&#9654;</span>
+          </div>
+          <div class="sub-row-body">
+            <div class="hypo-iter">
+              <span class="iter-num">1.1</span>
+              <span class="iter-score">Review: lacks specificity in method section</span>
+            </div>
+            <div class="hypo-iter">
+              <span class="iter-num">1.2</span>
+              <span class="iter-score">Revision: added contrastive loss formulation</span>
+            </div>
+            <div class="l3-group">
+              <div class="l3-header">
+                <span class="l3-chevron">&#9654;</span>
+                <span class="l3-label">Review criteria scores</span>
+              </div>
+              <div class="l3-body">
+                <div class="l3-item"><span class="l3-dot purple"></span> Novelty: 7.0</div>
+                <div class="l3-item"><span class="l3-dot purple"></span> Feasibility: 5.5</div>
+                <div class="l3-item"><span class="l3-dot purple"></span> Clarity: 5.8</div>
+                <div class="l3-item"><span class="l3-dot purple"></span> Grounding: 6.5</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- Iteration 2 -->
+        <div class="sub-row">
+          <div class="sub-row-header">
+            <span class="sub-row-icon icon-done">&#10003;</span>
+            <span class="sub-row-label">Iteration 2</span>
+            <span class="sub-row-sep">&mdash;</span>
+            <span class="sub-row-detail">Score 7.8</span>
+            <span class="sub-row-chevron">&#9654;</span>
+          </div>
+          <div class="sub-row-body">
+            <div class="hypo-iter">
+              <span class="iter-num">2.1</span>
+              <span class="iter-score">Review: needs stronger baseline justification</span>
+            </div>
+            <div class="hypo-iter">
+              <span class="iter-num">2.2</span>
+              <span class="iter-score">Revision: cited 3 baselines, added expected gains</span>
+            </div>
+            <div class="l3-group">
+              <div class="l3-header">
+                <span class="l3-chevron">&#9654;</span>
+                <span class="l3-label">Review criteria scores</span>
+              </div>
+              <div class="l3-body">
+                <div class="l3-item"><span class="l3-dot purple"></span> Novelty: 8.1</div>
+                <div class="l3-item"><span class="l3-dot purple"></span> Feasibility: 7.4</div>
+                <div class="l3-item"><span class="l3-dot purple"></span> Clarity: 7.9</div>
+                <div class="l3-item"><span class="l3-dot purple"></span> Grounding: 7.8</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- Iteration 3 -->
+        <div class="sub-row">
+          <div class="sub-row-header">
+            <span class="sub-row-icon icon-done">&#10003;</span>
+            <span class="sub-row-label">Iteration 3</span>
+            <span class="sub-row-sep">&mdash;</span>
+            <span class="sub-row-detail">Score 8.4 &mdash; accepted</span>
+            <span class="sub-row-chevron">&#9654;</span>
+          </div>
+          <div class="sub-row-body">
+            <div class="hypo-iter">
+              <span class="iter-num">3.1</span>
+              <span class="iter-score">Review: minor clarity edits, threshold met</span>
+              <span class="iter-badge best">best</span>
+            </div>
+            <div class="l3-group">
+              <div class="l3-header">
+                <span class="l3-chevron">&#9654;</span>
+                <span class="l3-label">Final scores</span>
+              </div>
+              <div class="l3-body">
+                <div class="l3-item"><span class="l3-dot purple"></span> Novelty: 8.6</div>
+                <div class="l3-item"><span class="l3-dot purple"></span> Feasibility: 8.2</div>
+                <div class="l3-item"><span class="l3-dot purple"></span> Clarity: 8.5</div>
+                <div class="l3-item"><span class="l3-dot purple"></span> Grounding: 8.3</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Dependency dots -->
+      <div class="dep-row">
+        <span class="dep-label">deps</span>
+        <div class="dep-dot green"><span class="dep-tip">Seed: complete</span></div>
+        <div class="dep-dot purple"><span class="dep-tip">Hypothesis: complete</span></div>
+      </div>
+      <div class="module-footer">
+        <div class="footer-item tooltip-wrap">
+          <span class="footer-icon">&#9202;</span> 31m
+          <span class="tooltip-text">Wall-clock time for hypothesis loop</span>
+        </div>
+        <div class="footer-item tooltip-wrap">
+          <span class="footer-icon">&#9830;</span> $8.73
+          <span class="tooltip-text">API cost: 3 review + revision cycles</span>
+        </div>
+        <div class="footer-item tooltip-wrap">
+          <span class="footer-icon">&#128257;</span> 3 iterations
+          <span class="tooltip-text">Converged after 3 review rounds</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- INVENTION (default visible) -->
+    <div class="module-content visible" data-module="invention">
+      <div class="module-title">Invention Loop &mdash; Iteration 2 of 3</div>
+      <div class="module-subtitle">Generating Artifacts &mdash; 3 of 5 complete</div>
+      <div class="module-summary">
+        Building research artifacts to validate the hypothesis. Baseline shows
+        17.5% accuracy improvement. Ablation study running.
+      </div>
+      <div class="sub-stages">
+        <!-- Strategy -->
+        <div class="sub-row">
+          <div class="sub-row-header">
+            <span class="sub-row-icon icon-done">&#10003;</span>
+            <span class="sub-row-label">Strategy</span>
+            <span class="sub-row-sep">&mdash;</span>
+            <span class="sub-row-detail">Contrastive alignment</span>
+            <span class="sub-row-chevron">&#9654;</span>
+          </div>
+          <div class="sub-row-body">
+            <div class="seed-step"><span class="step-icon">&#10003;</span> Selected contrastive learning approach</div>
+            <div class="seed-step"><span class="step-icon">&#10003;</span> Defined alignment loss function</div>
+            <div class="l3-group">
+              <div class="l3-header">
+                <span class="l3-chevron">&#9654;</span>
+                <span class="l3-label">Loss function details</span>
+              </div>
+              <div class="l3-body">
+                <div class="l3-item"><span class="l3-dot blue"></span> InfoNCE with temperature 0.07</div>
+                <div class="l3-item"><span class="l3-dot blue"></span> Cosine similarity kernel</div>
+                <div class="l3-item"><span class="l3-dot blue"></span> Hard negative mining enabled</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- Plan -->
+        <div class="sub-row">
+          <div class="sub-row-header">
+            <span class="sub-row-icon icon-done">&#10003;</span>
+            <span class="sub-row-label">Plan</span>
+            <span class="sub-row-sep">&mdash;</span>
+            <span class="sub-row-detail">5 artifacts planned</span>
+            <span class="sub-row-chevron">&#9654;</span>
+          </div>
+          <div class="sub-row-body">
+            <div class="seed-step"><span class="step-icon">&#10003;</span> Baseline benchmark</div>
+            <div class="seed-step"><span class="step-icon">&#10003;</span> Main experiment</div>
+            <div class="seed-step"><span class="step-icon">&#10003;</span> Ablation study</div>
+            <div class="seed-step"><span class="step-icon">&#10003;</span> Visualization suite</div>
+            <div class="seed-step"><span class="step-icon">&#10003;</span> Supplementary analysis</div>
+            <div class="l3-group">
+              <div class="l3-header">
+                <span class="l3-chevron">&#9654;</span>
+                <span class="l3-label">Planned metrics</span>
+              </div>
+              <div class="l3-body">
+                <div class="l3-item"><span class="l3-dot blue"></span> Accuracy, F1, BLEU</div>
+                <div class="l3-item"><span class="l3-dot blue"></span> Latency benchmarks</div>
+                <div class="l3-item"><span class="l3-dot blue"></span> Memory footprint</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- Artifacts (expanded, active) -->
+        <div class="sub-row expanded">
+          <div class="sub-row-header">
+            <span class="sub-row-icon icon-active"><span class="spinner"></span></span>
+            <span class="sub-row-label">Artifacts</span>
+            <span class="sub-row-sep">&mdash;</span>
+            <span class="sub-row-detail active-detail">3/5, ablation running</span>
+            <span class="sub-row-chevron">&#9654;</span>
+          </div>
+          <div class="sub-row-body">
+            <div class="artifact-item">
+              <span class="art-icon done">&#10003;</span>
+              <span class="art-label">Baseline benchmark</span>
+              <span class="art-status done-status">complete</span>
+            </div>
+            <div class="artifact-item">
+              <span class="art-icon done">&#10003;</span>
+              <span class="art-label">Main experiment</span>
+              <span class="art-status done-status">+17.5% acc</span>
+            </div>
+            <div class="artifact-item">
+              <span class="art-icon done">&#10003;</span>
+              <span class="art-label">Visualization suite</span>
+              <span class="art-status done-status">4 figures</span>
+            </div>
+            <div class="artifact-item">
+              <span class="art-icon running"><span class="spinner"></span></span>
+              <span class="art-label running-label">Ablation study</span>
+              <span class="art-status running-status">running...</span>
+            </div>
+            <div class="artifact-item">
+              <span class="art-icon pending">&#9675;</span>
+              <span class="art-label">Supplementary analysis</span>
+              <span class="art-status">pending</span>
+            </div>
+            <div class="l3-group">
+              <div class="l3-header">
+                <span class="l3-chevron">&#9654;</span>
+                <span class="l3-label">Ablation configurations</span>
+              </div>
+              <div class="l3-body">
+                <div class="l3-item"><span class="l3-dot blue"></span> No hard negatives: running</div>
+                <div class="l3-item"><span class="l3-dot muted"></span> Temperature sweep: pending</div>
+                <div class="l3-item"><span class="l3-dot muted"></span> Backbone freeze: pending</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- Paper Draft -->
+        <div class="sub-row">
+          <div class="sub-row-header">
+            <span class="sub-row-icon icon-pending">&#9675;</span>
+            <span class="sub-row-label pending-label">Paper Draft</span>
+            <span class="sub-row-sep">&mdash;</span>
+            <span class="sub-row-detail"></span>
+          </div>
+        </div>
+        <!-- Review -->
+        <div class="sub-row">
+          <div class="sub-row-header">
+            <span class="sub-row-icon icon-pending">&#9675;</span>
+            <span class="sub-row-label pending-label">Review</span>
+            <span class="sub-row-sep">&mdash;</span>
+            <span class="sub-row-detail"></span>
+          </div>
+        </div>
+        <!-- Update Hypo -->
+        <div class="sub-row">
+          <div class="sub-row-header">
+            <span class="sub-row-icon icon-pending">&#9675;</span>
+            <span class="sub-row-label pending-label">Update Hypo</span>
+            <span class="sub-row-sep">&mdash;</span>
+            <span class="sub-row-detail"></span>
+          </div>
+        </div>
+      </div>
+      <!-- Dependency dots -->
+      <div class="dep-row">
+        <span class="dep-label">deps</span>
+        <div class="dep-dot green"><span class="dep-tip">Seed: complete</span></div>
+        <div class="dep-dot purple"><span class="dep-tip">Hypothesis: complete</span></div>
+        <div class="dep-dot blue"><span class="dep-tip">Invention: in progress</span></div>
+        <div class="dep-dot orange-dim"><span class="dep-tip">Paper: waiting</span></div>
+      </div>
+      <div class="module-footer">
+        <div class="footer-item tooltip-wrap">
+          <span class="footer-icon">&#9202;</span> 42m
+          <span class="tooltip-text">Wall-clock time for invention loop</span>
+        </div>
+        <div class="footer-item tooltip-wrap">
+          <span class="footer-icon">&#9830;</span> $12.47
+          <span class="tooltip-text">API cost: strategy + plan + artifacts</span>
+        </div>
+        <div class="footer-item tooltip-wrap">
+          <span class="footer-icon">&#128200;</span> +17.5%
+          <span class="tooltip-text">Best accuracy improvement so far</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- PAPER -->
+    <div class="module-content" data-module="paper">
+      <div class="module-title">Paper Generation</div>
+      <div class="module-subtitle">Pending &mdash; waiting for invention loop</div>
+      <div class="module-summary">
+        Full paper generation will begin once the invention loop completes.
+        This stage compiles all artifacts, generates LaTeX, produces
+        visualizations, and assembles the final PDF.
+      </div>
+      <div class="sub-stages">
+        <div class="sub-row">
+          <div class="sub-row-header">
+            <span class="sub-row-icon icon-pending">&#9675;</span>
+            <span class="sub-row-label pending-label">Artifact Demos</span>
+            <span class="sub-row-sep">&mdash;</span>
+            <span class="sub-row-detail"></span>
+            <span class="sub-row-chevron">&#9654;</span>
+          </div>
+          <div class="sub-row-body">
+            <div class="l3-group">
+              <div class="l3-header">
+                <span class="l3-chevron">&#9654;</span>
+                <span class="l3-label">Planned outputs</span>
+              </div>
+              <div class="l3-body">
+                <div class="l3-item"><span class="l3-dot muted"></span> Interactive Python demo</div>
+                <div class="l3-item"><span class="l3-dot muted"></span> Notebook walkthrough</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="sub-row">
+          <div class="sub-row-header">
+            <span class="sub-row-icon icon-pending">&#9675;</span>
+            <span class="sub-row-label pending-label">Visualizations</span>
+            <span class="sub-row-sep">&mdash;</span>
+            <span class="sub-row-detail"></span>
+            <span class="sub-row-chevron">&#9654;</span>
+          </div>
+          <div class="sub-row-body">
+            <div class="l3-group">
+              <div class="l3-header">
+                <span class="l3-chevron">&#9654;</span>
+                <span class="l3-label">Planned figures</span>
+              </div>
+              <div class="l3-body">
+                <div class="l3-item"><span class="l3-dot muted"></span> Architecture diagram</div>
+                <div class="l3-item"><span class="l3-dot muted"></span> Training curves</div>
+                <div class="l3-item"><span class="l3-dot muted"></span> Ablation heatmap</div>
+                <div class="l3-item"><span class="l3-dot muted"></span> Comparison bar chart</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="sub-row">
+          <div class="sub-row-header">
+            <span class="sub-row-icon icon-pending">&#9675;</span>
+            <span class="sub-row-label pending-label">Full Paper</span>
+            <span class="sub-row-sep">&mdash;</span>
+            <span class="sub-row-detail"></span>
+            <span class="sub-row-chevron">&#9654;</span>
+          </div>
+          <div class="sub-row-body">
+            <div class="l3-group">
+              <div class="l3-header">
+                <span class="l3-chevron">&#9654;</span>
+                <span class="l3-label">Sections</span>
+              </div>
+              <div class="l3-body">
+                <div class="l3-item"><span class="l3-dot muted"></span> Abstract + Introduction</div>
+                <div class="l3-item"><span class="l3-dot muted"></span> Related Work</div>
+                <div class="l3-item"><span class="l3-dot muted"></span> Method</div>
+                <div class="l3-item"><span class="l3-dot muted"></span> Experiments + Results</div>
+                <div class="l3-item"><span class="l3-dot muted"></span> Conclusion</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="sub-row">
+          <div class="sub-row-header">
+            <span class="sub-row-icon icon-pending">&#9675;</span>
+            <span class="sub-row-label pending-label">Repository</span>
+            <span class="sub-row-sep">&mdash;</span>
+            <span class="sub-row-detail"></span>
+          </div>
+        </div>
+        <div class="sub-row">
+          <div class="sub-row-header">
+            <span class="sub-row-icon icon-pending">&#9675;</span>
+            <span class="sub-row-label pending-label">Final PDF</span>
+            <span class="sub-row-sep">&mdash;</span>
+            <span class="sub-row-detail"></span>
+          </div>
+        </div>
+      </div>
+      <!-- Dependency dots -->
+      <div class="dep-row">
+        <span class="dep-label">deps</span>
+        <div class="dep-dot green"><span class="dep-tip">Seed: complete</span></div>
+        <div class="dep-dot purple"><span class="dep-tip">Hypothesis: complete</span></div>
+        <div class="dep-dot muted-dim"><span class="dep-tip">Invention: not yet complete</span></div>
+        <div class="dep-dot muted-dim"><span class="dep-tip">Paper: blocked</span></div>
+      </div>
+      <div class="module-footer">
+        <div class="footer-item tooltip-wrap">
+          <span class="footer-icon">&#9202;</span> &mdash;
+          <span class="tooltip-text">Not started yet</span>
+        </div>
+        <div class="footer-item tooltip-wrap">
+          <span class="footer-icon">&#9830;</span> &mdash;
+          <span class="tooltip-text">Estimated $6-9</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- Keyboard hint -->
+<div class="key-hint">
+  <kbd>&#8592;</kbd><kbd>&#8594;</kbd> navigate modules
+</div>
+
+<script>
+(function() {
+  const MODULES = ['seed', 'hypothesis', 'invention', 'paper'];
+  let activeIndex = 2;
+
+  const tabs = document.querySelectorAll('.tab');
+  const groups = document.querySelectorAll('.module-group');
+  const contents = document.querySelectorAll('.module-content');
+
+  function switchTo(index) {
+    if (index < 0 || index >= MODULES.length) return;
+    activeIndex = index;
+    const mod = MODULES[index];
+
+    tabs.forEach(t => t.classList.toggle('active', t.dataset.module === mod));
+    groups.forEach(g => g.classList.toggle('selected', g.dataset.module === mod));
+    contents.forEach(c => {
+      if (c.dataset.module === mod) {
+        c.classList.add('visible');
+      } else {
+        c.classList.remove('visible');
+      }
+    });
+  }
+
+  tabs.forEach(t => {
+    t.addEventListener('click', () => {
+      switchTo(MODULES.indexOf(t.dataset.module));
+    });
+  });
+
+  groups.forEach(g => {
+    g.addEventListener('click', () => {
+      switchTo(MODULES.indexOf(g.dataset.module));
+    });
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      switchTo(activeIndex - 1);
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      switchTo(activeIndex + 1);
+    }
+  });
+
+  // Level 2 expand/collapse
+  document.querySelectorAll('.sub-row-header').forEach(header => {
+    header.addEventListener('click', (e) => {
+      const row = header.parentElement;
+      const body = row.querySelector(':scope > .sub-row-body');
+      if (!body || body.children.length === 0) return;
+      row.classList.toggle('expanded');
+    });
+  });
+
+  // Level 3 expand/collapse
+  document.querySelectorAll('.l3-header').forEach(header => {
+    header.addEventListener('click', (e) => {
+      e.stopPropagation();
+      header.parentElement.classList.toggle('expanded');
+    });
+  });
+
+  // ── Particle system ──
+  const canvas = document.getElementById('particle-canvas');
+  if (canvas) {
+    const ctx = canvas.getContext('2d');
+    let particles = [];
+    const PARTICLE_COUNT = 35;
+    const COLORS = [
+      { r: 74, g: 222, b: 128 },
+      { r: 168, g: 85, b: 247 },
+      { r: 96, g: 165, b: 250 },
+      { r: 251, g: 146, b: 60 }
+    ];
+
+    function resize() {
+      canvas.width = canvas.offsetWidth * window.devicePixelRatio;
+      canvas.height = canvas.offsetHeight * window.devicePixelRatio;
+      ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+    }
+
+    function createParticle() {
+      const c = COLORS[Math.floor(Math.random() * COLORS.length)];
+      return {
+        x: Math.random() * canvas.offsetWidth,
+        y: Math.random() * canvas.offsetHeight,
+        vx: (Math.random() - 0.5) * 0.3,
+        vy: (Math.random() - 0.5) * 0.3,
+        r: Math.random() * 1.5 + 0.5,
+        color: c,
+        alpha: Math.random() * 0.3 + 0.05,
+        life: Math.random() * 400 + 200,
+        age: 0
+      };
+    }
+
+    function init() {
+      resize();
+      particles = [];
+      for (let i = 0; i < PARTICLE_COUNT; i++) {
+        particles.push(createParticle());
+      }
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.offsetWidth, canvas.offsetHeight);
+
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.age++;
+
+        if (p.age > p.life || p.x < -10 || p.x > canvas.offsetWidth + 10 ||
+            p.y < -10 || p.y > canvas.offsetHeight + 10) {
+          particles[i] = createParticle();
+          continue;
+        }
+
+        const fadeIn = Math.min(p.age / 60, 1);
+        const fadeOut = Math.max((p.life - p.age) / 60, 0);
+        const alpha = p.alpha * Math.min(fadeIn, fadeOut);
+
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${p.color.r},${p.color.g},${p.color.b},${alpha})`;
+        ctx.fill();
+      }
+
+      requestAnimationFrame(draw);
+    }
+
+    window.addEventListener('resize', resize);
+    init();
+    draw();
+  }
+})();
+</script>
+</body>
+</html>
