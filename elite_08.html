@@ -1331,9 +1331,81 @@ function animateActiveSparkline() {
     mod.sparkData.shift();
     mod.sparkData.push(Math.floor(Math.random() * 8) + 5);
     renderSparklines();
+    renderActiveSubSparkline();
   }
   requestAnimationFrame(animateActiveSparkline);
 }
+
+/* ================================================================
+   INLINE SUB-MODULE SPARKLINE (on the active sub row)
+   ================================================================ */
+let subSparkData = [4, 6, 5, 7, 8, 6, 9, 7];
+
+function renderActiveSubSparkline() {
+  const el = document.getElementById('activeSubSpark');
+  if (!el) return;
+
+  const data = subSparkData;
+  const w = 44, h = 14;
+  const maxVal = Math.max(...data, 1);
+  const pts = data.map(function(v, j) {
+    const x = (j / (data.length - 1)) * w;
+    const y = h - (v / maxVal) * (h - 2) - 1;
+    return [x, y];
+  });
+
+  const pathD = pts.map(function(p, j) {
+    return (j === 0 ? 'M' : 'L') + p[0].toFixed(1) + ',' + p[1].toFixed(1);
+  }).join(' ');
+  const lastPt = pts[pts.length - 1];
+
+  el.innerHTML = '<svg viewBox="0 0 ' + w + ' ' + h + '">'
+    + '<path class="sub-spark-path" d="' + pathD + '" stroke="var(--purple)"/>'
+    + '<circle class="sub-spark-dot" cx="' + lastPt[0].toFixed(1)
+    + '" cy="' + lastPt[1].toFixed(1) + '" r="1.5" fill="var(--purple)"/>'
+    + '</svg>';
+}
+
+/* ================================================================
+   MINI BAR CHART for content dashboard
+   ================================================================ */
+function renderMiniChart(colorHex, data) {
+  if (!data || data.length === 0) return '';
+  const w = 100;
+  const barW = 6;
+  const gap = (w - data.length * barW) / (data.length - 1 || 1);
+  const maxVal = Math.max(...data.map(function(d){ return d.val; }), 1);
+  const h = 48;
+
+  let bars = '';
+  let labels = '';
+  data.forEach(function(d, i) {
+    const x = i * (barW + gap);
+    const barH = (d.val / maxVal) * (h - 14);
+    const y = h - barH - 10;
+    bars += '<rect class="chart-bar" x="' + x.toFixed(1) + '" y="' + y.toFixed(1)
+      + '" width="' + barW + '" height="' + barH.toFixed(1)
+      + '" fill="' + colorHex + '" opacity="' + (d.active ? '0.9' : '0.35') + '"/>';
+    labels += '<text class="chart-label" x="' + (x + barW / 2).toFixed(1) + '" y="' + (h - 1)
+      + '">' + d.label + '</text>';
+  });
+
+  return '<div class="content-chart">'
+    + '<div class="content-chart-title">Score Distribution</div>'
+    + '<svg viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none">'
+    + bars + labels
+    + '</svg></div>';
+}
+
+/* Score distribution chart data for review rounds */
+const reviewChartData = [
+  { label: 'A', val: 7.9, active: true },
+  { label: 'B', val: 7.2, active: false },
+  { label: 'C', val: 6.8, active: false },
+  { label: 'D', val: 6.5, active: false },
+  { label: 'E', val: 4.0, active: true },
+  { label: 'F', val: 0, active: false }
+];
 
 /* ================================================================
    CONTENT DASHBOARD RENDERER
@@ -1372,6 +1444,23 @@ function renderContent() {
       + '</div>';
   }
 
+  /* Mini chart for review sub-modules */
+  let chartHtml = '';
+  if (sub.items && sub.status === 'active') {
+    chartHtml = renderMiniChart(colorHex, reviewChartData);
+  }
+
+  /* Score pill for completed review rounds */
+  let scorePillHtml = '';
+  if (sub.status === 'done' && sub.statusText && sub.statusText.includes('/10')) {
+    const score = parseFloat(sub.statusText);
+    const pct = (score / 10) * 100;
+    scorePillHtml = '<span class="score-pill">'
+      + sub.statusText
+      + '<span class="score-bar"><span class="score-bar-fill" style="width:' + pct + '%"></span></span>'
+      + '</span>';
+  }
+
   let logsHtml = '';
   if (sub.logs) {
     logsHtml = '<div class="activity-log">'
@@ -1388,6 +1477,7 @@ function renderContent() {
     + '<div class="content-top">'
     + '<span class="content-title">' + sub.name + '</span>'
     + '<span class="card-badge ' + badgeClass + '">' + badgeText + '</span>'
+    + scorePillHtml
     + '</div>'
     + '<div class="content-summary">"' + sub.summary + '"</div>'
     + '<div class="stat-cards">'
@@ -1403,7 +1493,7 @@ function renderContent() {
     + '<div class="stat-value">' + sub.msgs + '</div>'
     + '<div class="stat-bar-stacked">' + segs + '</div></div>'
     + '</div>'
-    + itemsHtml + logsHtml
+    + chartHtml + itemsHtml + logsHtml
     + '</div>';
 
   // Animate stat bar fills
