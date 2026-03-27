@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AII Pipeline Dashboard — fin_13</title>
+<style>
+  /* ───────────────────────── Reset & Base ───────────────────────── */
+  *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+  :root {
+    --bg:        #0f1219;
+    --bg-card:   #161b26;
+    --bg-hover:  #1c2333;
+    --border:    #252d3d;
+    --text:      #c8cdd8;
+    --text-dim:  #6b7589;
+    --text-bright:#e8ecf4;
+    --accent:    #6c8cff;
+    --sidebar-w: 62px;
+    --sidebar-exp: 260px;
+    --ring-transition: 600ms cubic-bezier(.4,.0,.2,1);
+  }
+  html, body {
+    height:100%; font-family:'Inter','Segoe UI',system-ui,sans-serif;
+    background:var(--bg); color:var(--text); overflow:hidden;
+    font-size:13px; line-height:1.5;
+  }
+  /* ───────────────────────── Layout Shell ───────────────────────── */
+  .shell { display:flex; height:100vh; }
+
+  /* ───────────────────────── Sidebar ───────────────────────── */
+  .sidebar {
+    width:var(--sidebar-w); min-width:var(--sidebar-w);
+    background:#0b0e14; border-right:1px solid var(--border);
+    display:flex; flex-direction:column; align-items:center;
+    padding:12px 0 16px; gap:6px; transition:width .3s ease, min-width .3s ease;
+    position:relative; z-index:50; overflow:hidden;
+  }
+  .sidebar.expanded {
+    width:var(--sidebar-exp); min-width:var(--sidebar-exp);
+  }
+  .sidebar-toggle {
+    width:36px; height:36px; border-radius:8px;
+    background:transparent; border:1px solid var(--border);
+    color:var(--text-dim); cursor:pointer; display:flex;
+    align-items:center; justify-content:center; margin-bottom:8px;
+    transition:background .2s, color .2s;
+  }
+  .sidebar-toggle:hover { background:var(--bg-hover); color:var(--text-bright); }
+  .sidebar-toggle svg { width:16px; height:16px; transition:transform .3s; }
+  .sidebar.expanded .sidebar-toggle svg { transform:rotate(180deg); }
+
+  /* Ring Container */
+  .ring-container {
+    position:relative; width:44px; height:44px;
+    margin:4px 0 10px; flex-shrink:0;
+  }
+  .sidebar.expanded .ring-container { width:120px; height:120px; margin:10px 0 14px; }
+
+  .ring-svg {
+    width:100%; height:100%;
+    transition:var(--ring-transition);
+  }
+  .ring-bg {
+    fill:none; stroke:#1e2536; stroke-width:3;
+    transition:var(--ring-transition);
+  }
+  .ring-fill {
+    fill:none; stroke-width:3; stroke-linecap:round;
+    transition:stroke var(--ring-transition),
+               stroke-dasharray var(--ring-transition),
+               stroke-dashoffset var(--ring-transition),
+               filter var(--ring-transition);
+  }
+  .ring-dashed {
+    fill:none; stroke-width:1; stroke-dasharray:3 5;
+    opacity:.35; transition:stroke var(--ring-transition);
+    transform-origin:50% 50%;
+    animation:ring-spin 20s linear infinite;
+  }
+  @keyframes ring-spin { to { transform:rotate(360deg); } }
+
+  .ring-text {
+    font-weight:700; fill:var(--text-bright);
+    text-anchor:middle; dominant-baseline:central;
+    transition:fill var(--ring-transition), font-size var(--ring-transition);
+  }
+  .ring-label {
+    font-size:7px; font-weight:500; fill:var(--text-dim);
+    text-anchor:middle; dominant-baseline:central;
+    opacity:0; transition:opacity var(--ring-transition);
+  }
+  .sidebar.expanded .ring-label { opacity:1; }
+
+  /* Sidebar Module Nav Items */
+  .sidebar-nav { display:flex; flex-direction:column; gap:2px; width:100%; padding:0 8px; }
+  .nav-item {
+    display:flex; align-items:center; gap:10px;
+    padding:8px 10px; border-radius:8px; cursor:pointer;
+    transition:background .2s, color .2s; color:var(--text-dim);
+    white-space:nowrap; overflow:hidden; position:relative;
+  }
+  .nav-item:hover { background:var(--bg-hover); color:var(--text); }
+  .nav-item.active { background:rgba(108,140,255,.1); }
+  .nav-item .nav-icon {
+    width:20px; height:20px; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .nav-item .nav-icon svg { width:16px; height:16px; }
+  .nav-item .nav-label { font-size:12px; opacity:0; transition:opacity .25s; }
+  .sidebar.expanded .nav-item .nav-label { opacity:1; }
+  .nav-dot {
+    position:absolute; right:10px; width:6px; height:6px;
+    border-radius:50%; opacity:0; transition:opacity .2s, background .2s;
+  }
+  .nav-item.active .nav-dot { opacity:1; }
+
+  /* Sidebar bottom spacer */
+  .sidebar-spacer { flex:1; }
+
+  /* ───────────────────────── Main Content ───────────────────────── */
+  .main-content {
+    flex:1; overflow-y:auto; overflow-x:hidden;
+    padding:24px 28px; position:relative;
+  }
+  .main-content::-webkit-scrollbar { width:6px; }
+  .main-content::-webkit-scrollbar-track { background:transparent; }
+  .main-content::-webkit-scrollbar-thumb { background:#252d3d; border-radius:3px; }
+
+  /* ───────────────────────── Header ───────────────────────── */
+  .header {
+    display:flex; align-items:center; justify-content:space-between;
+    margin-bottom:22px; gap:16px;
+  }
+  .header-title { font-size:18px; font-weight:700; color:var(--text-bright); }
+  .header-sub { font-size:12px; color:var(--text-dim); margin-top:2px; }
+  .header-badges { display:flex; gap:8px; }
+  .badge {
+    padding:4px 12px; border-radius:20px; font-size:11px;
+    font-weight:600; border:1px solid transparent;
+  }
+  .badge-run { background:rgba(108,140,255,.12); color:#8aa4ff; border-color:rgba(108,140,255,.25); }
+  .badge-ok  { background:rgba(52,211,153,.1); color:#34d399; border-color:rgba(52,211,153,.2); }
+
+  /* ───────────────────────── 3-Level Cards ───────────────────────── */
+  .module-section { margin-bottom:28px; }
+  .module-header {
+    display:flex; align-items:center; gap:10px;
+    margin-bottom:12px; padding-bottom:8px;
+    border-bottom:1px solid var(--border);
+  }
+  .module-color-line {
+    width:3px; height:18px; border-radius:2px;
+    flex-shrink:0;
+  }
+  .module-name {
+    font-size:14px; font-weight:700; color:var(--text-bright);
+  }
+  .module-status {
+    margin-left:auto; font-size:11px; color:var(--text-dim);
+    display:flex; align-items:center; gap:6px;
+  }
+
+  /* Level-2 Step */
+  .step-grid {
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(310px,1fr));
+    gap:10px;
+  }
+  .step-card {
+    background:var(--bg-card); border:1px solid var(--border);
+    border-radius:10px; padding:14px 16px; position:relative;
+    transition:border-color .25s, box-shadow .25s; cursor:default;
+    overflow:hidden;
+  }
+  .step-card::before {
+    content:''; position:absolute; top:0; left:0;
+    width:100%; height:2px; border-radius:10px 10px 0 0;
+    opacity:.7;
+  }
+  .step-card:hover {
+    border-color:rgba(108,140,255,.3);
+    box-shadow:0 0 20px rgba(108,140,255,.06);
+  }
+  .step-top { display:flex; align-items:center; gap:8px; margin-bottom:8px; }
+  .step-icon {
+    width:28px; height:28px; border-radius:7px;
+    display:flex; align-items:center; justify-content:center;
+    font-size:13px; flex-shrink:0;
+  }
+  .step-name { font-size:12px; font-weight:600; color:var(--text-bright); }
+  .step-desc { font-size:11px; color:var(--text-dim); margin-top:2px; }
+  .step-right { margin-left:auto; display:flex; align-items:center; gap:6px; }
+
+  /* Level-3 Sub-tasks */
+  .subtask-list { display:flex; flex-direction:column; gap:4px; margin-top:10px; }
+  .subtask {
+    display:flex; align-items:center; gap:8px;
+    padding:6px 8px; border-radius:6px; font-size:11px;
+    background:rgba(255,255,255,.015); transition:background .2s;
+  }
+  .subtask:hover { background:rgba(255,255,255,.04); }
+  .subtask-dot {
+    width:5px; height:5px; border-radius:50%; flex-shrink:0;
+  }
+  .subtask-name { color:var(--text); flex:1; }
+  .subtask-badge {
+    padding:1px 7px; border-radius:9px; font-size:10px;
+    font-weight:600;
+  }
+
+  /* ───────────────────────── Dependency Dots ───────────────────────── */
+  .dep-row {
+    display:flex; align-items:center; gap:4px;
+    margin-top:8px; padding-top:6px;
+    border-top:1px dashed rgba(255,255,255,.05);
+  }
+  .dep-dot {
+    width:7px; height:7px; border-radius:50%;
+    border:1.5px solid; position:relative;
+  }
+  .dep-dot.filled::after {
+    content:''; position:absolute; inset:1.5px; border-radius:50%;
+    background:currentColor; opacity:.6;
+  }
+  .dep-label { font-size:10px; color:var(--text-dim); margin-left:4px; }
+
+  /* ───────────────────────── Spinners ───────────────────────── */
+  .spinner {
+    width:14px; height:14px; border:2px solid rgba(255,255,255,.1);
+    border-top-color:currentColor; border-radius:50%;
+    animation:spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  /* ───────────────────────── Glow Pulse ───────────────────────── */
+  .glow {
+    animation:glow-pulse 2.5s ease-in-out infinite;
+  }
+  @keyframes glow-pulse {
+    0%,100% { filter:drop-shadow(0 0 2px currentColor); }
+    50%     { filter:drop-shadow(0 0 8px currentColor); }
+  }
+
+  /* ───────────────────────── Particles ───────────────────────── */
+  .particles-canvas {
+    position:fixed; top:0; left:0; width:100%; height:100%;
+    pointer-events:none; z-index:0; opacity:.35;
+  }
+  .main-content, .sidebar { position:relative; z-index:1; }
+
+  /* ───────────────────────── Tooltips ───────────────────────── */
+  [data-tip] { position:relative; }
+  [data-tip]::after {
+    content:attr(data-tip); position:absolute; bottom:calc(100% + 6px);
+    left:50%; transform:translateX(-50%) translateY(4px);
+    padding:5px 10px; border-radius:6px; font-size:11px;
+    background:#1e2536; color:var(--text-bright);
+    border:1px solid var(--border);
+    white-space:nowrap; pointer-events:none;
+    opacity:0; transition:opacity .2s, transform .2s; z-index:99;
+  }
+  [data-tip]:hover::after {
+    opacity:1; transform:translateX(-50%) translateY(0);
+  }
+
+  /* ───────────────────────── Module Colors ───────────────────────── */
+  .clr-seed   { --mc:#f59e0b; }
+  .clr-hypo   { --mc:#6c8cff; }
+  .clr-invent { --mc:#a78bfa; }
+  .clr-paper  { --mc:#34d399; }
+  .clr-deploy { --mc:#f472b6; }
+  .clr-eval   { --mc:#fb923c; }
+
+  .clr-seed   .module-color-line { background:#f59e0b; }
+  .clr-hypo   .module-color-line { background:#6c8cff; }
+  .clr-invent .module-color-line { background:#a78bfa; }
+  .clr-paper  .module-color-line { background:#34d399; }
+  .clr-deploy .module-color-line { background:#f472b6; }
+  .clr-eval   .module-color-line { background:#fb923c; }
+
+  .clr-seed   .step-card::before { background:#f59e0b; }
+  .clr-hypo   .step-card::before { background:#6c8cff; }
+  .clr-invent .step-card::before { background:#a78bfa; }
+  .clr-paper  .step-card::before { background:#34d399; }
+  .clr-deploy .step-card::before { background:#f472b6; }
+  .clr-eval   .step-card::before { background:#fb923c; }
+
+  .clr-seed   .step-icon { background:rgba(245,158,11,.12); color:#f59e0b; }
+  .clr-hypo   .step-icon { background:rgba(108,140,255,.12); color:#6c8cff; }
+  .clr-invent .step-icon { background:rgba(167,139,250,.12); color:#a78bfa; }
+  .clr-paper  .step-icon { background:rgba(52,211,153,.1);  color:#34d399; }
+  .clr-deploy .step-icon { background:rgba(244,114,182,.1); color:#f472b6; }
+  .clr-eval   .step-icon { background:rgba(251,146,60,.1);  color:#fb923c; }
+
+  /* ───────────────────────── Responsive ───────────────────────── */
+  @media (max-width:768px) {
+    .sidebar { width:0; min-width:0; border:none; }
+    .sidebar.expanded { width:var(--sidebar-exp); min-width:var(--sidebar-exp); }
+    .step-grid { grid-template-columns:1fr; }
+  }
+</style>
+</head>
+<body>
+<!-- Particle background -->
+<canvas class="particles-canvas" id="particleCanvas"></canvas>
+
+<div class="shell">
+  <!-- ─────────── Sidebar ─────────── -->
+  <aside class="sidebar" id="sidebar">
+    <button class="sidebar-toggle" id="sidebarToggle" data-tip="Expand">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="9 18 15 12 9 6"/>
+      </svg>
+    </button>
+
+    <!-- Dynamic Ring -->
+    <div class="ring-container" id="ringContainer">
+      <svg class="ring-svg" viewBox="0 0 100 100" id="ringSvg">
+        <!-- Rotating dashed outline -->
+        <circle class="ring-dashed" id="ringDashed"
+                cx="50" cy="50" r="46" stroke="#6c8cff"/>
+        <!-- Background track -->
+        <circle class="ring-bg" cx="50" cy="50" r="40"
+                stroke-dasharray="251.33" stroke-dashoffset="0"/>
+        <!-- Fill arc -->
+        <circle class="ring-fill" id="ringFill"
+                cx="50" cy="50" r="40"
+                stroke="#6c8cff"
+                stroke-dasharray="251.33"
+                stroke-dashoffset="75.4"
+                transform="rotate(-90 50 50)"
+                filter="drop-shadow(0 0 4px rgba(108,140,255,.5))"/>
+        <!-- Center text -->
+        <text class="ring-text" id="ringText" x="50" y="47"
+              font-size="15">70%</text>
+        <text class="ring-label" id="ringLabel" x="50" y="62"
+              font-size="8">Hypothesis</text>
+      </svg>
+    </div>
+
+    <!-- Nav items -->
+    <nav class="sidebar-nav" id="sidebarNav">
+      <!-- Populated by JS -->
+    </nav>
+
+    <div class="sidebar-spacer"></div>
+
+    <!-- Bottom info icon -->
+    <div class="nav-item" data-tip="Pipeline v2.4" style="margin:0 8px;">
+      <span class="nav-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="16" x2="12" y2="12"/>
+          <line x1="12" y1="8" x2="12.01" y2="8"/>
+        </svg>
+      </span>
+      <span class="nav-label" style="font-size:11px;color:var(--text-dim)">v2.4.0</span>
+    </div>
+  </aside>
+
+  <!-- ─────────── Main ─────────── -->
+  <div class="main-content" id="mainContent">
+    <!-- Header -->
+    <div class="header">
+      <div>
+        <div class="header-title">AII Pipeline Dashboard</div>
+        <div class="header-sub">Run #1847 &mdash; quantum-lattice-fold</div>
+      </div>
+      <div class="header-badges">
+        <span class="badge badge-run">Running</span>
+        <span class="badge badge-ok">12 / 18 steps</span>
+      </div>
+    </div>
+
+    <!-- Modules rendered by JS -->
+    <div id="moduleContainer"></div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   DATA MODEL
+   ============================================================ */
+const MODULES = [
+  {
+    id:'seed', name:'Seed Hypotheses', cls:'clr-seed',
+    color:'#f59e0b', fill:100, ringLabel:'Seed',
+    icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="M4.93 4.93l1.41 1.41"/><path d="M17.66 17.66l1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="M4.93 19.07l1.41-1.41"/><path d="M17.66 6.34l1.41-1.41"/></svg>',
+    status:'done',
+    steps:[
+      { name:'Parse domain corpus', desc:'Extract entities from seed papers',
+        status:'done', icon:'P',
+        subs:[
+          { name:'Tokenize abstracts', status:'done' },
+          { name:'Entity extraction', status:'done' },
+          { name:'Cluster embeddings', status:'done' },
+        ],
+        deps:[{label:'corpus-db', filled:true},{label:'embed-svc', filled:true}]
+      },
+      { name:'Build knowledge graph', desc:'Link entities via co-occurrence',
+        status:'done', icon:'K',
+        subs:[
+          { name:'Node deduplication', status:'done' },
+          { name:'Edge weighting', status:'done' },
+        ],
+        deps:[{label:'neo4j', filled:true}]
+      },
+      { name:'Score seed novelty', desc:'Rank gaps in existing literature',
+        status:'done', icon:'N',
+        subs:[
+          { name:'Gap detection', status:'done' },
+          { name:'Novelty scoring', status:'done' },
+          { name:'Filter low-signal', status:'done' },
+        ],
+        deps:[{label:'corpus-db', filled:true},{label:'rank-svc', filled:true}]
+      },
+    ]
+  },
+  {
+    id:'hypo', name:'Hypothesis Loop', cls:'clr-hypo',
+    color:'#6c8cff', fill:70, ringLabel:'Hypothesis',
+    icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a7 7 0 0 1 7 7c0 2.38-1.19 4.47-3 5.74V17a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2v-2.26C6.19 13.47 5 11.38 5 9a7 7 0 0 1 7-7z"/><line x1="9" y1="22" x2="15" y2="22"/></svg>',
+    status:'running',
+    steps:[
+      { name:'Generate hypotheses', desc:'LLM-driven hypothesis candidates',
+        status:'done', icon:'G',
+        subs:[
+          { name:'Prompt construction', status:'done' },
+          { name:'Batch generation (k=8)', status:'done' },
+          { name:'Parse & validate JSON', status:'done' },
+        ],
+        deps:[{label:'claude-api', filled:true},{label:'seed-kg', filled:true}]
+      },
+      { name:'Review hypotheses', desc:'Multi-critic evaluation loop',
+        status:'running', icon:'R',
+        subs:[
+          { name:'Feasibility check', status:'done' },
+          { name:'Novelty verification', status:'running' },
+          { name:'Scope refinement', status:'pending' },
+          { name:'Final ranking', status:'pending' },
+        ],
+        deps:[{label:'claude-api', filled:true},{label:'scholar-api', filled:false}]
+      },
+      { name:'Select top-k', desc:'Pick best hypotheses for invention',
+        status:'pending', icon:'S',
+        subs:[
+          { name:'Aggregate scores', status:'pending' },
+          { name:'Diversity filter', status:'pending' },
+        ],
+        deps:[{label:'review-out', filled:false}]
+      },
+    ]
+  },
+  {
+    id:'invent', name:'Invention Loop', cls:'clr-invent',
+    color:'#a78bfa', fill:35, ringLabel:'Invention',
+    icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>',
+    status:'pending',
+    steps:[
+      { name:'Generate strategy', desc:'High-level invention approach',
+        status:'pending', icon:'T',
+        subs:[
+          { name:'Approach enumeration', status:'pending' },
+          { name:'Resource estimation', status:'pending' },
+        ],
+        deps:[{label:'hypo-out', filled:false}]
+      },
+      { name:'Generate plan', desc:'Detailed method & experiment plan',
+        status:'pending', icon:'P',
+        subs:[
+          { name:'Method skeleton', status:'pending' },
+          { name:'Experiment design', status:'pending' },
+          { name:'Metric selection', status:'pending' },
+        ],
+        deps:[{label:'strategy-out', filled:false}]
+      },
+      { name:'Generate paper text', desc:'Draft sections for the paper',
+        status:'pending', icon:'W',
+        subs:[
+          { name:'Abstract draft', status:'pending' },
+          { name:'Methods section', status:'pending' },
+          { name:'Results scaffold', status:'pending' },
+        ],
+        deps:[{label:'plan-out', filled:false}]
+      },
+      { name:'Review paper', desc:'LLM-based review & revision',
+        status:'pending', icon:'V',
+        subs:[
+          { name:'Consistency check', status:'pending' },
+          { name:'Claim verification', status:'pending' },
+        ],
+        deps:[{label:'draft-out', filled:false}]
+      },
+    ]
+  },
+  {
+    id:'paper', name:'Paper Repository', cls:'clr-paper',
+    color:'#34d399', fill:0, ringLabel:'Paper Repo',
+    icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>',
+    status:'pending',
+    steps:[
+      { name:'Generate artifact demos', desc:'Code demos for each claim',
+        status:'pending', icon:'D',
+        subs:[
+          { name:'Python demo gen', status:'pending' },
+          { name:'Notebook gen', status:'pending' },
+        ],
+        deps:[{label:'paper-text', filled:false}]
+      },
+      { name:'Generate visualizations', desc:'Figures & diagrams',
+        status:'pending', icon:'F',
+        subs:[
+          { name:'Architecture diagram', status:'pending' },
+          { name:'Result plots', status:'pending' },
+          { name:'Comparison tables', status:'pending' },
+        ],
+        deps:[{label:'demos-out', filled:false}]
+      },
+      { name:'Compile full paper', desc:'LaTeX assembly & references',
+        status:'pending', icon:'L',
+        subs:[
+          { name:'LaTeX templating', status:'pending' },
+          { name:'BibTeX assembly', status:'pending' },
+          { name:'PDF compilation', status:'pending' },
+        ],
+        deps:[{label:'viz-out', filled:false},{label:'text-out', filled:false}]
+      },
+    ]
+  },
+  {
+    id:'deploy', name:'Deployment', cls:'clr-deploy',
+    color:'#f472b6', fill:0, ringLabel:'Deploy',
+    icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>',
+    status:'pending',
+    steps:[
+      { name:'Package repository', desc:'Bundle code, data, paper',
+        status:'pending', icon:'B',
+        subs:[
+          { name:'Structure validation', status:'pending' },
+          { name:'Dependency lock', status:'pending' },
+        ],
+        deps:[{label:'paper-pdf', filled:false}]
+      },
+      { name:'Push to GitHub', desc:'Create repo & push artifacts',
+        status:'pending', icon:'G',
+        subs:[
+          { name:'Repo creation', status:'pending' },
+          { name:'CI/CD setup', status:'pending' },
+          { name:'Release tag', status:'pending' },
+        ],
+        deps:[{label:'package-out', filled:false}]
+      },
+    ]
+  },
+  {
+    id:'eval', name:'Evaluation', cls:'clr-eval',
+    color:'#fb923c', fill:0, ringLabel:'Evaluation',
+    icon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>',
+    status:'pending',
+    steps:[
+      { name:'Quality metrics', desc:'Automated paper quality scoring',
+        status:'pending', icon:'Q',
+        subs:[
+          { name:'Readability index', status:'pending' },
+          { name:'Citation coverage', status:'pending' },
+          { name:'Novelty delta', status:'pending' },
+        ],
+        deps:[{label:'paper-pdf', filled:false},{label:'seed-kg', filled:false}]
+      },
+      { name:'Comparison report', desc:'Compare against baselines',
+        status:'pending', icon:'C',
+        subs:[
+          { name:'Baseline retrieval', status:'pending' },
+          { name:'Statistical tests', status:'pending' },
+        ],
+        deps:[{label:'metrics-out', filled:false}]
+      },
+    ]
+  },
+];
+
+/* ============================================================
+   RENDER SIDEBAR NAV
+   ============================================================ */
+const sidebarNav = document.getElementById('sidebarNav');
+let activeModuleIdx = 1; // default: hypo
+
+function buildNav() {
+  sidebarNav.innerHTML = '';
+  MODULES.forEach((mod, i) => {
+    const item = document.createElement('div');
+    item.className = 'nav-item' + (i === activeModuleIdx ? ' active' : '');
+    item.setAttribute('data-tip', mod.name);
+    item.innerHTML = `
+      <span class="nav-icon" style="color:${mod.color}">${mod.icon}</span>
+      <span class="nav-label" style="color:${i===activeModuleIdx?'var(--text-bright)':'var(--text-dim)'}">${mod.name}</span>
+      <span class="nav-dot" style="background:${mod.color}"></span>
+    `;
+    item.addEventListener('click', () => selectModule(i));
+    sidebarNav.appendChild(item);
+  });
+}
+
+/* ============================================================
+   UPDATE RING — core feature of fin_13
+   ============================================================ */
+const ringFill   = document.getElementById('ringFill');
+const ringDashed = document.getElementById('ringDashed');
+const ringText   = document.getElementById('ringText');
+const ringLabel  = document.getElementById('ringLabel');
+const CIRC       = 2 * Math.PI * 40; // ~251.33
+
+function updateRing(mod) {
+  const pct  = mod.fill;
+  const off  = CIRC - (CIRC * pct / 100);
+  const col  = mod.color;
+
+  // Fill arc
+  ringFill.style.stroke            = col;
+  ringFill.style.strokeDasharray   = CIRC;
+  ringFill.style.strokeDashoffset  = off;
+  ringFill.style.filter            = `drop-shadow(0 0 6px ${col}80)`;
+
+  // Dashed outline
+  ringDashed.style.stroke = col;
+
+  // Text
+  ringText.textContent = pct + '%';
+  ringLabel.textContent = mod.ringLabel;
+}
+
+/* ============================================================
+   SELECT MODULE
+   ============================================================ */
+function selectModule(idx) {
+  activeModuleIdx = idx;
+  buildNav();
+  updateRing(MODULES[idx]);
+  renderModules();
+}
+
+/* ============================================================
+   STATUS HELPERS
+   ============================================================ */
+function statusBadge(st) {
+  const map = {
+    done:    { bg:'rgba(52,211,153,.1)', c:'#34d399', t:'Done' },
+    running: { bg:'rgba(108,140,255,.1)', c:'#8aa4ff', t:'Running' },
+    pending: { bg:'rgba(255,255,255,.06)', c:'var(--text-dim)', t:'Pending' },
+  };
+  const s = map[st] || map.pending;
+  return `<span class="subtask-badge" style="background:${s.bg};color:${s.c}">${s.t}</span>`;
+}
+function statusDot(st) {
+  const map = { done:'#34d399', running:'#6c8cff', pending:'#3a4259' };
+  return `<span class="subtask-dot" style="background:${map[st]||map.pending}"></span>`;
+}
+function stepStatus(st) {
+  if (st === 'running') return '<span class="spinner" style="color:#8aa4ff"></span>';
+  if (st === 'done')    return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+  return '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3a4259" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg>';
+}
+function moduleStatusText(st) {
+  if (st === 'done')    return '<span style="color:#34d399">Complete</span>';
+  if (st === 'running') return '<span class="glow" style="color:#8aa4ff">In Progress</span>';
+  return '<span style="color:var(--text-dim)">Queued</span>';
+}
+
+/* ============================================================
+   RENDER MODULES
+   ============================================================ */
+const moduleContainer = document.getElementById('moduleContainer');
+
+function renderModules() {
+  let html = '';
+  MODULES.forEach((mod, mi) => {
+    html += `<div class="module-section ${mod.cls}">`;
+    html += `<div class="module-header">`;
+    html += `<div class="module-color-line"></div>`;
+    html += `<span class="module-name">${mod.name}</span>`;
+    html += `<div class="module-status">${moduleStatusText(mod.status)}</div>`;
+    html += `</div>`;
+    html += `<div class="step-grid">`;
+    mod.steps.forEach(step => {
+      html += `<div class="step-card">`;
+      html += `<div class="step-top">`;
+      html += `<div class="step-icon">${step.icon}</div>`;
+      html += `<div><div class="step-name">${step.name}</div>`;
+      html += `<div class="step-desc">${step.desc}</div></div>`;
+      html += `<div class="step-right">${stepStatus(step.status)}</div>`;
+      html += `</div>`;
+      // Subtasks (level 3)
+      if (step.subs && step.subs.length) {
+        html += `<div class="subtask-list">`;
+        step.subs.forEach(sub => {
+          html += `<div class="subtask">`;
+          html += statusDot(sub.status);
+          html += `<span class="subtask-name">${sub.name}</span>`;
+          html += statusBadge(sub.status);
+          html += `</div>`;
+        });
+        html += `</div>`;
+      }
+      // Dependency dots
+      if (step.deps && step.deps.length) {
+        html += `<div class="dep-row">`;
+        html += `<span class="dep-label">Deps:</span>`;
+        step.deps.forEach(d => {
+          html += `<span class="dep-dot ${d.filled?'filled':''}" `
+                + `style="border-color:${d.filled?'#34d399':'#3a4259'};`
+                + `color:${d.filled?'#34d399':'#3a4259'}" `
+                + `data-tip="${d.label}"></span>`;
+        });
+        html += `</div>`;
+      }
+      html += `</div>`;
+    });
+    html += `</div></div>`;
+  });
+  moduleContainer.innerHTML = html;
+}
+
+/* ============================================================
+   SIDEBAR TOGGLE
+   ============================================================ */
+const sidebar       = document.getElementById('sidebar');
+const sidebarToggle = document.getElementById('sidebarToggle');
+sidebarToggle.addEventListener('click', () => {
+  sidebar.classList.toggle('expanded');
+  sidebarToggle.setAttribute('data-tip',
+    sidebar.classList.contains('expanded') ? 'Collapse' : 'Expand');
+});
+
+/* ============================================================
+   PARTICLES
+   ============================================================ */
+(function initParticles() {
+  const canvas = document.getElementById('particleCanvas');
+  const ctx    = canvas.getContext('2d');
+  let W, H, particles = [];
+
+  function resize() {
+    W = canvas.width  = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  class Particle {
+    constructor() { this.reset(); }
+    reset() {
+      this.x  = Math.random() * W;
+      this.y  = Math.random() * H;
+      this.r  = Math.random() * 1.2 + 0.3;
+      this.vx = (Math.random() - 0.5) * 0.15;
+      this.vy = (Math.random() - 0.5) * 0.15;
+      this.a  = Math.random() * 0.5 + 0.1;
+    }
+    update() {
+      this.x += this.vx; this.y += this.vy;
+      if (this.x < -10 || this.x > W+10 || this.y < -10 || this.y > H+10) this.reset();
+    }
+    draw() {
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.r, 0, Math.PI*2);
+      ctx.fillStyle = `rgba(108,140,255,${this.a})`;
+      ctx.fill();
+    }
+  }
+
+  for (let i=0; i<60; i++) particles.push(new Particle());
+
+  function loop() {
+    ctx.clearRect(0, 0, W, H);
+    // Draw faint connecting lines
+    for (let i=0; i<particles.length; i++) {
+      for (let j=i+1; j<particles.length; j++) {
+        const dx = particles[i].x - particles[j].x;
+        const dy = particles[i].y - particles[j].y;
+        const d  = Math.sqrt(dx*dx + dy*dy);
+        if (d < 120) {
+          ctx.beginPath();
+          ctx.moveTo(particles[i].x, particles[i].y);
+          ctx.lineTo(particles[j].x, particles[j].y);
+          ctx.strokeStyle = `rgba(108,140,255,${0.06*(1-d/120)})`;
+          ctx.lineWidth = 0.5;
+          ctx.stroke();
+        }
+      }
+    }
+    particles.forEach(p => { p.update(); p.draw(); });
+    requestAnimationFrame(loop);
+  }
+  loop();
+})();
+
+/* ============================================================
+   INIT
+   ============================================================ */
+buildNav();
+updateRing(MODULES[activeModuleIdx]);
+renderModules();
+</script>
+</body>
+</html>
