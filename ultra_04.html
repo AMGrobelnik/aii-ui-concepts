@@ -1,0 +1,2154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Ultra Pipeline (Right Panel + L-Path Dots)</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* ================================================================
+   RESET & CSS VARIABLES
+   ================================================================ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg: #1a1d23;
+  --surface: #22262e;
+  --surface-hi: #2e3440;
+  --border: rgba(46, 52, 64, 0.8);
+  --border-lite: rgba(60, 68, 82, 0.6);
+  --glass: rgba(34, 38, 46, 0.55);
+  --glass-border: rgba(100, 116, 155, 0.14);
+  --glass-shine: linear-gradient(135deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.02) 40%, transparent 60%);
+  --glass-blur: 16px;
+
+  --text-100: #e6e9f0;
+  --text-200: #b0b8c9;
+  --text-300: #8892a6;
+  --text-400: #5c6578;
+  --text-500: #3e4555;
+
+  --purple: #a78bfa;
+  --purple-dim: rgba(167,139,250,0.12);
+  --purple-glow: rgba(167,139,250,0.25);
+  --purple-deep: rgba(167,139,250,0.55);
+
+  --blue: #3b82f6;
+  --blue-dim: rgba(59,130,246,0.12);
+  --blue-glow: rgba(59,130,246,0.25);
+  --blue-deep: rgba(59,130,246,0.55);
+
+  --orange: #f59e0b;
+  --orange-dim: rgba(245,158,11,0.12);
+  --orange-glow: rgba(245,158,11,0.25);
+  --orange-deep: rgba(245,158,11,0.55);
+
+  --green: #34d399;
+  --green-dim: rgba(52,211,153,0.12);
+  --red: #ef4444;
+
+  --radius: 12px;
+  --radius-sm: 8px;
+  --radius-xs: 6px;
+  --transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  --header-h: 44px;
+  --sidebar-collapsed: 48px;
+  --sidebar-expanded: 240px;
+  --panel-w: 380px;
+}
+
+html { font-size: 14px; height: 100%; }
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg); color: var(--text-200);
+  min-height: 100vh; overflow-x: hidden; line-height: 1.5;
+  -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+}
+
+/* subtle grid background */
+body::before {
+  content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background-image:
+    linear-gradient(rgba(100,116,155,0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(100,116,155,0.025) 1px, transparent 1px);
+  background-size: 52px 52px;
+}
+
+/* ================================================================
+   AMBIENT PARTICLE CANVAS
+   ================================================================ */
+#particlesCanvas {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+}
+
+/* ================================================================
+   FIXED HEADER (44px glassmorphism)
+   ================================================================ */
+.header {
+  position: fixed; top: 0; left: 0; right: 0; height: var(--header-h);
+  background: rgba(26, 29, 35, 0.82);
+  backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--glass-border);
+  display: flex; align-items: center; padding: 0 20px;
+  z-index: 1000; gap: 14px;
+}
+.header-brand {
+  font-weight: 800; font-size: 13px; letter-spacing: 0.3px;
+  background: linear-gradient(135deg, var(--purple), var(--blue));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text; white-space: nowrap;
+}
+.breadcrumb { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.breadcrumb span { color: var(--text-400); }
+.breadcrumb .sep { color: rgba(100,116,155,0.35); font-size: 10px; }
+.breadcrumb .active { color: var(--text-200); font-weight: 500; }
+.header-right { margin-left: auto; display: flex; align-items: center; gap: 16px; }
+.header-stat {
+  font-size: 11px; color: var(--text-400);
+  display: flex; align-items: center; gap: 5px;
+}
+.header-stat .val {
+  color: var(--text-100); font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.live-badge {
+  display: flex; align-items: center; gap: 5px; padding: 2px 8px;
+  background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.18);
+  border-radius: 4px; font-size: 9px; font-weight: 700; color: var(--red);
+  letter-spacing: 0.7px; text-transform: uppercase;
+}
+.live-dot-red {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--red);
+  animation: liveDotPulse 1.5s ease-in-out infinite;
+}
+@keyframes liveDotPulse {
+  0%, 100% { opacity: 0.5; box-shadow: 0 0 3px rgba(239,68,68,0.3); }
+  50% { opacity: 1; box-shadow: 0 0 8px rgba(239,68,68,0.6); }
+}
+
+/* ================================================================
+   COLLAPSED SIDEBAR (48px -> 240px on hover)
+   ================================================================ */
+.sidebar {
+  position: fixed; top: var(--header-h); left: 0; bottom: 0;
+  width: var(--sidebar-collapsed);
+  background: rgba(26, 29, 35, 0.88);
+  backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+  border-right: 1px solid var(--glass-border);
+  z-index: 900; transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden; display: flex; flex-direction: column;
+  padding: 12px 0 16px; gap: 2px;
+}
+.sidebar:hover { width: var(--sidebar-expanded); }
+
+/* Overall progress ring in sidebar */
+.sidebar-ring-wrap {
+  display: flex; align-items: center; justify-content: center;
+  padding: 8px 0 12px; flex-shrink: 0;
+}
+.sidebar-ring { width: 32px; height: 32px; position: relative; flex-shrink: 0; }
+.sidebar-ring svg { width: 100%; height: 100%; }
+.sidebar-ring .ring-track { fill: none; stroke: var(--surface-hi); stroke-width: 3; }
+.sidebar-ring .ring-fill {
+  fill: none; stroke: var(--blue); stroke-width: 3; stroke-linecap: round;
+  transform: rotate(-90deg); transform-origin: 50% 50%;
+  transition: stroke-dashoffset 0.8s ease;
+  filter: drop-shadow(0 0 4px var(--blue-deep));
+}
+.sidebar-ring .ring-label {
+  position: absolute; inset: 0; display: flex; align-items: center;
+  justify-content: center; font-size: 8px; font-weight: 700; color: var(--text-100);
+}
+.sidebar-ring-text {
+  font-size: 11px; color: var(--text-400); font-weight: 500;
+  white-space: nowrap; margin-left: 10px;
+  opacity: 0; transition: opacity 0.2s ease 0.1s;
+}
+.sidebar:hover .sidebar-ring-text { opacity: 1; }
+
+.sidebar-divider {
+  width: 28px; height: 1px; background: var(--border);
+  margin: 4px auto 8px; flex-shrink: 0;
+  transition: width 0.3s ease;
+}
+.sidebar:hover .sidebar-divider { width: calc(100% - 24px); }
+
+.sidebar-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 9px 12px; cursor: pointer; transition: var(--transition);
+  white-space: nowrap; position: relative; flex-shrink: 0;
+}
+.sidebar-item:hover { background: rgba(100,116,155,0.06); }
+.sidebar-item.active { background: rgba(59,130,246,0.08); }
+.sidebar-item .indicator {
+  position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+  width: 3px; height: 0; border-radius: 0 3px 3px 0;
+  transition: height 0.25s ease;
+}
+.sidebar-item.active .indicator { height: 18px; }
+.sidebar-item[data-color="purple"] .indicator { background: var(--purple); }
+.sidebar-item[data-color="blue"] .indicator { background: var(--blue); }
+.sidebar-item[data-color="orange"] .indicator { background: var(--orange); }
+.sidebar-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  position: relative;
+}
+.sidebar-dot.done { background: var(--green); opacity: 0.7; }
+.sidebar-dot.running { background: var(--blue); animation: sbDotPulse 2s ease-in-out infinite; }
+.sidebar-dot.pending { background: transparent; border: 1.5px solid var(--text-500); }
+@keyframes sbDotPulse {
+  0%, 100% { box-shadow: 0 0 4px var(--blue-glow); }
+  50% { box-shadow: 0 0 10px var(--blue-glow), 0 0 18px rgba(59,130,246,0.15); }
+}
+.sidebar-label {
+  font-size: 12px; color: var(--text-300); font-weight: 500;
+  opacity: 0; transition: opacity 0.2s ease 0.1s;
+}
+.sidebar:hover .sidebar-label { opacity: 1; }
+.sidebar-spacer { flex: 1; }
+
+/* ================================================================
+   MAIN LAYOUT — shifts when panel opens
+   ================================================================ */
+.main {
+  margin-left: var(--sidebar-collapsed); margin-top: var(--header-h);
+  padding: 24px 28px 60px;
+  position: relative; z-index: 1;
+  margin-right: 0;
+  transition: margin-right 0.45s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+body.panel-open .main {
+  margin-right: var(--panel-w);
+}
+
+/* ================================================================
+   SECTION BACKGROUND TINTS
+   ================================================================ */
+.section-tint {
+  position: absolute; left: 0; right: 0; pointer-events: none;
+  border-radius: 20px; filter: blur(60px); z-index: -1;
+}
+.section-tint.purple-tint {
+  background: rgba(167,139,250,0.03); top: 0; height: 300px;
+}
+.section-tint.blue-tint {
+  background: rgba(59,130,246,0.05); top: 180px; height: 500px;
+}
+
+/* ================================================================
+   3 HORIZONTAL MODULE CARDS (glassmorphism)
+   ================================================================ */
+.module-cards {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 14px; margin-bottom: 6px; position: relative;
+}
+
+.mod-card {
+  position: relative; cursor: pointer; z-index: 1;
+  background: var(--glass);
+  backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border); border-radius: var(--radius);
+  padding: 14px 16px 12px; transition: all 0.35s ease; overflow: hidden;
+}
+.mod-card .glass-shine {
+  position: absolute; inset: 0; border-radius: var(--radius);
+  background: var(--glass-shine); pointer-events: none; z-index: 1;
+}
+/* glow halo behind active */
+.mod-card .glow-halo {
+  position: absolute; inset: -24px; border-radius: 28px;
+  opacity: 0; transition: opacity 0.5s ease; pointer-events: none; z-index: -1;
+  filter: blur(32px);
+}
+.mod-card[data-color="purple"] .glow-halo { background: var(--purple); }
+.mod-card[data-color="blue"] .glow-halo { background: var(--blue); }
+.mod-card[data-color="orange"] .glow-halo { background: var(--orange); }
+.mod-card.active .glow-halo { opacity: 0.12; animation: haloPulse 3s ease-in-out infinite; }
+@keyframes haloPulse { 0%, 100% { opacity: 0.08; } 50% { opacity: 0.18; } }
+
+/* inner glow */
+.mod-card::before {
+  content: ''; position: absolute; inset: -1px; border-radius: var(--radius);
+  opacity: 0; transition: opacity 0.4s ease; pointer-events: none; z-index: -1;
+}
+.mod-card[data-color="purple"]::before { box-shadow: 0 0 36px 8px var(--purple-dim), inset 0 0 18px var(--purple-dim); }
+.mod-card[data-color="blue"]::before { box-shadow: 0 0 36px 8px var(--blue-dim), inset 0 0 18px var(--blue-dim); }
+.mod-card[data-color="orange"]::before { box-shadow: 0 0 36px 8px var(--orange-dim), inset 0 0 18px var(--orange-dim); }
+.mod-card.active::before { opacity: 1; animation: cardGlowPulse 2.5s ease-in-out infinite; }
+@keyframes cardGlowPulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
+
+/* shimmer sweep on active */
+.mod-card .card-shimmer {
+  position: absolute; top: 0; left: -100%; width: 60%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent);
+  transform: skewX(-20deg); pointer-events: none; z-index: 2; opacity: 0;
+}
+.mod-card.active .card-shimmer { opacity: 1; animation: shimmerSweep 3.5s ease-in-out infinite; }
+@keyframes shimmerSweep { 0% { left: -100%; } 50% { left: 160%; } 100% { left: 160%; } }
+
+.mod-card:not(.active):hover {
+  border-color: rgba(100,116,155,0.22); transform: translateY(-2px);
+}
+.mod-card:not(.active):hover .glow-halo { opacity: 0.05; }
+.mod-card.active { border-color: rgba(255,255,255,0.1); }
+
+/* card internals */
+.mc-top { display: flex; align-items: center; gap: 9px; margin-bottom: 6px; position: relative; z-index: 3; }
+.mc-icon { font-size: 14px; flex-shrink: 0; }
+.mc-name { font-size: 13px; font-weight: 600; color: var(--text-100); letter-spacing: -0.2px; }
+.mc-badge {
+  font-size: 9px; font-weight: 600; padding: 2px 7px; border-radius: 6px;
+  margin-left: auto; flex-shrink: 0; text-transform: uppercase; letter-spacing: 0.3px;
+}
+.mc-badge.done { background: var(--green-dim); color: var(--green); }
+.mc-badge.running { background: var(--blue-dim); color: var(--blue); animation: badgeShimmer 2s ease-in-out infinite; }
+.mc-badge.pending { background: rgba(74,81,104,0.15); color: var(--text-400); }
+@keyframes badgeShimmer { 0%, 100% { opacity: 0.8; } 50% { opacity: 1; background: rgba(59,130,246,0.2); } }
+
+.mc-metrics { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; position: relative; z-index: 3; }
+.mc-metric-label { font-size: 10px; color: var(--text-400); text-transform: uppercase; letter-spacing: 0.4px; }
+.mc-metric-value { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* mini ring gauge 28px */
+.mc-ring { width: 28px; height: 28px; flex-shrink: 0; margin-left: auto; position: relative; }
+.mc-ring svg { width: 100%; height: 100%; }
+.mc-ring .ring-track { fill: none; stroke: var(--surface-hi); stroke-width: 3; }
+.mc-ring .ring-fill { fill: none; stroke-width: 3; stroke-linecap: round;
+  transform: rotate(-90deg); transform-origin: 50% 50%;
+  transition: stroke-dashoffset 0.8s ease; }
+.mc-ring .ring-text {
+  position: absolute; inset: 0; display: flex; align-items: center;
+  justify-content: center; font-size: 7px; font-weight: 700; color: var(--text-200);
+}
+
+/* 3px progress bar at bottom */
+.mc-bar { height: 3px; background: rgba(255,255,255,0.04); border-radius: 2px; overflow: hidden; position: relative; z-index: 3; }
+.mc-bar-fill { height: 100%; border-radius: 2px; width: 0; transition: width 1s ease; }
+.mod-card[data-color="purple"] .mc-bar-fill { background: var(--purple); box-shadow: 0 0 6px var(--purple-deep); }
+.mod-card[data-color="blue"] .mc-bar-fill { background: var(--blue); box-shadow: 0 0 6px var(--blue-deep); }
+.mod-card[data-color="orange"] .mc-bar-fill { background: var(--orange); box-shadow: 0 0 6px var(--orange-deep); }
+
+/* ================================================================
+   TREE AREA (3 columns, one per module)
+   ================================================================ */
+.tree-area {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 14px; position: relative; min-height: 100px;
+}
+
+.tree-col {
+  position: relative; z-index: 1;
+  animation: treeGrow 0.5s ease-out both;
+}
+.tree-col:nth-child(2) { animation-delay: 0.1s; }
+.tree-col:nth-child(3) { animation-delay: 0.2s; }
+@keyframes treeGrow { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+/* tree vertical trunk line */
+.tree-trunk {
+  position: relative; padding-left: 22px;
+  display: flex; flex-direction: column; gap: 3px;
+}
+.tree-trunk::before {
+  content: ''; position: absolute; left: 9px; top: 0;
+  width: 2px; border-radius: 1px;
+  height: var(--trunk-h, calc(100% - 18px));
+  transition: height 0.4s ease;
+}
+.tree-trunk[data-color="purple"]::before { background: rgba(167,139,250,0.18); }
+.tree-trunk[data-color="blue"]::before { background: rgba(59,130,246,0.18); }
+.tree-trunk[data-color="orange"]::before { background: rgba(245,158,11,0.18); }
+
+/* glow active branch */
+.tree-trunk.glow-trunk[data-color="purple"]::before {
+  background: rgba(167,139,250,0.45); box-shadow: 0 0 6px rgba(167,139,250,0.25);
+  animation: branchGlow 2.5s ease-in-out infinite;
+}
+.tree-trunk.glow-trunk[data-color="blue"]::before {
+  background: rgba(59,130,246,0.45); box-shadow: 0 0 6px rgba(59,130,246,0.25);
+  animation: branchGlow 2.5s ease-in-out infinite;
+}
+.tree-trunk.glow-trunk[data-color="orange"]::before {
+  background: rgba(245,158,11,0.45); box-shadow: 0 0 6px rgba(245,158,11,0.25);
+  animation: branchGlow 2.5s ease-in-out infinite;
+}
+@keyframes branchGlow { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }
+
+/* ================================================================
+   XL SUB-MODULE CARDS (44px)
+   ================================================================ */
+.sub-card {
+  height: 44px; display: flex; align-items: center; gap: 10px;
+  padding: 0 12px; position: relative; border-radius: var(--radius-xs);
+  background: var(--surface); border: 1px solid transparent;
+  cursor: pointer; overflow: hidden;
+  opacity: 0; transform: translateX(-10px);
+  transition: opacity 0.35s ease, transform 0.35s ease,
+              background 0.25s ease, border-color 0.25s ease,
+              box-shadow 0.3s ease;
+}
+.sub-card.visible { opacity: 1; transform: translateX(0); }
+
+/* horizontal branch connector from trunk */
+.sub-card::before {
+  content: ''; position: absolute; left: -13px; top: 50%;
+  width: 13px; height: 2px; border-radius: 1px;
+}
+.tree-trunk[data-color="purple"] .sub-card::before { background: rgba(167,139,250,0.18); }
+.tree-trunk[data-color="blue"] .sub-card::before { background: rgba(59,130,246,0.18); }
+.tree-trunk[data-color="orange"] .sub-card::before { background: rgba(245,158,11,0.18); }
+
+/* done state */
+.sub-card.done-sub { background: rgba(255,255,255,0.015); }
+
+/* active state: colored bg tint + glow border + shimmer */
+.sub-card.active-sub { border-color: rgba(255,255,255,0.06); }
+.sub-card.active-sub[data-pcolor="purple"] {
+  background: rgba(167,139,250,0.06); border-color: rgba(167,139,250,0.18);
+  box-shadow: 0 0 18px rgba(167,139,250,0.08), 0 2px 8px rgba(0,0,0,0.2);
+}
+.sub-card.active-sub[data-pcolor="blue"] {
+  background: rgba(59,130,246,0.06); border-color: rgba(59,130,246,0.18);
+  box-shadow: 0 0 18px rgba(59,130,246,0.08), 0 2px 8px rgba(0,0,0,0.2);
+}
+.sub-card.active-sub[data-pcolor="orange"] {
+  background: rgba(245,158,11,0.06); border-color: rgba(245,158,11,0.18);
+  box-shadow: 0 0 18px rgba(245,158,11,0.08), 0 2px 8px rgba(0,0,0,0.2);
+}
+
+/* shimmer overlay for active subs */
+.sub-card-shimmer {
+  position: absolute; inset: 0; border-radius: var(--radius-xs); pointer-events: none; opacity: 0;
+  background: linear-gradient(115deg, transparent 30%,
+    rgba(255,255,255,0.025) 46%, rgba(255,255,255,0.06) 50%,
+    rgba(255,255,255,0.025) 54%, transparent 70%);
+  background-size: 250% 100%; animation: subShimmer 3s ease-in-out infinite;
+}
+.sub-card.active-sub .sub-card-shimmer { opacity: 1; }
+@keyframes subShimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+/* glow pulse for active subs */
+.sub-card-glow {
+  position: absolute; inset: -1px; border-radius: var(--radius-xs); pointer-events: none; opacity: 0;
+  animation: subGlowPulse 2.5s ease-in-out infinite;
+}
+.sub-card.active-sub .sub-card-glow { opacity: 1; }
+.sub-card.active-sub[data-pcolor="purple"] .sub-card-glow { box-shadow: inset 0 0 16px rgba(167,139,250,0.05); }
+.sub-card.active-sub[data-pcolor="blue"] .sub-card-glow { box-shadow: inset 0 0 16px rgba(59,130,246,0.05); }
+.sub-card.active-sub[data-pcolor="orange"] .sub-card-glow { box-shadow: inset 0 0 16px rgba(245,158,11,0.05); }
+@keyframes subGlowPulse { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
+
+/* pending state */
+.sub-card.pending-sub { background: rgba(255,255,255,0.008); opacity: 0.5; }
+.sub-card.pending-sub.visible { opacity: 0.5; }
+
+/* left accent stripe */
+.sub-card::after {
+  content: ''; position: absolute; left: 0; top: 7px; bottom: 7px;
+  width: 2px; border-radius: 2px; opacity: 0; transition: opacity 0.25s;
+}
+.sub-card.active-sub::after { opacity: 1; }
+.sub-card.done-sub::after { opacity: 0.3; }
+.sub-card[data-pcolor="purple"]::after { background: var(--purple); }
+.sub-card[data-pcolor="blue"]::after { background: var(--blue); }
+.sub-card[data-pcolor="orange"]::after { background: var(--orange); }
+
+/* sub-card hover lift */
+.sub-card:not(.pending-sub):hover { transform: translateY(-1px); background: rgba(255,255,255,0.03); }
+
+/* sub-card internal elements */
+.sub-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; transition: all 0.3s;
+}
+.sub-dot.done { background: var(--green); opacity: 0.6; }
+.sub-dot.running { animation: subDotPulse 2s ease-in-out infinite; }
+.sub-dot.running[data-pcolor="blue"] {
+  background: var(--blue); box-shadow: 0 0 8px rgba(59,130,246,0.5);
+}
+.sub-dot.running[data-pcolor="purple"] {
+  background: var(--purple); box-shadow: 0 0 8px rgba(167,139,250,0.5);
+}
+.sub-dot.pending { background: transparent; border: 1.5px solid var(--text-500); opacity: 0.45; }
+@keyframes subDotPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.3); }
+}
+
+/* CSS spinner for running items */
+.sub-spinner {
+  width: 14px; height: 14px; flex-shrink: 0;
+  border: 2px solid rgba(59,130,246,0.15);
+  border-top-color: var(--blue);
+  border-radius: 50%; animation: spin 0.8s linear infinite;
+}
+.sub-spinner.purple-spin {
+  border-color: rgba(167,139,250,0.15);
+  border-top-color: var(--purple);
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.sub-label {
+  font-size: 11.5px; color: var(--text-300); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; flex: 1;
+}
+.sub-card.active-sub .sub-label { color: var(--text-100); font-weight: 500; }
+.sub-card.done-sub .sub-label { color: var(--text-300); }
+
+.sub-meta {
+  margin-left: auto; font-size: 10px; font-weight: 600;
+  color: var(--text-400); flex-shrink: 0; font-variant-numeric: tabular-nums;
+}
+.sub-card.active-sub .sub-meta { color: var(--text-200); }
+
+.sub-micro-badge {
+  font-size: 8px; font-weight: 700; padding: 1px 5px; border-radius: 4px;
+  text-transform: uppercase; letter-spacing: 0.4px; flex-shrink: 0; margin-left: 4px;
+}
+.sub-micro-badge.done { background: var(--green-dim); color: var(--green); }
+.sub-micro-badge.running { background: var(--blue-dim); color: var(--blue); }
+.sub-micro-badge.pending { background: rgba(74,81,104,0.12); color: var(--text-400); }
+
+/* ================================================================
+   LEVEL 3: ITEM CHECKLIST (30px) — Artifacts sub-items
+   ================================================================ */
+.level3-wrap {
+  padding-left: 24px; position: relative; overflow: hidden;
+  max-height: 500px; transition: max-height 0.4s ease;
+}
+.level3-wrap::before {
+  content: ''; position: absolute; left: 10px; top: 0;
+  width: 1px; height: calc(100% - 10px);
+}
+.tree-trunk[data-color="purple"] .level3-wrap::before { background: rgba(167,139,250,0.1); }
+.tree-trunk[data-color="blue"] .level3-wrap::before { background: rgba(59,130,246,0.1); }
+.tree-trunk[data-color="orange"] .level3-wrap::before { background: rgba(245,158,11,0.1); }
+
+.level3-item {
+  height: 30px; display: flex; align-items: center; gap: 7px;
+  font-size: 10.5px; color: var(--text-400); position: relative;
+  padding-left: 6px; border-radius: 4px;
+  opacity: 0; transform: translateX(-6px);
+  transition: opacity 0.25s ease, transform 0.25s ease, background 0.15s;
+}
+.level3-item.visible { opacity: 1; transform: translateX(0); }
+.level3-item:hover { background: rgba(255,255,255,0.02); }
+.level3-item::before {
+  content: ''; position: absolute; left: -10px; top: 50%;
+  width: 10px; height: 1px;
+}
+.tree-trunk[data-color="blue"] .level3-item::before { background: rgba(59,130,246,0.1); }
+
+.l3-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+.l3-dot.done { background: var(--green); opacity: 0.5; }
+.l3-dot.running { background: var(--blue); animation: l3Pulse 2s ease-in-out infinite; }
+.l3-dot.pending { border: 1px solid var(--text-500); opacity: 0.35; }
+@keyframes l3Pulse {
+  0%, 100% { box-shadow: 0 0 3px rgba(59,130,246,0.4); }
+  50% { box-shadow: 0 0 8px rgba(59,130,246,0.7); }
+}
+.l3-label { flex: 1; }
+.l3-meta { font-size: 9px; color: var(--text-500); font-variant-numeric: tabular-nums; }
+
+/* collapsed tree for complete modules */
+.tree-col.collapsed .tree-trunk { display: none; }
+.tree-collapsed-bar {
+  display: none; padding: 8px 14px; font-size: 11px; color: var(--text-400);
+  background: var(--glass); backdrop-filter: blur(10px);
+  border: 1px solid var(--glass-border); border-radius: var(--radius-sm);
+  cursor: pointer; transition: all 0.2s; align-items: center; gap: 8px;
+}
+.tree-collapsed-bar:hover { color: var(--text-300); background: var(--surface); }
+.tree-col.collapsed .tree-collapsed-bar { display: flex; }
+.tree-col .collapse-toggle {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 10px; color: var(--text-400); cursor: pointer;
+  padding: 2px 0 6px; transition: color 0.2s;
+}
+.tree-col .collapse-toggle:hover { color: var(--text-200); }
+.tree-col .collapse-toggle svg { width: 12px; height: 12px; transition: transform 0.3s; }
+.tree-col.collapsed .collapse-toggle svg { transform: rotate(-90deg); }
+
+/* ================================================================
+   HOVER TOOLTIP (400px glassmorphism)
+   ================================================================ */
+.tooltip-portal {
+  position: fixed; z-index: 2000; pointer-events: none;
+  width: 400px; opacity: 0; transform: translateY(6px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.tooltip-portal.visible { opacity: 1; transform: translateY(0); }
+.tooltip-inner {
+  background: rgba(26, 29, 35, 0.94);
+  backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius); padding: 16px 20px;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.5);
+}
+.tooltip-title {
+  font-size: 13px; font-weight: 600; color: var(--text-100); margin-bottom: 8px;
+  display: flex; align-items: center; gap: 8px;
+}
+.tooltip-summary { font-size: 12px; color: var(--text-300); line-height: 1.6; margin-bottom: 10px; }
+.tooltip-stats { display: flex; gap: 16px; }
+.tooltip-stat-val { font-size: 16px; font-weight: 700; color: var(--text-100); }
+.tooltip-stat-label { font-size: 10px; color: var(--text-400); }
+
+/* ================================================================
+   RIGHT SIDE PANEL (380px, slides in from right, glassmorphism)
+   ================================================================ */
+.right-panel {
+  position: fixed;
+  top: var(--header-h);
+  right: 0;
+  bottom: 0;
+  width: var(--panel-w);
+  z-index: 800;
+  transform: translateX(100%);
+  transition: transform 0.45s cubic-bezier(0.22, 0.61, 0.36, 1);
+  pointer-events: none;
+}
+.right-panel.open {
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
+/* stacked glass layers for depth */
+.rp-backdrop {
+  position: absolute; inset: 0;
+  background: rgba(22, 25, 31, 0.92);
+  backdrop-filter: blur(28px) saturate(1.4);
+  -webkit-backdrop-filter: blur(28px) saturate(1.4);
+  border-left: 1px solid rgba(100, 116, 155, 0.12);
+}
+.rp-shine {
+  position: absolute; inset: 0;
+  background: linear-gradient(170deg, rgba(255,255,255,0.05) 0%, transparent 30%,
+    transparent 70%, rgba(255,255,255,0.015) 100%);
+  pointer-events: none;
+}
+
+/* animated edge glow */
+.rp-edge-glow {
+  position: absolute; left: 0; top: 0; bottom: 0; width: 2px;
+  opacity: 0;
+  transition: opacity 0.5s ease 0.2s, background 0.3s ease;
+}
+.right-panel.open .rp-edge-glow { opacity: 1; }
+.rp-edge-glow.purple { background: linear-gradient(180deg, var(--purple), rgba(167,139,250,0.15)); }
+.rp-edge-glow.blue { background: linear-gradient(180deg, var(--blue), rgba(59,130,246,0.15)); }
+.rp-edge-glow.orange { background: linear-gradient(180deg, var(--orange), rgba(245,158,11,0.15)); }
+
+/* scanning line effect on panel open */
+.rp-scan-line {
+  position: absolute; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent 0%, rgba(59,130,246,0.4) 30%,
+    rgba(59,130,246,0.6) 50%, rgba(59,130,246,0.4) 70%, transparent 100%);
+  opacity: 0; pointer-events: none; top: 0;
+}
+.right-panel.open .rp-scan-line {
+  animation: scanDown 0.8s cubic-bezier(0.22, 0.61, 0.36, 1) 0.15s forwards;
+}
+@keyframes scanDown {
+  0%   { top: 0; opacity: 0.8; }
+  100% { top: 100%; opacity: 0; }
+}
+
+/* content scroll container */
+.rp-content {
+  position: relative; z-index: 2;
+  height: 100%; overflow-y: auto; overflow-x: hidden;
+  padding: 20px 20px 32px;
+  display: flex; flex-direction: column; gap: 0;
+}
+.rp-content::-webkit-scrollbar { width: 4px; }
+.rp-content::-webkit-scrollbar-thumb { background: rgba(100,116,155,0.2); border-radius: 2px; }
+
+/* close button */
+.rp-close {
+  position: absolute; top: 14px; right: 14px; z-index: 10;
+  width: 28px; height: 28px; border-radius: 8px; border: 1px solid rgba(100,116,155,0.12);
+  background: rgba(100,116,155,0.06); color: var(--text-400);
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  font-size: 14px; transition: var(--transition);
+}
+.rp-close:hover { background: rgba(100,116,155,0.18); color: var(--text-100); border-color: rgba(100,116,155,0.25); }
+
+/* panel header */
+.rp-header {
+  margin-bottom: 20px; padding-bottom: 14px;
+  border-bottom: 1px solid rgba(100,116,155,0.08);
+  opacity: 0; transform: translateX(20px);
+  transition: opacity 0.35s ease 0.15s, transform 0.35s ease 0.15s;
+}
+.right-panel.open .rp-header {
+  opacity: 1; transform: translateX(0);
+}
+.rp-header-label {
+  font-size: 9px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 1.2px; color: var(--text-500); margin-bottom: 6px;
+}
+.rp-header-title {
+  font-size: 15px; font-weight: 700; color: var(--text-100);
+  display: flex; align-items: center; gap: 8px;
+  letter-spacing: -0.3px;
+}
+.rp-header-title .color-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+}
+.rp-header-status {
+  font-size: 10px; margin-top: 4px; display: flex; align-items: center; gap: 6px;
+}
+.rp-status-badge {
+  font-size: 8px; font-weight: 700; padding: 2px 7px; border-radius: 4px;
+  text-transform: uppercase; letter-spacing: 0.5px;
+}
+.rp-status-badge.done { background: var(--green-dim); color: var(--green); }
+.rp-status-badge.running { background: var(--blue-dim); color: var(--blue); }
+.rp-status-badge.pending { background: rgba(74,81,104,0.12); color: var(--text-400); }
+
+/* ---- SECTION: First-Person Summary ---- */
+.rp-section {
+  margin-bottom: 18px;
+  opacity: 0; transform: translateX(24px);
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+.right-panel.open .rp-section {
+  opacity: 1; transform: translateX(0);
+}
+/* staggered entrance */
+.right-panel.open .rp-section:nth-child(2) { transition-delay: 0.22s; }
+.right-panel.open .rp-section:nth-child(3) { transition-delay: 0.30s; }
+.right-panel.open .rp-section:nth-child(4) { transition-delay: 0.38s; }
+.right-panel.open .rp-section:nth-child(5) { transition-delay: 0.46s; }
+.right-panel.open .rp-section:nth-child(6) { transition-delay: 0.54s; }
+
+.rp-section-title {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.8px; color: var(--text-400); margin-bottom: 8px;
+  display: flex; align-items: center; gap: 6px;
+}
+.rp-section-title svg { width: 12px; height: 12px; opacity: 0.6; }
+
+.rp-summary-card {
+  padding: 14px 16px; border-radius: var(--radius-sm);
+  background: rgba(26, 29, 35, 0.55);
+  border: 1px solid rgba(100,116,155,0.06);
+  position: relative; overflow: hidden;
+}
+.rp-summary-card .accent-bar {
+  position: absolute; left: 0; top: 0; bottom: 0; width: 3px; border-radius: 3px 0 0 3px;
+}
+.rp-summary-card .accent-bar.purple { background: var(--purple); }
+.rp-summary-card .accent-bar.blue { background: var(--blue); }
+.rp-summary-card .accent-bar.orange { background: var(--orange); }
+
+.rp-summary-text {
+  font-size: 12.5px; color: var(--text-200); line-height: 1.75;
+  padding-left: 10px; font-style: italic;
+}
+.rp-summary-text::before {
+  content: '\201C'; font-size: 22px; font-weight: 700; line-height: 1;
+  display: block; margin-bottom: -4px;
+  opacity: 0.25;
+}
+
+/* ---- SECTION: Stats Grid ---- */
+.rp-stat-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+}
+.rp-stat-card {
+  padding: 12px 14px; border-radius: var(--radius-sm);
+  background: rgba(26, 29, 35, 0.5);
+  border: 1px solid rgba(100,116,155,0.06);
+  text-align: center; position: relative; overflow: hidden;
+  transition: border-color 0.3s ease;
+}
+.rp-stat-card:hover { border-color: rgba(100,116,155,0.15); }
+.rp-stat-val {
+  font-size: 20px; font-weight: 700; color: var(--text-100);
+  font-variant-numeric: tabular-nums; line-height: 1.2;
+}
+.rp-stat-label {
+  font-size: 9.5px; color: var(--text-400); margin-top: 3px;
+  text-transform: uppercase; letter-spacing: 0.4px;
+}
+/* subtle colored top border on stat cards */
+.rp-stat-card::before {
+  content: ''; position: absolute; top: 0; left: 10%; right: 10%;
+  height: 1px; border-radius: 1px; opacity: 0.4;
+}
+.rp-stat-card.purple-tint::before { background: var(--purple); }
+.rp-stat-card.blue-tint::before { background: var(--blue); }
+.rp-stat-card.orange-tint::before { background: var(--orange); }
+
+/* ---- SECTION: Progress Items ---- */
+.rp-items-list { list-style: none; }
+.rp-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 8px; font-size: 11.5px; color: var(--text-300);
+  border-radius: 6px; transition: background 0.15s;
+}
+.rp-item:hover { background: rgba(255,255,255,0.02); }
+.rp-item + .rp-item { border-top: 1px solid rgba(100,116,155,0.04); }
+.rp-item-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.rp-item-label { flex: 1; }
+.rp-item-time { font-size: 9px; color: var(--text-500); font-variant-numeric: tabular-nums; }
+.rp-item-status { font-size: 10px; min-width: 12px; text-align: center; }
+
+/* ---- SECTION: Live Feed ---- */
+.rp-feed-header {
+  display: flex; align-items: center; gap: 6px; margin-bottom: 8px;
+}
+.rp-feed-title {
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.8px; color: var(--text-400);
+}
+.rp-mini-live {
+  font-size: 7px; font-weight: 700; padding: 1.5px 5px; border-radius: 3px;
+  background: rgba(239,68,68,0.1); color: var(--red);
+  letter-spacing: 0.6px; text-transform: uppercase;
+  display: flex; align-items: center; gap: 3px;
+}
+.rp-mini-live .dot {
+  width: 4px; height: 4px; border-radius: 50%; background: var(--red);
+  animation: liveDotPulse 1.5s ease-in-out infinite;
+}
+.rp-feed {
+  max-height: 200px; overflow-y: auto; flex: 1;
+  border-radius: var(--radius-xs);
+  background: rgba(26, 29, 35, 0.3);
+  border: 1px solid rgba(100,116,155,0.04);
+  padding: 6px 0;
+}
+.rp-feed::-webkit-scrollbar { width: 3px; }
+.rp-feed::-webkit-scrollbar-thumb { background: rgba(100,116,155,0.15); border-radius: 2px; }
+
+.rp-feed-entry {
+  display: flex; gap: 8px; padding: 5px 10px; font-size: 10.5px;
+  animation: rpFeedIn 0.4s ease both;
+}
+@keyframes rpFeedIn {
+  from { opacity: 0; transform: translateX(12px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.rp-feed-time { color: var(--text-500); font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 38px; font-size: 9px; }
+.rp-feed-pip { width: 4px; height: 4px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
+.rp-feed-msg { color: var(--text-300); flex: 1; line-height: 1.4; }
+
+/* ================================================================
+   DOT ANIMATION CONTAINER
+   ================================================================ */
+.dot-anim-container { position: fixed; inset: 0; pointer-events: none; z-index: 500; }
+.flying-dot {
+  position: absolute; width: 5px; height: 5px; border-radius: 50%;
+  pointer-events: none;
+}
+
+/* ================================================================
+   SELECTED SUB-CARD HIGHLIGHT
+   ================================================================ */
+.sub-card.selected { outline: 1px solid rgba(255,255,255,0.12); outline-offset: -1px; }
+.sub-card.selected[data-pcolor="purple"] { outline-color: rgba(167,139,250,0.3); }
+.sub-card.selected[data-pcolor="blue"] { outline-color: rgba(59,130,246,0.3); }
+.sub-card.selected[data-pcolor="orange"] { outline-color: rgba(245,158,11,0.3); }
+
+/* ================================================================
+   SCROLLBAR
+   ================================================================ */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--surface-hi); border-radius: 3px; }
+
+/* ================================================================
+   RUNNING MODULE PULSE
+   ================================================================ */
+.mod-card[data-status="running"] {
+  animation: runningBorderPulse 4s ease-in-out infinite;
+}
+@keyframes runningBorderPulse {
+  0%, 100% { border-color: rgba(59,130,246,0.14); }
+  50% { border-color: rgba(59,130,246,0.28); }
+}
+
+.sub-card.active-sub[data-pcolor="blue"] {
+  animation: blueSubPulse 3s ease-in-out infinite;
+}
+@keyframes blueSubPulse {
+  0%, 100% { border-color: rgba(59,130,246,0.14); }
+  50% { border-color: rgba(59,130,246,0.28); }
+}
+
+.mod-card[data-status="pending"] { opacity: 0.65; }
+.mod-card[data-status="pending"]:hover { opacity: 0.8; }
+
+/* ================================================================
+   PANEL OVERLAY SCRIM
+   ================================================================ */
+.panel-scrim {
+  position: fixed; inset: 0; z-index: 790;
+  background: rgba(0,0,0,0);
+  pointer-events: none; transition: background 0.4s ease;
+}
+body.panel-open .panel-scrim {
+  background: rgba(0,0,0,0.08);
+  pointer-events: auto;
+}
+
+/* ================================================================
+   PANEL CONNECTION LINE (animated dashed line from card to panel)
+   ================================================================ */
+.panel-connector {
+  position: fixed; z-index: 795; pointer-events: none;
+  opacity: 0; transition: opacity 0.4s ease 0.1s;
+}
+body.panel-open .panel-connector { opacity: 1; }
+.panel-connector svg { overflow: visible; }
+</style>
+</head>
+<body>
+
+<!-- Ambient Particles Canvas -->
+<canvas id="particlesCanvas"></canvas>
+
+<!-- Dot Animation Container (L-path dots) -->
+<div class="dot-anim-container" id="dotAnimContainer"></div>
+
+<!-- Tooltip Portal -->
+<div class="tooltip-portal" id="tooltipPortal">
+  <div class="tooltip-inner">
+    <div class="tooltip-title" id="tooltipTitle"></div>
+    <div class="tooltip-summary" id="tooltipSummary"></div>
+    <div class="tooltip-stats" id="tooltipStats"></div>
+  </div>
+</div>
+
+<!-- Panel Scrim -->
+<div class="panel-scrim" id="panelScrim"></div>
+
+<!-- Panel Connector (SVG line from card to panel) -->
+<div class="panel-connector" id="panelConnector">
+  <svg id="connectorSvg" width="0" height="0">
+    <defs>
+      <linearGradient id="connGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+        <stop offset="0%" stop-color="var(--blue)" stop-opacity="0.3"/>
+        <stop offset="100%" stop-color="var(--blue)" stop-opacity="0.08"/>
+      </linearGradient>
+    </defs>
+    <path id="connectorPath" fill="none" stroke="url(#connGrad)" stroke-width="1.5"
+      stroke-dasharray="6 3" stroke-linecap="round"/>
+  </svg>
+</div>
+
+<!-- ===== HEADER ===== -->
+<header class="header">
+  <div class="header-brand">AI Inventor</div>
+  <nav class="breadcrumb">
+    <span class="sep">/</span>
+    <span>Pipeline</span>
+    <span class="sep">/</span>
+    <span class="active" id="breadcrumb">Overview</span>
+  </nav>
+  <div class="header-right">
+    <div class="header-stat">
+      <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6" cy="6" r="5"/><path d="M6 3v3l2 1.5"/></svg>
+      <span class="val" id="timerDisplay">02:34:17</span>
+    </div>
+    <div class="header-stat">
+      <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 1v10M3 3.5l3-2.5 3 2.5M3 8.5l3 2.5 3-2.5"/></svg>
+      <span class="val" id="costDisplay">$12.47</span>
+    </div>
+    <div class="live-badge">
+      <span class="live-dot-red"></span>
+      LIVE
+    </div>
+  </div>
+</header>
+
+<!-- ===== SIDEBAR ===== -->
+<nav class="sidebar" id="sidebar">
+  <div class="sidebar-ring-wrap">
+    <div class="sidebar-ring">
+      <svg viewBox="0 0 32 32">
+        <circle class="ring-track" cx="16" cy="16" r="12"/>
+        <circle class="ring-fill" cx="16" cy="16" r="12"
+          stroke-dasharray="75.4" stroke-dashoffset="30.16"/>
+      </svg>
+      <div class="ring-label">60%</div>
+    </div>
+    <span class="sidebar-ring-text">Overall Progress</span>
+  </div>
+  <div class="sidebar-divider"></div>
+
+  <div class="sidebar-item" data-module="0" data-color="purple">
+    <div class="indicator"></div>
+    <div class="sidebar-dot done"></div>
+    <span class="sidebar-label">Generate Hypothesis</span>
+  </div>
+  <div class="sidebar-item active" data-module="1" data-color="blue">
+    <div class="indicator"></div>
+    <div class="sidebar-dot running"></div>
+    <span class="sidebar-label">Test Hypothesis</span>
+  </div>
+  <div class="sidebar-item" data-module="2" data-color="orange">
+    <div class="indicator"></div>
+    <div class="sidebar-dot pending"></div>
+    <span class="sidebar-label">Disseminate Results</span>
+  </div>
+
+  <div class="sidebar-spacer"></div>
+  <div class="sidebar-item" style="opacity:0.5;">
+    <div class="sidebar-dot" style="background:transparent; border:1.5px solid var(--text-500); width:8px; height:8px; border-radius:50%;"></div>
+    <span class="sidebar-label" style="font-size:11px; color:var(--text-500);">Settings</span>
+  </div>
+</nav>
+
+<!-- ===== MAIN CONTENT ===== -->
+<main class="main" id="mainContent">
+  <!-- Section tints -->
+  <div class="section-tint purple-tint"></div>
+  <div class="section-tint blue-tint"></div>
+
+  <!-- 3 HORIZONTAL MODULE CARDS -->
+  <section class="module-cards" id="moduleCards">
+
+    <!-- Module 1: Generate Hypothesis (purple, COMPLETE) -->
+    <div class="mod-card" data-color="purple" data-module="0" data-status="done">
+      <div class="glass-shine"></div>
+      <div class="glow-halo"></div>
+      <div class="card-shimmer"></div>
+      <div class="mc-top">
+        <span class="mc-icon">&#x1F9EA;</span>
+        <span class="mc-name">Generate Hypothesis</span>
+        <span class="mc-badge done">Complete</span>
+      </div>
+      <div class="mc-metrics">
+        <span class="mc-metric-label">Score</span>
+        <span class="mc-metric-value" style="color:var(--purple)">8.4/10</span>
+        <div class="mc-ring">
+          <svg viewBox="0 0 28 28">
+            <circle class="ring-track" cx="14" cy="14" r="10"/>
+            <circle class="ring-fill" cx="14" cy="14" r="10" stroke="var(--purple)"
+              stroke-dasharray="62.83" stroke-dashoffset="0"
+              style="transform:rotate(-90deg);transform-origin:50% 50%;filter:drop-shadow(0 0 3px var(--purple-deep))"/>
+          </svg>
+          <div class="ring-text" style="color:var(--purple)">100</div>
+        </div>
+      </div>
+      <div class="mc-bar"><div class="mc-bar-fill" style="width:100%"></div></div>
+    </div>
+
+    <!-- Module 2: Test Hypothesis (blue, ACTIVE) -->
+    <div class="mod-card active" data-color="blue" data-module="1" data-status="running">
+      <div class="glass-shine"></div>
+      <div class="glow-halo"></div>
+      <div class="card-shimmer"></div>
+      <div class="mc-top">
+        <span class="mc-icon">&#x1F52C;</span>
+        <span class="mc-name">Test Hypothesis</span>
+        <span class="mc-badge running">Running</span>
+      </div>
+      <div class="mc-metrics">
+        <span class="mc-metric-label">Artifacts</span>
+        <span class="mc-metric-value" style="color:var(--blue)">3/5</span>
+        <div class="mc-ring">
+          <svg viewBox="0 0 28 28">
+            <circle class="ring-track" cx="14" cy="14" r="10"/>
+            <circle class="ring-fill" cx="14" cy="14" r="10" stroke="var(--blue)"
+              stroke-dasharray="62.83" stroke-dashoffset="25.13"
+              style="transform:rotate(-90deg);transform-origin:50% 50%;filter:drop-shadow(0 0 3px var(--blue-deep))"/>
+          </svg>
+          <div class="ring-text" style="color:var(--blue)">60</div>
+        </div>
+      </div>
+      <div class="mc-bar"><div class="mc-bar-fill" style="width:60%"></div></div>
+    </div>
+
+    <!-- Module 3: Disseminate Results (orange, PENDING) -->
+    <div class="mod-card" data-color="orange" data-module="2" data-status="pending">
+      <div class="glass-shine"></div>
+      <div class="glow-halo"></div>
+      <div class="card-shimmer"></div>
+      <div class="mc-top">
+        <span class="mc-icon">&#x1F4E1;</span>
+        <span class="mc-name">Disseminate Results</span>
+        <span class="mc-badge pending">Pending</span>
+      </div>
+      <div class="mc-metrics">
+        <span class="mc-metric-label">Progress</span>
+        <span class="mc-metric-value" style="color:var(--text-400)">0%</span>
+        <div class="mc-ring">
+          <svg viewBox="0 0 28 28">
+            <circle class="ring-track" cx="14" cy="14" r="10"/>
+            <circle class="ring-fill" cx="14" cy="14" r="10" stroke="var(--orange)"
+              stroke-dasharray="62.83" stroke-dashoffset="62.83"
+              style="transform:rotate(-90deg);transform-origin:50% 50%;"/>
+          </svg>
+          <div class="ring-text" style="color:var(--text-400)">0</div>
+        </div>
+      </div>
+      <div class="mc-bar"><div class="mc-bar-fill" style="width:0%"></div></div>
+    </div>
+  </section>
+
+  <!-- TREE AREA: 3 columns of sub-module trees -->
+  <section class="tree-area" id="treeArea"></section>
+</main>
+
+<!-- ===== RIGHT SIDE PANEL ===== -->
+<div class="right-panel" id="rightPanel">
+  <div class="rp-backdrop"></div>
+  <div class="rp-shine"></div>
+  <div class="rp-edge-glow" id="rpEdgeGlow"></div>
+  <div class="rp-scan-line" id="rpScanLine"></div>
+  <div class="rp-content" id="rpContent">
+    <button class="rp-close" id="rpClose">&times;</button>
+  </div>
+</div>
+
+<script>
+/* ================================================================
+   DATA MODEL
+   ================================================================ */
+const MODULES = [
+  {
+    id: 'gen_hypo', label: 'Generate Hypothesis', color: 'purple', status: 'done',
+    summary: 'Refined hypothesis through 3 adversarial review iterations: 6.2 -> 7.8 -> 8.4/10. Final review found 0 major issues.',
+    firstPerson: 'I refined the hypothesis over three adversarial review cycles. The initial score of 6.2 improved to 7.8 after addressing methodological gaps, then reached 8.4 after tightening the experimental bounds. The final review flagged zero major issues -- only cosmetic wording suggestions remained. Confidence is high.',
+    duration: '01:12:34', cost: '$4.21', messages: 847,
+    subs: [
+      { id: 'gen1', label: 'Gen Hypo Iter 1', status: 'done', meta: '6.2/10', duration: '14m', items: [],
+        firstPerson: 'I generated the initial hypothesis draft. It scored 6.2/10 -- reviewers flagged weak novelty claims and missing baselines.' },
+      { id: 'rev1', label: 'Review Iter 1', status: 'done', meta: '3 issues', duration: '8m', items: [],
+        firstPerson: 'I identified 3 substantive issues: unclear scope boundary, no ablation justification, and a missing comparison to SOTA. Passed these back for refinement.' },
+      { id: 'gen2', label: 'Gen Hypo Iter 2', status: 'done', meta: '7.8/10', duration: '16m', items: [],
+        firstPerson: 'I rewrote the hypothesis addressing all 3 flagged issues. Score jumped to 7.8. The reviewer noted improved clarity but wanted tighter experimental bounds.' },
+      { id: 'rev2', label: 'Review Iter 2', status: 'done', meta: '1 issue', duration: '9m', items: [],
+        firstPerson: 'I found only 1 remaining issue: the variance analysis section needed explicit confidence intervals. Everything else looked solid.' },
+      { id: 'gen3', label: 'Gen Hypo Iter 3', status: 'done', meta: '8.4/10', duration: '18m', items: [],
+        firstPerson: 'I finalized the hypothesis with explicit CI bounds and a streamlined abstract. Final score: 8.4/10. Ready for experimentation.' },
+      { id: 'rev3', label: 'Review Iter 3', status: 'done', meta: '0 major', duration: '7m', items: [],
+        firstPerson: 'I completed the final review pass. Zero major issues detected. Only minor wording suggestions remain. Hypothesis is approved for the testing phase.' }
+    ]
+  },
+  {
+    id: 'test_hypo', label: 'Test Hypothesis', color: 'blue', status: 'running',
+    summary: 'Building research artifacts. Baseline evaluation shows +17.5% accuracy improvement over prior work.',
+    firstPerson: 'I am actively building research artifacts to validate the hypothesis. Baseline evaluation already shows a promising +17.5% accuracy improvement over the nearest prior work. Currently running the ablation study and drafting the paper simultaneously.',
+    duration: '01:18:42', cost: '$7.83', messages: 1204,
+    subs: [
+      { id: 'strat', label: 'Strategy', status: 'done', meta: 'Contrastive', duration: '12m', items: [],
+        firstPerson: 'I selected a contrastive learning strategy after evaluating 4 candidates. This approach best isolates the hypothesis variable while maintaining statistical power.' },
+      { id: 'plan', label: 'Plan', status: 'done', meta: '5 artifacts', duration: '8m', items: [],
+        firstPerson: 'I planned 5 artifacts: baseline implementation, dataset prep, proof of concept, ablation study, and evaluation suite. Each has clear acceptance criteria.' },
+      {
+        id: 'artifacts', label: 'Artifacts', status: 'running', meta: '3/5', duration: '41m',
+        firstPerson: 'I have completed 3 of 5 artifacts. The ablation study is running epoch 3/10 with promising intermediate results. Evaluation suite build is queued next.',
+        items: [
+          { label: 'Baseline Implementation', status: 'done', time: '12m' },
+          { label: 'Dataset Preparation', status: 'done', time: '8m' },
+          { label: 'Proof of Concept', status: 'done', time: '15m' },
+          { label: 'Ablation Study', status: 'running', time: '6m' },
+          { label: 'Evaluation Suite', status: 'pending', time: '--' }
+        ]
+      },
+      { id: 'paper', label: 'Paper Draft', status: 'running', meta: 'Writing...', duration: '18m', items: [],
+        firstPerson: 'I am drafting the paper in parallel with artifact generation. Introduction and related work are complete. Currently writing the methods section with inline references to running experiments.' },
+      { id: 'review', label: 'Review', status: 'pending', meta: '--', duration: '--', items: [],
+        firstPerson: 'Awaiting completion of artifacts and paper draft before initiating the review cycle.' },
+      { id: 'update', label: 'Update Hypo', status: 'pending', meta: '--', duration: '--', items: [],
+        firstPerson: 'Will update the hypothesis based on review findings, if any significant deviations from expected results are observed.' }
+    ]
+  },
+  {
+    id: 'disseminate', label: 'Disseminate Results', color: 'orange', status: 'pending',
+    summary: 'Awaiting completion of Test Hypothesis module before generating paper repository.',
+    firstPerson: 'I am waiting for the Test Hypothesis module to complete before I begin generating the paper repository, demos, visualizations, and deployment artifacts.',
+    duration: '--', cost: '$0.00', messages: 0,
+    subs: [
+      { id: 'repo', label: 'Gen Repo', status: 'pending', meta: '--', duration: '--', items: [],
+        firstPerson: 'Waiting to generate the research repository with reproducible code and documentation.' },
+      { id: 'demos', label: 'Demos + Viz', status: 'pending', meta: '--', duration: '--', items: [],
+        firstPerson: 'Will create interactive demos and visualizations once the experimental artifacts are finalized.' },
+      { id: 'full_paper', label: 'Full Paper', status: 'pending', meta: '--', duration: '--', items: [],
+        firstPerson: 'Will compile the full paper with all figures, tables, and supplementary materials.' },
+      { id: 'deploy_src', label: 'Deploy Source', status: 'pending', meta: '--', duration: '--', items: [],
+        firstPerson: 'Queued to deploy source code to GitHub with CI/CD and documentation site.' },
+      { id: 'deploy_paper', label: 'Deploy Paper', status: 'pending', meta: '--', duration: '--', items: [],
+        firstPerson: 'Queued to deploy the compiled paper to arXiv and the project website.' }
+    ]
+  }
+];
+
+/* ================================================================
+   RENDER TREE AREA
+   ================================================================ */
+const treeArea = document.getElementById('treeArea');
+
+function renderTrees() {
+  treeArea.innerHTML = '';
+  MODULES.forEach((mod, mi) => {
+    const col = document.createElement('div');
+    col.className = 'tree-col' + (mod.status === 'done' ? ' collapsed' : '');
+    col.dataset.module = mi;
+
+    // collapse toggle
+    const toggle = document.createElement('div');
+    toggle.className = 'collapse-toggle';
+    toggle.innerHTML = `<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 4.5l3 3 3-3"/></svg>
+      <span>${mod.subs.length} sub-modules</span>`;
+    toggle.addEventListener('click', () => col.classList.toggle('collapsed'));
+    col.appendChild(toggle);
+
+    // trunk
+    const trunk = document.createElement('div');
+    trunk.className = 'tree-trunk' + (mod.status === 'running' ? ' glow-trunk' : '');
+    trunk.dataset.color = mod.color;
+    trunk.dataset.module = mi;
+
+    mod.subs.forEach((sub, si) => {
+      // sub-card
+      const card = document.createElement('div');
+      const stClass = sub.status === 'done' ? 'done-sub' :
+                       sub.status === 'running' ? 'active-sub' : 'pending-sub';
+      card.className = `sub-card ${stClass}`;
+      card.dataset.pcolor = mod.color;
+      card.dataset.module = mi;
+      card.dataset.sub = si;
+
+      // shimmer + glow overlays
+      card.innerHTML = `<div class="sub-card-shimmer"></div><div class="sub-card-glow"></div>`;
+
+      // status indicator
+      if (sub.status === 'done') {
+        const check = document.createElement('span');
+        check.style.cssText = 'font-size:11px; color:var(--green); flex-shrink:0;';
+        check.textContent = '\u2713';
+        card.appendChild(check);
+      } else if (sub.status === 'running') {
+        const spinner = document.createElement('div');
+        spinner.className = 'sub-spinner' + (mod.color === 'purple' ? ' purple-spin' : '');
+        card.appendChild(spinner);
+      } else {
+        const dot = document.createElement('div');
+        dot.className = 'sub-dot pending';
+        card.appendChild(dot);
+      }
+
+      // label
+      const lbl = document.createElement('span');
+      lbl.className = 'sub-label';
+      lbl.textContent = sub.label;
+      card.appendChild(lbl);
+
+      // meta
+      const meta = document.createElement('span');
+      meta.className = 'sub-meta';
+      meta.textContent = sub.meta;
+      card.appendChild(meta);
+
+      // micro badge
+      const badge = document.createElement('span');
+      badge.className = `sub-micro-badge ${sub.status === 'done' ? 'done' : sub.status === 'running' ? 'running' : 'pending'}`;
+      badge.textContent = sub.status === 'done' ? 'Done' : sub.status === 'running' ? 'Live' : 'Wait';
+      card.appendChild(badge);
+
+      // click -> right panel
+      card.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openRightPanel(mi, si);
+      });
+
+      // hover -> tooltip
+      card.addEventListener('mouseenter', (e) => showTooltip(e, mi, si));
+      card.addEventListener('mousemove', (e) => moveTooltip(e));
+      card.addEventListener('mouseleave', hideTooltip);
+
+      trunk.appendChild(card);
+
+      // level 3 items (2-level tree for Artifacts)
+      if (sub.items && sub.items.length > 0) {
+        const wrap = document.createElement('div');
+        wrap.className = 'level3-wrap';
+        sub.items.forEach((item, ii) => {
+          const row = document.createElement('div');
+          row.className = 'level3-item';
+          const dotCls = item.status === 'done' ? 'done' : item.status === 'running' ? 'running' : 'pending';
+          row.innerHTML = `<div class="l3-dot ${dotCls}"></div>
+            <span class="l3-label">${item.label}</span>
+            <span class="l3-meta">${item.time}</span>`;
+          wrap.appendChild(row);
+        });
+        trunk.appendChild(wrap);
+      }
+    });
+
+    col.appendChild(trunk);
+
+    // collapsed bar
+    const collBar = document.createElement('div');
+    collBar.className = 'tree-collapsed-bar';
+    const doneCount = mod.subs.filter(s => s.status === 'done').length;
+    collBar.innerHTML = `<span style="font-size:11px; color:var(--green);">\u2713</span>
+      <span>${doneCount}/${mod.subs.length} complete</span>
+      <span style="margin-left:auto; font-size:10px; color:var(--text-500);">Click to expand</span>`;
+    collBar.addEventListener('click', () => col.classList.toggle('collapsed'));
+    col.appendChild(collBar);
+
+    treeArea.appendChild(col);
+  });
+
+  // animate sub-cards visible
+  requestAnimationFrame(() => {
+    let delay = 0;
+    document.querySelectorAll('.sub-card, .level3-item').forEach(el => {
+      setTimeout(() => el.classList.add('visible'), delay);
+      delay += 40;
+    });
+  });
+}
+renderTrees();
+
+/* ================================================================
+   TOOLTIP
+   ================================================================ */
+const tooltipEl = document.getElementById('tooltipPortal');
+const tooltipTitle = document.getElementById('tooltipTitle');
+const tooltipSummary = document.getElementById('tooltipSummary');
+const tooltipStats = document.getElementById('tooltipStats');
+let tooltipTimeout;
+
+function showTooltip(e, mi, si) {
+  clearTimeout(tooltipTimeout);
+  if (currentPanel === `${mi}-${si}`) return;
+  const mod = MODULES[mi];
+  const sub = mod.subs[si];
+  tooltipTimeout = setTimeout(() => {
+    const color = mod.color === 'purple' ? 'var(--purple)' :
+                  mod.color === 'blue' ? 'var(--blue)' : 'var(--orange)';
+    tooltipTitle.innerHTML = `<span style="color:${color}">\u25CF</span> ${sub.label}`;
+    tooltipSummary.textContent = sub.status === 'done'
+      ? `Completed in ${sub.duration}. Result: ${sub.meta}`
+      : sub.status === 'running'
+      ? `Currently running (${sub.duration} elapsed). Progress: ${sub.meta}`
+      : 'Waiting for preceding steps to complete.';
+    tooltipStats.innerHTML = `
+      <div><div class="tooltip-stat-val">${sub.duration}</div><div class="tooltip-stat-label">Duration</div></div>
+      <div><div class="tooltip-stat-val">${sub.meta}</div><div class="tooltip-stat-label">Result</div></div>
+      <div><div class="tooltip-stat-val">${sub.status === 'done' ? '\u2713' : sub.status === 'running' ? '\u25B6' : '\u25CB'}</div><div class="tooltip-stat-label">Status</div></div>`;
+    moveTooltip(e);
+    tooltipEl.classList.add('visible');
+  }, 400);
+}
+function moveTooltip(e) {
+  const x = Math.min(e.clientX + 16, window.innerWidth - 420);
+  const y = Math.min(e.clientY + 12, window.innerHeight - 180);
+  tooltipEl.style.left = x + 'px';
+  tooltipEl.style.top = y + 'px';
+}
+function hideTooltip() {
+  clearTimeout(tooltipTimeout);
+  tooltipEl.classList.remove('visible');
+}
+
+/* ================================================================
+   RIGHT SIDE PANEL
+   ================================================================ */
+const rightPanel = document.getElementById('rightPanel');
+const rpContent = document.getElementById('rpContent');
+const rpClose = document.getElementById('rpClose');
+const rpEdgeGlow = document.getElementById('rpEdgeGlow');
+const rpScanLine = document.getElementById('rpScanLine');
+const panelScrim = document.getElementById('panelScrim');
+const panelConnector = document.getElementById('panelConnector');
+const connectorSvg = document.getElementById('connectorSvg');
+const connectorPath = document.getElementById('connectorPath');
+const breadcrumbEl = document.getElementById('breadcrumb');
+let currentPanel = null;
+
+rpClose.addEventListener('click', closeRightPanel);
+panelScrim.addEventListener('click', closeRightPanel);
+
+function closeRightPanel() {
+  rightPanel.classList.remove('open');
+  document.body.classList.remove('panel-open');
+  currentPanel = null;
+  breadcrumbEl.textContent = 'Overview';
+  document.querySelectorAll('.sub-card.selected').forEach(el => el.classList.remove('selected'));
+  rpScanLine.style.animation = 'none';
+  connectorSvg.setAttribute('width', '0');
+  connectorSvg.setAttribute('height', '0');
+}
+
+function openRightPanel(mi, si) {
+  const mod = MODULES[mi];
+  const sub = mod.subs[si];
+  const key = `${mi}-${si}`;
+  if (currentPanel === key) { closeRightPanel(); return; }
+
+  const wasOpen = currentPanel !== null;
+  currentPanel = key;
+
+  breadcrumbEl.textContent = `${mod.label} > ${sub.label}`;
+  document.querySelectorAll('.sub-card.selected').forEach(el => el.classList.remove('selected'));
+  const targetCard = document.querySelector(`.sub-card[data-module="${mi}"][data-sub="${si}"]`);
+  if (targetCard) targetCard.classList.add('selected');
+
+  const color = mod.color;
+  const colorVar = color === 'purple' ? 'var(--purple)' :
+                   color === 'blue' ? 'var(--blue)' : 'var(--orange)';
+
+  rpEdgeGlow.className = 'rp-edge-glow ' + color;
+
+  const gradStops = document.querySelectorAll('#connGrad stop');
+  gradStops[0].setAttribute('stop-color', colorVar);
+  gradStops[1].setAttribute('stop-color', colorVar);
+
+  rpScanLine.style.animation = 'none';
+  void rpScanLine.offsetHeight;
+  rpScanLine.style.animation = '';
+
+  // Build panel content
+  let html = `<button class="rp-close" onclick="closeRightPanel()">&times;</button>`;
+
+  // Header section
+  html += `<div class="rp-header">
+    <div class="rp-header-label">Sub-Module Detail</div>
+    <div class="rp-header-title">
+      <span class="color-dot" style="background:${colorVar}"></span>
+      ${sub.label}
+    </div>
+    <div class="rp-header-status">
+      <span class="rp-status-badge ${sub.status === 'done' ? 'done' : sub.status === 'running' ? 'running' : 'pending'}">
+        ${sub.status === 'done' ? 'Complete' : sub.status === 'running' ? 'Running' : 'Pending'}
+      </span>
+      <span style="color:var(--text-500); font-size:10px;">${sub.duration !== '--' ? sub.duration + ' elapsed' : 'Not started'}</span>
+    </div>
+  </div>`;
+
+  // Section 1: First-person summary
+  const fpText = sub.firstPerson || mod.firstPerson || 'No details available yet.';
+  html += `<div class="rp-section">
+    <div class="rp-section-title">
+      <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 16 16"><path d="M8 1C4.134 1 1 4.134 1 8s3.134 7 7 7 7-3.134 7-7S11.866 1 8 1z"/><path d="M8 5v3l2 1.5"/></svg>
+      Agent Summary
+    </div>
+    <div class="rp-summary-card">
+      <div class="accent-bar ${color}"></div>
+      <div class="rp-summary-text">${fpText}</div>
+    </div>
+  </div>`;
+
+  // Section 2: Stats grid
+  html += `<div class="rp-section">
+    <div class="rp-section-title">
+      <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 16 16"><rect x="1" y="5" width="3" height="10" rx="1"/><rect x="6.5" y="1" width="3" height="14" rx="1"/><rect x="12" y="8" width="3" height="7" rx="1"/></svg>
+      Statistics
+    </div>
+    <div class="rp-stat-grid">
+      <div class="rp-stat-card ${color}-tint">
+        <div class="rp-stat-val">${mod.duration}</div>
+        <div class="rp-stat-label">Module Time</div>
+      </div>
+      <div class="rp-stat-card ${color}-tint">
+        <div class="rp-stat-val">${mod.cost}</div>
+        <div class="rp-stat-label">Cost</div>
+      </div>
+      <div class="rp-stat-card ${color}-tint">
+        <div class="rp-stat-val">${mod.messages}</div>
+        <div class="rp-stat-label">Messages</div>
+      </div>
+      <div class="rp-stat-card ${color}-tint">
+        <div class="rp-stat-val">${mod.subs.filter(s => s.status === 'done').length}/${mod.subs.length}</div>
+        <div class="rp-stat-label">Steps Done</div>
+      </div>
+    </div>
+  </div>`;
+
+  // Section 3: Items list or module steps
+  if (sub.items && sub.items.length > 0) {
+    html += `<div class="rp-section">
+      <div class="rp-section-title">
+        <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 16 16"><path d="M2 4h12M2 8h12M2 12h8"/></svg>
+        Artifact Progress
+      </div>
+      <ul class="rp-items-list">`;
+    sub.items.forEach(item => {
+      const dotColor = item.status === 'done' ? 'var(--green)' :
+                       item.status === 'running' ? colorVar : 'var(--text-500)';
+      const icon = item.status === 'done' ? '\u2713' :
+                   item.status === 'running' ? '\u25B6' : '\u25CB';
+      html += `<li class="rp-item">
+        <span class="rp-item-dot" style="background:${dotColor}"></span>
+        <span class="rp-item-label">${item.label}</span>
+        <span class="rp-item-time">${item.time}</span>
+        <span class="rp-item-status">${icon}</span>
+      </li>`;
+    });
+    html += `</ul></div>`;
+  } else {
+    html += `<div class="rp-section">
+      <div class="rp-section-title">
+        <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 16 16"><path d="M2 4h12M2 8h12M2 12h8"/></svg>
+        Module Steps
+      </div>
+      <ul class="rp-items-list">`;
+    mod.subs.forEach(s => {
+      const dotColor = s.status === 'done' ? 'var(--green)' :
+                       s.status === 'running' ? colorVar : 'var(--text-500)';
+      const icon = s.status === 'done' ? '\u2713' : s.status === 'running' ? '\u25B6' : '\u25CB';
+      const isCurrent = s.id === sub.id;
+      html += `<li class="rp-item" style="${isCurrent ? 'background:rgba(255,255,255,0.025);border-radius:6px;' : ''}">
+        <span class="rp-item-dot" style="background:${dotColor}"></span>
+        <span class="rp-item-label" style="${isCurrent ? 'color:var(--text-100);font-weight:600;' : ''}">${s.label}</span>
+        <span class="rp-item-time">${s.meta}</span>
+        <span class="rp-item-status">${icon}</span>
+      </li>`;
+    });
+    html += `</ul></div>`;
+  }
+
+  // Section 4: Live Feed
+  html += `<div class="rp-section" style="flex:1; display:flex; flex-direction:column;">
+    <div class="rp-feed-header">
+      <span class="rp-feed-title">Live Activity</span>
+      <span class="rp-mini-live"><span class="dot"></span> Live</span>
+    </div>
+    <div class="rp-feed" id="rpFeed"></div>
+  </div>`;
+
+  rpContent.innerHTML = html;
+  populatePanelFeed(mod, sub);
+
+  if (!wasOpen) {
+    rightPanel.classList.add('open');
+    document.body.classList.add('panel-open');
+  } else {
+    rightPanel.classList.remove('open');
+    void rightPanel.offsetHeight;
+    rightPanel.classList.add('open');
+    document.body.classList.add('panel-open');
+  }
+
+  requestAnimationFrame(() => drawConnector(targetCard));
+}
+
+function populatePanelFeed(mod, sub) {
+  const feedEl = document.getElementById('rpFeed');
+  if (!feedEl) return;
+  const events = [
+    { time: '02:34', color: 'var(--blue)', msg: `${sub.label}: processing step ${sub.meta}` },
+    { time: '02:33', color: 'var(--green)', msg: `Token budget: 48,231 tokens used` },
+    { time: '02:31', color: 'var(--blue)', msg: `Agent spawned for ${sub.label}` },
+    { time: '02:28', color: 'var(--green)', msg: `Previous step completed successfully` },
+    { time: '02:25', color: 'var(--purple)', msg: `Quality score updated: ${sub.meta}` }
+  ];
+  feedEl.innerHTML = events.map((ev, i) => `
+    <div class="rp-feed-entry" style="animation-delay:${i * 0.08 + 0.3}s">
+      <span class="rp-feed-time">${ev.time}</span>
+      <span class="rp-feed-pip" style="background:${ev.color}"></span>
+      <span class="rp-feed-msg">${ev.msg}</span>
+    </div>
+  `).join('');
+}
+
+/* ================================================================
+   CONNECTOR LINE: card -> panel edge
+   ================================================================ */
+function drawConnector(cardEl) {
+  if (!cardEl) return;
+  const cardRect = cardEl.getBoundingClientRect();
+  const panelLeft = window.innerWidth - 380;
+
+  const startX = cardRect.right + 4;
+  const startY = cardRect.top + cardRect.height / 2;
+  const endX = panelLeft - 2;
+  const endY = startY;
+
+  const svgLeft = Math.min(startX, endX) - 10;
+  const svgTop = Math.min(startY, endY) - 20;
+  const svgW = Math.abs(endX - startX) + 20;
+  const svgH = 40;
+
+  panelConnector.style.left = svgLeft + 'px';
+  panelConnector.style.top = svgTop + 'px';
+  connectorSvg.setAttribute('width', svgW);
+  connectorSvg.setAttribute('height', svgH);
+
+  const lx = startX - svgLeft;
+  const ly = startY - svgTop;
+  const rx = endX - svgLeft;
+  const ry = endY - svgTop;
+  const cpx = lx + (rx - lx) * 0.5;
+
+  connectorPath.setAttribute('d', `M ${lx} ${ly} C ${cpx} ${ly}, ${cpx} ${ry}, ${rx} ${ry}`);
+
+  const len = connectorPath.getTotalLength();
+  connectorPath.style.strokeDasharray = `${len}`;
+  connectorPath.style.strokeDashoffset = `${len}`;
+  connectorPath.style.transition = 'stroke-dashoffset 0.6s cubic-bezier(0.22, 0.61, 0.36, 1) 0.1s';
+  requestAnimationFrame(() => {
+    connectorPath.style.strokeDashoffset = '0';
+  });
+}
+
+window.addEventListener('resize', () => {
+  if (currentPanel) {
+    const [mi, si] = currentPanel.split('-');
+    const card = document.querySelector(`.sub-card[data-module="${mi}"][data-sub="${si}"]`);
+    if (card) drawConnector(card);
+  }
+});
+
+/* ================================================================
+   MODULE CARD CLICKS -> update breadcrumb
+   ================================================================ */
+document.querySelectorAll('.mod-card').forEach(card => {
+  card.addEventListener('click', () => {
+    const mi = parseInt(card.dataset.module);
+    const mod = MODULES[mi];
+    breadcrumbEl.textContent = mod.label;
+    document.querySelectorAll('.sidebar-item').forEach(si => si.classList.remove('active'));
+    const sbItem = document.querySelector(`.sidebar-item[data-module="${mi}"]`);
+    if (sbItem) sbItem.classList.add('active');
+  });
+});
+
+/* ================================================================
+   SIDEBAR NAV CLICKS
+   ================================================================ */
+document.querySelectorAll('.sidebar-item[data-module]').forEach(item => {
+  item.addEventListener('click', () => {
+    const mi = parseInt(item.dataset.module);
+    breadcrumbEl.textContent = MODULES[mi].label;
+    document.querySelectorAll('.sidebar-item').forEach(si => si.classList.remove('active'));
+    item.classList.add('active');
+  });
+});
+
+/* ================================================================
+   AMBIENT PARTICLES (40 dots + connection lines)
+   ================================================================ */
+const pCanvas = document.getElementById('particlesCanvas');
+const pCtx = pCanvas.getContext('2d');
+let particles = [];
+
+function resizeParticles() {
+  pCanvas.width = window.innerWidth;
+  pCanvas.height = window.innerHeight;
+}
+resizeParticles();
+window.addEventListener('resize', resizeParticles);
+
+class Particle {
+  constructor() {
+    this.x = Math.random() * pCanvas.width;
+    this.y = Math.random() * pCanvas.height;
+    this.vx = (Math.random() - 0.5) * 0.3;
+    this.vy = (Math.random() - 0.5) * 0.3;
+    this.radius = Math.random() * 1.5 + 0.5;
+    this.opacity = Math.random() * 0.12 + 0.03;
+  }
+  update() {
+    this.x += this.vx;
+    this.y += this.vy;
+    if (this.x < 0 || this.x > pCanvas.width) this.vx *= -1;
+    if (this.y < 0 || this.y > pCanvas.height) this.vy *= -1;
+  }
+}
+
+for (let i = 0; i < 40; i++) particles.push(new Particle());
+
+function drawParticles() {
+  pCtx.clearRect(0, 0, pCanvas.width, pCanvas.height);
+
+  for (let i = 0; i < particles.length; i++) {
+    for (let j = i + 1; j < particles.length; j++) {
+      const dx = particles[i].x - particles[j].x;
+      const dy = particles[i].y - particles[j].y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 150) {
+        const alpha = (1 - dist / 150) * 0.04;
+        pCtx.beginPath();
+        pCtx.moveTo(particles[i].x, particles[i].y);
+        pCtx.lineTo(particles[j].x, particles[j].y);
+        pCtx.strokeStyle = `rgba(100, 130, 200, ${alpha})`;
+        pCtx.lineWidth = 0.5;
+        pCtx.stroke();
+      }
+    }
+  }
+
+  particles.forEach(p => {
+    p.update();
+    pCtx.beginPath();
+    pCtx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+    pCtx.fillStyle = `rgba(140, 170, 220, ${p.opacity})`;
+    pCtx.fill();
+  });
+
+  requestAnimationFrame(drawParticles);
+}
+drawParticles();
+
+/* ================================================================
+   L-SHAPED DOT ANIMATION (THE DIFFERENTIATOR)
+
+   Dots flow DOWN the vertical tree trunk line, then turn RIGHT
+   along the horizontal branch to reach the active sub-module.
+   Uses getBoundingClientRect for precise positioning.
+   Multi-target: both Artifacts and Paper Draft are running.
+   ================================================================ */
+const dotContainer = document.getElementById('dotAnimContainer');
+
+/**
+ * For a given active sub-card, compute the L-shaped path:
+ *  1. Start at the top of the trunk line (trunkRect.left + 1, trunkRect.top)
+ *  2. Flow DOWN to the vertical position of the sub-card center
+ *  3. Turn RIGHT along the horizontal branch to the sub-card left edge
+ */
+function computeLPath(trunkEl, subCardEl) {
+  const trunkRect = trunkEl.getBoundingClientRect();
+  const cardRect = subCardEl.getBoundingClientRect();
+
+  // Trunk line is at left:9px inside the trunk container, and 2px wide
+  const trunkX = trunkRect.left + 9 + 1; // center of the 2px trunk line
+  const trunkTopY = trunkRect.top;
+  const cardCenterY = cardRect.top + cardRect.height / 2;
+  const cardLeftX = cardRect.left;
+
+  return {
+    // Start: top of trunk
+    startX: trunkX,
+    startY: trunkTopY,
+    // Corner: where the L turns
+    cornerX: trunkX,
+    cornerY: cardCenterY,
+    // End: left edge of card
+    endX: cardLeftX,
+    endY: cardCenterY,
+    // Total vertical distance
+    vertDist: cardCenterY - trunkTopY,
+    // Total horizontal distance
+    horizDist: cardLeftX - trunkX
+  };
+}
+
+function getColorForModule(color) {
+  if (color === 'purple') return { bg: '#a78bfa', shadow: 'rgba(167,139,250,0.6)', trail: 'rgba(167,139,250,0.3)' };
+  if (color === 'blue')   return { bg: '#3b82f6', shadow: 'rgba(59,130,246,0.6)',   trail: 'rgba(59,130,246,0.3)' };
+  if (color === 'orange') return { bg: '#f59e0b', shadow: 'rgba(245,158,11,0.6)',   trail: 'rgba(245,158,11,0.3)' };
+  return { bg: '#3b82f6', shadow: 'rgba(59,130,246,0.6)', trail: 'rgba(59,130,246,0.3)' };
+}
+
+/**
+ * Spawn a single dot that follows the L-shaped path:
+ *  Phase 1 (0 -> 0.55): vertical descent down trunk
+ *  Phase 2 (0.55 -> 1.0): horizontal sweep right to card
+ *
+ *  Smooth easing on both phases, rounded corner transition,
+ *  fade in/out at start and end.
+ */
+function spawnLDot(trunkEl, subCardEl, color) {
+  const path = computeLPath(trunkEl, subCardEl);
+  if (path.vertDist < 10 || path.horizDist < 5) return;
+
+  const colors = getColorForModule(color);
+  const dot = document.createElement('div');
+  dot.className = 'flying-dot';
+  dot.style.background = colors.bg;
+  dot.style.boxShadow = `0 0 8px ${colors.shadow}, 0 0 16px ${colors.trail}`;
+  dot.style.left = path.startX + 'px';
+  dot.style.top = path.startY + 'px';
+  dot.style.opacity = '0';
+  dot.style.transform = 'scale(0.3)';
+  dotContainer.appendChild(dot);
+
+  const duration = 1600 + Math.random() * 600;
+  const startTime = performance.now();
+  // Slight random offset to prevent all dots overlapping
+  const startOffset = (Math.random() - 0.5) * 20;
+
+  function easeInOutCubic(t) {
+    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  }
+
+  function animateDot(now) {
+    const elapsed = now - startTime;
+    const t = Math.min(elapsed / duration, 1);
+
+    let x, y;
+
+    // Phase split: 55% vertical, 45% horizontal
+    const vertPhase = 0.55;
+
+    if (t < vertPhase) {
+      // Phase 1: vertical descent
+      const pt = easeInOutCubic(t / vertPhase);
+      x = path.startX;
+      y = path.startY + startOffset + path.vertDist * pt;
+    } else {
+      // Phase 2: horizontal sweep right
+      const pt = easeInOutCubic((t - vertPhase) / (1 - vertPhase));
+      x = path.cornerX + path.horizDist * pt;
+      y = path.cornerY;
+    }
+
+    // Fade in first 8%, fade out last 12%
+    const opacity = t < 0.08 ? t / 0.08 : t > 0.88 ? (1 - t) / 0.12 : 1;
+    // Scale: grow in, shrink out
+    const scale = t < 0.08 ? 0.3 + 0.7 * (t / 0.08) : t > 0.92 ? 1 - 0.7 * ((t - 0.92) / 0.08) : 1;
+
+    dot.style.left = x + 'px';
+    dot.style.top = y + 'px';
+    dot.style.opacity = opacity * 0.85;
+    dot.style.transform = `scale(${scale})`;
+
+    if (t < 1) {
+      requestAnimationFrame(animateDot);
+    } else {
+      dot.remove();
+    }
+  }
+  requestAnimationFrame(animateDot);
+}
+
+/**
+ * Find all active (running) sub-cards and spawn L-path dots for each.
+ * Multi-target: iterates all .active-sub cards.
+ */
+function spawnLDotWave() {
+  const activeCards = document.querySelectorAll('.sub-card.active-sub');
+  activeCards.forEach(card => {
+    // Find parent trunk
+    const trunk = card.closest('.tree-trunk');
+    if (!trunk) return;
+    const color = trunk.dataset.color;
+
+    // Spawn 1-2 dots per target with staggered delays
+    const count = 1 + Math.floor(Math.random() * 2);
+    for (let i = 0; i < count; i++) {
+      setTimeout(() => spawnLDot(trunk, card, color), i * 250 + Math.random() * 200);
+    }
+  });
+}
+
+// Spawn wave every 2.5 seconds + initial burst
+setInterval(spawnLDotWave, 2500);
+setTimeout(spawnLDotWave, 600);
+setTimeout(spawnLDotWave, 1200);
+
+/* ================================================================
+   LIVE ACTIVITY FEED (events every ~4s)
+   ================================================================ */
+const FEED_EVENTS = [
+  { color: 'var(--blue)', msg: '<strong>Artifacts</strong>: Ablation study running epoch 3/10' },
+  { color: 'var(--blue)', msg: '<strong>Paper Draft</strong>: Writing methods section' },
+  { color: 'var(--green)', msg: '<strong>Proof of Concept</strong> artifact completed' },
+  { color: 'var(--blue)', msg: '<strong>Ablation</strong>: accuracy delta +2.3% at layer 4' },
+  { color: 'var(--purple)', msg: 'Hypothesis score stable at <strong>8.4/10</strong>' },
+  { color: 'var(--blue)', msg: '<strong>Paper Draft</strong>: Generating related work section' },
+  { color: 'var(--blue)', msg: '<strong>Artifacts</strong>: Compiling evaluation metrics' },
+  { color: 'var(--green)', msg: '<strong>Dataset</strong> artifact verified: 12,847 samples' },
+  { color: 'var(--blue)', msg: 'Token budget: 52,441 / 100,000 tokens' },
+  { color: 'var(--blue)', msg: '<strong>Paper Draft</strong>: Introduction complete' },
+  { color: 'var(--purple)', msg: 'Review confidence: 94% no regressions' },
+  { color: 'var(--orange)', msg: 'Paper repo deployment queued' }
+];
+let feedIdx = 0;
+
+function addFeedEvent() {
+  const rpFeed = document.getElementById('rpFeed');
+  if (!rpFeed || !rightPanel.classList.contains('open')) return;
+
+  const ev = FEED_EVENTS[feedIdx % FEED_EVENTS.length];
+  feedIdx++;
+
+  const now = new Date();
+  const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+  const entry = document.createElement('div');
+  entry.className = 'rp-feed-entry';
+  entry.innerHTML = `<span class="rp-feed-time">${time}</span>
+    <span class="rp-feed-pip" style="background:${ev.color}"></span>
+    <span class="rp-feed-msg">${ev.msg}</span>`;
+  rpFeed.insertBefore(entry, rpFeed.firstChild);
+
+  while (rpFeed.children.length > 15) {
+    rpFeed.removeChild(rpFeed.lastChild);
+  }
+}
+setInterval(addFeedEvent, 4000);
+
+/* ================================================================
+   LIVE TIMER + COST
+   ================================================================ */
+let timerSeconds = 2 * 3600 + 34 * 60 + 17;
+let costValue = 12.47;
+const timerEl = document.getElementById('timerDisplay');
+const costEl = document.getElementById('costDisplay');
+
+setInterval(() => {
+  timerSeconds++;
+  const h = String(Math.floor(timerSeconds / 3600)).padStart(2, '0');
+  const m = String(Math.floor((timerSeconds % 3600) / 60)).padStart(2, '0');
+  const s = String(timerSeconds % 60).padStart(2, '0');
+  timerEl.textContent = `${h}:${m}:${s}`;
+}, 1000);
+
+setInterval(() => {
+  costValue += 0.01 + Math.random() * 0.02;
+  costEl.textContent = `$${costValue.toFixed(2)}`;
+}, 8000);
+
+/* ================================================================
+   KEYBOARD NAVIGATION (arrows + Escape)
+   ================================================================ */
+let focusedModule = 1;
+let focusedSub = -1;
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    closeRightPanel();
+    return;
+  }
+  if (e.key === 'ArrowLeft') {
+    focusedModule = Math.max(0, focusedModule - 1);
+    focusedSub = -1;
+    breadcrumbEl.textContent = MODULES[focusedModule].label;
+    updateSidebarActive(focusedModule);
+    highlightModuleCard(focusedModule);
+    e.preventDefault();
+  }
+  if (e.key === 'ArrowRight') {
+    focusedModule = Math.min(MODULES.length - 1, focusedModule + 1);
+    focusedSub = -1;
+    breadcrumbEl.textContent = MODULES[focusedModule].label;
+    updateSidebarActive(focusedModule);
+    highlightModuleCard(focusedModule);
+    e.preventDefault();
+  }
+  if (e.key === 'ArrowDown') {
+    const mod = MODULES[focusedModule];
+    focusedSub = Math.min(mod.subs.length - 1, focusedSub + 1);
+    highlightSubCard(focusedModule, focusedSub);
+    e.preventDefault();
+  }
+  if (e.key === 'ArrowUp') {
+    focusedSub = Math.max(-1, focusedSub - 1);
+    if (focusedSub >= 0) highlightSubCard(focusedModule, focusedSub);
+    e.preventDefault();
+  }
+  if (e.key === 'Enter' && focusedSub >= 0) {
+    openRightPanel(focusedModule, focusedSub);
+    e.preventDefault();
+  }
+});
+
+function updateSidebarActive(mi) {
+  document.querySelectorAll('.sidebar-item').forEach(si => si.classList.remove('active'));
+  const item = document.querySelector(`.sidebar-item[data-module="${mi}"]`);
+  if (item) item.classList.add('active');
+}
+
+function highlightModuleCard(mi) {
+  document.querySelectorAll('.mod-card').forEach(c => c.style.outline = 'none');
+  const card = document.querySelector(`.mod-card[data-module="${mi}"]`);
+  if (card) {
+    const color = MODULES[mi].color;
+    const cv = color === 'purple' ? 'rgba(167,139,250,0.4)' :
+               color === 'blue' ? 'rgba(59,130,246,0.4)' : 'rgba(245,158,11,0.4)';
+    card.style.outline = `1px solid ${cv}`;
+    card.style.outlineOffset = '-1px';
+  }
+}
+
+function highlightSubCard(mi, si) {
+  document.querySelectorAll('.sub-card').forEach(c => {
+    c.style.outline = 'none';
+    c.style.outlineOffset = '';
+  });
+  const card = document.querySelector(`.sub-card[data-module="${mi}"][data-sub="${si}"]`);
+  if (card) {
+    const color = MODULES[mi].color;
+    const cv = color === 'purple' ? 'rgba(167,139,250,0.35)' :
+               color === 'blue' ? 'rgba(59,130,246,0.35)' : 'rgba(245,158,11,0.35)';
+    card.style.outline = `1px solid ${cv}`;
+    card.style.outlineOffset = '-1px';
+    card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+/* ================================================================
+   RADIAL AMBIENT GLOW (follows active module section)
+   ================================================================ */
+const ambientGlow = document.createElement('div');
+ambientGlow.style.cssText = `
+  position: fixed; width: 600px; height: 400px; border-radius: 50%;
+  pointer-events: none; z-index: 0; filter: blur(80px); opacity: 0.04;
+  transition: all 2s ease; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(ellipse, var(--blue), transparent 70%);
+`;
+document.body.insertBefore(ambientGlow, document.body.firstChild);
+
+let glowAngle = 0;
+function driftGlow() {
+  glowAngle += 0.003;
+  const ox = Math.sin(glowAngle) * 80;
+  const oy = Math.cos(glowAngle * 0.7) * 40;
+  ambientGlow.style.transform = `translate(calc(-50% + ${ox}px), calc(-50% + ${oy}px))`;
+  requestAnimationFrame(driftGlow);
+}
+driftGlow();
+
+/* ================================================================
+   MODULE CARD ENTRANCE ANIMATIONS
+   ================================================================ */
+function animateCardEntrance() {
+  const cards = document.querySelectorAll('.mod-card');
+  cards.forEach((card, i) => {
+    card.style.opacity = '0';
+    card.style.transform = 'translateY(12px)';
+    card.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+    setTimeout(() => {
+      card.style.opacity = '1';
+      card.style.transform = 'translateY(0)';
+    }, 120 + i * 100);
+  });
+}
+animateCardEntrance();
+
+/* ================================================================
+   COST SPARKLINE MICRO-ANIMATION
+   ================================================================ */
+const sparkDot = document.createElement('span');
+sparkDot.style.cssText = `
+  width: 4px; height: 4px; border-radius: 50%; background: var(--green);
+  display: inline-block; margin-left: 4px; vertical-align: middle;
+  animation: costPulse 3s ease-in-out infinite;
+`;
+const sparkStyle = document.createElement('style');
+sparkStyle.textContent = `
+  @keyframes costPulse {
+    0%, 100% { opacity: 0.3; transform: scale(0.8); }
+    50% { opacity: 1; transform: scale(1.2); }
+  }
+`;
+document.head.appendChild(sparkStyle);
+costEl.parentElement.appendChild(sparkDot);
+
+/* ================================================================
+   RESIZE HANDLER for responsive module cards
+   ================================================================ */
+function handleResize() {
+  const w = window.innerWidth;
+  const cards = document.querySelector('.module-cards');
+  if (w < 900) {
+    cards.style.gridTemplateColumns = '1fr';
+  } else if (w < 1200) {
+    cards.style.gridTemplateColumns = 'repeat(2, 1fr)';
+  } else {
+    cards.style.gridTemplateColumns = 'repeat(3, 1fr)';
+  }
+
+  const tree = document.getElementById('treeArea');
+  if (w < 900) {
+    tree.style.gridTemplateColumns = '1fr';
+  } else if (w < 1200) {
+    tree.style.gridTemplateColumns = 'repeat(2, 1fr)';
+  } else {
+    tree.style.gridTemplateColumns = 'repeat(3, 1fr)';
+  }
+}
+window.addEventListener('resize', handleResize);
+handleResize();
+
+/* ================================================================
+   KEYBOARD HINT (bottom-right, shifts when panel open)
+   ================================================================ */
+const kbdHint = document.createElement('div');
+kbdHint.style.cssText = `
+  position: fixed; bottom: 12px; right: 20px; font-size: 10px;
+  color: var(--text-500); z-index: 50; opacity: 0.6;
+  display: flex; gap: 8px; align-items: center;
+  transition: right 0.45s cubic-bezier(0.22, 0.61, 0.36, 1);
+`;
+kbdHint.innerHTML = `
+  <span style="display:inline-block; padding:1px 5px; background:var(--surface);
+    border:1px solid var(--glass-border); border-radius:3px; font-size:9px;
+    color:var(--text-400);">\u2190\u2192</span> modules
+  <span style="display:inline-block; padding:1px 5px; background:var(--surface);
+    border:1px solid var(--glass-border); border-radius:3px; font-size:9px;
+    color:var(--text-400);">\u2191\u2193</span> subs
+  <span style="display:inline-block; padding:1px 5px; background:var(--surface);
+    border:1px solid var(--glass-border); border-radius:3px; font-size:9px;
+    color:var(--text-400);">Enter</span> open
+  <span style="display:inline-block; padding:1px 5px; background:var(--surface);
+    border:1px solid var(--glass-border); border-radius:3px; font-size:9px;
+    color:var(--text-400);">Esc</span> close
+`;
+document.body.appendChild(kbdHint);
+
+// Shift keyboard hint when panel opens
+const observer = new MutationObserver(() => {
+  if (document.body.classList.contains('panel-open')) {
+    kbdHint.style.right = (380 + 20) + 'px';
+  } else {
+    kbdHint.style.right = '20px';
+  }
+});
+observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+
+/* ================================================================
+   AUTO-EXPAND / COLLAPSE trees on load
+   ================================================================ */
+setTimeout(() => {
+  const activeCols = document.querySelectorAll('.tree-col');
+  activeCols.forEach(col => {
+    const mi = parseInt(col.dataset.module);
+    if (MODULES[mi] && MODULES[mi].status === 'pending') {
+      col.classList.add('collapsed');
+    }
+  });
+}, 100);
+
+/* ================================================================
+   SMOOTH SCROLL
+   ================================================================ */
+document.documentElement.style.scrollBehavior = 'smooth';
+
+/* ================================================================
+   FLYING DOT TRAIL STYLE
+   ================================================================ */
+const trailStyle = document.createElement('style');
+trailStyle.textContent = `
+  .flying-dot-trail {
+    position: absolute; width: 3px; height: 3px; border-radius: 50%;
+    pointer-events: none; opacity: 0.3;
+    transition: opacity 0.6s ease;
+  }
+`;
+document.head.appendChild(trailStyle);
+
+/* ================================================================
+   RUNNING ITEM ROW SHIMMER in panel
+   ================================================================ */
+const rpItemStyle = document.createElement('style');
+rpItemStyle.textContent = `
+  .rp-item-running {
+    position: relative; overflow: hidden;
+  }
+  .rp-item-running::after {
+    content: ''; position: absolute; top: 0; left: -100%; width: 50%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(59,130,246,0.04), transparent);
+    animation: rpItemShimmer 2.5s ease-in-out infinite;
+    pointer-events: none;
+  }
+  @keyframes rpItemShimmer {
+    0% { left: -100%; } 60% { left: 150%; } 100% { left: 150%; }
+  }
+`;
+document.head.appendChild(rpItemStyle);
+</script>
+</body>
+</html>
