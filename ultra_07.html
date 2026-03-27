@@ -1,0 +1,2189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Slide-Up Drawer</title>
+<style>
+  /* ================================================================
+     RESET & CUSTOM PROPERTIES
+     ================================================================ */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg-deep:     #0a0c14;
+    --bg-surface:  #11141e;
+    --bg-card:     rgba(18, 22, 34, 0.82);
+    --bg-drawer:   rgba(14, 17, 28, 0.92);
+    --glass-border: rgba(255, 255, 255, 0.07);
+    --glass-thick:  rgba(255, 255, 255, 0.10);
+    --text-main:   #e2e4eb;
+    --text-dim:    #6b7089;
+    --text-muted:  #3e445a;
+
+    /* Stage palette */
+    --green:    #34d399;
+    --green-bg: rgba(52, 211, 153, 0.10);
+    --green-glow: rgba(52, 211, 153, 0.30);
+    --purple:   #a78bfa;
+    --purple-bg: rgba(167, 139, 250, 0.10);
+    --purple-glow: rgba(167, 139, 250, 0.30);
+    --blue:     #60a5fa;
+    --blue-bg:  rgba(96, 165, 250, 0.12);
+    --blue-glow: rgba(96, 165, 250, 0.30);
+    --orange:   #fb923c;
+    --orange-bg: rgba(251, 146, 60, 0.08);
+    --orange-glow: rgba(251, 146, 60, 0.25);
+
+    /* Layout */
+    --card-w: 148px;
+    --card-h: 68px;
+    --card-r: 11px;
+
+    /* Motion */
+    --ease-out:  cubic-bezier(0.22, 0.61, 0.36, 1);
+    --ease-snap: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --fast: 0.2s;
+    --med:  0.35s;
+
+    /* Tree animation */
+    --tree-dot-size: 5px;
+    --tree-line-color: rgba(255, 255, 255, 0.06);
+    --tree-vert-height: 36px;
+    --tree-horiz-width: 18px;
+
+    /* Drawer */
+    --drawer-max: 55vh;
+    --drawer-peek: 0px;
+    --drawer-radius: 22px;
+    --handle-w: 42px;
+    --handle-h: 4px;
+  }
+
+  html { font-size: 15px; }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg-deep);
+    color: var(--text-main);
+    min-height: 100vh;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ================================================================
+     AMBIENT BACKGROUND
+     ================================================================ */
+  body::before {
+    content: '';
+    position: fixed;
+    top: -40%; left: -20%;
+    width: 140%; height: 140%;
+    background:
+      radial-gradient(ellipse 600px 400px at 20% 12%, rgba(96, 165, 250, 0.04) 0%, transparent 70%),
+      radial-gradient(ellipse 500px 350px at 80% 18%, rgba(167, 139, 250, 0.035) 0%, transparent 70%),
+      radial-gradient(ellipse 450px 400px at 50% 85%, rgba(52, 211, 153, 0.025) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ================================================================
+     MAIN LAYOUT
+     ================================================================ */
+  .app {
+    position: relative;
+    z-index: 1;
+    max-width: 860px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 28px 24px 60px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ================================================================
+     HEADER BAR
+     ================================================================ */
+  .header-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 32px;
+    padding-bottom: 18px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  }
+
+  .header-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--text-main);
+  }
+
+  .header-subtitle {
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    margin-top: 2px;
+    letter-spacing: 0.03em;
+  }
+
+  .header-badge {
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 4px 10px;
+    border-radius: 6px;
+    background: var(--blue-bg);
+    color: var(--blue);
+    border: 1px solid rgba(96, 165, 250, 0.15);
+  }
+
+  /* ================================================================
+     TOP STRIP — STAGE CARDS WITH L-TREE CONNECTORS
+     ================================================================ */
+  .stage-strip {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 0;
+    position: relative;
+    margin-bottom: 12px;
+    padding: 0 8px;
+  }
+
+  /* Each stage column: card + vertical connector */
+  .stage-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+  }
+
+  /* L-shaped connector between stages */
+  .stage-col + .stage-col {
+    margin-left: 28px;
+  }
+
+  .l-connector {
+    position: absolute;
+    top: 50%;
+    right: 100%;
+    width: 28px;
+    height: 2px;
+    pointer-events: none;
+    transform: translateY(-50%);
+  }
+
+  /* ── Stage Card ────────────────────────────────────────── */
+  .stage-card {
+    width: var(--card-w);
+    height: var(--card-h);
+    border-radius: var(--card-r);
+    background: var(--bg-card);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border: 1px solid var(--glass-border);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    cursor: pointer;
+    position: relative;
+    user-select: none;
+    transition:
+      transform var(--med) var(--ease-out),
+      border-color var(--fast),
+      box-shadow var(--med) var(--ease-out),
+      background var(--fast);
+    z-index: 2;
+  }
+
+  .stage-card:hover {
+    transform: translateY(-3px);
+    border-color: rgba(255, 255, 255, 0.12);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
+  }
+
+  /* Accent stripe at top */
+  .stage-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 14px; right: 14px;
+    height: 2.5px;
+    border-radius: 0 0 3px 3px;
+    opacity: 0.6;
+    transition: opacity var(--fast);
+  }
+
+  .stage-card[data-stage="seed"]::before       { background: var(--green); }
+  .stage-card[data-stage="hypothesis"]::before  { background: var(--purple); }
+  .stage-card[data-stage="invention"]::before   { background: var(--blue); }
+  .stage-card[data-stage="paper"]::before       { background: var(--orange); }
+
+  .stage-card[data-stage="seed"]       { --accent: var(--green);  --accent-bg: var(--green-bg);  --accent-glow: var(--green-glow); }
+  .stage-card[data-stage="hypothesis"] { --accent: var(--purple); --accent-bg: var(--purple-bg); --accent-glow: var(--purple-glow); }
+  .stage-card[data-stage="invention"]  { --accent: var(--blue);   --accent-bg: var(--blue-bg);   --accent-glow: var(--blue-glow); }
+  .stage-card[data-stage="paper"]      { --accent: var(--orange); --accent-bg: var(--orange-bg); --accent-glow: var(--orange-glow); }
+
+  .card-label {
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    transition: color var(--fast);
+  }
+
+  .card-status {
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--text-muted);
+    transition: color var(--fast);
+  }
+
+  .card-badge {
+    position: absolute;
+    top: -6px; right: -6px;
+    font-size: 0.55rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 2px 6px;
+    border-radius: 4px;
+    line-height: 1.3;
+    z-index: 3;
+  }
+
+  .badge-done    { background: rgba(52, 211, 153, 0.2); color: var(--green); }
+  .badge-running { background: rgba(96, 165, 250, 0.2); color: var(--blue); }
+  .badge-pending { background: rgba(148, 163, 184, 0.12); color: #64748b; }
+
+  /* Dim state (pending stage) */
+  .stage-card.is-dim {
+    opacity: 0.42;
+  }
+
+  .stage-card:hover.is-dim {
+    opacity: 0.7;
+  }
+
+  /* Selected card */
+  .stage-card.is-selected {
+    transform: translateY(-4px);
+    border-color: rgba(255, 255, 255, 0.14);
+    background: rgba(18, 22, 34, 0.95);
+    box-shadow:
+      0 10px 32px rgba(0, 0, 0, 0.5),
+      0 0 0 1px var(--accent, transparent),
+      0 0 24px 4px var(--accent-glow, transparent);
+  }
+
+  .stage-card.is-selected::before { opacity: 1; height: 3px; }
+  .stage-card.is-selected .card-label  { color: var(--accent); }
+  .stage-card.is-selected .card-status { color: var(--text-main); }
+  .stage-card.is-selected.is-dim { opacity: 1; }
+
+  /* Focus ring */
+  .stage-card:focus-visible {
+    outline: 2px solid var(--accent, var(--blue));
+    outline-offset: 3px;
+  }
+
+  /* ================================================================
+     L-SHAPED TREE CONNECTOR (SVG between cards)
+     ================================================================ */
+  .tree-svg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1;
+    overflow: visible;
+  }
+
+  .tree-line {
+    fill: none;
+    stroke: var(--tree-line-color);
+    stroke-width: 1.5;
+    stroke-linecap: round;
+  }
+
+  .tree-line.active {
+    stroke: rgba(255, 255, 255, 0.12);
+  }
+
+  /* L-tree animated dot */
+  .tree-dot {
+    r: 3;
+    opacity: 0;
+    filter: blur(0.3px);
+  }
+
+  .tree-dot.active {
+    opacity: 1;
+  }
+
+  /* ================================================================
+     KEYBOARD HINT
+     ================================================================ */
+  .nav-hint {
+    text-align: center;
+    margin: 8px 0 24px;
+    font-size: 0.66rem;
+    color: var(--text-muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    opacity: 0.55;
+  }
+
+  .nav-hint kbd {
+    display: inline-block;
+    padding: 1px 6px;
+    margin: 0 2px;
+    font-size: 0.64rem;
+    font-family: inherit;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 4px;
+    color: var(--text-dim);
+  }
+
+  /* ================================================================
+     MAIN CONTENT AREA (visible when no drawer is open)
+     ================================================================ */
+  .content-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .content-prompt {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-dim);
+    font-size: 0.85rem;
+    line-height: 1.6;
+  }
+
+  .content-prompt .prompt-icon {
+    font-size: 2rem;
+    margin-bottom: 12px;
+    opacity: 0.3;
+  }
+
+  .content-prompt .prompt-hint {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    margin-top: 8px;
+  }
+
+  /* ── Metric summary row ─────────────────────────────────── */
+  .metric-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+  }
+
+  .metric {
+    flex: 1;
+    min-width: 100px;
+    background: var(--bg-card);
+    backdrop-filter: blur(14px);
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    text-align: center;
+    transition: border-color var(--fast);
+  }
+
+  .metric:hover { border-color: rgba(255, 255, 255, 0.10); }
+
+  .metric-value {
+    font-size: 1.35rem;
+    font-weight: 700;
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+
+  .metric-label {
+    font-size: 0.68rem;
+    font-weight: 500;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  /* Colour helpers */
+  .text-green  { color: var(--green); }
+  .text-purple { color: var(--purple); }
+  .text-blue   { color: var(--blue); }
+  .text-orange { color: var(--orange); }
+
+  /* ================================================================
+     SLIDE-UP DRAWER OVERLAY
+     ================================================================ */
+  .drawer-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 100;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.35s var(--ease-out);
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
+  }
+
+  .drawer-overlay.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* ================================================================
+     SLIDE-UP DRAWER
+     ================================================================ */
+  .drawer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 110;
+    max-height: var(--drawer-max);
+    min-height: 200px;
+    border-radius: var(--drawer-radius) var(--drawer-radius) 0 0;
+    background: var(--bg-drawer);
+    backdrop-filter: blur(28px) saturate(1.3);
+    -webkit-backdrop-filter: blur(28px) saturate(1.3);
+    border: 1px solid var(--glass-thick);
+    border-bottom: none;
+    box-shadow:
+      0 -12px 60px rgba(0, 0, 0, 0.5),
+      0 -4px 20px rgba(0, 0, 0, 0.3),
+      inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    transform: translateY(100%);
+    transition: transform 0.4s var(--ease-out);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    touch-action: none;
+    will-change: transform;
+  }
+
+  .drawer.open {
+    transform: translateY(0);
+  }
+
+  .drawer.dragging {
+    transition: none;
+  }
+
+  /* ── Drag handle ────────────────────────────────────────── */
+  .drawer-handle-zone {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 12px 0 6px;
+    cursor: grab;
+    flex-shrink: 0;
+  }
+
+  .drawer-handle-zone:active { cursor: grabbing; }
+
+  .drawer-handle {
+    width: var(--handle-w);
+    height: var(--handle-h);
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.20);
+    transition: background var(--fast), width var(--fast);
+  }
+
+  .drawer-handle-zone:hover .drawer-handle {
+    background: rgba(255, 255, 255, 0.35);
+    width: calc(var(--handle-w) + 10px);
+  }
+
+  /* ── Drawer header ──────────────────────────────────────── */
+  .drawer-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 24px 14px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    flex-shrink: 0;
+  }
+
+  .drawer-header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .drawer-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    flex-shrink: 0;
+  }
+
+  .accent-green  { background: var(--green-bg);  color: var(--green); }
+  .accent-purple { background: var(--purple-bg); color: var(--purple); }
+  .accent-blue   { background: var(--blue-bg);   color: var(--blue); }
+  .accent-orange { background: var(--orange-bg); color: var(--orange); }
+
+  .drawer-title {
+    font-size: 1.05rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  .drawer-subtitle {
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    margin-top: 1px;
+  }
+
+  .drawer-close {
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    border: 1px solid var(--glass-border);
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text-dim);
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background var(--fast), color var(--fast), border-color var(--fast);
+    flex-shrink: 0;
+  }
+
+  .drawer-close:hover {
+    background: rgba(255, 255, 255, 0.09);
+    color: var(--text-main);
+    border-color: rgba(255, 255, 255, 0.18);
+  }
+
+  /* ── Drawer scrollable body ─────────────────────────────── */
+  .drawer-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 18px 24px 28px;
+    overscroll-behavior: contain;
+  }
+
+  .drawer-body::-webkit-scrollbar {
+    width: 5px;
+  }
+
+  .drawer-body::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .drawer-body::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 3px;
+  }
+
+  .drawer-body::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.14);
+  }
+
+  /* ================================================================
+     DRAWER CONTENT — PANELS
+     ================================================================ */
+
+  /* Drawer section */
+  .drawer-section {
+    display: none;
+    flex-direction: column;
+    gap: 14px;
+    animation: drawerFadeIn 0.3s ease forwards;
+  }
+
+  .drawer-section.visible {
+    display: flex;
+  }
+
+  @keyframes drawerFadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Glass panel within drawer */
+  .panel {
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    border-radius: 11px;
+    overflow: hidden;
+    transition: border-color var(--fast);
+  }
+
+  .panel:hover {
+    border-color: rgba(255, 255, 255, 0.10);
+  }
+
+  /* Expandable panel header */
+  .panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 13px 16px;
+    cursor: pointer;
+    user-select: none;
+    transition: background var(--fast);
+  }
+
+  .panel-header:hover {
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  .panel-header-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .panel-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .panel-title {
+    font-size: 0.85rem;
+    font-weight: 550;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .panel-header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .panel-badge {
+    font-size: 0.65rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 5px;
+    white-space: nowrap;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .badge-done    { background: rgba(52, 211, 153, 0.15); color: var(--green); }
+  .badge-active  { background: rgba(96, 165, 250, 0.15); color: var(--blue); }
+  .badge-wait    { background: rgba(148, 163, 184, 0.10); color: #64748b; }
+
+  .panel-chevron {
+    font-size: 0.6rem;
+    color: var(--text-muted);
+    transition: transform 0.25s var(--ease-out);
+    display: inline-block;
+  }
+
+  .panel.is-open .panel-chevron {
+    transform: rotate(90deg);
+  }
+
+  /* Panel body (collapsed by default) */
+  .panel-body {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.35s var(--ease-out);
+  }
+
+  .panel.is-open .panel-body {
+    max-height: 600px;
+  }
+
+  .panel-content {
+    padding: 0 16px 16px;
+    font-size: 0.8rem;
+    line-height: 1.6;
+    color: var(--text-dim);
+  }
+
+  .panel-content p {
+    margin-bottom: 8px;
+  }
+
+  .panel-content p:last-child {
+    margin-bottom: 0;
+  }
+
+  /* ── Tag row ────────────────────────────────────────────── */
+  .tag-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .tag {
+    font-size: 0.65rem;
+    font-weight: 500;
+    padding: 3px 8px;
+    border-radius: 5px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    color: var(--text-dim);
+    white-space: nowrap;
+  }
+
+  /* ── Detail list (key-value pairs) ──────────────────────── */
+  .detail-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .detail-list li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.78rem;
+    padding: 4px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+  }
+
+  .detail-list li:last-child { border-bottom: none; }
+
+  .detail-key {
+    color: var(--text-dim);
+    font-weight: 500;
+  }
+
+  .detail-val {
+    color: var(--text-main);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ── Progress bar ───────────────────────────────────────── */
+  .progress-track {
+    height: 3px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.06);
+    overflow: hidden;
+    margin-top: 8px;
+  }
+
+  .progress-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.6s var(--ease-out);
+  }
+
+  .fill-green  { background: var(--green); }
+  .fill-purple { background: var(--purple); }
+  .fill-blue   { background: var(--blue); }
+  .fill-orange { background: var(--orange); }
+
+  /* ── Score pill ─────────────────────────────────────────── */
+  .score-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 5px;
+  }
+
+  .score-pill .sdot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+
+  /* ── Empty state ────────────────────────────────────────── */
+  .empty-state {
+    text-align: center;
+    padding: 32px 16px;
+    color: var(--text-dim);
+  }
+
+  .empty-icon {
+    font-size: 1.8rem;
+    margin-bottom: 8px;
+    opacity: 0.3;
+  }
+
+  .empty-state p {
+    font-size: 0.82rem;
+    line-height: 1.5;
+  }
+
+  /* ── Sub-step list ──────────────────────────────────────── */
+  .substep-list {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    margin-top: 6px;
+  }
+
+  .substep {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.76rem;
+  }
+
+  .substep-icon {
+    width: 18px;
+    height: 18px;
+    border-radius: 5px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    flex-shrink: 0;
+    font-weight: 700;
+  }
+
+  .substep-icon.done    { background: rgba(52, 211, 153, 0.15); color: var(--green); }
+  .substep-icon.running { background: rgba(96, 165, 250, 0.15); color: var(--blue); }
+  .substep-icon.pending { background: rgba(148, 163, 184, 0.10); color: #475569; }
+
+  .substep-name {
+    color: var(--text-dim);
+    flex: 1;
+  }
+
+  .substep-name.active-step {
+    color: var(--text-main);
+    font-weight: 600;
+  }
+
+  .substep-time {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Spinner */
+  .spin-ring {
+    width: 10px;
+    height: 10px;
+    border: 1.5px solid rgba(96, 165, 250, 0.25);
+    border-top-color: var(--blue);
+    border-radius: 50%;
+    animation: spinRing 0.8s linear infinite;
+  }
+
+  @keyframes spinRing {
+    to { transform: rotate(360deg); }
+  }
+
+  /* ================================================================
+     RESPONSIVE
+     ================================================================ */
+  @media (max-width: 700px) {
+    :root {
+      --card-w: 120px;
+      --card-h: 58px;
+      --drawer-max: 65vh;
+    }
+    .stage-col + .stage-col { margin-left: 16px; }
+    .card-label { font-size: 0.64rem; }
+    .card-status { font-size: 0.72rem; }
+    .metric-row { gap: 8px; }
+    .metric { min-width: 80px; padding: 10px; }
+    .metric-value { font-size: 1.1rem; }
+    .drawer-body { padding: 14px 16px 24px; }
+    .drawer-header { padding: 6px 16px 12px; }
+  }
+
+  @media (max-width: 480px) {
+    :root {
+      --card-w: 95px;
+      --card-h: 52px;
+      --drawer-max: 70vh;
+    }
+    .stage-col + .stage-col { margin-left: 10px; }
+    .stage-strip { padding: 0 4px; }
+    .header-bar { flex-direction: column; align-items: flex-start; gap: 8px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ================================================================
+       HEADER
+       ================================================================ -->
+  <div class="header-bar">
+    <div>
+      <div class="header-title">AI Inventor</div>
+      <div class="header-subtitle">Pipeline run #2847 &mdash; Sparse Cross-Attention</div>
+    </div>
+    <div class="header-badge">Invention in Progress</div>
+  </div>
+
+  <!-- ================================================================
+       STAGE STRIP — cards + L-tree connectors
+       ================================================================ -->
+  <div class="stage-strip" id="stageStrip">
+    <svg class="tree-svg" id="treeSvg"></svg>
+
+    <!-- Seed -->
+    <div class="stage-col" data-col="0">
+      <div class="stage-card" data-stage="seed" data-index="0" tabindex="0">
+        <span class="card-badge badge-done">Done</span>
+        <span class="card-label">Seed</span>
+        <span class="card-status">12 gaps</span>
+      </div>
+    </div>
+
+    <!-- Hypothesis -->
+    <div class="stage-col" data-col="1">
+      <div class="stage-card" data-stage="hypothesis" data-index="1" tabindex="0">
+        <span class="card-badge badge-done">Done</span>
+        <span class="card-label">Hypothesis</span>
+        <span class="card-status">8.4 / 10</span>
+      </div>
+    </div>
+
+    <!-- Invention (active) -->
+    <div class="stage-col" data-col="2">
+      <div class="stage-card" data-stage="invention" data-index="2" tabindex="0">
+        <span class="card-badge badge-running">Running</span>
+        <span class="card-label">Invention</span>
+        <span class="card-status">3 / 5</span>
+      </div>
+    </div>
+
+    <!-- Paper -->
+    <div class="stage-col" data-col="3">
+      <div class="stage-card is-dim" data-stage="paper" data-index="3" tabindex="0">
+        <span class="card-badge badge-pending">Pending</span>
+        <span class="card-label">Paper</span>
+        <span class="card-status">&mdash;</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="nav-hint">
+    <kbd>&larr;</kbd> <kbd>&rarr;</kbd> navigate &nbsp;&middot;&nbsp; <kbd>Enter</kbd> open drawer &nbsp;&middot;&nbsp; <kbd>Esc</kbd> close
+  </div>
+
+  <!-- ================================================================
+       SUMMARY METRICS (always visible)
+       ================================================================ -->
+  <div class="metric-row" id="metricRow">
+    <div class="metric">
+      <div class="metric-value text-green">847</div>
+      <div class="metric-label">Papers Scanned</div>
+    </div>
+    <div class="metric">
+      <div class="metric-value text-purple">8.4</div>
+      <div class="metric-label">Hypo Score</div>
+    </div>
+    <div class="metric">
+      <div class="metric-value text-blue">3 / 5</div>
+      <div class="metric-label">Invention Iter.</div>
+    </div>
+    <div class="metric">
+      <div class="metric-value text-orange">&mdash;</div>
+      <div class="metric-label">Paper Status</div>
+    </div>
+  </div>
+
+  <!-- ================================================================
+       CONTENT PROMPT (visible when drawer is closed)
+       ================================================================ -->
+  <div class="content-area" id="contentArea">
+    <div class="content-prompt">
+      <div class="prompt-icon">&#9652;</div>
+      <div>Select a stage above to view details</div>
+      <div class="prompt-hint">Click a card or press Enter to slide open the drawer</div>
+    </div>
+  </div>
+
+</div><!-- /app -->
+
+<!-- ================================================================
+     DRAWER OVERLAY
+     ================================================================ -->
+<div class="drawer-overlay" id="drawerOverlay"></div>
+
+<!-- ================================================================
+     SLIDE-UP DRAWER
+     ================================================================ -->
+<div class="drawer" id="drawer">
+  <!-- Drag handle -->
+  <div class="drawer-handle-zone" id="drawerHandleZone">
+    <div class="drawer-handle" id="drawerHandle"></div>
+  </div>
+
+  <!-- Header (populated by JS) -->
+  <div class="drawer-header" id="drawerHeader">
+    <div class="drawer-header-left">
+      <div class="drawer-icon accent-green" id="drawerIcon">&#9672;</div>
+      <div>
+        <div class="drawer-title" id="drawerTitle">Seed Exploration</div>
+        <div class="drawer-subtitle" id="drawerSubtitle">Knowledge graph traversal</div>
+      </div>
+    </div>
+    <button class="drawer-close" id="drawerClose" aria-label="Close drawer">&times;</button>
+  </div>
+
+  <!-- Scrollable body -->
+  <div class="drawer-body" id="drawerBody">
+
+    <!-- ── SEED SECTION ────────────────────────────────────── -->
+    <div class="drawer-section" data-section="seed">
+      <div class="metric-row">
+        <div class="metric">
+          <div class="metric-value text-green">847</div>
+          <div class="metric-label">Papers Scanned</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value text-green">12</div>
+          <div class="metric-label">Seed Topics</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value text-green">3.2k</div>
+          <div class="metric-label">KG Nodes</div>
+        </div>
+      </div>
+
+      <div class="panel is-open">
+        <div class="panel-header" onclick="togglePanel(this)">
+          <div class="panel-header-left">
+            <div class="panel-dot" style="background:var(--green)"></div>
+            <span class="panel-title">Topic Clusters</span>
+          </div>
+          <div class="panel-header-right">
+            <span class="panel-badge badge-done">Complete</span>
+            <span class="panel-chevron">&#9654;</span>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="panel-content">
+            <p>Identified 12 high-potential seed topics from knowledge graph traversal across 847 source papers.</p>
+            <div class="tag-row">
+              <span class="tag">neural architecture</span>
+              <span class="tag">self-supervised</span>
+              <span class="tag">graph reasoning</span>
+              <span class="tag">causal inference</span>
+              <span class="tag">sparse attention</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header" onclick="togglePanel(this)">
+          <div class="panel-header-left">
+            <div class="panel-dot" style="background:var(--green)"></div>
+            <span class="panel-title">Citation Network Analysis</span>
+          </div>
+          <div class="panel-header-right">
+            <span class="panel-badge badge-done">Complete</span>
+            <span class="panel-chevron">&#9654;</span>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="panel-content">
+            <ul class="detail-list">
+              <li><span class="detail-key">Avg citations/paper</span><span class="detail-val">23.4</span></li>
+              <li><span class="detail-key">Max graph depth</span><span class="detail-val">7 hops</span></li>
+              <li><span class="detail-key">Connected components</span><span class="detail-val">4</span></li>
+              <li><span class="detail-key">Bridge papers found</span><span class="detail-val">18</span></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header" onclick="togglePanel(this)">
+          <div class="panel-header-left">
+            <div class="panel-dot" style="background:var(--green)"></div>
+            <span class="panel-title">Gap Detection</span>
+          </div>
+          <div class="panel-header-right">
+            <span class="panel-badge badge-done">Complete</span>
+            <span class="panel-chevron">&#9654;</span>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="panel-content">
+            <p>Cross-domain gap analysis surfaced 6 underexplored intersections between established research areas. Highest-signal gap: causal reasoning applied to sparse attention mechanisms.</p>
+            <div class="progress-track">
+              <div class="progress-fill fill-green" style="width:100%"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header" onclick="togglePanel(this)">
+          <div class="panel-header-left">
+            <div class="panel-dot" style="background:var(--green)"></div>
+            <span class="panel-title">Sub-steps</span>
+          </div>
+          <div class="panel-header-right">
+            <span class="panel-badge badge-done">4 / 4</span>
+            <span class="panel-chevron">&#9654;</span>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="panel-content">
+            <div class="substep-list">
+              <div class="substep">
+                <div class="substep-icon done">&#10003;</div>
+                <span class="substep-name">Fetch source papers</span>
+                <span class="substep-time">42s</span>
+              </div>
+              <div class="substep">
+                <div class="substep-icon done">&#10003;</div>
+                <span class="substep-name">Build knowledge graph</span>
+                <span class="substep-time">1m 18s</span>
+              </div>
+              <div class="substep">
+                <div class="substep-icon done">&#10003;</div>
+                <span class="substep-name">Detect research gaps</span>
+                <span class="substep-time">35s</span>
+              </div>
+              <div class="substep">
+                <div class="substep-icon done">&#10003;</div>
+                <span class="substep-name">Rank gap novelty</span>
+                <span class="substep-time">22s</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── HYPOTHESIS SECTION ──────────────────────────────── -->
+    <div class="drawer-section" data-section="hypothesis">
+      <div class="metric-row">
+        <div class="metric">
+          <div class="metric-value text-purple">8.4</div>
+          <div class="metric-label">Final Score</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value text-purple">4</div>
+          <div class="metric-label">Iterations</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value text-purple">6</div>
+          <div class="metric-label">Candidates</div>
+        </div>
+      </div>
+
+      <div class="panel is-open">
+        <div class="panel-header" onclick="togglePanel(this)">
+          <div class="panel-header-left">
+            <div class="panel-dot" style="background:var(--purple)"></div>
+            <span class="panel-title">Winning Hypothesis</span>
+          </div>
+          <div class="panel-header-right">
+            <span class="score-pill" style="background:var(--purple-bg);color:var(--purple)">
+              <span class="sdot" style="background:var(--purple)"></span>8.4
+            </span>
+            <span class="panel-chevron">&#9654;</span>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="panel-content">
+            <p><strong>Causal Sparse Attention (CSA):</strong> A modified transformer attention mechanism that leverages causal graph structure to dynamically prune attention weights, reducing compute by ~40% while preserving reasoning quality on structured tasks.</p>
+            <div class="tag-row">
+              <span class="tag">novelty: high</span>
+              <span class="tag">feasibility: medium-high</span>
+              <span class="tag">impact: significant</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header" onclick="togglePanel(this)">
+          <div class="panel-header-left">
+            <div class="panel-dot" style="background:var(--purple);opacity:0.5"></div>
+            <span class="panel-title">Review Loop History</span>
+          </div>
+          <div class="panel-header-right">
+            <span class="panel-badge badge-done">4 rounds</span>
+            <span class="panel-chevron">&#9654;</span>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="panel-content">
+            <ul class="detail-list">
+              <li><span class="detail-key">Round 1</span><span class="detail-val">6.1 &rarr; rejected</span></li>
+              <li><span class="detail-key">Round 2</span><span class="detail-val">7.0 &rarr; refine</span></li>
+              <li><span class="detail-key">Round 3</span><span class="detail-val">7.8 &rarr; refine</span></li>
+              <li><span class="detail-key">Round 4</span><span class="detail-val">8.4 &rarr; accepted</span></li>
+            </ul>
+            <div class="progress-track">
+              <div class="progress-fill fill-purple" style="width:100%"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header" onclick="togglePanel(this)">
+          <div class="panel-header-left">
+            <div class="panel-dot" style="background:var(--purple);opacity:0.5"></div>
+            <span class="panel-title">Rejected Candidates</span>
+          </div>
+          <div class="panel-header-right">
+            <span class="panel-badge badge-wait">5 discarded</span>
+            <span class="panel-chevron">&#9654;</span>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="panel-content">
+            <ul class="detail-list">
+              <li><span class="detail-key">Adaptive graph pooling</span><span class="detail-val">5.2</span></li>
+              <li><span class="detail-key">Meta-learned loss shaping</span><span class="detail-val">6.8</span></li>
+              <li><span class="detail-key">Neuro-symbolic KG embed</span><span class="detail-val">5.9</span></li>
+              <li><span class="detail-key">Contrastive causal repr.</span><span class="detail-val">7.1</span></li>
+              <li><span class="detail-key">Hierarchical slot attention</span><span class="detail-val">6.3</span></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header" onclick="togglePanel(this)">
+          <div class="panel-header-left">
+            <div class="panel-dot" style="background:var(--purple)"></div>
+            <span class="panel-title">Sub-steps</span>
+          </div>
+          <div class="panel-header-right">
+            <span class="panel-badge badge-done">6 / 6</span>
+            <span class="panel-chevron">&#9654;</span>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="panel-content">
+            <div class="substep-list">
+              <div class="substep">
+                <div class="substep-icon done">&#10003;</div>
+                <span class="substep-name">Select top gaps</span>
+                <span class="substep-time">8s</span>
+              </div>
+              <div class="substep">
+                <div class="substep-icon done">&#10003;</div>
+                <span class="substep-name">Generate hypotheses</span>
+                <span class="substep-time">2m 04s</span>
+              </div>
+              <div class="substep">
+                <div class="substep-icon done">&#10003;</div>
+                <span class="substep-name">Novelty check</span>
+                <span class="substep-time">55s</span>
+              </div>
+              <div class="substep">
+                <div class="substep-icon done">&#10003;</div>
+                <span class="substep-name">Feasibility check</span>
+                <span class="substep-time">47s</span>
+              </div>
+              <div class="substep">
+                <div class="substep-icon done">&#10003;</div>
+                <span class="substep-name">Multi-criteria review</span>
+                <span class="substep-time">1m 33s</span>
+              </div>
+              <div class="substep">
+                <div class="substep-icon done">&#10003;</div>
+                <span class="substep-name">Rank &amp; select best</span>
+                <span class="substep-time">19s</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── INVENTION SECTION ───────────────────────────────── -->
+    <div class="drawer-section" data-section="invention">
+      <div class="metric-row">
+        <div class="metric">
+          <div class="metric-value text-blue">3 / 5</div>
+          <div class="metric-label">Iteration</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value text-blue">7.6</div>
+          <div class="metric-label">Draft Score</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value text-blue">2.4k</div>
+          <div class="metric-label">Tokens/step</div>
+        </div>
+      </div>
+
+      <div class="panel is-open">
+        <div class="panel-header" onclick="togglePanel(this)">
+          <div class="panel-header-left">
+            <div class="panel-dot" style="background:var(--blue)"></div>
+            <span class="panel-title">Current Draft &mdash; Strategy</span>
+          </div>
+          <div class="panel-header-right">
+            <span class="panel-badge badge-active">In Progress</span>
+            <span class="panel-chevron">&#9654;</span>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="panel-content">
+            <p>The CSA module replaces standard scaled dot-product attention with a two-phase approach: (1) causal discovery via a lightweight DAG estimator, then (2) attention masking guided by the inferred graph. This reduces the O(n&sup2;) attention to O(n&middot;k) where k is the average causal neighborhood size.</p>
+            <div class="progress-track">
+              <div class="progress-fill fill-blue" style="width:60%"></div>
+            </div>
+            <p style="margin-top:8px;font-size:0.72rem;color:var(--text-muted)">60% through current iteration</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header" onclick="togglePanel(this)">
+          <div class="panel-header-left">
+            <div class="panel-dot" style="background:var(--blue);opacity:0.5"></div>
+            <span class="panel-title">Plan Generation</span>
+          </div>
+          <div class="panel-header-right">
+            <span class="panel-badge badge-done">Complete</span>
+            <span class="panel-chevron">&#9654;</span>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="panel-content">
+            <ul class="detail-list">
+              <li><span class="detail-key">Sections planned</span><span class="detail-val">7</span></li>
+              <li><span class="detail-key">Figures proposed</span><span class="detail-val">4</span></li>
+              <li><span class="detail-key">Baselines identified</span><span class="detail-val">3</span></li>
+              <li><span class="detail-key">Ablation studies</span><span class="detail-val">2</span></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header" onclick="togglePanel(this)">
+          <div class="panel-header-left">
+            <div class="panel-dot" style="background:var(--blue);opacity:0.5"></div>
+            <span class="panel-title">Paper Text Draft</span>
+          </div>
+          <div class="panel-header-right">
+            <span class="panel-badge badge-active">Drafting</span>
+            <span class="panel-chevron">&#9654;</span>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="panel-content">
+            <ul class="detail-list">
+              <li><span class="detail-key">Abstract</span><span class="detail-val">&#10003; final</span></li>
+              <li><span class="detail-key">Introduction</span><span class="detail-val">&#10003; final</span></li>
+              <li><span class="detail-key">Method</span><span class="detail-val">&#9654; drafting</span></li>
+              <li><span class="detail-key">Experiments</span><span class="detail-val">&#9675; pending</span></li>
+              <li><span class="detail-key">Conclusion</span><span class="detail-val">&#9675; pending</span></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header" onclick="togglePanel(this)">
+          <div class="panel-header-left">
+            <div class="panel-dot" style="background:var(--blue);opacity:0.3"></div>
+            <span class="panel-title">Review Feedback (Round 2)</span>
+          </div>
+          <div class="panel-header-right">
+            <span class="panel-badge badge-done">Applied</span>
+            <span class="panel-chevron">&#9654;</span>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="panel-content">
+            <p>Reviewer requested stronger motivation for causal masking vs. learned sparsity. Added comparison with top-k attention baselines in Section 3.2. Score improved from 6.9 to 7.6.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header" onclick="togglePanel(this)">
+          <div class="panel-header-left">
+            <div class="panel-dot" style="background:var(--blue)"></div>
+            <span class="panel-title">Sub-steps</span>
+          </div>
+          <div class="panel-header-right">
+            <span class="panel-badge badge-active">4 / 12</span>
+            <span class="panel-chevron">&#9654;</span>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="panel-content">
+            <div class="substep-list">
+              <div class="substep">
+                <div class="substep-icon done">&#10003;</div>
+                <span class="substep-name">Generate strategy</span>
+                <span class="substep-time">1m 12s</span>
+              </div>
+              <div class="substep">
+                <div class="substep-icon done">&#10003;</div>
+                <span class="substep-name">Generate plan v1</span>
+                <span class="substep-time">2m 45s</span>
+              </div>
+              <div class="substep">
+                <div class="substep-icon done">&#10003;</div>
+                <span class="substep-name">Generate paper text v1</span>
+                <span class="substep-time">3m 08s</span>
+              </div>
+              <div class="substep">
+                <div class="substep-icon running"><div class="spin-ring"></div></div>
+                <span class="substep-name active-step">Review paper v1</span>
+                <span class="substep-time">1m 22s...</span>
+              </div>
+              <div class="substep">
+                <div class="substep-icon pending">&middot;</div>
+                <span class="substep-name">Generate plan v2</span>
+                <span class="substep-time"></span>
+              </div>
+              <div class="substep">
+                <div class="substep-icon pending">&middot;</div>
+                <span class="substep-name">Generate paper text v2</span>
+                <span class="substep-time"></span>
+              </div>
+              <div class="substep">
+                <div class="substep-icon pending">&middot;</div>
+                <span class="substep-name">Review paper v2</span>
+                <span class="substep-time"></span>
+              </div>
+              <div class="substep">
+                <div class="substep-icon pending">&middot;</div>
+                <span class="substep-name">Generate plan v3</span>
+                <span class="substep-time"></span>
+              </div>
+              <div class="substep">
+                <div class="substep-icon pending">&middot;</div>
+                <span class="substep-name">Generate paper text v3</span>
+                <span class="substep-time"></span>
+              </div>
+              <div class="substep">
+                <div class="substep-icon pending">&middot;</div>
+                <span class="substep-name">Review paper v3</span>
+                <span class="substep-time"></span>
+              </div>
+              <div class="substep">
+                <div class="substep-icon pending">&middot;</div>
+                <span class="substep-name">Final plan refinement</span>
+                <span class="substep-time"></span>
+              </div>
+              <div class="substep">
+                <div class="substep-icon pending">&middot;</div>
+                <span class="substep-name">Final paper text</span>
+                <span class="substep-time"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── PAPER SECTION ───────────────────────────────────── -->
+    <div class="drawer-section" data-section="paper">
+      <div class="empty-state">
+        <div class="empty-icon">&#9675;</div>
+        <p>Waiting for invention loop to complete.</p>
+        <p style="margin-top:8px;font-size:0.72rem;color:var(--text-muted)">
+          Paper generation begins after the invention loop reaches a passing review score.
+        </p>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header" onclick="togglePanel(this)">
+          <div class="panel-header-left">
+            <div class="panel-dot" style="background:var(--orange);opacity:0.3"></div>
+            <span class="panel-title">Artifact Demos</span>
+          </div>
+          <div class="panel-header-right">
+            <span class="panel-badge badge-wait">Pending</span>
+            <span class="panel-chevron">&#9654;</span>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="panel-content">
+            <p style="color:var(--text-muted)">Python demo scripts and interactive notebooks will be generated once the paper text is finalized.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header" onclick="togglePanel(this)">
+          <div class="panel-header-left">
+            <div class="panel-dot" style="background:var(--orange);opacity:0.3"></div>
+            <span class="panel-title">Visualizations</span>
+          </div>
+          <div class="panel-header-right">
+            <span class="panel-badge badge-wait">Pending</span>
+            <span class="panel-chevron">&#9654;</span>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="panel-content">
+            <p style="color:var(--text-muted)">Architecture diagrams and result plots will be generated from structured data after the method section is complete.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header" onclick="togglePanel(this)">
+          <div class="panel-header-left">
+            <div class="panel-dot" style="background:var(--orange);opacity:0.3"></div>
+            <span class="panel-title">Full Paper Assembly</span>
+          </div>
+          <div class="panel-header-right">
+            <span class="panel-badge badge-wait">Pending</span>
+            <span class="panel-chevron">&#9654;</span>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="panel-content">
+            <p style="color:var(--text-muted)">LaTeX compilation and final PDF output. Includes bibliography, appendices, and supplementary materials.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header" onclick="togglePanel(this)">
+          <div class="panel-header-left">
+            <div class="panel-dot" style="background:var(--orange);opacity:0.3"></div>
+            <span class="panel-title">BibTeX &amp; References</span>
+          </div>
+          <div class="panel-header-right">
+            <span class="panel-badge badge-wait">Pending</span>
+            <span class="panel-chevron">&#9654;</span>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="panel-content">
+            <p style="color:var(--text-muted)">Automatic reference collection and BibTeX generation from cited works in the paper text.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header" onclick="togglePanel(this)">
+          <div class="panel-header-left">
+            <div class="panel-dot" style="background:var(--orange);opacity:0.3"></div>
+            <span class="panel-title">Repository Package</span>
+          </div>
+          <div class="panel-header-right">
+            <span class="panel-badge badge-wait">Pending</span>
+            <span class="panel-chevron">&#9654;</span>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="panel-content">
+            <p style="color:var(--text-muted)">Reproducibility package with code, data, and instructions for running experiments.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header" onclick="togglePanel(this)">
+          <div class="panel-header-left">
+            <div class="panel-dot" style="background:var(--orange)"></div>
+            <span class="panel-title">Sub-steps</span>
+          </div>
+          <div class="panel-header-right">
+            <span class="panel-badge badge-wait">0 / 5</span>
+            <span class="panel-chevron">&#9654;</span>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="panel-content">
+            <div class="substep-list">
+              <div class="substep">
+                <div class="substep-icon pending">&middot;</div>
+                <span class="substep-name">Generate artifact demos</span>
+                <span class="substep-time"></span>
+              </div>
+              <div class="substep">
+                <div class="substep-icon pending">&middot;</div>
+                <span class="substep-name">Generate visualizations</span>
+                <span class="substep-time"></span>
+              </div>
+              <div class="substep">
+                <div class="substep-icon pending">&middot;</div>
+                <span class="substep-name">Compile full paper</span>
+                <span class="substep-time"></span>
+              </div>
+              <div class="substep">
+                <div class="substep-icon pending">&middot;</div>
+                <span class="substep-name">Generate BibTeX</span>
+                <span class="substep-time"></span>
+              </div>
+              <div class="substep">
+                <div class="substep-icon pending">&middot;</div>
+                <span class="substep-name">Package repository</span>
+                <span class="substep-time"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /drawer-body -->
+</div><!-- /drawer -->
+
+
+<!-- ════════════════════════════════════════════════════════════════
+     JAVASCRIPT
+     ════════════════════════════════════════════════════════════════ -->
+<script>
+(function () {
+  'use strict';
+
+  /* ================================================================
+     STAGE DATA
+     ================================================================ */
+  var STAGES = [
+    {
+      key: 'seed',
+      title: 'Seed Exploration',
+      subtitle: 'Knowledge graph traversal & topic seeding',
+      icon: '\u25C8',
+      iconClass: 'accent-green',
+      color: '#34d399'
+    },
+    {
+      key: 'hypothesis',
+      title: 'Hypothesis Generation',
+      subtitle: 'Iterative refinement with review scoring',
+      icon: '\u25C6',
+      iconClass: 'accent-purple',
+      color: '#a78bfa'
+    },
+    {
+      key: 'invention',
+      title: 'Invention Loop',
+      subtitle: 'Plan, draft, review \u2014 iteration 3 of 5',
+      icon: '\u2699',
+      iconClass: 'accent-blue',
+      color: '#60a5fa'
+    },
+    {
+      key: 'paper',
+      title: 'Paper Generation',
+      subtitle: 'Final assembly, figures & repository',
+      icon: '\u2605',
+      iconClass: 'accent-orange',
+      color: '#fb923c'
+    }
+  ];
+
+  /* ================================================================
+     DOM REFERENCES
+     ================================================================ */
+  var stageStrip    = document.getElementById('stageStrip');
+  var cards         = Array.from(stageStrip.querySelectorAll('.stage-card'));
+  var stageCols     = Array.from(stageStrip.querySelectorAll('.stage-col'));
+  var treeSvg       = document.getElementById('treeSvg');
+  var drawerOverlay = document.getElementById('drawerOverlay');
+  var drawer        = document.getElementById('drawer');
+  var drawerHandleZone = document.getElementById('drawerHandleZone');
+  var drawerClose   = document.getElementById('drawerClose');
+  var drawerIcon    = document.getElementById('drawerIcon');
+  var drawerTitle   = document.getElementById('drawerTitle');
+  var drawerSubtitle = document.getElementById('drawerSubtitle');
+  var drawerBody    = document.getElementById('drawerBody');
+  var drawerSections = Array.from(drawerBody.querySelectorAll('.drawer-section'));
+  var contentArea   = document.getElementById('contentArea');
+
+  var selectedIdx   = -1;
+  var drawerOpen    = false;
+
+  /* ================================================================
+     L-SHAPED TREE CONNECTORS (SVG)
+     ================================================================ */
+
+  /* Connector colors blend between adjacent stage colors */
+  var CONN_COLORS = ['#34d399', '#a78bfa', '#60a5fa'];
+
+  /* Track animation frames for cleanup */
+  var treeAnimFrames = [];
+
+  /**
+   * Get the center-right and center-left edges of a card
+   * relative to the treeSvg coordinate space.
+   */
+  function getCardEdges(card) {
+    var cr = card.getBoundingClientRect();
+    var sr = treeSvg.getBoundingClientRect();
+    return {
+      rightX:  cr.right - sr.left,
+      leftX:   cr.left - sr.left,
+      centerY: cr.top + cr.height / 2 - sr.top,
+      topY:    cr.top - sr.top,
+      bottomY: cr.bottom - sr.top
+    };
+  }
+
+  /**
+   * Draw L-shaped connectors between adjacent stage cards.
+   *
+   * The "L-shape" is: horizontal from source card right edge,
+   * then a 90-degree turn downward (or upward) via a rounded
+   * corner, then horizontal into the target card left edge.
+   *
+   * Since cards are horizontally aligned, the L-shape goes:
+   *   right-edge -> horizontal midpoint -> small vertical jog -> horizontal -> left-edge
+   *
+   * We use a polyline with rounded corners to create the L path.
+   */
+  function drawTreeConnectors() {
+    /* Cancel old animations */
+    treeAnimFrames.forEach(function (id) { cancelAnimationFrame(id); });
+    treeAnimFrames = [];
+    treeSvg.innerHTML = '';
+
+    var ns = 'http://www.w3.org/2000/svg';
+
+    for (var i = 0; i < cards.length - 1; i++) {
+      var srcEdges = getCardEdges(cards[i]);
+      var dstEdges = getCardEdges(cards[i + 1]);
+
+      /*
+       * L-shaped path geometry:
+       *
+       *   (srcRight, srcCenterY)
+       *       |
+       *       +---> (midX, srcCenterY)   [horizontal segment]
+       *                  |
+       *                  v
+       *             (midX, dstCenterY)    [vertical segment]
+       *                  |
+       *                  +---> (dstLeft, dstCenterY)  [horizontal segment]
+       *
+       * This creates an actual L-tree / elbow connector.
+       */
+      var sx = srcEdges.rightX + 2;
+      var sy = srcEdges.centerY;
+      var dx = dstEdges.leftX - 2;
+      var dy = dstEdges.centerY;
+      var midX = (sx + dx) / 2;
+
+      /* Radius for rounded corner */
+      var r = 6;
+
+      /* Determine vertical direction */
+      var vertDir = dy > sy ? 1 : (dy < sy ? -1 : 0);
+
+      var d;
+      if (vertDir === 0) {
+        /* Straight horizontal — no vertical needed */
+        d = 'M' + sx + ',' + sy + ' L' + dx + ',' + dy;
+      } else {
+        /*
+         * Build an L-path with TWO rounded corners:
+         *   horizontal -> round corner -> vertical -> round corner -> horizontal
+         */
+        var vy = dy - sy;
+        var absVy = Math.abs(vy);
+        var signV = vertDir;
+
+        /* Clamp radius to half the vertical distance or half the horizontal run */
+        var halfHoriz = (midX - sx);
+        var clampR = Math.min(r, absVy / 2, halfHoriz);
+
+        /* First horizontal to just before the first corner */
+        d = 'M' + sx + ',' + sy;
+        d += ' L' + (midX - clampR) + ',' + sy;
+
+        /* First rounded corner (horizontal -> vertical) */
+        d += ' Q' + midX + ',' + sy + ' ' + midX + ',' + (sy + signV * clampR);
+
+        /* Vertical segment */
+        d += ' L' + midX + ',' + (dy - signV * clampR);
+
+        /* Second rounded corner (vertical -> horizontal) */
+        d += ' Q' + midX + ',' + dy + ' ' + (midX + clampR) + ',' + dy;
+
+        /* Final horizontal to destination */
+        d += ' L' + dx + ',' + dy;
+      }
+
+      /* Is this connector segment "active"? */
+      var isActive = (selectedIdx >= 0) &&
+                     (i >= Math.min(selectedIdx, 2) && i <= Math.max(selectedIdx, 2)) ||
+                     (i === selectedIdx || i + 1 === selectedIdx);
+
+      /* Draw the L-path */
+      var path = document.createElementNS(ns, 'path');
+      path.setAttribute('d', d);
+      path.setAttribute('class', 'tree-line' + (isActive ? ' active' : ''));
+      path.setAttribute('stroke', CONN_COLORS[i]);
+      path.setAttribute('stroke-opacity', isActive ? '0.35' : '0.12');
+      path.id = 'tree-path-' + i;
+      treeSvg.appendChild(path);
+
+      /* Animated dot traveling along the L-path */
+      var dot = document.createElementNS(ns, 'circle');
+      dot.setAttribute('class', 'tree-dot' + (isActive ? ' active' : ''));
+      dot.setAttribute('fill', CONN_COLORS[i]);
+      dot.setAttribute('r', isActive ? '3.5' : '2.5');
+      dot.setAttribute('filter', 'none');
+      treeSvg.appendChild(dot);
+
+      animateLDot(dot, path, isActive ? 2200 : 3600, isActive);
+    }
+  }
+
+  /**
+   * Animate a dot along an SVG path using getPointAtLength.
+   * The dot travels the full L-shape (horizontal -> corner -> vertical -> corner -> horizontal).
+   */
+  function animateLDot(dot, path, durationMs, isActive) {
+    var len = path.getTotalLength();
+    if (len < 1) return;
+
+    var startTime = null;
+    /* Stagger start so dots do not all begin at the same phase */
+    var phaseOffset = Math.random() * durationMs;
+
+    function tick(timestamp) {
+      if (!startTime) startTime = timestamp;
+      var elapsed = ((timestamp - startTime) + phaseOffset) % durationMs;
+      var t = elapsed / durationMs;
+
+      var pt = path.getPointAtLength(t * len);
+      dot.setAttribute('cx', pt.x);
+      dot.setAttribute('cy', pt.y);
+
+      /* Glow effect: dot is brighter at midpoint of path */
+      var brightness = 0.5 + 0.5 * Math.sin(t * Math.PI);
+      dot.setAttribute('opacity', isActive ? (0.6 + 0.4 * brightness) : (0.25 + 0.25 * brightness));
+
+      var frameId = requestAnimationFrame(tick);
+      treeAnimFrames.push(frameId);
+    }
+
+    var frameId = requestAnimationFrame(tick);
+    treeAnimFrames.push(frameId);
+  }
+
+
+  /* ================================================================
+     CARD SELECTION
+     ================================================================ */
+  function selectCard(idx) {
+    if (idx < 0 || idx >= cards.length) return;
+    selectedIdx = idx;
+
+    cards.forEach(function (card, i) {
+      card.classList.toggle('is-selected', i === idx);
+    });
+
+    /* Redraw connectors to update active state */
+    drawTreeConnectors();
+  }
+
+  function deselectAll() {
+    selectedIdx = -1;
+    cards.forEach(function (card) {
+      card.classList.remove('is-selected');
+    });
+    drawTreeConnectors();
+  }
+
+
+  /* ================================================================
+     DRAWER OPEN / CLOSE
+     ================================================================ */
+  function openDrawer(idx) {
+    if (idx < 0 || idx >= STAGES.length) return;
+    selectCard(idx);
+
+    var stage = STAGES[idx];
+
+    /* Update drawer header */
+    drawerIcon.className = 'drawer-icon ' + stage.iconClass;
+    drawerIcon.textContent = stage.icon;
+    drawerTitle.textContent = stage.title;
+    drawerSubtitle.textContent = stage.subtitle;
+
+    /* Show the correct section */
+    drawerSections.forEach(function (sec) {
+      var match = sec.getAttribute('data-section') === stage.key;
+      sec.classList.toggle('visible', match);
+      /* Re-trigger animation */
+      if (match) {
+        sec.style.animation = 'none';
+        void sec.offsetHeight;
+        sec.style.animation = '';
+      }
+    });
+
+    /* Scroll drawer body to top */
+    drawerBody.scrollTop = 0;
+
+    /* Show overlay and drawer */
+    drawerOverlay.classList.add('visible');
+    drawer.classList.add('open');
+    drawerOpen = true;
+
+    /* Dim main content */
+    contentArea.style.opacity = '0.3';
+    contentArea.style.pointerEvents = 'none';
+  }
+
+  function closeDrawer() {
+    drawer.classList.remove('open');
+    drawerOverlay.classList.remove('visible');
+    drawerOpen = false;
+
+    /* Restore main content */
+    contentArea.style.opacity = '1';
+    contentArea.style.pointerEvents = '';
+
+    /* Do not deselect card — keep visual hint of last viewed */
+  }
+
+
+  /* ================================================================
+     CARD CLICK HANDLING
+     ================================================================ */
+  cards.forEach(function (card, i) {
+    card.addEventListener('click', function () {
+      if (drawerOpen && selectedIdx === i) {
+        /* Clicking same card again closes the drawer */
+        closeDrawer();
+      } else {
+        openDrawer(i);
+      }
+    });
+  });
+
+
+  /* ================================================================
+     DRAWER CLOSE EVENTS
+     ================================================================ */
+  drawerClose.addEventListener('click', closeDrawer);
+
+  drawerOverlay.addEventListener('click', closeDrawer);
+
+
+  /* ================================================================
+     KEYBOARD NAVIGATION
+     ================================================================ */
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+      if (drawerOpen) {
+        closeDrawer();
+        e.preventDefault();
+      }
+      return;
+    }
+
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      var nextIdx = drawerOpen
+        ? Math.min(selectedIdx + 1, cards.length - 1)
+        : Math.min((selectedIdx < 0 ? -1 : selectedIdx) + 1, cards.length - 1);
+      if (drawerOpen) {
+        openDrawer(nextIdx);
+      } else {
+        selectCard(nextIdx);
+        cards[nextIdx].focus();
+      }
+    }
+
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      var prevIdx = drawerOpen
+        ? Math.max(selectedIdx - 1, 0)
+        : Math.max((selectedIdx < 0 ? 1 : selectedIdx) - 1, 0);
+      if (drawerOpen) {
+        openDrawer(prevIdx);
+      } else {
+        selectCard(prevIdx);
+        cards[prevIdx].focus();
+      }
+    }
+
+    if (e.key === 'Enter') {
+      if (!drawerOpen && selectedIdx >= 0) {
+        openDrawer(selectedIdx);
+        e.preventDefault();
+      }
+    }
+  });
+
+
+  /* ================================================================
+     DRAG-TO-DISMISS (touch + mouse)
+     ================================================================ */
+  var dragState = {
+    active: false,
+    startY: 0,
+    currentY: 0,
+    startTime: 0
+  };
+
+  function onDragStart(y) {
+    if (!drawerOpen) return;
+    dragState.active = true;
+    dragState.startY = y;
+    dragState.currentY = y;
+    dragState.startTime = Date.now();
+    drawer.classList.add('dragging');
+  }
+
+  function onDragMove(y) {
+    if (!dragState.active) return;
+    dragState.currentY = y;
+    var dy = y - dragState.startY;
+    /* Only allow dragging downward */
+    if (dy < 0) dy = 0;
+    drawer.style.transform = 'translateY(' + dy + 'px)';
+
+    /* Fade overlay proportionally */
+    var progress = Math.min(dy / (window.innerHeight * 0.3), 1);
+    drawerOverlay.style.opacity = String(1 - progress * 0.6);
+  }
+
+  function onDragEnd() {
+    if (!dragState.active) return;
+    dragState.active = false;
+    drawer.classList.remove('dragging');
+
+    var dy = dragState.currentY - dragState.startY;
+    var dt = Date.now() - dragState.startTime;
+    var velocity = dy / Math.max(dt, 1);
+
+    /* Dismiss if dragged far enough or fast enough */
+    var drawerHeight = drawer.offsetHeight;
+    var threshold = drawerHeight * 0.25;
+
+    if (dy > threshold || velocity > 0.5) {
+      /* Dismiss with momentum */
+      drawer.style.transform = '';
+      drawerOverlay.style.opacity = '';
+      closeDrawer();
+    } else {
+      /* Snap back */
+      drawer.style.transform = '';
+      drawerOverlay.style.opacity = '';
+    }
+  }
+
+  /* Mouse events on handle zone */
+  drawerHandleZone.addEventListener('mousedown', function (e) {
+    e.preventDefault();
+    onDragStart(e.clientY);
+  });
+
+  document.addEventListener('mousemove', function (e) {
+    if (dragState.active) {
+      e.preventDefault();
+      onDragMove(e.clientY);
+    }
+  });
+
+  document.addEventListener('mouseup', function () {
+    onDragEnd();
+  });
+
+  /* Touch events on handle zone */
+  drawerHandleZone.addEventListener('touchstart', function (e) {
+    if (e.touches.length === 1) {
+      onDragStart(e.touches[0].clientY);
+    }
+  }, { passive: true });
+
+  document.addEventListener('touchmove', function (e) {
+    if (dragState.active && e.touches.length === 1) {
+      onDragMove(e.touches[0].clientY);
+      /* Prevent page scroll while dragging */
+      e.preventDefault();
+    }
+  }, { passive: false });
+
+  document.addEventListener('touchend', function () {
+    onDragEnd();
+  });
+
+  /* Also allow dragging from the drawer header area */
+  var drawerHeader = document.getElementById('drawerHeader');
+  drawerHeader.addEventListener('mousedown', function (e) {
+    /* Only if not clicking the close button */
+    if (e.target === drawerClose || drawerClose.contains(e.target)) return;
+    e.preventDefault();
+    onDragStart(e.clientY);
+  });
+
+  drawerHeader.addEventListener('touchstart', function (e) {
+    if (e.target === drawerClose || drawerClose.contains(e.target)) return;
+    if (e.touches.length === 1) {
+      onDragStart(e.touches[0].clientY);
+    }
+  }, { passive: true });
+
+
+  /* ================================================================
+     PANEL EXPAND / COLLAPSE (global)
+     ================================================================ */
+  window.togglePanel = function (header) {
+    var panel = header.closest('.panel');
+    panel.classList.toggle('is-open');
+  };
+
+
+  /* ================================================================
+     RESIZE HANDLER
+     ================================================================ */
+  var resizeTimer;
+  window.addEventListener('resize', function () {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(drawTreeConnectors, 100);
+  });
+
+
+  /* ================================================================
+     INIT
+     ================================================================ */
+
+  /* Draw L-tree connectors after layout settles */
+  requestAnimationFrame(function () {
+    requestAnimationFrame(function () {
+      drawTreeConnectors();
+    });
+  });
+
+  /* Select invention card by default (stage 2 is "running") */
+  selectCard(2);
+
+})();
+</script>
+
+</body>
+</html>
