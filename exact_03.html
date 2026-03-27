@@ -1,0 +1,2074 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor Pipeline — exact_03</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #0b0e14;
+  --bg-raised: #10141c;
+  --surface: rgba(16,20,28,.7);
+  --surface-card: rgba(13,17,26,.82);
+  --border: rgba(148,163,184,.07);
+  --border-hi: rgba(148,163,184,.14);
+  --text: #f1f5f9;
+  --text-dim: #94a3b8;
+  --text-muted: #64748b;
+  --text-faint: #475569;
+
+  --purple: #a78bfa; --purple-dim: rgba(167,139,250,.10); --purple-glow: rgba(167,139,250,.30);
+  --blue: #60a5fa;   --blue-dim: rgba(96,165,250,.10);   --blue-glow: rgba(96,165,250,.30);
+  --orange: #fb923c; --orange-dim: rgba(251,146,60,.10); --orange-glow: rgba(251,146,60,.30);
+  --green: #34d399;  --green-dim: rgba(52,211,153,.10);  --green-glow: rgba(52,211,153,.30);
+  --red: #f87171;    --red-dim: rgba(248,113,113,.10);
+
+  --radius: 14px;
+  --radius-sm: 10px;
+  --ease: cubic-bezier(.4,0,.2,1);
+  --ease-spring: cubic-bezier(.34,1.56,.64,1);
+  font-size: 14px;
+
+  --sidebar-w: 48px;
+  --sidebar-w-open: 240px;
+  --header-h: 50px;
+}
+
+html, body { height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--text-dim);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  display: flex; flex-direction: column;
+}
+
+/* ===== GLASS NOISE ===== */
+.glass-noise {
+  position: fixed; inset: 0; z-index: 9999; pointer-events: none; opacity: .015;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 256px 256px;
+}
+
+/* ===== AMBIENT BG ===== */
+#ambientCanvas { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+
+body::before {
+  content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background-image:
+    radial-gradient(ellipse 700px 400px at 15% 15%, rgba(167,139,250,.035), transparent),
+    radial-gradient(ellipse 600px 450px at 75% 55%, rgba(96,165,250,.03), transparent),
+    radial-gradient(ellipse 500px 350px at 85% 85%, rgba(251,146,60,.025), transparent);
+}
+
+/* ===== HEADER ===== */
+.header {
+  position: fixed; top: 0; left: 0; right: 0; height: var(--header-h); z-index: 200;
+  display: flex; align-items: center; gap: 14px; padding: 0 20px;
+  background: rgba(11,14,20,.8);
+  backdrop-filter: blur(22px) saturate(1.3);
+  border-bottom: 1px solid var(--border);
+}
+.header::after {
+  content: ''; position: absolute; bottom: -1px; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(167,139,250,.12) 30%, rgba(96,165,250,.12) 70%, transparent);
+}
+
+.brand {
+  font-weight: 800; font-size: 15px; color: var(--text);
+  letter-spacing: -.4px; display: flex; align-items: center; gap: 8px;
+}
+.brand-icon {
+  width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center;
+  background: linear-gradient(135deg, var(--purple), var(--blue));
+  font-size: 12px; color: #fff; font-weight: 700;
+  box-shadow: 0 0 12px rgba(167,139,250,.2);
+}
+
+.header-spacer { flex: 1; }
+
+/* Header ring */
+.header-ring {
+  width: 36px; height: 36px; position: relative; flex-shrink: 0;
+}
+.header-ring svg { width: 100%; height: 100%; }
+.h-ring-track { fill: none; stroke: rgba(148,163,184,.08); stroke-width: 3; }
+.h-ring-fill {
+  fill: none; stroke: var(--blue); stroke-width: 3; stroke-linecap: round;
+  transform: rotate(-90deg); transform-origin: 50% 50%;
+  transition: stroke-dashoffset .8s var(--ease);
+  filter: drop-shadow(0 0 4px var(--blue-glow));
+}
+.h-ring-label {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 9px; font-weight: 700; color: var(--text);
+}
+.header-ring::after {
+  content: ''; position: absolute; inset: -5px; border-radius: 50%;
+  border: 1.5px dashed rgba(96,165,250,.25); opacity: .4;
+  animation: orbitSpin 14s linear infinite;
+}
+.header-ring::before {
+  content: ''; position: absolute; inset: -3px; border-radius: 50%;
+  background: radial-gradient(circle, var(--blue-glow), transparent 70%);
+  animation: ringPulse 2.5s ease-in-out infinite;
+}
+@keyframes orbitSpin { to { transform: rotate(360deg); } }
+@keyframes ringPulse { 0%,100% { opacity: .2; } 50% { opacity: .55; } }
+
+.header-divider { width: 1px; height: 20px; background: var(--border); flex-shrink: 0; }
+.header-stat {
+  font-size: 11px; color: var(--text-dim); white-space: nowrap;
+  display: flex; align-items: center; gap: 4px;
+}
+.header-stat .lbl {
+  font-size: 9px; text-transform: uppercase; letter-spacing: .5px;
+  color: var(--text-faint); font-weight: 600;
+}
+.header-stat strong { color: var(--text); font-weight: 700; }
+
+/* Token/$ subtle bar */
+.token-bar {
+  display: flex; align-items: center; gap: 6px; font-size: 10px; color: var(--text-faint);
+}
+.token-bar-track {
+  width: 60px; height: 3px; border-radius: 2px;
+  background: rgba(148,163,184,.06); overflow: hidden;
+}
+.token-bar-fill {
+  height: 100%; border-radius: 2px;
+  background: linear-gradient(90deg, var(--purple), var(--blue));
+  transition: width .8s var(--ease);
+}
+
+/* ===== COLLAPSED SIDEBAR (48px -> 240px) ===== */
+.sidebar {
+  position: fixed; left: 0; top: var(--header-h); bottom: 0;
+  width: var(--sidebar-w); z-index: 150;
+  background: rgba(11,14,20,.88);
+  backdrop-filter: blur(18px) saturate(1.2);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  padding: 14px 0 12px; gap: 2px;
+  overflow: hidden;
+  transition: width .35s var(--ease);
+}
+.sidebar:hover { width: var(--sidebar-w-open); }
+
+.sidebar-brand {
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 12px; height: 40px; margin-bottom: 10px;
+  white-space: nowrap; overflow: hidden;
+}
+.sidebar-brand-icon {
+  width: 24px; height: 24px; min-width: 24px; border-radius: 6px;
+  display: grid; place-items: center;
+  background: linear-gradient(135deg, var(--purple), var(--blue));
+  font-size: 11px; font-weight: 700; color: #fff;
+  box-shadow: 0 0 8px rgba(167,139,250,.15);
+}
+.sidebar-brand-text {
+  font-size: 13px; font-weight: 700; color: var(--text);
+  opacity: 0; transition: opacity .2s .1s;
+  letter-spacing: -.3px;
+}
+.sidebar:hover .sidebar-brand-text { opacity: 1; }
+
+.sidebar-sep { height: 1px; background: var(--border); margin: 6px 10px; flex-shrink: 0; }
+
+.sidebar-section-label {
+  font-size: 8px; color: var(--text-faint); text-transform: uppercase;
+  letter-spacing: .8px; font-weight: 600;
+  padding: 6px 14px 4px; white-space: nowrap;
+  opacity: 0; transition: opacity .2s .1s;
+}
+.sidebar:hover .sidebar-section-label { opacity: 1; }
+
+.sidebar-btn {
+  display: flex; align-items: center; gap: 10px;
+  height: 38px; min-height: 38px;
+  padding: 0 12px; border: none; background: transparent;
+  cursor: pointer; position: relative;
+  color: var(--text-muted); white-space: nowrap; overflow: hidden;
+  border-radius: 0; transition: all .15s var(--ease);
+}
+.sidebar-btn:hover { background: rgba(148,163,184,.05); color: var(--text-dim); }
+.sidebar-btn.active { background: rgba(148,163,184,.07); }
+
+.sidebar-btn .sb-icon {
+  width: 24px; height: 24px; min-width: 24px; border-radius: 6px;
+  display: grid; place-items: center;
+  font-size: 10px; font-weight: 700; color: #fff;
+}
+.sidebar-btn .sb-label {
+  font-size: 12px; font-weight: 500;
+  opacity: 0; transition: opacity .2s .1s;
+}
+.sidebar:hover .sb-label { opacity: 1; }
+
+.sidebar-btn .sb-dot {
+  position: absolute; left: 30px; top: 7px; width: 6px; height: 6px;
+  border-radius: 50%; opacity: .85;
+}
+
+/* Active indicator left bar */
+.sidebar-btn::before {
+  content: ''; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+  width: 2.5px; height: 0; border-radius: 1px; transition: height .2s var(--ease);
+}
+.sidebar-btn.active::before { height: 18px; }
+
+/* Module color coding for sidebar */
+.sidebar-btn[data-color="purple"]::before { background: var(--purple); }
+.sidebar-btn[data-color="blue"]::before { background: var(--blue); }
+.sidebar-btn[data-color="orange"]::before { background: var(--orange); }
+
+/* Sidebar footer spacer */
+.sidebar-footer { margin-top: auto; }
+
+/* ===== MAIN ===== */
+.main {
+  position: relative; z-index: 1;
+  margin-left: var(--sidebar-w);
+  padding: calc(var(--header-h) + 20px) 32px 40px;
+  max-width: 1100px;
+  transition: margin-left .35s var(--ease);
+}
+
+/* ===== MODULE CARDS ROW (3 horizontal glass cards) ===== */
+.module-cards {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 14px; position: relative; margin-bottom: 24px;
+}
+
+/* Particle canvas for connector dots between cards */
+#particleCanvas {
+  position: absolute; inset: -20px; z-index: 0; pointer-events: none;
+}
+
+.mod-card {
+  position: relative; z-index: 1; cursor: pointer;
+  background: var(--surface-card);
+  backdrop-filter: blur(16px) saturate(1.2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px 14px;
+  transition: all .3s var(--ease);
+  overflow: hidden;
+}
+.mod-card:hover { transform: translateY(-2px); border-color: var(--border-hi); }
+
+/* Glow halo behind card */
+.mod-card::before {
+  content: ''; position: absolute; inset: -2px; border-radius: var(--radius);
+  opacity: 0; transition: opacity .5s; pointer-events: none; z-index: -1;
+}
+.mod-card[data-color="purple"]::before {
+  box-shadow: 0 0 40px 8px var(--purple-dim), 0 0 80px 16px rgba(167,139,250,.05), inset 0 0 20px var(--purple-dim);
+}
+.mod-card[data-color="blue"]::before {
+  box-shadow: 0 0 40px 8px var(--blue-dim), 0 0 80px 16px rgba(96,165,250,.05), inset 0 0 20px var(--blue-dim);
+}
+.mod-card[data-color="orange"]::before {
+  box-shadow: 0 0 40px 8px var(--orange-dim), 0 0 80px 16px rgba(251,146,60,.05), inset 0 0 20px var(--orange-dim);
+}
+.mod-card.done::before { opacity: .3; }
+.mod-card.active-card::before { opacity: 1; animation: haloBreath 3s ease-in-out infinite; }
+@keyframes haloBreath { 0%,100% { opacity: .5; } 50% { opacity: 1; } }
+
+/* Shimmer sweep on active cards */
+.mod-card::after {
+  content: ''; position: absolute; top: 0; left: -120%; width: 70%; height: 100%;
+  background: linear-gradient(100deg, transparent, rgba(255,255,255,.03), rgba(255,255,255,.06), rgba(255,255,255,.03), transparent);
+  transform: skewX(-18deg); pointer-events: none;
+}
+.mod-card.active-card::after { animation: shimmerSweep 3.5s ease-in-out infinite; }
+@keyframes shimmerSweep { 0% { left: -120%; } 50% { left: 170%; } 100% { left: 170%; } }
+
+/* Top accent line */
+.mod-card .accent-line {
+  position: absolute; top: 0; left: 16px; right: 16px; height: 2px;
+  border-radius: 0 0 2px 2px; opacity: .5;
+}
+.mod-card[data-color="purple"] .accent-line { background: linear-gradient(90deg, transparent, var(--purple), transparent); }
+.mod-card[data-color="blue"] .accent-line   { background: linear-gradient(90deg, transparent, var(--blue), transparent); }
+.mod-card[data-color="orange"] .accent-line { background: linear-gradient(90deg, transparent, var(--orange), transparent); }
+
+/* Card internal layout */
+.mc-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.mc-icon {
+  width: 34px; height: 34px; border-radius: 9px;
+  display: grid; place-items: center; font-size: 15px; flex-shrink: 0;
+  transition: transform .3s var(--ease-spring);
+}
+.mod-card:hover .mc-icon { transform: scale(1.06); }
+.mod-card.active-card .mc-icon { animation: iconFloat 3s ease-in-out infinite; }
+@keyframes iconFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+
+.mod-card[data-color="purple"] .mc-icon { background: var(--purple-dim); color: var(--purple); }
+.mod-card[data-color="blue"] .mc-icon   { background: var(--blue-dim); color: var(--blue); }
+.mod-card[data-color="orange"] .mc-icon { background: var(--orange-dim); color: var(--orange); }
+
+.mc-title-area { flex: 1; min-width: 0; }
+.mc-title { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 1px; }
+.mc-subtitle { font-size: 10px; color: var(--text-muted); }
+
+.mc-badge {
+  font-size: 9px; font-weight: 700; padding: 3px 9px; border-radius: 6px;
+  text-transform: uppercase; letter-spacing: .4px; flex-shrink: 0;
+}
+.mc-badge.done    { background: var(--green-dim); color: var(--green); }
+.mc-badge.running { background: var(--blue-dim); color: var(--blue); animation: badgePulse 2s ease-in-out infinite; }
+.mc-badge.pending { background: rgba(100,116,139,.06); color: var(--text-muted); }
+@keyframes badgePulse { 0%,100% { opacity: .7; } 50% { opacity: 1; background: rgba(96,165,250,.18); } }
+
+/* Spinning partial circle on active badge */
+.mc-badge.running::before {
+  content: ''; display: inline-block; width: 8px; height: 8px;
+  border: 1.5px solid transparent; border-top-color: currentColor;
+  border-radius: 50%; margin-right: 5px; vertical-align: middle;
+  animation: spinBadge .8s linear infinite;
+}
+@keyframes spinBadge { to { transform: rotate(360deg); } }
+
+/* Active card running dot after title */
+.mod-card.active-card .mc-title::after {
+  content: ''; display: inline-block; width: 5px; height: 5px; border-radius: 50%;
+  background: var(--blue); margin-left: 7px; vertical-align: middle;
+  animation: titleDotBlink 1.5s ease-in-out infinite;
+}
+@keyframes titleDotBlink { 0%,100% { opacity: 1; } 50% { opacity: .25; } }
+
+/* Progress bar */
+.mc-progress {
+  height: 3px; border-radius: 2px; background: rgba(148,163,184,.05);
+  overflow: hidden; margin-bottom: 8px;
+}
+.mc-progress-fill {
+  height: 100%; border-radius: 2px; width: 0; transition: width .8s var(--ease);
+}
+.mod-card[data-color="purple"] .mc-progress-fill { background: linear-gradient(90deg, var(--purple), rgba(167,139,250,.4)); }
+.mod-card[data-color="blue"] .mc-progress-fill   { background: linear-gradient(90deg, var(--blue), rgba(96,165,250,.4)); }
+.mod-card[data-color="orange"] .mc-progress-fill { background: linear-gradient(90deg, var(--orange), rgba(251,146,60,.4)); }
+
+/* Card stats row */
+.mc-stats { display: flex; gap: 14px; font-size: 10px; color: var(--text-muted); }
+.mc-stats span { display: flex; align-items: center; gap: 3px; }
+.mc-stats .val { color: var(--text-dim); font-weight: 600; }
+
+/* ===== TREE SECTION (rounds below active card) ===== */
+.tree-section {
+  position: relative; margin-bottom: 24px;
+  max-height: 0; overflow: hidden; opacity: 0;
+  transition: max-height .5s var(--ease), opacity .35s, margin-bottom .3s;
+}
+.tree-section.open { max-height: 800px; opacity: 1; }
+.tree-section.hidden { max-height: 0; opacity: 0; margin-bottom: 0; }
+
+.tree-inner { position: relative; padding-left: 20px; }
+
+/* Vertical tree line */
+.tree-inner::before {
+  content: ''; position: absolute; left: 8px; top: 0; bottom: 18px;
+  width: 2px; border-radius: 1px;
+}
+.tree-section[data-color="purple"] .tree-inner::before { background: linear-gradient(180deg, var(--purple), rgba(167,139,250,.08)); }
+.tree-section[data-color="blue"] .tree-inner::before   { background: linear-gradient(180deg, var(--blue), rgba(96,165,250,.08)); }
+.tree-section[data-color="orange"] .tree-inner::before { background: linear-gradient(180deg, var(--orange), rgba(251,146,60,.08)); }
+
+/* Active branch glow on vertical line */
+.tree-section[data-color="blue"] .tree-inner::before {
+  box-shadow: 0 0 8px rgba(96,165,250,.2);
+  animation: branchGlow 2.5s ease-in-out infinite;
+}
+@keyframes branchGlow { 0%,100% { opacity: .6; } 50% { opacity: 1; } }
+
+/* Round row (tree item) */
+.round-row {
+  height: 46px; display: flex; align-items: center; gap: 10px;
+  padding: 0 14px 0 2px; border-radius: var(--radius-sm);
+  position: relative; cursor: pointer;
+  opacity: 0; transform: translateX(-10px);
+  transition: opacity .3s var(--ease), transform .3s var(--ease), background .15s, border-color .2s;
+  background: transparent;
+  border: 1px solid transparent;
+}
+.round-row.visible { opacity: 1; transform: translateX(0); }
+.round-row:hover { background: rgba(255,255,255,.02); }
+.round-row.selected { background: rgba(255,255,255,.025); border-color: var(--border); }
+
+/* Horizontal branch line from vertical to round */
+.round-row::before {
+  content: ''; position: absolute; left: -12px; top: 50%;
+  width: 12px; height: 1.5px; border-radius: 1px;
+}
+.tree-section[data-color="purple"] .round-row::before { background: rgba(167,139,250,.2); }
+.tree-section[data-color="blue"] .round-row::before   { background: rgba(96,165,250,.2); }
+.tree-section[data-color="orange"] .round-row::before { background: rgba(251,146,60,.2); }
+
+/* Active round glow on branch */
+.round-row.active-round::before {
+  box-shadow: 0 0 6px rgba(96,165,250,.25);
+  animation: branchGlow 2.5s ease-in-out infinite;
+}
+
+/* Shimmer on active round */
+.round-row.active-round::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(96,165,250,.02), rgba(96,165,250,.05), rgba(96,165,250,.02), transparent);
+  background-size: 250% 100%; animation: roundShimmer 3s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+}
+@keyframes roundShimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+/* Round status dot */
+.round-dot {
+  width: 11px; height: 11px; border-radius: 50%; flex-shrink: 0;
+  transition: all .3s;
+}
+.round-dot.done { opacity: .65; }
+.round-dot.running { animation: dotPulse 2s ease-in-out infinite; }
+.round-dot.pending { background: transparent !important; border: 1.5px solid var(--text-faint); opacity: .4; }
+@keyframes dotPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.3); } }
+
+.round-label {
+  font-size: 13px; color: var(--text-dim); flex: 1; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.round-row.active-round .round-label { color: var(--text); font-weight: 600; }
+.round-row.done-round .round-label { color: var(--text-muted); }
+
+.round-meta {
+  font-size: 10px; color: var(--text-faint); white-space: nowrap;
+  font-variant-numeric: tabular-nums; flex-shrink: 0;
+}
+
+/* Ghost chevron on hover */
+.round-chevron {
+  width: 14px; height: 14px; flex-shrink: 0;
+  color: transparent; transition: color .15s;
+  display: grid; place-items: center;
+}
+.round-row:hover .round-chevron { color: var(--text-faint); }
+.round-row.expanded .round-chevron { color: var(--text-muted); transform: rotate(90deg); }
+.round-chevron svg { width: 12px; height: 12px; }
+
+/* ===== SUB-STEPS (inside expanded round) ===== */
+.sub-steps {
+  max-height: 0; overflow: hidden; opacity: 0;
+  padding-left: 22px; position: relative;
+  transition: max-height .4s var(--ease), opacity .3s;
+}
+.round-row.expanded + .sub-steps { max-height: 400px; opacity: 1; }
+
+/* Sub-step vertical line */
+.sub-steps-inner { position: relative; padding-left: 16px; }
+.sub-steps-inner::before {
+  content: ''; position: absolute; left: 6px; top: 0; bottom: 14px;
+  width: 1.5px; border-radius: 1px;
+}
+.tree-section[data-color="blue"] .sub-steps-inner::before { background: rgba(96,165,250,.12); }
+.tree-section[data-color="purple"] .sub-steps-inner::before { background: rgba(167,139,250,.12); }
+.tree-section[data-color="orange"] .sub-steps-inner::before { background: rgba(251,146,60,.12); }
+
+.sub-step {
+  height: 40px; display: flex; align-items: center; gap: 8px;
+  padding: 0 10px 0 0; border-radius: 8px;
+  position: relative; cursor: pointer;
+  opacity: 0; transform: translateX(-8px);
+  transition: opacity .3s var(--ease), transform .3s var(--ease), background .15s, border-color .2s;
+  border: 1px solid transparent;
+}
+.sub-step.visible { opacity: 1; transform: translateX(0); }
+.sub-step:hover { background: rgba(255,255,255,.02); }
+.sub-step.selected { background: rgba(255,255,255,.025); border-color: var(--border); }
+
+/* Sub-step horizontal branch */
+.sub-step::before {
+  content: ''; position: absolute; left: -10px; top: 50%;
+  width: 10px; height: 1.5px; border-radius: 1px;
+}
+.tree-section[data-color="blue"] .sub-step::before { background: rgba(96,165,250,.15); }
+.tree-section[data-color="purple"] .sub-step::before { background: rgba(167,139,250,.15); }
+.tree-section[data-color="orange"] .sub-step::before { background: rgba(251,146,60,.15); }
+
+/* Active sub-step glow */
+.sub-step.active-sub::before {
+  background: rgba(96,165,250,.45);
+  box-shadow: 0 0 6px rgba(96,165,250,.25);
+  animation: branchGlow 2.5s ease-in-out infinite;
+}
+
+/* Active sub-step tint + shimmer */
+.tree-section[data-color="blue"] .sub-step.active-sub { background: rgba(96,165,250,.04); }
+.sub-step.active-sub::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(96,165,250,.02), rgba(96,165,250,.04), rgba(96,165,250,.02), transparent);
+  background-size: 250% 100%; animation: roundShimmer 3.5s ease-in-out infinite;
+  border-radius: 8px;
+}
+
+/* Sub-step dots */
+.sub-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+.sub-dot.done { opacity: .55; }
+.sub-dot.running { animation: dotPulse 2s ease-in-out infinite; }
+.sub-dot.pending { background: transparent !important; border: 1.5px solid var(--text-faint); opacity: .35; }
+
+.sub-label {
+  font-size: 12px; color: var(--text-muted); flex: 1; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.sub-step.active-sub .sub-label { color: var(--text-dim); font-weight: 500; }
+.sub-step.done-sub .sub-label { color: var(--text-faint); }
+
+.sub-meta { font-size: 9px; color: var(--text-faint); white-space: nowrap; flex-shrink: 0; }
+
+/* Ghost chevron on sub-step hover */
+.sub-chevron {
+  width: 12px; height: 12px; flex-shrink: 0;
+  color: transparent; transition: color .15s;
+  display: grid; place-items: center;
+}
+.sub-step:hover .sub-chevron { color: var(--text-faint); }
+.sub-chevron svg { width: 10px; height: 10px; }
+
+/* ===== CONTENT DASHBOARD (TWO BOXES below active sub-step) ===== */
+.dashboard {
+  display: grid; grid-template-columns: 1fr 360px;
+  gap: 16px; margin-top: 20px;
+  max-height: 0; overflow: hidden; opacity: 0;
+  transition: max-height .5s var(--ease), opacity .35s, margin-top .4s;
+}
+.dashboard.open { max-height: 900px; opacity: 1; }
+.dashboard.hidden { max-height: 0; opacity: 0; margin-top: 0; }
+
+.panel {
+  background: var(--surface-card);
+  backdrop-filter: blur(16px) saturate(1.2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 22px 24px; overflow: hidden;
+  position: relative;
+  transition: transform .35s var(--ease), opacity .3s;
+}
+.panel::before {
+  content: ''; position: absolute; top: 0; left: 20px; right: 20px; height: 1px;
+  border-radius: 0 0 1px 1px;
+}
+.panel.left-panel::before { background: linear-gradient(90deg, transparent, var(--blue), transparent); opacity: .25; }
+.panel.right-panel::before { background: linear-gradient(90deg, transparent, rgba(148,163,184,.12), transparent); }
+
+.dashboard.open .panel { transform: translateY(0); opacity: 1; }
+.dashboard.hidden .panel { transform: translateY(10px); opacity: 0; }
+
+.dash-fade { animation: dashFadeIn .35s var(--ease); }
+@keyframes dashFadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+/* Summary panel (left) */
+.dash-header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.dash-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.dash-title { font-size: 15px; font-weight: 700; color: var(--text); }
+.dash-badge {
+  font-size: 9px; font-weight: 700; padding: 3px 9px; border-radius: 6px;
+  text-transform: uppercase; letter-spacing: .4px;
+}
+.dash-badge.done    { background: var(--green-dim); color: var(--green); }
+.dash-badge.running { background: var(--blue-dim); color: var(--blue); }
+.dash-badge.pending { background: rgba(100,116,139,.06); color: var(--text-muted); }
+.dash-badge.running::before {
+  content: ''; display: inline-block; width: 7px; height: 7px;
+  border: 1.5px solid transparent; border-top-color: currentColor;
+  border-radius: 50%; margin-right: 4px; vertical-align: middle;
+  animation: spinBadge .8s linear infinite;
+}
+
+.dash-summary {
+  font-size: 13px; color: var(--text-dim); line-height: 1.7;
+  margin-bottom: 16px; font-style: italic;
+  padding-bottom: 14px; border-bottom: 1px solid var(--border);
+}
+
+/* Item list inside summary panel */
+.dash-items { display: flex; flex-direction: column; gap: 4px; }
+.dash-item {
+  display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+  border-radius: var(--radius-sm); font-size: 12px;
+  transition: background .15s; cursor: default; position: relative; overflow: hidden;
+}
+.dash-item:hover { background: rgba(255,255,255,.02); }
+.di-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.di-dot.done { background: var(--green); opacity: .65; }
+.di-dot.running { background: var(--blue); animation: dotPulse 1.5s ease-in-out infinite; }
+.di-dot.pending { border: 1px solid var(--text-faint); }
+.di-label { color: var(--text-dim); flex: 1; }
+.di-meta { font-size: 10px; color: var(--text-muted); white-space: nowrap; }
+
+.dash-item.running-item::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(96,165,250,.04), rgba(96,165,250,.06), rgba(96,165,250,.04), transparent);
+  background-size: 250% 100%; animation: itemShimmer 2.8s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+}
+@keyframes itemShimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+/* Activity feed (right panel) */
+.feed-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.feed-title {
+  font-size: 10px; color: var(--text-faint); text-transform: uppercase;
+  letter-spacing: .6px; font-weight: 600;
+}
+.live-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 8px; font-weight: 800; color: var(--red);
+  background: var(--red-dim); padding: 2px 8px 2px 6px;
+  border-radius: 4px; letter-spacing: .6px; text-transform: uppercase;
+}
+.live-badge-dot {
+  width: 5px; height: 5px; border-radius: 50%; background: var(--red);
+  animation: liveBlink 1.3s ease-in-out infinite;
+}
+@keyframes liveBlink { 0%,100% { opacity: 1; } 50% { opacity: .15; } }
+
+.feed-count { margin-left: auto; font-size: 10px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+
+.feed-list {
+  display: flex; flex-direction: column; gap: 3px;
+  max-height: 300px; overflow-y: auto;
+}
+.feed-list::-webkit-scrollbar { width: 3px; }
+.feed-list::-webkit-scrollbar-track { background: transparent; }
+.feed-list::-webkit-scrollbar-thumb { background: rgba(148,163,184,.12); border-radius: 2px; }
+
+.feed-event {
+  display: flex; align-items: flex-start; gap: 8px; padding: 7px 10px;
+  border-radius: 7px; font-size: 11px;
+  background: rgba(255,255,255,.012); border: 1px solid transparent;
+  position: relative; overflow: hidden;
+  opacity: 0; transform: translateY(6px); animation: feedIn .4s var(--ease) forwards;
+}
+.feed-event.is-new { border-color: rgba(96,165,250,.1); background: rgba(96,165,250,.025); }
+.feed-event.is-new::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(96,165,250,.04), transparent);
+  background-size: 300% 100%; animation: feedShimmer 2s ease-in-out;
+}
+@keyframes feedShimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+@keyframes feedIn { to { opacity: 1; transform: translateY(0); } }
+
+.feed-event:nth-child(1) { animation-delay: 0ms; }
+.feed-event:nth-child(2) { animation-delay: 50ms; }
+.feed-event:nth-child(3) { animation-delay: 100ms; }
+.feed-event:nth-child(4) { animation-delay: 150ms; }
+.feed-event:nth-child(5) { animation-delay: 200ms; }
+.feed-event:nth-child(6) { animation-delay: 250ms; }
+
+.fe-time {
+  font-size: 9px; color: var(--text-faint); font-family: 'JetBrains Mono', monospace;
+  font-weight: 500; flex-shrink: 0; width: 38px; padding-top: 1px;
+}
+.fe-icon {
+  width: 16px; height: 16px; border-radius: 4px; display: grid; place-items: center;
+  font-size: 8px; flex-shrink: 0;
+}
+.fe-body { flex: 1; min-width: 0; }
+.fe-text { color: var(--text-dim); font-size: 11px; line-height: 1.4; }
+.fe-type {
+  font-size: 7px; font-weight: 700; padding: 1px 5px; border-radius: 3px;
+  text-transform: uppercase; letter-spacing: .3px; flex-shrink: 0; margin-left: auto; align-self: flex-start;
+}
+.fe-type.t-gen   { background: var(--blue-dim); color: var(--blue); }
+.fe-type.t-ok    { background: var(--green-dim); color: var(--green); }
+.fe-type.t-warn  { background: var(--orange-dim); color: var(--orange); }
+.fe-type.t-score { background: var(--purple-dim); color: var(--purple); }
+.fe-type.t-info  { background: rgba(34,211,238,.08); color: #22d3ee; }
+
+/* ===== L-SHAPED DOT ANIMATION CANVAS ===== */
+#dotCanvas {
+  position: fixed; inset: 0; z-index: 50; pointer-events: none;
+}
+
+/* ===== KEYBOARD HINT ===== */
+.kbd-hint {
+  position: fixed; bottom: 10px; right: 16px; font-size: 10px; color: var(--text-faint); z-index: 100;
+  display: flex; align-items: center; gap: 8px;
+  background: rgba(11,14,20,.75); backdrop-filter: blur(12px);
+  padding: 5px 12px; border-radius: 6px; border: 1px solid var(--border);
+}
+.kbd-hint kbd {
+  display: inline-block; padding: 1px 5px; background: rgba(30,41,59,.6);
+  border: 1px solid var(--border); border-radius: 3px;
+  font-family: inherit; font-size: 9px; color: var(--text-muted);
+}
+
+/* ===== COLOR-PER-MODULE TINTS for active rounds ===== */
+.tree-section[data-color="purple"] .round-row.active-round {
+  background: rgba(167,139,250,.03);
+}
+.tree-section[data-color="purple"] .round-row.active-round::before {
+  background: rgba(167,139,250,.45);
+  box-shadow: 0 0 6px rgba(167,139,250,.25);
+  animation: branchGlow 2.5s ease-in-out infinite;
+}
+.tree-section[data-color="purple"] .round-row.active-round::after {
+  background: linear-gradient(90deg, transparent, rgba(167,139,250,.02), rgba(167,139,250,.05), rgba(167,139,250,.02), transparent);
+  background-size: 250% 100%; animation: roundShimmer 3s ease-in-out infinite;
+}
+
+.tree-section[data-color="orange"] .round-row.active-round {
+  background: rgba(251,146,60,.03);
+}
+.tree-section[data-color="orange"] .round-row.active-round::before {
+  background: rgba(251,146,60,.45);
+  box-shadow: 0 0 6px rgba(251,146,60,.25);
+  animation: branchGlow 2.5s ease-in-out infinite;
+}
+.tree-section[data-color="orange"] .round-row.active-round::after {
+  background: linear-gradient(90deg, transparent, rgba(251,146,60,.02), rgba(251,146,60,.05), rgba(251,146,60,.02), transparent);
+  background-size: 250% 100%; animation: roundShimmer 3s ease-in-out infinite;
+}
+
+.tree-section[data-color="blue"] .round-row.active-round {
+  background: rgba(96,165,250,.03);
+}
+
+/* ===== COLOR-PER-MODULE TINTS for active sub-steps ===== */
+.tree-section[data-color="purple"] .sub-step.active-sub {
+  background: rgba(167,139,250,.04);
+}
+.tree-section[data-color="purple"] .sub-step.active-sub::before {
+  background: rgba(167,139,250,.45);
+  box-shadow: 0 0 6px rgba(167,139,250,.25);
+}
+.tree-section[data-color="purple"] .sub-step.active-sub::after {
+  background: linear-gradient(90deg, transparent, rgba(167,139,250,.02), rgba(167,139,250,.04), rgba(167,139,250,.02), transparent);
+  background-size: 250% 100%;
+}
+
+.tree-section[data-color="orange"] .sub-step.active-sub {
+  background: rgba(251,146,60,.04);
+}
+.tree-section[data-color="orange"] .sub-step.active-sub::before {
+  background: rgba(251,146,60,.45);
+  box-shadow: 0 0 6px rgba(251,146,60,.25);
+}
+.tree-section[data-color="orange"] .sub-step.active-sub::after {
+  background: linear-gradient(90deg, transparent, rgba(251,146,60,.02), rgba(251,146,60,.04), rgba(251,146,60,.02), transparent);
+  background-size: 250% 100%;
+}
+
+/* ===== Active vertical tree line glow for purple/orange ===== */
+.tree-section[data-color="purple"] .tree-inner::before {
+  box-shadow: 0 0 8px rgba(167,139,250,.15);
+  animation: branchGlow 2.5s ease-in-out infinite;
+}
+.tree-section[data-color="orange"] .tree-inner::before {
+  box-shadow: 0 0 8px rgba(251,146,60,.15);
+  animation: branchGlow 2.5s ease-in-out infinite;
+}
+
+/* ===== MODULE CARD SELECTED STATE ===== */
+.mod-card.selected {
+  border-color: var(--border-hi);
+}
+.mod-card.selected::before { opacity: .45; }
+
+/* ===== FOCUS RING for keyboard nav ===== */
+.mod-card:focus-visible, .round-row:focus-visible, .sub-step:focus-visible {
+  outline: 2px solid var(--blue); outline-offset: 2px;
+}
+
+/* ===== SCROLLBAR ===== */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(148,163,184,.1); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<!-- Glass noise texture -->
+<div class="glass-noise"></div>
+
+<!-- Ambient background particles -->
+<canvas id="ambientCanvas"></canvas>
+
+<!-- L-shaped dot animation canvas -->
+<canvas id="dotCanvas"></canvas>
+
+<!-- ===== HEADER ===== -->
+<header class="header">
+  <div class="brand">
+    <div class="brand-icon">A</div>
+    AI Inventor
+  </div>
+  <div class="header-spacer"></div>
+  <div class="header-ring">
+    <svg viewBox="0 0 36 36">
+      <circle class="h-ring-track" cx="18" cy="18" r="14"/>
+      <circle class="h-ring-fill" cx="18" cy="18" r="14" id="hRingFill"
+        stroke-dasharray="87.96" stroke-dashoffset="52.78"/>
+    </svg>
+    <div class="h-ring-label" id="hRingLabel">40%</div>
+  </div>
+  <div class="header-divider"></div>
+  <div class="header-stat"><span class="lbl">Time</span> <strong id="hTime">21m 14s</strong></div>
+  <div class="header-divider"></div>
+  <div class="header-stat"><span class="lbl">Cost</span> <strong id="hCost">$4.12</strong></div>
+  <div class="header-divider"></div>
+  <div class="token-bar">
+    <span>312k tok</span>
+    <div class="token-bar-track">
+      <div class="token-bar-fill" style="width:48%"></div>
+    </div>
+  </div>
+</header>
+
+<!-- ===== SIDEBAR (48px collapsed, 240px on hover) ===== -->
+<nav class="sidebar" id="sidebar">
+  <div class="sidebar-brand">
+    <div class="sidebar-brand-icon">A</div>
+    <span class="sidebar-brand-text">AI Inventor</span>
+  </div>
+  <div class="sidebar-sep"></div>
+
+  <div class="sidebar-section-label">Modules</div>
+  <button class="sidebar-btn" data-color="purple" data-mod="0">
+    <div class="sb-icon" style="background:var(--purple)">1</div>
+    <span class="sb-label">Invent</span>
+    <div class="sb-dot" style="background:var(--green)"></div>
+  </button>
+  <button class="sidebar-btn active" data-color="blue" data-mod="1">
+    <div class="sb-icon" style="background:var(--blue)">2</div>
+    <span class="sb-label">Elaboration</span>
+    <div class="sb-dot" style="background:var(--blue);animation:dotPulse 2s ease-in-out infinite"></div>
+  </button>
+  <button class="sidebar-btn" data-color="orange" data-mod="2">
+    <div class="sb-icon" style="background:var(--orange)">3</div>
+    <span class="sb-label">Disseminate</span>
+  </button>
+
+  <div class="sidebar-sep"></div>
+  <div class="sidebar-section-label">Starred</div>
+  <button class="sidebar-btn" data-color="purple" data-mod="-1" style="pointer-events:none;opacity:.4">
+    <div class="sb-icon" style="background:rgba(148,163,184,.12);color:var(--text-faint)">&#9733;</div>
+    <span class="sb-label" style="color:var(--text-faint)">No starred items</span>
+  </button>
+
+  <div class="sidebar-sep"></div>
+  <div class="sidebar-section-label">Recents</div>
+  <button class="sidebar-btn" data-color="purple" data-mod="-1" style="pointer-events:none;opacity:.4">
+    <div class="sb-icon" style="background:rgba(148,163,184,.12);color:var(--text-faint)">&#128337;</div>
+    <span class="sb-label" style="color:var(--text-faint)">No recent runs</span>
+  </button>
+
+  <div class="sidebar-footer"></div>
+</nav>
+
+<!-- ===== MAIN ===== -->
+<div class="main" id="mainArea">
+  <!-- MODULE CARDS (rendered by JS) -->
+  <div class="module-cards" id="moduleCards">
+    <canvas id="particleCanvas"></canvas>
+  </div>
+
+  <!-- TREE SECTION (rounds) -->
+  <div class="tree-section" id="treeSection" data-color="blue"></div>
+
+  <!-- DASHBOARD (summary + activity feed) -->
+  <div class="dashboard hidden" id="dashboard">
+    <div class="panel left-panel" id="leftPanel"></div>
+    <div class="panel right-panel" id="rightPanel"></div>
+  </div>
+</div>
+
+<!-- Keyboard hint -->
+<div class="kbd-hint">
+  <kbd>&#8592;</kbd><kbd>&#8594;</kbd> modules
+  <kbd>&#8593;</kbd><kbd>&#8595;</kbd> rounds
+  <kbd>Enter</kbd> expand
+  <kbd>Esc</kbd> close
+</div>
+
+<script>
+/* ====================================================================
+   DATA MODEL
+   ==================================================================== */
+const COLOR_MAP = {
+  purple: { main: '#a78bfa', dim: 'rgba(167,139,250,.10)', glow: 'rgba(167,139,250,.30)', css: '--purple' },
+  blue:   { main: '#60a5fa', dim: 'rgba(96,165,250,.10)',   glow: 'rgba(96,165,250,.30)',   css: '--blue' },
+  orange: { main: '#fb923c', dim: 'rgba(251,146,60,.10)',   glow: 'rgba(251,146,60,.30)',   css: '--orange' },
+};
+
+const MODULES = [
+  {
+    id: 'create_hypo', label: 'Create Hypothesis', color: 'purple',
+    icon: '\u2728', status: 'done', progress: 100,
+    time: '8m 22s', cost: '$1.68',
+    rounds: [
+      {
+        id: 'r1', label: 'Round 1', state: 'done', meta: '6.2/10',
+        subs: [
+          { id: 's1', label: 'Generate Ideas', state: 'done', meta: '12 seeds',
+            summary: "I generated 12 seed hypotheses by traversing weakly-connected clusters in the knowledge graph. Each hypothesis includes a falsifiability criterion and proposed validation approach. Top candidate: topological photon pairing for fault-tolerant gates.",
+            items: [
+              { label: 'Knowledge graph traversal', meta: '128 nodes visited', done: true },
+              { label: 'Seed generation (diversified)', meta: '12 candidates', done: true },
+              { label: 'Novelty scoring', meta: 'mean 7.1/10', done: true },
+            ]
+          },
+          { id: 's2', label: 'Review & Score', state: 'done', meta: '6.2/10',
+            summary: "I reviewed all 12 hypotheses against novelty, feasibility, and grounding criteria. Average score: 6.2/10. Main weaknesses: insufficient experimental grounding and overly broad scope in 4 candidates.",
+            items: [
+              { label: 'Multi-criteria evaluation', meta: '12 scored', done: true },
+              { label: 'Weakness identification', meta: '4 flagged', done: true },
+            ]
+          },
+          { id: 's3', label: 'Refine', state: 'done', meta: 'Improved',
+            summary: "I narrowed to the top 6 hypotheses and refined their experimental protocols, adding specific photon-pair generation rates and error thresholds.",
+            items: [
+              { label: 'Protocol refinement', meta: '6 updated', done: true },
+              { label: 'Constraint tightening', meta: '3 bounds added', done: true },
+            ]
+          },
+        ]
+      },
+      {
+        id: 'r2', label: 'Round 2', state: 'done', meta: '7.8/10',
+        subs: [
+          { id: 's1', label: 'Re-evaluate', state: 'done', meta: '7.8/10',
+            summary: "Re-evaluated the refined hypotheses. Average score improved to 7.8/10. The top hypothesis on topological photon pairing scored 8.6.",
+            items: [
+              { label: 'Scoring round 2', meta: '6 scored', done: true },
+              { label: 'Gap analysis', meta: '2 gaps remain', done: true },
+            ]
+          },
+          { id: 's2', label: 'Final Refine', state: 'done', meta: 'Polished',
+            summary: "Tightened photon-pair fidelity prediction to 99.2% +/- 0.3%, added comparison baselines from 3 competing approaches.",
+            items: [
+              { label: 'Fidelity bounds', meta: '99.2% +/- 0.3%', done: true },
+              { label: 'Baseline comparison', meta: '3 approaches', done: true },
+            ]
+          },
+        ]
+      },
+      {
+        id: 'r3', label: 'Round 3', state: 'done', meta: '8.4/10',
+        subs: [
+          { id: 's1', label: 'Final Review', state: 'done', meta: '8.4/10',
+            summary: "Completed the final review. Lead hypothesis achieved 8.4/10 -- strong novelty, well-grounded predictions, and a clear experimental path. Accepted for elaboration phase.",
+            items: [
+              { label: 'Final scoring', meta: '8.4/10 pass', done: true },
+              { label: 'Acceptance decision', meta: 'Approved', done: true },
+            ]
+          },
+        ]
+      },
+    ]
+  },
+  {
+    id: 'test_ideas', label: 'Test Ideas', color: 'blue',
+    icon: '\ud83d\udd2c', status: 'running', progress: 60,
+    time: '12m 52s', cost: '$2.44',
+    rounds: [
+      {
+        id: 'r5', label: 'Round 5', state: 'done', meta: 'Complete',
+        subs: [
+          { id: 's1', label: 'Literature Review', state: 'done', meta: '847 papers',
+            summary: "Conducted comprehensive literature review across 847 papers. Identified closest prior art for each hypothesis and compiled related-work section with 142 unique citations.",
+            items: [
+              { label: 'Corpus retrieval (S2, arXiv)', meta: '847 papers', done: true },
+              { label: 'Prior art mapping', meta: '10/10 mapped', done: true },
+              { label: 'Citation graph', meta: '142 citations', done: true },
+            ]
+          },
+          { id: 's2', label: 'Experiment Design', state: 'done', meta: '10 protocols',
+            summary: "Designed rigorous experimental protocols for all hypotheses with variables, controls, power analysis, and success thresholds.",
+            items: [
+              { label: 'Protocol design', meta: '10 protocols', done: true },
+              { label: 'Power analysis', meta: 'alpha=0.05', done: true },
+            ]
+          },
+        ]
+      },
+      {
+        id: 'r6', label: 'Round 6', state: 'done', meta: 'Complete',
+        subs: [
+          { id: 's1', label: 'Baseline Sims', state: 'done', meta: '30 runs',
+            summary: "Ran all baseline models (3 per hypothesis) on synthetic datasets. All baselines reproduce within 2% of published metrics.",
+            items: [
+              { label: 'Baseline execution', meta: '30 runs', done: true },
+              { label: 'Metric verification', meta: 'within 2%', done: true },
+            ]
+          },
+          { id: 's2', label: 'Data Preparation', state: 'done', meta: '10 datasets',
+            summary: "Prepared synthetic evaluation datasets for all hypotheses calibrated to boundary conditions. Distribution validation KL divergence < 0.015.",
+            items: [
+              { label: 'Synthetic data gen', meta: '10 datasets', done: true },
+              { label: 'Distribution check', meta: 'KL < 0.015', done: true },
+            ]
+          },
+        ]
+      },
+      {
+        id: 'r3', label: 'Round 3', state: 'active', meta: '6/10 sims',
+        subs: [
+          { id: 's1', label: 'Plan Approach', state: 'done', meta: 'Designed',
+            summary: "Designed the simulation strategy: systematic component testing with ablation studies alongside main experiments. Defined convergence criteria and resource allocation.",
+            items: [
+              { label: 'Strategy design', meta: 'Approved', done: true },
+              { label: 'Resource allocation', meta: '4x A100', done: true },
+            ]
+          },
+          { id: 's2', label: 'Manage Artifacts', state: 'done', meta: '6 artifacts',
+            summary: "Organized all experimental artifacts: datasets, model checkpoints, configuration files, and intermediate results into a versioned artifact store.",
+            items: [
+              { label: 'Artifact cataloging', meta: '6 artifacts', done: true },
+              { label: 'Version control', meta: 'v3.2', done: true },
+            ]
+          },
+          { id: 's3', label: 'Create Artifacts', state: 'active', meta: '6/10 done',
+            summary: "Currently executing main simulations for hypothesis 7. The proposed mechanism shows a 23% improvement over baseline on hypotheses 1-6. Processing the nano-scale thermal transport model.",
+            items: [
+              { label: 'Core mechanism simulation', meta: '6/10 complete', running: true },
+              { label: 'Statistical significance testing', meta: '6/10 done', running: true },
+              { label: 'Ablation studies', meta: '4/10 done', running: true },
+              { label: 'Result aggregation', meta: '6 tables ready', done: true },
+              { label: 'Final evaluation suite', meta: 'queued', done: false },
+            ],
+            logs: [
+              { time: '14:31', text: 'Hypothesis 7 simulation checkpoint: thermal transport matrix at 68% convergence', type: 't-info' },
+              { time: '14:29', text: 'Ablation #5 complete: encoder attention contributes 18.3% of final performance', type: 't-ok' },
+              { time: '14:26', text: 'Hypothesis 7 initiated: nano-scale thermal transport in layered metamaterials', type: 't-gen' },
+              { time: '14:22', text: 'Statistical significance confirmed for hypothesis 6: p < 0.001, d = 1.42', type: 't-score' },
+              { time: '14:18', text: 'Hypothesis 5 ablation flagged: attention contribution only 3.1%', type: 't-warn' },
+              { time: '14:14', text: 'Hypothesis 6 complete: +27.4% improvement over ResNet-KG baseline', type: 't-ok' },
+            ]
+          },
+          { id: 's4', label: 'Write Paper', state: 'pending', meta: 'queued',
+            summary: "Pending simulation completion. Will draft paper sections integrating all experimental results, statistical analyses, and visualizations.",
+            items: [
+              { label: 'Results section', meta: 'queued', done: false },
+              { label: 'Methods section', meta: 'queued', done: false },
+              { label: 'Discussion draft', meta: 'queued', done: false },
+            ]
+          },
+        ]
+      },
+      {
+        id: 'r8', label: 'Round 8', state: 'pending', meta: 'queued',
+        subs: [
+          { id: 's1', label: 'Analyze Results', state: 'pending', meta: 'queued',
+            summary: "Pending. Will perform comprehensive statistical analysis including effect sizes, confidence intervals, and failure mode classification.",
+            items: [
+              { label: 'Statistical analysis', meta: 'queued', done: false },
+              { label: 'Effect size computation', meta: 'queued', done: false },
+            ]
+          },
+          { id: 's2', label: 'Final Evaluation', state: 'pending', meta: 'queued',
+            summary: "Pending. Full evaluation suite with all methods, all datasets, 5 seeds, and cross-hypothesis comparison.",
+            items: [
+              { label: 'Full eval suite', meta: 'queued', done: false },
+              { label: 'Visualization generation', meta: 'queued', done: false },
+            ]
+          },
+        ]
+      },
+    ]
+  },
+  {
+    id: 'report_results', label: 'Report Results', color: 'orange',
+    icon: '\ud83d\udce1', status: 'pending', progress: 0,
+    time: '--', cost: '--',
+    rounds: [
+      {
+        id: 'r1', label: 'Round 1', state: 'pending', meta: 'queued',
+        subs: [
+          { id: 's1', label: 'Draft Paper', state: 'pending', meta: 'queued',
+            summary: "Pending hypothesis testing results. Will generate complete paper drafts including abstract, introduction, methodology, results, and discussion.",
+            items: [
+              { label: 'Abstract generation', meta: 'queued', done: false },
+              { label: 'Section drafting', meta: 'queued', done: false },
+            ]
+          },
+          { id: 's2', label: 'Generate Figures', state: 'pending', meta: 'queued',
+            summary: "Will create publication-quality SVG figures, architecture diagrams, and result comparison plots.",
+            items: [
+              { label: 'Static figures', meta: 'queued', done: false },
+              { label: 'Architecture diagrams', meta: 'queued', done: false },
+            ]
+          },
+          { id: 's3', label: 'Review & Revise', state: 'pending', meta: 'queued',
+            summary: "Multi-round review covering scientific rigor, argument clarity, and citation accuracy.",
+            items: [
+              { label: 'Rigor review', meta: 'queued', done: false },
+              { label: 'Revision cycles', meta: 'queued', done: false },
+            ]
+          },
+          { id: 's4', label: 'Compile & Package', state: 'pending', meta: 'queued',
+            summary: "Final compilation into submission-ready papers with LaTeX, BibTeX, companion code, and reproducibility docs.",
+            items: [
+              { label: 'LaTeX compilation', meta: 'queued', done: false },
+              { label: 'Code repository', meta: 'queued', done: false },
+            ]
+          },
+        ]
+      },
+    ]
+  }
+];
+
+/* ====================================================================
+   STATE
+   ==================================================================== */
+let selectedMod = -1;
+let selectedRound = -1;
+let selectedSub = -1;
+let dashboardOpen = false;
+
+/* ====================================================================
+   RENDER MODULE CARDS (3 horizontal glass cards)
+   ==================================================================== */
+function renderModuleCards() {
+  const row = document.getElementById('moduleCards');
+  // Keep canvas
+  const canvas = document.getElementById('particleCanvas');
+
+  // Remove old cards
+  row.querySelectorAll('.mod-card').forEach(c => c.remove());
+
+  MODULES.forEach((m, i) => {
+    const c = COLOR_MAP[m.color];
+    const statusCls = m.status === 'done' ? 'done' : m.status === 'running' ? 'active-card' : '';
+    const card = document.createElement('div');
+    card.className = 'mod-card ' + statusCls;
+    card.dataset.color = m.color;
+    card.dataset.mod = i;
+
+    const badgeCls = m.status === 'done' ? 'done' : m.status === 'running' ? 'running' : 'pending';
+    const badgeText = m.status === 'done' ? 'Done' : m.status === 'running' ? 'Active' : 'Pending';
+
+    card.innerHTML =
+      '<div class="accent-line"></div>' +
+      '<div class="mc-header">' +
+        '<div class="mc-icon">' + m.icon + '</div>' +
+        '<div class="mc-title-area">' +
+          '<div class="mc-title">' + m.label + '</div>' +
+          '<div class="mc-subtitle">' + m.progress + '% ' + (m.status === 'done' ? 'complete' : m.status === 'running' ? 'in progress' : 'pending') + '</div>' +
+        '</div>' +
+        '<span class="mc-badge ' + badgeCls + '">' + badgeText + '</span>' +
+      '</div>' +
+      '<div class="mc-progress"><div class="mc-progress-fill" data-w="' + m.progress + '"></div></div>' +
+      '<div class="mc-stats">' +
+        '<span><span class="val">' + m.time + '</span> elapsed</span>' +
+        '<span><span class="val">' + m.cost + '</span> cost</span>' +
+        '<span><span class="val">' + m.rounds.length + '</span> rounds</span>' +
+      '</div>';
+
+    card.addEventListener('click', function() { selectModule(i); });
+    row.appendChild(card);
+  });
+
+  // Animate progress fills
+  requestAnimationFrame(function() {
+    row.querySelectorAll('.mc-progress-fill').forEach(function(el) {
+      el.style.width = el.dataset.w + '%';
+    });
+  });
+}
+
+/* ====================================================================
+   RENDER TREE (Rounds as tree items)
+   ==================================================================== */
+function renderTree(mi) {
+  var section = document.getElementById('treeSection');
+  var m = MODULES[mi];
+  var c = COLOR_MAP[m.color];
+
+  section.dataset.color = m.color;
+  section.innerHTML = '<div class="tree-inner" id="treeInner"></div>';
+
+  var inner = document.getElementById('treeInner');
+
+  m.rounds.forEach(function(round, ri) {
+    var stateCls = round.state === 'active' ? 'active-round' : round.state === 'done' ? 'done-round' : '';
+    var expandedCls = round.state === 'active' ? ' expanded' : '';
+    var dotCls = round.state === 'active' ? 'running' : round.state === 'done' ? 'done' : 'pending';
+    var dotStyle = round.state !== 'pending' ? 'background:' + c.main : '';
+    var statusIcon = round.state === 'done' ? '\u2713' : round.state === 'active' ? '\u25b6' : '\u25cb';
+
+    var roundEl = document.createElement('div');
+    roundEl.className = 'round-row ' + stateCls + expandedCls;
+    roundEl.dataset.mod = mi;
+    roundEl.dataset.round = ri;
+
+    roundEl.innerHTML =
+      '<div class="round-dot ' + dotCls + '" style="' + dotStyle + '"></div>' +
+      '<span class="round-label">' + statusIcon + ' ' + round.label + '</span>' +
+      '<span class="round-meta">' + (round.meta || '') + '</span>' +
+      '<span class="round-chevron"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><polyline points="4 2 8 6 4 10"/></svg></span>';
+
+    roundEl.addEventListener('click', function(e) {
+      e.stopPropagation();
+      toggleRound(mi, ri);
+    });
+
+    inner.appendChild(roundEl);
+
+    // Sub-steps container
+    var subsContainer = document.createElement('div');
+    subsContainer.className = 'sub-steps';
+    subsContainer.dataset.round = ri;
+
+    var subsInner = document.createElement('div');
+    subsInner.className = 'sub-steps-inner';
+
+    round.subs.forEach(function(sub, si) {
+      var subState = sub.state === 'active' ? 'active-sub' : sub.state === 'done' ? 'done-sub' : '';
+      var subDotCls = sub.state === 'active' ? 'running' : sub.state === 'done' ? 'done' : 'pending';
+      var subDotStyle = sub.state !== 'pending' ? 'background:' + c.main : '';
+
+      var subEl = document.createElement('div');
+      subEl.className = 'sub-step ' + subState;
+      subEl.dataset.mod = mi;
+      subEl.dataset.round = ri;
+      subEl.dataset.sub = si;
+
+      subEl.innerHTML =
+        '<div class="sub-dot ' + subDotCls + '" style="' + subDotStyle + '"></div>' +
+        '<span class="sub-label">' + sub.label + '</span>' +
+        '<span class="sub-meta">' + (sub.meta || '') + '</span>' +
+        '<span class="sub-chevron"><svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><polyline points="3 2 7 5 3 8"/></svg></span>';
+
+      subEl.addEventListener('click', function(e) {
+        e.stopPropagation();
+        selectSubStep(mi, ri, si);
+      });
+
+      subsInner.appendChild(subEl);
+    });
+
+    subsContainer.appendChild(subsInner);
+    inner.appendChild(subsContainer);
+  });
+
+  // Show tree with animation
+  section.classList.add('open');
+  section.classList.remove('hidden');
+
+  // Stagger visibility
+  requestAnimationFrame(function() {
+    section.querySelectorAll('.round-row').forEach(function(el, i) {
+      el.style.transitionDelay = (i * 60) + 'ms';
+      el.classList.add('visible');
+    });
+    section.querySelectorAll('.sub-step').forEach(function(el, i) {
+      el.style.transitionDelay = (i * 40 + 100) + 'ms';
+      el.classList.add('visible');
+    });
+  });
+}
+
+function hideTree() {
+  var section = document.getElementById('treeSection');
+  section.classList.remove('open');
+  section.classList.add('hidden');
+}
+
+function toggleRound(mi, ri) {
+  var roundRow = document.querySelector('.round-row[data-mod="' + mi + '"][data-round="' + ri + '"]');
+  if (!roundRow) return;
+
+  var wasExpanded = roundRow.classList.contains('expanded');
+
+  // Collapse all rounds first
+  document.querySelectorAll('.round-row').forEach(function(r) {
+    r.classList.remove('expanded');
+  });
+
+  if (!wasExpanded) {
+    roundRow.classList.add('expanded');
+    selectedRound = ri;
+    // Animate in sub-steps
+    var subsContainer = roundRow.nextElementSibling;
+    if (subsContainer) {
+      subsContainer.querySelectorAll('.sub-step').forEach(function(el, i) {
+        el.style.transitionDelay = (i * 50) + 'ms';
+        el.classList.add('visible');
+      });
+    }
+  } else {
+    selectedRound = -1;
+    selectedSub = -1;
+    closeDashboard();
+  }
+}
+
+/* ====================================================================
+   MODULE SELECTION
+   ==================================================================== */
+function selectModule(mi) {
+  if (selectedMod === mi) {
+    // Deselect
+    selectedMod = -1;
+    selectedRound = -1;
+    selectedSub = -1;
+    hideTree();
+    closeDashboard();
+    highlightCard(-1);
+    highlightSidebarBtn(-1);
+    return;
+  }
+
+  selectedMod = mi;
+  selectedRound = -1;
+  selectedSub = -1;
+  closeDashboard();
+  highlightCard(mi);
+  highlightSidebarBtn(mi);
+  renderTree(mi);
+}
+
+function highlightCard(mi) {
+  document.querySelectorAll('.mod-card').forEach(function(c, i) {
+    c.classList.toggle('selected', i === mi);
+  });
+}
+
+function highlightSidebarBtn(mi) {
+  document.querySelectorAll('.sidebar-btn[data-mod]').forEach(function(b) {
+    var bmi = parseInt(b.dataset.mod);
+    b.classList.toggle('active', bmi === mi);
+  });
+}
+
+/* ====================================================================
+   SUB-STEP SELECTION -> TWO BOXES
+   ==================================================================== */
+function selectSubStep(mi, ri, si) {
+  if (selectedMod === mi && selectedRound === ri && selectedSub === si && dashboardOpen) {
+    // Toggle off
+    closeDashboard();
+    selectedSub = -1;
+    document.querySelectorAll('.sub-step').forEach(function(s) { s.classList.remove('selected'); });
+    return;
+  }
+
+  selectedMod = mi;
+  selectedRound = ri;
+  selectedSub = si;
+
+  // Highlight selected sub
+  document.querySelectorAll('.sub-step').forEach(function(s) { s.classList.remove('selected'); });
+  var target = document.querySelector('.sub-step[data-mod="' + mi + '"][data-round="' + ri + '"][data-sub="' + si + '"]');
+  if (target) target.classList.add('selected');
+
+  openDashboard(mi, ri, si);
+}
+
+/* ====================================================================
+   DASHBOARD: Summary (left) + Activity Feed (right). NO STAT CARDS.
+   ==================================================================== */
+function openDashboard(mi, ri, si) {
+  var m = MODULES[mi];
+  var round = m.rounds[ri];
+  var sub = round.subs[si];
+  var c = COLOR_MAP[m.color];
+  var db = document.getElementById('dashboard');
+
+  // LEFT PANEL: Summary + items
+  var left = document.getElementById('leftPanel');
+  var badgeCls = sub.state === 'active' ? 'running' : sub.state === 'done' ? 'done' : 'pending';
+  var badgeText = sub.state === 'active' ? 'Running' : sub.state === 'done' ? 'Complete' : 'Pending';
+
+  var itemsHtml = (sub.items || []).map(function(it) {
+    var dotCls = it.done ? 'done' : it.running ? 'running' : 'pending';
+    var rowCls = it.running ? 'running-item' : '';
+    return '<div class="dash-item ' + rowCls + '">' +
+      '<div class="di-dot ' + dotCls + '"></div>' +
+      '<span class="di-label">' + it.label + '</span>' +
+      '<span class="di-meta">' + it.meta + '</span>' +
+    '</div>';
+  }).join('');
+
+  left.innerHTML = '<div class="dash-fade">' +
+    '<div class="dash-header">' +
+      '<div class="dash-dot" style="background:' + c.main + '"></div>' +
+      '<div class="dash-title">' + sub.label + '</div>' +
+      '<span class="dash-badge ' + badgeCls + '">' + badgeText + '</span>' +
+    '</div>' +
+    '<div class="dash-summary">' + sub.summary + '</div>' +
+    '<div class="dash-items">' + itemsHtml + '</div>' +
+  '</div>';
+
+  // RIGHT PANEL: Activity Feed
+  var right = document.getElementById('rightPanel');
+  var logs = sub.logs || generateDefaultLogs(sub, m);
+
+  var eventsHtml = logs.map(function(e, i) {
+    var isNew = i < 2;
+    return '<div class="feed-event ' + (isNew ? 'is-new' : '') + '" style="animation-delay:' + (i * 50) + 'ms">' +
+      '<span class="fe-time">' + e.time + '</span>' +
+      '<div class="fe-icon" style="background:' + c.dim + ';color:' + c.main + '">\u26a1</div>' +
+      '<div class="fe-body">' +
+        '<div class="fe-text">' + e.text + '</div>' +
+      '</div>' +
+      '<span class="fe-type ' + (e.type || 't-info') + '">' + getTypeLabel(e.type) + '</span>' +
+    '</div>';
+  }).join('');
+
+  right.innerHTML = '<div class="dash-fade">' +
+    '<div class="feed-header">' +
+      '<span class="feed-title">Activity Feed</span>' +
+      '<span class="live-badge"><span class="live-badge-dot"></span> LIVE</span>' +
+      '<span class="feed-count">' + logs.length + ' events</span>' +
+    '</div>' +
+    '<div class="feed-list" id="feedList">' + eventsHtml + '</div>' +
+  '</div>';
+
+  db.classList.add('open');
+  db.classList.remove('hidden');
+  dashboardOpen = true;
+}
+
+function closeDashboard() {
+  var db = document.getElementById('dashboard');
+  db.classList.remove('open');
+  db.classList.add('hidden');
+  dashboardOpen = false;
+}
+
+function getTypeLabel(type) {
+  var map = { 't-gen': 'Start', 't-ok': 'Done', 't-warn': 'Alert', 't-score': 'Score', 't-info': 'Info' };
+  return map[type] || 'Info';
+}
+
+function generateDefaultLogs(sub, mod) {
+  if (sub.state === 'done') {
+    return [
+      { time: '13:42', text: sub.label + ' completed successfully', type: 't-ok' },
+      { time: '13:38', text: 'Final validation passed for ' + sub.label.toLowerCase(), type: 't-ok' },
+      { time: '13:35', text: 'Processing artifacts for ' + mod.label, type: 't-info' },
+    ];
+  }
+  if (sub.state === 'pending') {
+    return [
+      { time: '--:--', text: 'Waiting for previous steps to complete', type: 't-info' },
+    ];
+  }
+  return [
+    { time: '14:30', text: sub.label + ' is currently in progress', type: 't-gen' },
+    { time: '14:28', text: 'Checkpoint saved', type: 't-info' },
+  ];
+}
+
+/* ====================================================================
+   SIDEBAR CLICK NAVIGATION
+   ==================================================================== */
+document.querySelectorAll('.sidebar-btn[data-mod]').forEach(function(btn) {
+  var mi = parseInt(btn.dataset.mod);
+  if (mi < 0) return;
+  btn.addEventListener('click', function() { selectModule(mi); });
+});
+
+/* ====================================================================
+   KEYBOARD NAVIGATION
+   ==================================================================== */
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'ArrowRight') {
+    e.preventDefault();
+    selectModule(Math.min((selectedMod < 0 ? -1 : selectedMod) + 1, MODULES.length - 1));
+  } else if (e.key === 'ArrowLeft') {
+    e.preventDefault();
+    if (selectedMod <= 0) {
+      selectedMod = -1; selectedRound = -1; selectedSub = -1;
+      hideTree(); closeDashboard(); highlightCard(-1); highlightSidebarBtn(-1);
+    } else {
+      selectModule(selectedMod - 1);
+    }
+  } else if (e.key === 'ArrowDown' && selectedMod >= 0) {
+    e.preventDefault();
+    var m = MODULES[selectedMod];
+    if (selectedRound < 0) {
+      // Select first round
+      if (m.rounds.length > 0) toggleRound(selectedMod, 0);
+    } else if (selectedRound < m.rounds.length - 1) {
+      toggleRound(selectedMod, selectedRound + 1);
+    }
+  } else if (e.key === 'ArrowUp' && selectedMod >= 0) {
+    e.preventDefault();
+    if (selectedRound > 0) {
+      toggleRound(selectedMod, selectedRound - 1);
+    } else if (selectedRound === 0) {
+      // Collapse
+      document.querySelectorAll('.round-row').forEach(function(r) { r.classList.remove('expanded'); });
+      selectedRound = -1; selectedSub = -1; closeDashboard();
+    }
+  } else if (e.key === 'Enter' && selectedMod >= 0 && selectedRound >= 0) {
+    e.preventDefault();
+    var round = MODULES[selectedMod].rounds[selectedRound];
+    if (round && round.subs.length > 0) {
+      var nextSub = selectedSub < 0 ? 0 : Math.min(selectedSub + 1, round.subs.length - 1);
+      selectSubStep(selectedMod, selectedRound, nextSub);
+    }
+  } else if (e.key === 'Escape') {
+    e.preventDefault();
+    if (dashboardOpen) {
+      closeDashboard();
+      selectedSub = -1;
+      document.querySelectorAll('.sub-step').forEach(function(s) { s.classList.remove('selected'); });
+    } else if (selectedRound >= 0) {
+      document.querySelectorAll('.round-row').forEach(function(r) { r.classList.remove('expanded'); });
+      selectedRound = -1;
+    } else {
+      selectedMod = -1; hideTree(); highlightCard(-1); highlightSidebarBtn(-1);
+    }
+  }
+});
+
+/* ====================================================================
+   AMBIENT PARTICLE SYSTEM
+   ==================================================================== */
+function initAmbientParticles() {
+  var canvas = document.getElementById('ambientCanvas');
+  var ctx = canvas.getContext('2d');
+  var particles = [];
+  var COUNT = 55;
+
+  function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  var colors = ['rgba(167,139,250,', 'rgba(96,165,250,', 'rgba(251,146,60,'];
+  for (var i = 0; i < COUNT; i++) {
+    particles.push({
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height,
+      vx: (Math.random() - .5) * .15,
+      vy: (Math.random() - .5) * .1,
+      r: Math.random() * 1.5 + .5,
+      o: Math.random() * .12 + .03,
+      color: colors[Math.floor(Math.random() * 3)]
+    });
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Nebula blobs
+    var blobs = [
+      { cx: canvas.width * .15, cy: canvas.height * .2, rx: 250, ry: 180, color: '167,139,250' },
+      { cx: canvas.width * .7,  cy: canvas.height * .5, rx: 200, ry: 200, color: '96,165,250' },
+      { cx: canvas.width * .5,  cy: canvas.height * .8, rx: 180, ry: 150, color: '251,146,60' },
+    ];
+    blobs.forEach(function(b) {
+      var grad = ctx.createRadialGradient(b.cx, b.cy, 0, b.cx, b.cy, b.rx);
+      grad.addColorStop(0, 'rgba(' + b.color + ',0.035)');
+      grad.addColorStop(0.5, 'rgba(' + b.color + ',0.015)');
+      grad.addColorStop(1, 'rgba(' + b.color + ',0)');
+      ctx.beginPath();
+      ctx.ellipse(b.cx, b.cy, b.rx, b.ry, 0, 0, Math.PI * 2);
+      ctx.fillStyle = grad;
+      ctx.fill();
+    });
+
+    particles.forEach(function(p) {
+      p.x += p.vx; p.y += p.vy;
+      if (p.x < 0) p.x = canvas.width;
+      if (p.x > canvas.width) p.x = 0;
+      if (p.y < 0) p.y = canvas.height;
+      if (p.y > canvas.height) p.y = 0;
+
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = p.color + p.o + ')';
+      ctx.fill();
+    });
+
+    // Connection lines
+    for (var i = 0; i < particles.length; i++) {
+      for (var j = i + 1; j < particles.length; j++) {
+        var dx = particles[i].x - particles[j].x;
+        var dy = particles[i].y - particles[j].y;
+        var dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 110) {
+          ctx.beginPath();
+          ctx.moveTo(particles[i].x, particles[i].y);
+          ctx.lineTo(particles[j].x, particles[j].y);
+          ctx.strokeStyle = 'rgba(148,163,184,' + (.015 * (1 - dist / 110)) + ')';
+          ctx.lineWidth = .5;
+          ctx.stroke();
+        }
+      }
+    }
+    requestAnimationFrame(draw);
+  }
+  draw();
+}
+
+/* ====================================================================
+   L-SHAPED DOT ANIMATION (DOWN then RIGHT, getBoundingClientRect)
+   From active module card to active sub-step
+   ==================================================================== */
+function initDotSystem() {
+  var canvas = document.getElementById('dotCanvas');
+  var ctx = canvas.getContext('2d');
+  var dots = [];
+
+  function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  function getSourceRect() {
+    var activeCard = document.querySelector('.mod-card.active-card');
+    if (!activeCard) return null;
+    var rect = activeCard.getBoundingClientRect();
+    return { x: rect.left + rect.width / 2, y: rect.bottom };
+  }
+
+  function getTargetRect() {
+    var activeSub = document.querySelector('.sub-step.active-sub');
+    if (activeSub) {
+      var dot = activeSub.querySelector('.sub-dot');
+      if (dot) {
+        var rect = dot.getBoundingClientRect();
+        return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+      }
+    }
+    // Fallback: active round dot
+    var activeRound = document.querySelector('.round-row.active-round');
+    if (activeRound) {
+      var rdot = activeRound.querySelector('.round-dot');
+      if (rdot) {
+        var rr = rdot.getBoundingClientRect();
+        return { x: rr.left + rr.width / 2, y: rr.top + rr.height / 2 };
+      }
+    }
+    return null;
+  }
+
+  function spawnDot(src, tgt) {
+    // L-shaped path: DOWN from card, then RIGHT to target
+    var midY = tgt.y; // go down to target's Y level
+    var midX = src.x; // keep X until turn
+
+    // Total path length
+    var segDown = Math.abs(midY - src.y);
+    var segRight = Math.abs(tgt.x - midX);
+    var total = segDown + segRight;
+    if (total < 20) return;
+
+    var c = COLOR_MAP.blue;
+    dots.push({
+      sx: src.x, sy: src.y,
+      mx: midX, my: midY,
+      tx: tgt.x, ty: tgt.y,
+      segDown: segDown, segRight: segRight, total: total,
+      progress: 0,
+      speed: 60 / total / 60, // ~60px per second at 60fps
+      color: c.main,
+      glow: c.glow,
+      r: 2.5,
+      trail: []
+    });
+  }
+
+  var spawnTimer = 0;
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    var src = getSourceRect();
+    var tgt = getTargetRect();
+
+    if (src && tgt) {
+      spawnTimer++;
+      if (spawnTimer % 20 === 0) {
+        spawnDot(
+          { x: src.x + (Math.random() - .5) * 20, y: src.y },
+          tgt
+        );
+      }
+
+      // Draw faint L-shaped guide line
+      ctx.beginPath();
+      ctx.moveTo(src.x, src.y);
+      ctx.lineTo(src.x, tgt.y);
+      ctx.lineTo(tgt.x, tgt.y);
+      ctx.strokeStyle = 'rgba(96,165,250,0.04)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    dots = dots.filter(function(d) { return d.progress <= 1.05; });
+
+    dots.forEach(function(d) {
+      d.progress += d.speed;
+
+      var frac = d.progress;
+      var x, y;
+      var downFrac = d.segDown / d.total;
+
+      if (frac <= downFrac) {
+        // Going DOWN
+        var t = frac / downFrac;
+        x = d.sx;
+        y = d.sy + (d.my - d.sy) * t;
+      } else {
+        // Going RIGHT
+        var t2 = (frac - downFrac) / (1 - downFrac);
+        if (t2 > 1) t2 = 1;
+        x = d.mx + (d.tx - d.mx) * t2;
+        y = d.my;
+      }
+
+      d.trail.push({ x: x, y: y });
+      if (d.trail.length > 10) d.trail.shift();
+
+      // Trail
+      for (var i = 0; i < d.trail.length - 1; i++) {
+        var alpha = (i / d.trail.length) * .35;
+        ctx.beginPath();
+        ctx.moveTo(d.trail[i].x, d.trail[i].y);
+        ctx.lineTo(d.trail[i + 1].x, d.trail[i + 1].y);
+        ctx.strokeStyle = 'rgba(96,165,250,' + alpha + ')';
+        ctx.lineWidth = d.r * .6;
+        ctx.stroke();
+      }
+
+      // Main dot
+      var mainAlpha = frac < .05 ? frac * 20 : frac > .95 ? (1 - frac) * 20 : 1;
+      if (mainAlpha < 0) mainAlpha = 0;
+      ctx.save();
+      ctx.globalAlpha = mainAlpha * .85;
+      ctx.shadowColor = d.glow;
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.arc(x, y, d.r, 0, Math.PI * 2);
+      ctx.fillStyle = d.color;
+      ctx.fill();
+      ctx.restore();
+
+      // Arrival flash
+      if (frac > .92 && frac <= 1.05) {
+        var fa = Math.min((frac - .92) / .08, 1);
+        ctx.beginPath();
+        ctx.arc(d.tx, d.ty, 6 + fa * 8, 0, Math.PI * 2);
+        ctx.fillStyle = d.glow;
+        ctx.globalAlpha = (1 - fa) * .35;
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+    });
+
+    requestAnimationFrame(draw);
+  }
+  draw();
+}
+
+/* ====================================================================
+   LIVE TIMER
+   ==================================================================== */
+var baseTime = 21 * 60 + 14;
+function initLiveTimer() {
+  setInterval(function() {
+    baseTime++;
+    var m = Math.floor(baseTime / 60);
+    var s = baseTime % 60;
+    document.getElementById('hTime').textContent = m + 'm ' + String(s).padStart(2, '0') + 's';
+
+    var baseCost = 4.12 + (baseTime - (21 * 60 + 14)) * 0.0018;
+    document.getElementById('hCost').textContent = '$' + baseCost.toFixed(2);
+
+    var progress = Math.min(40 + (baseTime - (21 * 60 + 14)) * 0.012, 60);
+    var circumference = 87.96;
+    var offset = circumference * (1 - progress / 100);
+    document.getElementById('hRingFill').setAttribute('stroke-dashoffset', offset.toFixed(2));
+    document.getElementById('hRingLabel').textContent = Math.round(progress) + '%';
+  }, 1000);
+}
+
+/* ====================================================================
+   PERIODIC FEED UPDATE
+   ==================================================================== */
+var LIVE_EVENTS = [
+  'Gradient norm stabilized at 0.42 for hypothesis 7 epoch 12',
+  'Memory checkpoint written: 847MB compressed state',
+  'Hypothesis 7 loss curve inflection detected at epoch 14',
+  'Ablation #5 component removal: encoder self-attention layer',
+  'Validation metric improved: BLEU +2.3 points on hypothesis 6',
+  'Batch processing rate: 142 samples/sec on A100 cluster',
+  'Cross-attention weights converging for multi-modal fusion',
+  'Hypothesis 8 data calibration starting -- boundary conditions loaded',
+];
+var feedIdx = 0;
+
+function initPeriodicFeed() {
+  setInterval(function() {
+    var feedList = document.getElementById('feedList');
+    if (!feedList) return;
+
+    var evt = LIVE_EVENTS[feedIdx % LIVE_EVENTS.length];
+    feedIdx++;
+
+    var now = new Date();
+    var timeStr = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+
+    var c = COLOR_MAP.blue;
+    var el = document.createElement('div');
+    el.className = 'feed-event is-new';
+    el.innerHTML =
+      '<span class="fe-time">' + timeStr + '</span>' +
+      '<div class="fe-icon" style="background:' + c.dim + ';color:' + c.main + '">\u26a1</div>' +
+      '<div class="fe-body"><div class="fe-text">' + evt + '</div></div>' +
+      '<span class="fe-type t-info">Live</span>';
+
+    feedList.insertBefore(el, feedList.firstChild);
+
+    while (feedList.children.length > 8) {
+      feedList.removeChild(feedList.lastChild);
+    }
+
+    var countEl = document.querySelector('.feed-count');
+    if (countEl) countEl.textContent = feedList.children.length + ' events';
+  }, 7000);
+}
+
+/* ====================================================================
+   STAGGERED ENTRY ANIMATION
+   ==================================================================== */
+function animateEntry() {
+  document.querySelectorAll('.mod-card').forEach(function(card, i) {
+    card.style.opacity = '0';
+    card.style.transform = 'translateY(14px)';
+    card.style.transition = 'opacity .5s var(--ease), transform .5s var(--ease)';
+    setTimeout(function() {
+      card.style.opacity = '1';
+      card.style.transform = 'translateY(0)';
+    }, 80 + i * 100);
+  });
+}
+
+/* ====================================================================
+   CONNECTOR PARTICLES (between module cards in the row)
+   ==================================================================== */
+function initConnectorParticles() {
+  var canvas = document.getElementById('particleCanvas');
+  var ctx = canvas.getContext('2d');
+  var connDots = [];
+
+  function resize() {
+    var row = document.getElementById('moduleCards');
+    var rect = row.getBoundingClientRect();
+    canvas.width = rect.width + 40;
+    canvas.height = rect.height + 40;
+    canvas.style.width = canvas.width + 'px';
+    canvas.style.height = canvas.height + 'px';
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  function getCardEdges() {
+    var row = document.getElementById('moduleCards');
+    var parentRect = row.getBoundingClientRect();
+    return Array.from(document.querySelectorAll('.mod-card')).map(function(c) {
+      var r = c.getBoundingClientRect();
+      return {
+        cx: r.left + r.width / 2 - parentRect.left + 20,
+        cy: r.top + r.height / 2 - parentRect.top + 20,
+        right: r.right - parentRect.left + 20,
+        left: r.left - parentRect.left + 20
+      };
+    });
+  }
+
+  function initDots() {
+    connDots = [];
+    var edges = getCardEdges();
+    var colorPairs = [
+      ['#a78bfa', '#60a5fa'],
+      ['#60a5fa', '#fb923c']
+    ];
+    for (var i = 0; i < 2; i++) {
+      var from = edges[i];
+      var to = edges[i + 1];
+      if (!from || !to) continue;
+      for (var j = 0; j < 4; j++) {
+        connDots.push({
+          fX: from.right, tX: to.left,
+          y: (from.cy + to.cy) / 2,
+          p: j / 4,
+          sp: 0.003 + Math.random() * 0.002,
+          c1: colorPairs[i][0],
+          c2: colorPairs[i][1],
+          r: 1.5
+        });
+      }
+    }
+  }
+  initDots();
+
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    var edges = getCardEdges();
+
+    // Faint connection lines between cards
+    for (var i = 0; i < 2; i++) {
+      var f = edges[i];
+      var t = edges[i + 1];
+      if (!f || !t) continue;
+      ctx.beginPath();
+      ctx.moveTo(f.right, f.cy);
+      ctx.lineTo(t.left, t.cy);
+      ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    // Animated dots
+    for (var d = 0; d < connDots.length; d++) {
+      var p = connDots[d];
+      p.p += p.sp;
+      if (p.p > 1) p.p -= 1;
+
+      var x = p.fX + (p.tX - p.fX) * p.p;
+      var yOff = Math.sin(p.p * Math.PI) * 4;
+      var alpha = 0.25 + Math.sin(p.p * Math.PI) * 0.3;
+      var color = p.p < 0.5 ? p.c1 : p.c2;
+
+      ctx.save();
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 8;
+      ctx.beginPath();
+      ctx.arc(x, p.y + yOff, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.globalAlpha = alpha;
+      ctx.fill();
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+
+    requestAnimationFrame(draw);
+  }
+  draw();
+}
+
+/* ====================================================================
+   RESIZE HANDLER
+   ==================================================================== */
+function initResizeHandler() {
+  var resizeTimer;
+  window.addEventListener('resize', function() {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function() {
+      // Recalculate sub-step containers
+      document.querySelectorAll('.sub-steps').forEach(function(container) {
+        var roundRow = container.previousElementSibling;
+        if (roundRow && roundRow.classList.contains('expanded')) {
+          container.style.maxHeight = container.scrollHeight + 'px';
+        }
+      });
+    }, 150);
+  });
+}
+
+/* ====================================================================
+   SIDEBAR HOVER SMOOTHING — prevent sidebar flicker when
+   mouse briefly leaves during transition
+   ==================================================================== */
+function initSidebarSmoothing() {
+  var sidebar = document.getElementById('sidebar');
+  var closeTimer = null;
+
+  sidebar.addEventListener('mouseenter', function() {
+    if (closeTimer) {
+      clearTimeout(closeTimer);
+      closeTimer = null;
+    }
+  });
+
+  sidebar.addEventListener('mouseleave', function() {
+    // Small delay before allowing CSS :hover to collapse
+    // This prevents jitter from fast mouse movements
+    closeTimer = setTimeout(function() {
+      closeTimer = null;
+    }, 80);
+  });
+}
+
+/* ====================================================================
+   COLOR-TINTED TREE SECTIONS — dynamically set tint for
+   each module's color when tree is rendered
+   ==================================================================== */
+function applyTreeColorTint(color) {
+  var section = document.getElementById('treeSection');
+  section.dataset.color = color;
+
+  // Apply tint to active round rows
+  var c = COLOR_MAP[color];
+  section.querySelectorAll('.round-row.active-round').forEach(function(row) {
+    row.style.background = c.dim;
+  });
+}
+
+/* ====================================================================
+   TOOLTIP HELPERS — show contextual info on hover for
+   round rows (lightweight, no full tooltip panel)
+   ==================================================================== */
+var hoverTimer = null;
+
+function initRoundHoverInfo() {
+  // Ghost chevrons already appear via CSS on hover.
+  // This adds a subtle glow effect when hovering round rows
+  document.addEventListener('mouseover', function(e) {
+    var roundRow = e.target.closest('.round-row');
+    if (!roundRow) return;
+    var dot = roundRow.querySelector('.round-dot');
+    if (dot && !dot.classList.contains('pending')) {
+      dot.style.filter = 'brightness(1.3)';
+    }
+  });
+
+  document.addEventListener('mouseout', function(e) {
+    var roundRow = e.target.closest('.round-row');
+    if (!roundRow) return;
+    var dot = roundRow.querySelector('.round-dot');
+    if (dot) {
+      dot.style.filter = '';
+    }
+  });
+}
+
+/* ====================================================================
+   INIT
+   ==================================================================== */
+renderModuleCards();
+initAmbientParticles();
+initDotSystem();
+initConnectorParticles();
+initLiveTimer();
+initResizeHandler();
+initSidebarSmoothing();
+initRoundHoverInfo();
+
+animateEntry();
+
+// Auto-select "Test Ideas" (module 1) after entry animations
+setTimeout(function() { selectModule(1); }, 500);
+// Expand Round 3 (the active round, index 2) to show sub-steps
+setTimeout(function() { toggleRound(1, 2); }, 800);
+// Start periodic feed updates once dashboard might be open
+setTimeout(function() { initPeriodicFeed(); }, 2000);
+</script>
+</body>
+</html>

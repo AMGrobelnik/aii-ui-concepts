@@ -1,0 +1,2005 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor Pipeline — Exact 04</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #1a1d23;
+  --bg-raised: #1e2128;
+  --surface: rgba(30,34,42,.72);
+  --surface-hi: rgba(40,44,54,.65);
+  --surface-card: rgba(26,29,35,.88);
+  --border: rgba(148,163,184,.07);
+  --border-hi: rgba(148,163,184,.14);
+  --text: #f1f5f9;
+  --text-dim: #94a3b8;
+  --text-muted: #64748b;
+  --text-faint: #475569;
+
+  --purple: #a78bfa; --purple-dim: rgba(167,139,250,.10); --purple-glow: rgba(167,139,250,.22);
+  --blue: #60a5fa;   --blue-dim: rgba(96,165,250,.10);   --blue-glow: rgba(96,165,250,.22);
+  --orange: #fb923c; --orange-dim: rgba(251,146,60,.10); --orange-glow: rgba(251,146,60,.22);
+  --green: #34d399;  --green-dim: rgba(52,211,153,.10);  --green-glow: rgba(52,211,153,.22);
+  --red: #f87171;    --red-dim: rgba(248,113,113,.10);
+  --cyan: #22d3ee;   --cyan-dim: rgba(34,211,238,.10);
+
+  --radius: 12px;
+  --radius-sm: 8px;
+  --ease: cubic-bezier(.4,0,.2,1);
+  --ease-spring: cubic-bezier(.34,1.56,.64,1);
+  font-size: 14px;
+}
+
+html, body { height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--text-dim);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  display: flex; flex-direction: column;
+}
+
+/* ===== AMBIENT BACKGROUND with spec tints ===== */
+#ambientCanvas { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+
+body::before {
+  content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background-image:
+    radial-gradient(ellipse 900px 500px at 15% 8%, rgba(167,139,250,.03), transparent),
+    radial-gradient(ellipse 700px 550px at 75% 55%, rgba(96,165,250,.05), transparent),
+    linear-gradient(rgba(148,163,184,.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148,163,184,.015) 1px, transparent 1px);
+  background-size: 100%, 100%, 56px 56px, 56px 56px;
+}
+
+/* ===== SIDEBAR: 48px collapsed, 240px on hover ===== */
+.sidebar {
+  position: fixed; left: 0; top: 0; bottom: 0; width: 48px; z-index: 200;
+  background: rgba(26,29,35,.92);
+  backdrop-filter: blur(20px) saturate(1.2);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  padding: 0; overflow: hidden;
+  transition: width .35s var(--ease);
+}
+.sidebar:hover { width: 240px; }
+.sidebar:hover .sidebar-label { opacity: 1; transform: translateX(0); }
+.sidebar:hover .sidebar-section-title { opacity: 1; }
+.sidebar:hover .sidebar-brand-text { opacity: 1; transform: translateX(0); }
+
+/* Brand area */
+.sidebar-brand {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 12px; min-height: 52px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.sidebar-brand-icon {
+  width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center;
+  background: linear-gradient(135deg, var(--purple), var(--blue));
+  font-size: 13px; color: #fff; font-weight: 800; flex-shrink: 0;
+  box-shadow: 0 0 14px rgba(167,139,250,.18);
+}
+.sidebar-brand-text {
+  font-weight: 800; font-size: 14px; color: var(--text);
+  letter-spacing: -.4px; white-space: nowrap;
+  opacity: 0; transform: translateX(-6px);
+  transition: opacity .25s var(--ease), transform .25s var(--ease);
+}
+
+/* Section titles */
+.sidebar-section-title {
+  font-size: 9px; color: var(--text-faint); text-transform: uppercase;
+  letter-spacing: .7px; font-weight: 700;
+  padding: 14px 14px 6px; white-space: nowrap;
+  opacity: 0; transition: opacity .2s var(--ease);
+}
+
+/* Nav items */
+.sidebar-nav { display: flex; flex-direction: column; gap: 2px; padding: 4px 6px; }
+.sidebar-item {
+  display: flex; align-items: center; gap: 10px;
+  height: 40px; padding: 0 6px;
+  border-radius: 8px; border: none; background: transparent;
+  cursor: pointer; position: relative; color: var(--text-muted);
+  transition: all .2s var(--ease); width: 100%; text-align: left;
+  font-family: inherit; font-size: 12px;
+}
+.sidebar-item:hover { background: rgba(148,163,184,.06); color: var(--text-dim); }
+.sidebar-item.active { background: rgba(148,163,184,.08); color: var(--text); }
+
+/* Active indicator bar on left edge */
+.sidebar-item::before {
+  content: ''; position: absolute; left: -6px; top: 50%; transform: translateY(-50%);
+  width: 2.5px; height: 0; border-radius: 2px;
+  transition: height .2s var(--ease);
+}
+.sidebar-item.active::before { height: 20px; }
+.sidebar-item[data-color="purple"]::before { background: var(--purple); }
+.sidebar-item[data-color="blue"]::before { background: var(--blue); }
+.sidebar-item[data-color="orange"]::before { background: var(--orange); }
+
+.sidebar-item-icon {
+  width: 24px; height: 24px; border-radius: 6px; display: grid; place-items: center;
+  font-size: 11px; font-weight: 700; color: #fff; flex-shrink: 0;
+}
+.sidebar-label {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px;
+  opacity: 0; transform: translateX(-4px);
+  transition: opacity .2s var(--ease), transform .2s var(--ease);
+  font-weight: 500;
+}
+.sidebar-item .status-dot {
+  position: absolute; top: 8px; right: 8px; width: 6px; height: 6px;
+  border-radius: 50%;
+}
+
+/* Sidebar separator */
+.sidebar-sep { height: 1px; background: var(--border); margin: 4px 10px; flex-shrink: 0; }
+
+/* Progress ring in sidebar */
+.sidebar-ring-wrap {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 10px 6px; flex-shrink: 0;
+}
+.sidebar-ring {
+  width: 30px; height: 30px; position: relative; flex-shrink: 0;
+}
+.sidebar-ring svg { width: 100%; height: 100%; }
+.s-ring-track { fill: none; stroke: rgba(148,163,184,.08); stroke-width: 2.5; }
+.s-ring-fill {
+  fill: none; stroke-width: 2.5; stroke-linecap: round;
+  transform: rotate(-90deg); transform-origin: 50% 50%;
+  transition: stroke-dashoffset 1s var(--ease);
+  filter: drop-shadow(0 0 3px var(--blue-glow));
+}
+.s-ring-text {
+  font-size: 7px; font-weight: 700; text-anchor: middle; dominant-baseline: central;
+  font-family: 'Inter', sans-serif;
+}
+.sidebar-ring::after {
+  content: ''; position: absolute; inset: -3px; border-radius: 50%;
+  border: 1px dashed rgba(96,165,250,.18); opacity: .4;
+  animation: orbitSpin 12s linear infinite;
+}
+@keyframes orbitSpin { to { transform: rotate(360deg); } }
+
+.sidebar-ring-label {
+  font-size: 10px; color: var(--text-muted); white-space: nowrap;
+  opacity: 0; transition: opacity .2s var(--ease);
+}
+.sidebar:hover .sidebar-ring-label { opacity: 1; }
+
+/* Starred & Recents items */
+.sidebar-starred, .sidebar-recents { padding: 2px 6px; display: flex; flex-direction: column; gap: 1px; }
+.sidebar-mini-item {
+  display: flex; align-items: center; gap: 8px;
+  height: 32px; padding: 0 6px;
+  border-radius: 6px; border: none; background: transparent;
+  cursor: pointer; color: var(--text-muted);
+  transition: all .15s var(--ease); width: 100%; text-align: left;
+  font-family: inherit; font-size: 11px;
+}
+.sidebar-mini-item:hover { background: rgba(148,163,184,.05); color: var(--text-dim); }
+.sidebar-mini-icon { font-size: 11px; flex-shrink: 0; width: 20px; text-align: center; }
+.sidebar-mini-label {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  opacity: 0; transform: translateX(-4px);
+  transition: opacity .2s var(--ease), transform .2s var(--ease);
+}
+.sidebar:hover .sidebar-mini-label { opacity: 1; transform: translateX(0); }
+
+/* Sidebar spacer */
+.sidebar-spacer { flex: 1; }
+
+/* Token bar at bottom of sidebar */
+.sidebar-token-bar {
+  padding: 10px 10px 12px; flex-shrink: 0;
+  border-top: 1px solid var(--border);
+}
+.token-bar-track {
+  height: 3px; border-radius: 2px; background: rgba(148,163,184,.06);
+  overflow: hidden;
+}
+.token-bar-fill {
+  height: 100%; border-radius: 2px; width: 0;
+  background: linear-gradient(90deg, var(--purple), var(--blue));
+  transition: width 1s var(--ease);
+}
+.token-bar-label {
+  font-size: 9px; color: var(--text-faint); margin-top: 4px;
+  white-space: nowrap;
+  opacity: 0; transition: opacity .2s var(--ease);
+}
+.sidebar:hover .token-bar-label { opacity: 1; }
+
+/* ===== MAIN CONTENT ===== */
+.main {
+  position: relative; z-index: 1;
+  margin-left: 48px; padding: 24px 32px 40px;
+  max-width: 1440px;
+  transition: margin-left .35s var(--ease);
+}
+
+/* ===== MODULE CARDS ROW (3 horizontal) ===== */
+.modules-row {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 16px; position: relative; margin-bottom: 24px;
+}
+
+/* Particle canvas overlaid on module row */
+#particleCanvas {
+  position: absolute; inset: -20px; z-index: 0; pointer-events: none;
+}
+
+/* ===== GLASS MODULE CARD ===== */
+.mod-card {
+  position: relative; z-index: 1; cursor: pointer;
+  background: rgba(26,29,35,.85);
+  backdrop-filter: blur(16px) saturate(1.15);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 22px 18px;
+  transition: all .35s var(--ease);
+  overflow: hidden;
+}
+.mod-card:hover { transform: translateY(-2px); border-color: var(--border-hi); }
+.mod-card.pending-card { opacity: .5; }
+.mod-card.pending-card:hover { opacity: .65; }
+
+/* Glow halo */
+.mod-card::before {
+  content: ''; position: absolute; inset: -2px; border-radius: var(--radius);
+  opacity: 0; transition: opacity .5s; pointer-events: none; z-index: -1;
+}
+.mod-card[data-color="purple"]::before {
+  box-shadow: 0 0 40px 8px var(--purple-dim), 0 0 80px 16px rgba(167,139,250,.05), inset 0 0 20px var(--purple-dim);
+}
+.mod-card[data-color="blue"]::before {
+  box-shadow: 0 0 40px 8px var(--blue-dim), 0 0 80px 16px rgba(96,165,250,.05), inset 0 0 20px var(--blue-dim);
+}
+.mod-card[data-color="orange"]::before {
+  box-shadow: 0 0 40px 8px var(--orange-dim), 0 0 80px 16px rgba(251,146,60,.05), inset 0 0 20px var(--orange-dim);
+}
+.mod-card.done-card::before { opacity: .3; }
+.mod-card.active-card::before { opacity: 1; animation: haloBreath 3s ease-in-out infinite; }
+@keyframes haloBreath { 0%,100% { opacity: .5; } 50% { opacity: 1; } }
+
+/* Shimmer sweep for active card */
+.mod-card::after {
+  content: ''; position: absolute; top: 0; left: -120%; width: 70%; height: 100%;
+  background: linear-gradient(100deg, transparent, rgba(255,255,255,.02), rgba(255,255,255,.05), rgba(255,255,255,.02), transparent);
+  transform: skewX(-18deg); pointer-events: none;
+}
+.mod-card.active-card::after { animation: shimmerSweep 3.8s ease-in-out infinite; }
+@keyframes shimmerSweep { 0% { left: -120%; } 50% { left: 170%; } 100% { left: 170%; } }
+
+/* Top accent line */
+.mod-card .accent-line {
+  position: absolute; top: 0; left: 16px; right: 16px; height: 2px;
+  border-radius: 0 0 2px 2px; opacity: .5;
+}
+.mod-card[data-color="purple"] .accent-line { background: linear-gradient(90deg, transparent, var(--purple), transparent); }
+.mod-card[data-color="blue"] .accent-line   { background: linear-gradient(90deg, transparent, var(--blue), transparent); }
+.mod-card[data-color="orange"] .accent-line { background: linear-gradient(90deg, transparent, var(--orange), transparent); }
+
+/* Card header layout */
+.mc-header { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.mc-icon {
+  width: 38px; height: 38px; border-radius: 10px;
+  display: grid; place-items: center; font-size: 17px; flex-shrink: 0;
+  transition: transform .3s var(--ease-spring), box-shadow .3s;
+}
+.mod-card:hover .mc-icon { transform: scale(1.06); }
+.mod-card.active-card .mc-icon { animation: iconFloat 3s ease-in-out infinite; }
+@keyframes iconFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-2px); } }
+
+.mod-card[data-color="purple"] .mc-icon { background: var(--purple-dim); color: var(--purple); }
+.mod-card[data-color="blue"] .mc-icon   { background: var(--blue-dim); color: var(--blue); }
+.mod-card[data-color="orange"] .mc-icon { background: var(--orange-dim); color: var(--orange); }
+
+.mc-title-area { flex: 1; min-width: 0; }
+.mc-title { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 2px; }
+.mc-subtitle { font-size: 11px; color: var(--text-muted); }
+
+/* Status badge */
+.mc-badge {
+  font-size: 9px; font-weight: 700; padding: 3px 10px; border-radius: 6px;
+  text-transform: uppercase; letter-spacing: .5px; flex-shrink: 0;
+}
+.mc-badge.done    { background: var(--green-dim); color: var(--green); }
+.mc-badge.running { background: var(--blue-dim); color: var(--blue); animation: badgePulse 2s ease-in-out infinite; }
+.mc-badge.pending { background: rgba(100,116,139,.06); color: var(--text-faint); }
+@keyframes badgePulse { 0%,100% { opacity: .7; } 50% { opacity: 1; background: rgba(96,165,250,.18); } }
+
+/* Spinning partial circle outline for active running badge */
+.mc-badge.running::before {
+  content: ''; display: inline-block; width: 8px; height: 8px;
+  border: 1.5px solid transparent; border-top-color: currentColor; border-right-color: currentColor;
+  border-radius: 50%; margin-right: 5px; vertical-align: middle;
+  animation: spinBadge .9s linear infinite;
+}
+@keyframes spinBadge { to { transform: rotate(360deg); } }
+
+/* Active card title blinking dot */
+.mod-card.active-card .mc-title::after {
+  content: '';
+  display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--blue); margin-left: 8px; vertical-align: middle;
+  animation: titleDotBlink 1.5s ease-in-out infinite;
+}
+@keyframes titleDotBlink { 0%,100% { opacity: 1; } 50% { opacity: .25; } }
+
+/* Progress bar */
+.mc-progress { height: 3px; border-radius: 2px; background: rgba(148,163,184,.05); overflow: hidden; margin-bottom: 10px; }
+.mc-progress-fill { height: 100%; border-radius: 2px; width: 0; transition: width .8s var(--ease); }
+.mod-card[data-color="purple"] .mc-progress-fill { background: linear-gradient(90deg, var(--purple), rgba(167,139,250,.4)); }
+.mod-card[data-color="blue"] .mc-progress-fill   { background: linear-gradient(90deg, var(--blue), rgba(96,165,250,.4)); }
+.mod-card[data-color="orange"] .mc-progress-fill { background: linear-gradient(90deg, var(--orange), rgba(251,146,60,.4)); }
+
+/* Percent display */
+.mc-percent {
+  font-size: 22px; font-weight: 800; letter-spacing: -.5px; margin-bottom: 2px;
+}
+.mod-card[data-color="purple"] .mc-percent { color: var(--purple); }
+.mod-card[data-color="blue"] .mc-percent   { color: var(--blue); }
+.mod-card[data-color="orange"] .mc-percent { color: var(--orange); }
+
+.mc-stats { font-size: 11px; color: var(--text-muted); display: flex; gap: 14px; }
+.mc-stats .val { color: var(--text-dim); font-weight: 600; }
+
+/* ===== SPINNING PARTIAL CIRCLE OUTLINE for active card ===== */
+.active-spinner-ring {
+  position: absolute; top: 12px; right: 14px; width: 32px; height: 32px;
+}
+.active-spinner-ring svg { width: 100%; height: 100%; animation: spinRing 2.2s linear infinite; }
+@keyframes spinRing { to { transform: rotate(360deg); } }
+.spinner-track { fill: none; stroke: rgba(96,165,250,.1); stroke-width: 2; }
+.spinner-arc {
+  fill: none; stroke: var(--blue); stroke-width: 2; stroke-linecap: round;
+  stroke-dasharray: 60 40;
+  filter: drop-shadow(0 0 4px var(--blue-glow));
+}
+
+/* Glow halo pulse behind spinner */
+.active-spinner-ring::before {
+  content: ''; position: absolute; inset: -6px; border-radius: 50%;
+  background: radial-gradient(circle, var(--blue-glow), transparent 70%);
+  animation: spinnerHaloPulse 2.5s ease-in-out infinite;
+}
+@keyframes spinnerHaloPulse { 0%,100% { opacity: .2; } 50% { opacity: .6; } }
+
+/* ===== TREE AREA BELOW ACTIVE CARD ===== */
+.tree-section {
+  margin-bottom: 24px;
+  max-height: 0; overflow: hidden; opacity: 0;
+  transition: max-height .5s var(--ease), opacity .35s;
+}
+.tree-section.open { max-height: 600px; opacity: 1; }
+
+.tree-container {
+  background: rgba(26,29,35,.6);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  position: relative;
+}
+
+/* Tree header */
+.tree-header {
+  font-size: 11px; color: var(--text-muted); font-weight: 600;
+  margin-bottom: 12px; display: flex; align-items: center; gap: 8px;
+}
+.tree-header-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--blue); }
+
+/* Round rows */
+.round-list { list-style: none; position: relative; padding-left: 14px; }
+.round-list::before {
+  content: ''; position: absolute; left: 5px; top: 4px; bottom: 4px;
+  width: 2px; border-radius: 1px;
+  background: linear-gradient(180deg, var(--blue), rgba(96,165,250,.08));
+}
+
+.round-row {
+  display: flex; align-items: center; gap: 10px;
+  height: 38px; padding: 0 10px; margin-bottom: 2px;
+  border-radius: var(--radius-sm);
+  position: relative; cursor: pointer;
+  transition: background .15s var(--ease);
+}
+.round-row:hover { background: rgba(255,255,255,.02); }
+.round-row.selected { background: rgba(96,165,250,.04); }
+
+/* Horizontal branch from tree line */
+.round-row::before {
+  content: ''; position: absolute; left: -9px; top: 50%;
+  width: 9px; height: 2px; border-radius: 1px;
+  background: rgba(96,165,250,.2);
+}
+
+.round-icon {
+  font-size: 12px; flex-shrink: 0; width: 18px; text-align: center;
+  color: var(--text-muted);
+}
+.round-icon.done { color: var(--green); }
+.round-icon.active { color: var(--blue); }
+.round-icon.pending { color: var(--text-faint); opacity: .5; }
+
+.round-label {
+  font-size: 12.5px; color: var(--text-dim); font-weight: 500;
+  flex: 1; min-width: 0;
+}
+.round-row.active-round .round-label { color: var(--text); font-weight: 600; }
+.round-row.done-round .round-label { color: var(--text-muted); }
+.round-row.pending-round .round-label { color: var(--text-faint); opacity: .6; }
+
+/* Ghost chevron on non-expanded rounds */
+.round-chevron {
+  font-size: 10px; color: var(--text-faint); opacity: 0;
+  transition: opacity .2s var(--ease);
+  flex-shrink: 0;
+}
+.round-row:hover .round-chevron { opacity: .5; }
+.round-row.expanded .round-chevron { opacity: .8; transform: rotate(90deg); }
+
+/* ===== EXPANDED ROUND SUB-STEPS ===== */
+.substep-list {
+  list-style: none; position: relative;
+  padding-left: 32px; margin-left: 14px;
+  max-height: 0; overflow: hidden; opacity: 0;
+  transition: max-height .4s var(--ease), opacity .3s;
+}
+.substep-list.open { opacity: 1; }
+.substep-list::before {
+  content: ''; position: absolute; left: 22px; top: 0; bottom: 16px;
+  width: 1.5px; border-radius: 1px;
+  background: linear-gradient(180deg, rgba(96,165,250,.25), rgba(96,165,250,.05));
+}
+
+.substep-row {
+  display: flex; align-items: center; gap: 9px;
+  height: 36px; padding: 0 10px;
+  border-radius: 6px; position: relative;
+  cursor: pointer;
+  transition: background .15s var(--ease);
+}
+.substep-row:hover { background: rgba(255,255,255,.02); }
+.substep-row.selected-step { background: rgba(96,165,250,.05); }
+
+/* Branch line from substep tree */
+.substep-row::before {
+  content: ''; position: absolute; left: -10px; top: 50%;
+  width: 10px; height: 1.5px; border-radius: 1px;
+  background: rgba(96,165,250,.15);
+}
+.substep-row.active-step::before {
+  background: rgba(96,165,250,.45);
+  box-shadow: 0 0 6px rgba(96,165,250,.25);
+}
+
+.substep-icon {
+  font-size: 11px; flex-shrink: 0; width: 16px; text-align: center;
+}
+.substep-icon.done { color: var(--green); }
+.substep-icon.active { color: var(--blue); }
+.substep-icon.pending { color: var(--text-faint); opacity: .4; }
+
+.substep-label {
+  font-size: 12px; color: var(--text-dim); flex: 1; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.substep-row.active-step .substep-label { color: var(--text); font-weight: 600; }
+.substep-row.done-step .substep-label { color: var(--text-muted); }
+.substep-row.pending-step .substep-label { color: var(--text-faint); }
+
+/* Active step spinner dots (ellipsis animation) */
+.step-dots {
+  display: inline-flex; gap: 2px; margin-left: 6px; vertical-align: middle;
+}
+.step-dots span {
+  width: 3px; height: 3px; border-radius: 50%; background: var(--blue);
+  animation: stepDotBounce 1.4s ease-in-out infinite;
+}
+.step-dots span:nth-child(2) { animation-delay: .15s; }
+.step-dots span:nth-child(3) { animation-delay: .3s; }
+@keyframes stepDotBounce {
+  0%,80%,100% { opacity: .25; transform: scale(.8); }
+  40% { opacity: 1; transform: scale(1.2); }
+}
+
+/* Active step mini-spinner */
+.step-spinner {
+  width: 14px; height: 14px; flex-shrink: 0;
+  border: 1.5px solid transparent; border-top-color: var(--blue);
+  border-radius: 50%;
+  animation: spinBadge .8s linear infinite;
+}
+
+/* Active step shimmer */
+.substep-row.active-step::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(96,165,250,.02), rgba(96,165,250,.045), rgba(96,165,250,.02), transparent);
+  background-size: 250% 100%; animation: stepShimmer 3s ease-in-out infinite;
+  border-radius: 6px;
+}
+@keyframes stepShimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+/* ===== L-SHAPED DOT CONNECTOR ===== */
+#dotCanvas {
+  position: fixed; inset: 0; z-index: 50; pointer-events: none;
+}
+
+/* ===== DETAIL PANEL (two boxes below tree, hidden until click) ===== */
+.detail-section {
+  display: grid; grid-template-columns: 1fr 380px;
+  gap: 18px;
+  max-height: 0; overflow: hidden; opacity: 0;
+  transition: max-height .5s var(--ease), opacity .35s, margin-top .4s;
+  margin-bottom: 24px;
+}
+.detail-section.open { max-height: 600px; opacity: 1; }
+
+.detail-panel {
+  background: rgba(26,29,35,.82);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 22px 24px; overflow: hidden;
+  position: relative;
+}
+.detail-panel::before {
+  content: ''; position: absolute; top: 0; left: 20px; right: 20px; height: 1px;
+  border-radius: 0 0 1px 1px;
+}
+.detail-panel.left-panel::before {
+  background: linear-gradient(90deg, transparent, var(--blue), transparent); opacity: .25;
+}
+.detail-panel.right-panel::before {
+  background: linear-gradient(90deg, transparent, rgba(148,163,184,.12), transparent);
+}
+
+.detail-fade { animation: detailFadeIn .35s var(--ease); }
+@keyframes detailFadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+/* Summary panel (left) */
+.detail-header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.detail-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.detail-title { font-size: 15px; font-weight: 700; color: var(--text); }
+.detail-badge {
+  font-size: 9px; font-weight: 700; padding: 3px 10px; border-radius: 6px;
+  text-transform: uppercase; letter-spacing: .4px; margin-left: auto;
+}
+.detail-badge.done    { background: var(--green-dim); color: var(--green); }
+.detail-badge.running { background: var(--blue-dim); color: var(--blue); }
+.detail-badge.pending { background: rgba(100,116,139,.06); color: var(--text-faint); }
+.detail-badge.running::before {
+  content: ''; display: inline-block; width: 7px; height: 7px;
+  border: 1.5px solid transparent; border-top-color: currentColor;
+  border-radius: 50%; margin-right: 4px; vertical-align: middle;
+  animation: spinBadge .8s linear infinite;
+}
+
+.detail-summary {
+  font-size: 13px; color: var(--text-dim); line-height: 1.75;
+  font-style: italic; max-width: 680px;
+  padding-bottom: 14px; border-bottom: 1px solid var(--border);
+  margin-bottom: 14px;
+}
+
+/* Detail items list */
+.detail-items { display: flex; flex-direction: column; gap: 3px; }
+.detail-item {
+  display: flex; align-items: center; gap: 10px; padding: 7px 12px;
+  border-radius: var(--radius-sm); font-size: 12px;
+  transition: background .15s; cursor: default; position: relative; overflow: hidden;
+}
+.detail-item:hover { background: rgba(255,255,255,.02); }
+.di-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.di-dot.done { background: var(--green); opacity: .7; }
+.di-dot.running { background: var(--blue); animation: dotPulse 1.5s ease-in-out infinite; }
+.di-dot.pending { border: 1.5px solid var(--text-faint); }
+@keyframes dotPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.3); } }
+
+.di-label { color: var(--text-dim); flex: 1; }
+.di-meta { font-size: 10px; color: var(--text-muted); white-space: nowrap; }
+
+.detail-item.running-item::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(96,165,250,.03), rgba(96,165,250,.06), rgba(96,165,250,.03), transparent);
+  background-size: 250% 100%; animation: itemShimmer 2.8s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+}
+@keyframes itemShimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+/* ===== ACTIVITY FEED (right panel) ===== */
+.feed-section { }
+.feed-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.feed-title {
+  font-size: 10px; color: var(--text-faint); text-transform: uppercase;
+  letter-spacing: .6px; font-weight: 600;
+}
+.live-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 8px; font-weight: 800; color: var(--red);
+  background: var(--red-dim); padding: 2px 8px 2px 6px;
+  border-radius: 4px; letter-spacing: .6px; text-transform: uppercase;
+}
+.live-badge-dot {
+  width: 5px; height: 5px; border-radius: 50%; background: var(--red);
+  animation: liveBlink 1.3s ease-in-out infinite;
+}
+@keyframes liveBlink { 0%,100% { opacity: 1; } 50% { opacity: .15; } }
+
+.feed-count { margin-left: auto; font-size: 10px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+
+.feed-list { display: flex; flex-direction: column; gap: 3px; max-height: 260px; overflow-y: auto; }
+.feed-list::-webkit-scrollbar { width: 3px; }
+.feed-list::-webkit-scrollbar-track { background: transparent; }
+.feed-list::-webkit-scrollbar-thumb { background: rgba(148,163,184,.12); border-radius: 2px; }
+
+.feed-event {
+  display: flex; align-items: flex-start; gap: 10px; padding: 8px 10px;
+  border-radius: 7px; font-size: 11px;
+  background: rgba(255,255,255,.012); border: 1px solid transparent;
+  position: relative; overflow: hidden;
+  opacity: 0; transform: translateY(8px); animation: feedIn .4s var(--ease) forwards;
+}
+.feed-event.is-new { border-color: rgba(96,165,250,.1); background: rgba(96,165,250,.025); }
+.feed-event.is-new::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(96,165,250,.04), transparent);
+  background-size: 300% 100%; animation: feedShimmer 2s ease-in-out;
+}
+@keyframes feedShimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+@keyframes feedIn { to { opacity: 1; transform: translateY(0); } }
+
+.fe-time {
+  font-size: 9px; color: var(--text-faint); font-family: 'JetBrains Mono', monospace;
+  font-weight: 500; flex-shrink: 0; width: 42px; padding-top: 1px;
+}
+.fe-icon {
+  width: 18px; height: 18px; border-radius: 5px; display: grid; place-items: center;
+  font-size: 9px; flex-shrink: 0;
+}
+.fe-body { flex: 1; min-width: 0; }
+.fe-text { color: var(--text-dim); font-size: 11px; line-height: 1.4; }
+.fe-type {
+  font-size: 7px; font-weight: 700; padding: 1px 6px; border-radius: 3px;
+  text-transform: uppercase; letter-spacing: .3px; flex-shrink: 0; margin-left: auto; align-self: flex-start;
+}
+.fe-type.t-gen   { background: var(--blue-dim); color: var(--blue); }
+.fe-type.t-ok    { background: var(--green-dim); color: var(--green); }
+.fe-type.t-warn  { background: var(--orange-dim); color: var(--orange); }
+.fe-type.t-score { background: var(--purple-dim); color: var(--purple); }
+.fe-type.t-info  { background: var(--cyan-dim); color: var(--cyan); }
+
+/* Feed event stagger */
+.feed-event:nth-child(1) { animation-delay: 0ms; }
+.feed-event:nth-child(2) { animation-delay: 60ms; }
+.feed-event:nth-child(3) { animation-delay: 120ms; }
+.feed-event:nth-child(4) { animation-delay: 180ms; }
+.feed-event:nth-child(5) { animation-delay: 240ms; }
+.feed-event:nth-child(6) { animation-delay: 300ms; }
+.feed-event:nth-child(7) { animation-delay: 360ms; }
+.feed-event:nth-child(8) { animation-delay: 420ms; }
+
+/* ===== KEYBOARD HINT ===== */
+.kbd-hint {
+  position: fixed; bottom: 10px; right: 16px; font-size: 10px; color: var(--text-faint); z-index: 100;
+  display: flex; align-items: center; gap: 8px;
+  background: rgba(26,29,35,.8); backdrop-filter: blur(10px);
+  padding: 5px 12px; border-radius: 6px; border: 1px solid var(--border);
+}
+.kbd-hint kbd {
+  display: inline-block; padding: 1px 5px; background: rgba(40,44,54,.7);
+  border: 1px solid var(--border); border-radius: 3px;
+  font-family: inherit; font-size: 9px; color: var(--text-muted);
+}
+
+/* ===== SCROLLBAR ===== */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(148,163,184,.1); border-radius: 3px; }
+
+/* ===== TREE GROW ANIMATION ===== */
+@keyframes treeGrow {
+  from { max-height: 0; opacity: 0; }
+  to { max-height: 600px; opacity: 1; }
+}
+
+/* ===== HOVER TOOLTIP (360px glassmorphism) ===== */
+.tooltip {
+  position: fixed; z-index: 500; pointer-events: none;
+  width: 360px; max-width: 88vw;
+  background: rgba(26,29,35,.94); backdrop-filter: blur(20px) saturate(1.3);
+  border: 1px solid var(--border-hi); border-radius: var(--radius);
+  padding: 16px 18px; box-shadow: 0 16px 48px rgba(0,0,0,.45), 0 0 1px rgba(255,255,255,.04);
+  opacity: 0; transform: translateY(6px);
+  transition: opacity .2s, transform .2s;
+}
+.tooltip.show { opacity: 1; transform: translateY(0); }
+.tooltip::before {
+  content: ''; position: absolute; top: 0; left: 16px; right: 16px; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(96,165,250,.18), transparent);
+  border-radius: 0 0 1px 1px;
+}
+.tooltip .tt-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.tooltip .tt-dot { width: 7px; height: 7px; border-radius: 50%; }
+.tooltip .tt-title { font-size: 13px; font-weight: 700; color: var(--text); }
+.tooltip .tt-badge {
+  font-size: 8px; font-weight: 700; padding: 2px 7px; border-radius: 4px;
+  text-transform: uppercase; margin-left: auto;
+}
+.tooltip .tt-summary {
+  font-size: 11.5px; line-height: 1.6; color: var(--text-dim);
+  font-style: italic; margin-bottom: 8px;
+}
+.tooltip .tt-progress {
+  height: 2px; border-radius: 1px; background: rgba(148,163,184,.06);
+  overflow: hidden; margin-bottom: 10px;
+}
+.tooltip .tt-progress-fill { height: 100%; border-radius: 1px; }
+.tooltip .tt-items { display: flex; flex-direction: column; gap: 2px; }
+.tooltip .tt-item { display: flex; align-items: center; gap: 6px; font-size: 10.5px; padding: 2px 0; }
+.tooltip .tt-item-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+.tooltip .tt-item-label { color: var(--text-dim); }
+.tooltip .tt-item-meta { margin-left: auto; font-size: 9px; color: var(--text-muted); }
+
+/* ===== ROUND ROW ENTRY STAGGER ===== */
+.round-row {
+  opacity: 0; transform: translateX(-8px);
+  animation: roundEntry .35s var(--ease) forwards;
+}
+.round-row:nth-child(1) { animation-delay: 0ms; }
+.round-row:nth-child(3) { animation-delay: 60ms; }
+.round-row:nth-child(5) { animation-delay: 120ms; }
+.round-row:nth-child(7) { animation-delay: 180ms; }
+@keyframes roundEntry { to { opacity: 1; transform: translateX(0); } }
+
+/* Round row pending dim */
+.round-row.pending-round { opacity: 0; animation: roundEntryDim .35s var(--ease) forwards; }
+@keyframes roundEntryDim { to { opacity: .45; transform: translateX(0); } }
+
+/* ===== SUBSTEP ROW ENTRY STAGGER ===== */
+.substep-row {
+  opacity: 0; transform: translateX(-6px);
+  animation: substepEntry .3s var(--ease) forwards;
+}
+.substep-row:nth-child(1) { animation-delay: 40ms; }
+.substep-row:nth-child(2) { animation-delay: 90ms; }
+.substep-row:nth-child(3) { animation-delay: 140ms; }
+.substep-row:nth-child(4) { animation-delay: 190ms; }
+@keyframes substepEntry { to { opacity: 1; transform: translateX(0); } }
+.substep-row.pending-step { animation-name: substepEntryDim; }
+@keyframes substepEntryDim { to { opacity: .5; transform: translateX(0); } }
+
+/* ===== ACTIVE ROUND GLOW BRANCH ===== */
+.round-row.active-round::before {
+  background: rgba(96,165,250,.45);
+  box-shadow: 0 0 6px rgba(96,165,250,.2);
+  animation: branchGlow 2.5s ease-in-out infinite;
+}
+@keyframes branchGlow { 0%,100% { opacity: .55; } 50% { opacity: 1; } }
+
+/* Active round shimmer */
+.round-row.active-round::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(96,165,250,.015), rgba(96,165,250,.035), rgba(96,165,250,.015), transparent);
+  background-size: 250% 100%; animation: roundShimmer 3.5s ease-in-out infinite;
+  border-radius: var(--radius-sm); z-index: -1;
+}
+@keyframes roundShimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+/* ===== DONE CARD CHECKMARK OVERLAY ===== */
+.mod-card.done-card .mc-icon::after {
+  content: '\2713'; position: absolute; bottom: -2px; right: -2px;
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--green); color: #fff; font-size: 8px;
+  display: grid; place-items: center; font-weight: 800;
+}
+.mod-card.done-card .mc-icon { position: relative; }
+
+/* ===== PENDING CARD STRIKETHROUGH ===== */
+.mod-card.pending-card .mc-progress-fill { opacity: 0; }
+.mod-card.pending-card .mc-percent { color: var(--text-faint); }
+
+/* ===== CARD SELECTION RING ===== */
+.mod-card.card-selected {
+  border-color: var(--border-hi);
+  box-shadow: 0 0 0 1px var(--border-hi);
+}
+.mod-card[data-color="purple"].card-selected { box-shadow: 0 0 0 1px rgba(167,139,250,.2); }
+.mod-card[data-color="blue"].card-selected   { box-shadow: 0 0 0 1px rgba(96,165,250,.2); }
+.mod-card[data-color="orange"].card-selected { box-shadow: 0 0 0 1px rgba(251,146,60,.2); }
+
+/* ===== DETAIL PANEL TRANSITIONS ===== */
+.detail-section { transition: max-height .55s var(--ease), opacity .4s, margin-top .4s; }
+.detail-panel { transition: transform .35s var(--ease), opacity .3s; }
+.detail-section.open .detail-panel { transform: translateY(0); opacity: 1; }
+.detail-section:not(.open) .detail-panel { transform: translateY(12px); opacity: 0; }
+
+/* ===== SIDEBAR HOVER MICRO-INTERACTIONS ===== */
+.sidebar-item .sidebar-item-icon { transition: transform .2s var(--ease-spring); }
+.sidebar-item:hover .sidebar-item-icon { transform: scale(1.08); }
+.sidebar-item.active .sidebar-item-icon { box-shadow: 0 0 8px rgba(96,165,250,.15); }
+
+/* ===== SIDEBAR COLLAPSED TOOLTIP ===== */
+.sidebar:not(:hover) .sidebar-item[data-tip]::after {
+  content: attr(data-tip);
+  position: absolute; left: 52px; top: 50%; transform: translateY(-50%);
+  background: var(--bg-raised); border: 1px solid var(--border-hi);
+  padding: 4px 10px; border-radius: 6px; font-size: 11px; color: var(--text);
+  white-space: nowrap; pointer-events: none; opacity: 0;
+  transition: opacity .15s, transform .15s; z-index: 300;
+}
+.sidebar:not(:hover) .sidebar-item:hover::after {
+  opacity: 1; transform: translateY(-50%) translateX(4px);
+}
+
+/* ===== FOCUS RING ===== */
+.mod-card:focus-visible, .round-row:focus-visible, .substep-row:focus-visible {
+  outline: 2px solid var(--blue); outline-offset: 2px;
+}
+</style>
+</head>
+<body>
+
+<canvas id="ambientCanvas"></canvas>
+<canvas id="dotCanvas"></canvas>
+
+<!-- ===== SIDEBAR (48px collapsed, 240px hover) ===== -->
+<nav class="sidebar" id="sidebar">
+  <!-- Brand -->
+  <div class="sidebar-brand">
+    <div class="sidebar-brand-icon">A</div>
+    <span class="sidebar-brand-text">AI Inventor</span>
+  </div>
+
+  <!-- Progress ring -->
+  <div class="sidebar-ring-wrap">
+    <div class="sidebar-ring">
+      <svg viewBox="0 0 30 30">
+        <circle class="s-ring-track" cx="15" cy="15" r="11.5"/>
+        <circle class="s-ring-fill" cx="15" cy="15" r="11.5" id="sRingFill"
+          stroke-dasharray="72.26" stroke-dashoffset="33.24"
+          stroke="var(--blue)" fill="none"/>
+        <text class="s-ring-text" x="15" y="15" fill="var(--text)" id="sRingText">54%</text>
+      </svg>
+    </div>
+    <span class="sidebar-ring-label">Pipeline Progress</span>
+  </div>
+
+  <div class="sidebar-sep"></div>
+
+  <!-- Main navigation -->
+  <div class="sidebar-section-title">Navigation</div>
+  <div class="sidebar-nav" id="sidebarNav">
+    <button class="sidebar-item" data-color="purple" data-mod="0">
+      <div class="sidebar-item-icon" style="background:var(--purple)">1</div>
+      <span class="sidebar-label">Invent</span>
+      <div class="status-dot" style="background:var(--green)"></div>
+    </button>
+    <button class="sidebar-item active" data-color="blue" data-mod="1">
+      <div class="sidebar-item-icon" style="background:var(--blue)">2</div>
+      <span class="sidebar-label">Elaboration</span>
+      <div class="status-dot" style="background:var(--blue);animation:dotPulse 2s ease-in-out infinite"></div>
+    </button>
+    <button class="sidebar-item" data-color="orange" data-mod="2">
+      <div class="sidebar-item-icon" style="background:var(--orange)">3</div>
+      <span class="sidebar-label">Disseminate</span>
+    </button>
+  </div>
+
+  <div class="sidebar-sep"></div>
+
+  <!-- Starred -->
+  <div class="sidebar-section-title">Starred</div>
+  <div class="sidebar-starred">
+    <button class="sidebar-mini-item">
+      <span class="sidebar-mini-icon">&#9733;</span>
+      <span class="sidebar-mini-label">Run #47 — Main</span>
+    </button>
+    <button class="sidebar-mini-item">
+      <span class="sidebar-mini-icon">&#9733;</span>
+      <span class="sidebar-mini-label">Thermal Model</span>
+    </button>
+  </div>
+
+  <div class="sidebar-sep"></div>
+
+  <!-- Recents -->
+  <div class="sidebar-section-title">Recents</div>
+  <div class="sidebar-recents">
+    <button class="sidebar-mini-item">
+      <span class="sidebar-mini-icon">&#128337;</span>
+      <span class="sidebar-mini-label">Hypo. Analysis</span>
+    </button>
+    <button class="sidebar-mini-item">
+      <span class="sidebar-mini-icon">&#128337;</span>
+      <span class="sidebar-mini-label">KG Build v3</span>
+    </button>
+    <button class="sidebar-mini-item">
+      <span class="sidebar-mini-icon">&#128337;</span>
+      <span class="sidebar-mini-label">Sim. Batch #12</span>
+    </button>
+  </div>
+
+  <div class="sidebar-spacer"></div>
+
+  <!-- Token bar -->
+  <div class="sidebar-token-bar">
+    <div class="token-bar-track">
+      <div class="token-bar-fill" id="tokenBarFill"></div>
+    </div>
+    <div class="token-bar-label" id="tokenBarLabel">284k / 500k tokens</div>
+  </div>
+</nav>
+
+<!-- ===== MAIN CONTENT ===== -->
+<div class="main" id="mainContent">
+  <!-- Module cards row -->
+  <div class="modules-row" id="modulesRow">
+    <canvas id="particleCanvas"></canvas>
+  </div>
+
+  <!-- Tree section (below active card, initially hidden) -->
+  <div class="tree-section" id="treeSection">
+    <div class="tree-container" id="treeContainer"></div>
+  </div>
+
+  <!-- Detail section (two boxes, hidden until substep click) -->
+  <div class="detail-section" id="detailSection">
+    <div class="detail-panel left-panel" id="leftPanel"></div>
+    <div class="detail-panel right-panel" id="rightPanel"></div>
+  </div>
+</div>
+
+<!-- Tooltip -->
+<div class="tooltip" id="tooltip"></div>
+
+<!-- Keyboard hint -->
+<div class="kbd-hint">
+  <kbd>&#8592;</kbd><kbd>&#8594;</kbd> cards
+  <kbd>&#8593;</kbd><kbd>&#8595;</kbd> steps
+  <kbd>Enter</kbd> detail
+  <kbd>Esc</kbd> close
+</div>
+
+<script>
+/* ====================================================================
+   DATA MODEL
+   ==================================================================== */
+const MODULES = [
+  {
+    id: 'create_hypo', label: 'Create Hypothesis', color: 'purple',
+    icon: '\u2728', status: 'done', progress: 100,
+    time: '8m 14s', tokens: '128k', cost: '$1.52',
+    subs: []
+  },
+  {
+    id: 'test_ideas', label: 'Test Ideas', color: 'blue',
+    icon: '\u{1f52c}', status: 'running', progress: 60,
+    time: '14m 38s', tokens: '156k', cost: '$2.35',
+    rounds: [
+      {
+        id: 'round_5', label: 'Round 5', state: 'done',
+        summary: "I completed the piezoelectric energy harvesting hypothesis test. All four sub-steps finished successfully. The proposed nano-composite design showed a 34% improvement in energy conversion efficiency over the aluminium nitride baseline. Statistical significance confirmed at p < 0.001.",
+        substeps: [
+          {
+            id: 'r5_plan', label: 'Plan Approach', state: 'done',
+            summary: "I designed the experimental protocol for testing the piezoelectric nano-composite hypothesis. Selected three control materials and defined efficiency metrics based on the IEEE standard for energy harvesting devices.",
+            items: [
+              { label: 'Protocol design', meta: 'complete', done: true },
+              { label: 'Control material selection', meta: '3 selected', done: true },
+              { label: 'Metric definition', meta: 'IEEE std.', done: true },
+            ]
+          },
+          {
+            id: 'r5_man', label: 'Man Artifacts', state: 'done',
+            summary: "I prepared simulation environments for all three control materials plus the proposed nano-composite. Calibrated COMSOL models against published experimental data with < 2% error.",
+            items: [
+              { label: 'COMSOL model calibration', meta: '< 2% err', done: true },
+              { label: 'Material property database', meta: '47 entries', done: true },
+            ]
+          },
+          {
+            id: 'r5_create', label: 'Create Artifacts', state: 'done',
+            summary: "I ran all simulations to completion. The nano-composite showed 34% higher energy conversion than AlN baseline. Generated comprehensive result tables and convergence plots for all test conditions.",
+            items: [
+              { label: 'Full simulation suite', meta: '12 runs', done: true },
+              { label: 'Result aggregation', meta: 'complete', done: true },
+              { label: 'Convergence verification', meta: 'passed', done: true },
+            ]
+          },
+          {
+            id: 'r5_write', label: 'Write Paper', state: 'done',
+            summary: "I drafted the complete methodology and results sections. Integrated 8 figures and 3 tables. Discussion links the piezoelectric enhancement mechanism to the grain boundary engineering approach.",
+            items: [
+              { label: 'Methodology section', meta: '2.4k words', done: true },
+              { label: 'Results with figures', meta: '8 figs, 3 tbls', done: true },
+              { label: 'Discussion synthesis', meta: 'complete', done: true },
+            ]
+          },
+        ]
+      },
+      {
+        id: 'round_6', label: 'Round 6', state: 'done',
+        summary: "I tested the bio-luminescent protein integration hypothesis for flexible electronic displays. The proposed bio-LED architecture demonstrated 2.8x luminous efficacy compared to conventional OLED at equivalent power. Manuscript section drafted with 6 figures.",
+        substeps: [
+          {
+            id: 'r6_plan', label: 'Plan Approach', state: 'done',
+            summary: "I designed a comparative study between bio-luminescent protein LEDs and state-of-the-art flexible OLEDs. Defined luminous efficacy, lifetime, and flexibility as primary metrics.",
+            items: [
+              { label: 'Comparative study design', meta: 'complete', done: true },
+              { label: 'Metric selection', meta: '3 primary', done: true },
+            ]
+          },
+          {
+            id: 'r6_man', label: 'Man Artifacts', state: 'done',
+            summary: "I built molecular dynamics models for both bio-LED and OLED architectures. Prepared substrate flexibility simulation parameters from published bend-test data.",
+            items: [
+              { label: 'MD model construction', meta: '2 archs', done: true },
+              { label: 'Flexibility parameters', meta: 'calibrated', done: true },
+            ]
+          },
+          {
+            id: 'r6_create', label: 'Create Artifacts', state: 'done',
+            summary: "I completed all simulations. Bio-LED showed 2.8x luminous efficacy at equivalent power draw. Lifetime projections indicate 40% improvement under cyclic bending stress.",
+            items: [
+              { label: 'Efficacy simulation', meta: '2.8x gain', done: true },
+              { label: 'Lifetime projection', meta: '+40% flex', done: true },
+              { label: 'Statistical analysis', meta: 'p < 0.001', done: true },
+            ]
+          },
+          {
+            id: 'r6_write', label: 'Write Paper', state: 'done',
+            summary: "I drafted results and discussion sections. Generated 6 publication-quality figures including the Ragone plot comparing bio-LED vs OLED efficiency frontiers.",
+            items: [
+              { label: 'Results draft', meta: '1.8k words', done: true },
+              { label: 'Figure generation', meta: '6 figures', done: true },
+            ]
+          },
+        ]
+      },
+      {
+        id: 'round_3', label: 'Round 3', state: 'active', expanded: true,
+        substeps: [
+          {
+            id: 'plan_approach', label: 'Plan Approach', state: 'done',
+            summary: "I analyzed the hypothesis structure and designed a three-phase testing strategy. The approach combines in-silico molecular dynamics with graph-based reasoning over the knowledge base. I selected boundary conditions from the top-5 related prior works and calibrated expected effect sizes.",
+            items: [
+              { label: 'Strategy formulation', meta: 'complete', done: true },
+              { label: 'Boundary condition selection', meta: '5 priors', done: true },
+              { label: 'Effect size calibration', meta: 'd=1.2 est.', done: true },
+            ]
+          },
+          {
+            id: 'man_artifacts', label: 'Man Artifacts', state: 'done',
+            summary: "I prepared all necessary computational artifacts: synthetic evaluation datasets calibrated to the hypothesis boundary conditions, baseline model checkpoints, and evaluation harnesses. All artifacts passed integrity checks and distribution validation.",
+            items: [
+              { label: 'Synthetic dataset generation', meta: '3 sets', done: true },
+              { label: 'Baseline checkpoints loaded', meta: '4 models', done: true },
+              { label: 'Evaluation harness setup', meta: 'verified', done: true },
+            ]
+          },
+          {
+            id: 'create_artifacts', label: 'Create Artifacts', state: 'active',
+            summary: "I am currently generating the primary experimental artifacts for the thermal transport hypothesis. The nano-scale simulation is running on the A100 cluster, processing layer 4 of 7 in the metamaterial stack. Current convergence rate is tracking 12% above projections.",
+            items: [
+              { label: 'Nano-scale thermal simulation', meta: '4/7 layers', running: true },
+              { label: 'Cross-layer coupling analysis', meta: '3/7 done', running: true },
+              { label: 'Convergence verification', meta: 'tracking', done: false },
+              { label: 'Artifact packaging', meta: 'queued', done: false },
+            ]
+          },
+          {
+            id: 'write_paper', label: 'Write Paper', state: 'pending',
+            summary: "Pending completion of artifact creation. Will draft the methodology section with integrated figures, compile results tables, and generate the discussion linking findings back to the original hypothesis.",
+            items: [
+              { label: 'Methodology draft', meta: 'queued', done: false },
+              { label: 'Results compilation', meta: 'queued', done: false },
+              { label: 'Discussion synthesis', meta: 'queued', done: false },
+            ]
+          },
+        ]
+      },
+      {
+        id: 'round_8', label: 'Round 8', state: 'pending',
+        substeps: []
+      },
+    ]
+  },
+  {
+    id: 'report_results', label: 'Report Results', color: 'orange',
+    icon: '\u{1f4e1}', status: 'pending', progress: 0,
+    time: '--', tokens: '--', cost: '--',
+    subs: []
+  }
+];
+
+const COLOR_MAP = {
+  purple: { main: '#a78bfa', dim: 'rgba(167,139,250,.10)', glow: 'rgba(167,139,250,.22)' },
+  blue:   { main: '#60a5fa', dim: 'rgba(96,165,250,.10)',   glow: 'rgba(96,165,250,.22)' },
+  orange: { main: '#fb923c', dim: 'rgba(251,146,60,.10)',   glow: 'rgba(251,146,60,.22)' },
+};
+
+/* ====================================================================
+   STATE
+   ==================================================================== */
+let selectedCard = -1;
+let selectedRound = -1;
+let selectedStep = -1;
+let treeVisible = false;
+let detailVisible = false;
+
+/* ====================================================================
+   RENDER MODULE CARDS
+   ==================================================================== */
+function renderModuleCards() {
+  const row = document.getElementById('modulesRow');
+  const canvas = document.getElementById('particleCanvas');
+  row.innerHTML = '';
+  row.appendChild(canvas);
+
+  MODULES.forEach((m, i) => {
+    const statusCls = m.status === 'done' ? 'done-card' : m.status === 'running' ? 'active-card' : 'pending-card';
+    const card = document.createElement('div');
+    card.className = `mod-card ${statusCls}`;
+    card.dataset.color = m.color;
+    card.dataset.mod = i;
+    card.id = `modCard${i}`;
+
+    const badgeCls = m.status === 'done' ? 'done' : m.status === 'running' ? 'running' : 'pending';
+    const badgeText = m.status === 'done' ? 'Complete' : m.status === 'running' ? 'Running' : 'Pending';
+
+    let spinnerHTML = '';
+    if (m.status === 'running') {
+      spinnerHTML = `
+        <div class="active-spinner-ring">
+          <svg viewBox="0 0 32 32">
+            <circle class="spinner-track" cx="16" cy="16" r="13"/>
+            <circle class="spinner-arc" cx="16" cy="16" r="13"/>
+          </svg>
+        </div>`;
+    }
+
+    card.innerHTML = `
+      <div class="accent-line"></div>
+      ${spinnerHTML}
+      <div class="mc-header">
+        <div class="mc-icon">${m.icon}</div>
+        <div class="mc-title-area">
+          <div class="mc-title">${m.label}</div>
+          <div class="mc-subtitle">Module ${i + 1} of ${MODULES.length}</div>
+        </div>
+        <span class="mc-badge ${badgeCls}">${badgeText}</span>
+      </div>
+      <div class="mc-progress"><div class="mc-progress-fill" data-w="${m.progress}"></div></div>
+      <div class="mc-percent">${m.progress}%</div>
+      <div class="mc-stats">
+        <span><span class="val">${m.time}</span> elapsed</span>
+        <span><span class="val">${m.cost}</span> cost</span>
+      </div>
+    `;
+    card.addEventListener('click', () => onCardClick(i));
+    row.appendChild(card);
+  });
+
+  requestAnimationFrame(() => {
+    row.querySelectorAll('.mc-progress-fill').forEach(el => {
+      el.style.width = el.dataset.w + '%';
+    });
+  });
+}
+
+/* ====================================================================
+   CARD CLICK HANDLER
+   ==================================================================== */
+function onCardClick(i) {
+  if (selectedCard === i) {
+    selectedCard = -1;
+    closeTree();
+    closeDetail();
+    updateSidebarActive(-1);
+    updateCardSelection(-1);
+    return;
+  }
+  selectedCard = i;
+  selectedRound = -1;
+  selectedStep = -1;
+  updateSidebarActive(i);
+  updateCardSelection(i);
+  closeDetail();
+
+  const m = MODULES[i];
+  if (m.rounds && m.rounds.length > 0) {
+    renderTree(m);
+    openTree();
+  } else {
+    closeTree();
+  }
+}
+
+function updateSidebarActive(idx) {
+  document.querySelectorAll('.sidebar-item[data-mod]').forEach((b, i) => {
+    b.classList.toggle('active', i === idx);
+  });
+}
+
+function updateCardSelection(idx) {
+  document.querySelectorAll('.mod-card').forEach((c, i) => {
+    c.classList.toggle('card-selected', i === idx);
+  });
+}
+
+/* ====================================================================
+   RENDER TREE (Rounds listed vertically with colored tree lines)
+   ==================================================================== */
+function renderTree(mod) {
+  const container = document.getElementById('treeContainer');
+  container.innerHTML = '';
+
+  const header = document.createElement('div');
+  header.className = 'tree-header';
+  header.innerHTML = `<div class="tree-header-dot"></div> ${mod.label} Rounds`;
+  container.appendChild(header);
+
+  const list = document.createElement('div');
+  list.className = 'round-list';
+
+  mod.rounds.forEach((round, ri) => {
+    const row = document.createElement('div');
+    const stateCls = round.state === 'active' ? 'active-round' : round.state === 'done' ? 'done-round' : 'pending-round';
+    row.className = `round-row ${stateCls}`;
+    if (round.expanded) row.classList.add('expanded');
+    row.dataset.round = ri;
+
+    const iconCls = round.state === 'active' ? 'active' : round.state === 'done' ? 'done' : 'pending';
+    const iconChar = round.state === 'done' ? '\u2713' : round.state === 'active' ? '\u25B6' : '\u25CB';
+
+    row.innerHTML = `
+      <span class="round-icon ${iconCls}">${iconChar}</span>
+      <span class="round-label">${round.label}</span>
+      <span class="round-chevron">\u203A</span>
+    `;
+
+    row.addEventListener('click', (e) => {
+      e.stopPropagation();
+      onRoundClick(ri, mod);
+    });
+    row.addEventListener('mouseenter', (e) => showTooltip(e, round, null));
+    row.addEventListener('mouseleave', hideTooltip);
+    list.appendChild(row);
+
+    // Substeps container (always render, control with max-height)
+    const substepList = document.createElement('div');
+    substepList.className = 'substep-list';
+    substepList.id = `substeps-${ri}`;
+
+    if (round.substeps && round.substeps.length > 0) {
+      round.substeps.forEach((step, si) => {
+        const stepRow = document.createElement('div');
+        const stepStateCls = step.state === 'active' ? 'active-step' : step.state === 'done' ? 'done-step' : 'pending-step';
+        stepRow.className = `substep-row ${stepStateCls}`;
+        stepRow.dataset.round = ri;
+        stepRow.dataset.step = si;
+
+        const stepIconCls = step.state === 'active' ? 'active' : step.state === 'done' ? 'done' : 'pending';
+        const stepIconChar = step.state === 'done' ? '\u2713' : step.state === 'active' ? '\u25B6' : '\u25CB';
+
+        let dotsHTML = '';
+        let spinnerHTML = '';
+        if (step.state === 'active') {
+          dotsHTML = '<span class="step-dots"><span></span><span></span><span></span></span>';
+          spinnerHTML = '<div class="step-spinner"></div>';
+        }
+
+        stepRow.innerHTML = `
+          <span class="substep-icon ${stepIconCls}">${stepIconChar}</span>
+          <span class="substep-label">${step.label}${dotsHTML}</span>
+          ${spinnerHTML}
+        `;
+
+        stepRow.addEventListener('click', (e) => {
+          e.stopPropagation();
+          onStepClick(ri, si, mod);
+        });
+        stepRow.addEventListener('mouseenter', (e) => showTooltip(e, round, step));
+        stepRow.addEventListener('mouseleave', hideTooltip);
+        substepList.appendChild(stepRow);
+      });
+    }
+    list.appendChild(substepList);
+
+    // Auto-expand if flagged
+    if (round.expanded && round.substeps && round.substeps.length > 0) {
+      requestAnimationFrame(() => {
+        substepList.style.maxHeight = substepList.scrollHeight + 'px';
+        substepList.classList.add('open');
+      });
+    }
+  });
+
+  container.appendChild(list);
+}
+
+function onRoundClick(ri, mod) {
+  const round = mod.rounds[ri];
+  const substepList = document.getElementById(`substeps-${ri}`);
+  const roundRow = document.querySelector(`.round-row[data-round="${ri}"]`);
+
+  // Toggle expand
+  if (round.expanded) {
+    round.expanded = false;
+    roundRow.classList.remove('expanded');
+    substepList.classList.remove('open');
+    substepList.style.maxHeight = '0';
+    closeDetail();
+    selectedRound = -1;
+    selectedStep = -1;
+  } else {
+    // Collapse others
+    mod.rounds.forEach((r, i) => {
+      if (i !== ri && r.expanded) {
+        r.expanded = false;
+        const otherList = document.getElementById(`substeps-${i}`);
+        const otherRow = document.querySelector(`.round-row[data-round="${i}"]`);
+        if (otherList) { otherList.classList.remove('open'); otherList.style.maxHeight = '0'; }
+        if (otherRow) otherRow.classList.remove('expanded');
+      }
+    });
+
+    round.expanded = true;
+    roundRow.classList.add('expanded');
+    selectedRound = ri;
+
+    if (round.substeps && round.substeps.length > 0) {
+      substepList.style.maxHeight = substepList.scrollHeight + 'px';
+      substepList.classList.add('open');
+    }
+  }
+
+  // Highlight
+  document.querySelectorAll('.round-row').forEach(r => r.classList.remove('selected'));
+  roundRow.classList.add('selected');
+
+  updateTreeSectionHeight();
+  requestAnimationFrame(drawLShapedDots);
+}
+
+function onStepClick(ri, si, mod) {
+  selectedRound = ri;
+  selectedStep = si;
+
+  // Highlight step
+  document.querySelectorAll('.substep-row').forEach(r => r.classList.remove('selected-step'));
+  const target = document.querySelector(`.substep-row[data-round="${ri}"][data-step="${si}"]`);
+  if (target) target.classList.add('selected-step');
+
+  const round = mod.rounds[ri];
+  const step = round.substeps[si];
+  openDetail(step, mod);
+}
+
+/* ====================================================================
+   TREE OPEN / CLOSE
+   ==================================================================== */
+function openTree() {
+  const section = document.getElementById('treeSection');
+  treeVisible = true;
+  section.classList.add('open');
+  updateTreeSectionHeight();
+}
+
+function closeTree() {
+  const section = document.getElementById('treeSection');
+  treeVisible = false;
+  section.classList.remove('open');
+}
+
+function updateTreeSectionHeight() {
+  requestAnimationFrame(() => {
+    const section = document.getElementById('treeSection');
+    if (treeVisible) {
+      const container = document.getElementById('treeContainer');
+      section.style.maxHeight = (container.scrollHeight + 40) + 'px';
+    }
+  });
+}
+
+/* ====================================================================
+   DETAIL OPEN / CLOSE (Two boxes below tree)
+   ==================================================================== */
+function openDetail(step, mod) {
+  const section = document.getElementById('detailSection');
+  const c = COLOR_MAP[mod.color];
+  detailVisible = true;
+
+  // LEFT: Summary panel (first person text)
+  const left = document.getElementById('leftPanel');
+  const badgeCls = step.state === 'active' ? 'running' : step.state === 'done' ? 'done' : 'pending';
+  const badgeText = step.state === 'active' ? 'Running' : step.state === 'done' ? 'Complete' : 'Pending';
+
+  left.innerHTML = `<div class="detail-fade">
+    <div class="detail-header">
+      <div class="detail-dot" style="background:${c.main}"></div>
+      <div class="detail-title">${step.label}</div>
+      <span class="detail-badge ${badgeCls}">${badgeText}</span>
+    </div>
+    <div class="detail-summary">${step.summary || ''}</div>
+    <div class="detail-items">
+      ${(step.items || []).map(it => {
+        const dotCls = it.done ? 'done' : it.running ? 'running' : 'pending';
+        const rowCls = it.running ? 'running-item' : '';
+        return `<div class="detail-item ${rowCls}">
+          <div class="di-dot ${dotCls}"></div>
+          <span class="di-label">${it.label}</span>
+          <span class="di-meta">${it.meta}</span>
+        </div>`;
+      }).join('')}
+    </div>
+  </div>`;
+
+  // RIGHT: Activity feed (live, timestamps)
+  const right = document.getElementById('rightPanel');
+  right.innerHTML = `<div class="detail-fade">
+    ${renderActivityFeed(step, mod, c)}
+  </div>`;
+
+  section.classList.add('open');
+}
+
+function closeDetail() {
+  const section = document.getElementById('detailSection');
+  detailVisible = false;
+  section.classList.remove('open');
+  selectedStep = -1;
+}
+
+/* ====================================================================
+   ACTIVITY FEED RENDERER
+   ==================================================================== */
+function renderActivityFeed(step, mod, c) {
+  const now = new Date();
+  const baseH = now.getHours();
+  const baseM = now.getMinutes();
+
+  const feedTemplates = {
+    'Plan Approach': [
+      { dt: -8, icon: '\u2705', text: 'Strategy formulation complete -- three-phase testing plan validated against prior work', type: 't-ok', lbl: 'Done' },
+      { dt: -6, icon: '\u{1f4ca}', text: 'Boundary conditions extracted from 5 prior works, calibrated for thermal domain', type: 't-score', lbl: 'Data' },
+      { dt: -5, icon: '\u26a1', text: 'Effect size estimation: d=1.2 based on meta-analysis of 23 similar interventions', type: 't-info', lbl: 'Calc' },
+      { dt: -4, icon: '\u{1f4ca}', text: 'Power analysis complete: minimum 8 simulation runs needed for 95% confidence', type: 't-score', lbl: 'Stats' },
+      { dt: -3, icon: '\u2705', text: 'Plan validation passed all consistency checks -- approved for execution', type: 't-ok', lbl: 'Done' },
+    ],
+    'Man Artifacts': [
+      { dt: -14, icon: '\u{1f9ea}', text: 'Synthetic dataset generation initiated for 3 boundary condition sets', type: 't-gen', lbl: 'Start' },
+      { dt: -11, icon: '\u{1f4ca}', text: 'Dataset 1/3 complete -- 14.2k samples, KL divergence 0.011 vs target distribution', type: 't-score', lbl: 'Data' },
+      { dt: -9, icon: '\u2705', text: 'All 3 synthetic datasets generated and validated', type: 't-ok', lbl: 'Done' },
+      { dt: -7, icon: '\u2705', text: 'All 4 baseline model checkpoints loaded -- weights verified against published hashes', type: 't-ok', lbl: 'Done' },
+      { dt: -5, icon: '\u26a1', text: 'Evaluation harness integrity check passed (3/3 suites, 47 test cases)', type: 't-info', lbl: 'Valid' },
+      { dt: -3, icon: '\u2705', text: 'All artifacts staged and ready for experiment execution', type: 't-ok', lbl: 'Done' },
+    ],
+    'Create Artifacts': [
+      { dt: -6, icon: '\u{1f9ea}', text: 'Nano-scale thermal simulation launched on A100 cluster (4x GPU)', type: 't-gen', lbl: 'Start', isNew: false },
+      { dt: -5, icon: '\u{1f4ca}', text: 'Layer 1 convergence achieved -- residual norm 4.2e-8', type: 't-score', lbl: 'Score' },
+      { dt: -4, icon: '\u2705', text: 'Layers 1-3 convergence verified -- all residual norms < 1e-6', type: 't-ok', lbl: 'Done' },
+      { dt: -3, icon: '\u26a1', text: 'Processing layer 4/7 in metamaterial stack -- convergence 12% above projection', type: 't-info', lbl: 'Info', isNew: true },
+      { dt: -2, icon: '\u26a0\ufe0f', text: 'Memory pressure at 78% on node 3 -- gradient checkpointing auto-enabled', type: 't-warn', lbl: 'Alert', isNew: true },
+      { dt: -1, icon: '\u{1f4ca}', text: 'Cross-layer coupling coefficient: 0.834 for layers 1-3 interaction', type: 't-score', lbl: 'Score', isNew: true },
+      { dt: 0, icon: '\u26a1', text: 'Layer 4 thermal conductivity tensor computation in progress', type: 't-info', lbl: 'Live', isNew: true },
+    ],
+    'Write Paper': [
+      { dt: -1, icon: '\u{1f4cb}', text: 'Outline generated -- awaiting artifact completion before full drafting', type: 't-info', lbl: 'Queue' },
+      { dt: 0, icon: '\u26a1', text: 'Methodology section template prepared with placeholder references', type: 't-info', lbl: 'Prep' },
+    ],
+  };
+
+  const events = feedTemplates[step.label] || [
+    { dt: 0, icon: '\u26a1', text: 'No activity recorded yet for this step', type: 't-info', lbl: 'Info' }
+  ];
+
+  return `
+    <div class="feed-section">
+      <div class="feed-header">
+        <span class="feed-title">Activity Feed</span>
+        <span class="live-badge"><span class="live-badge-dot"></span> LIVE</span>
+        <span class="feed-count">${events.length} events</span>
+      </div>
+      <div class="feed-list" id="feedList">
+        ${events.map((e, i) => {
+          const h = baseH;
+          const m = Math.max(0, baseM + e.dt);
+          const ts = `${String(h).padStart(2,'0')}:${String(m % 60).padStart(2,'0')}`;
+          return `
+            <div class="feed-event ${e.isNew ? 'is-new' : ''}" style="animation-delay:${i * 60}ms">
+              <span class="fe-time">${ts}</span>
+              <div class="fe-icon" style="background:${c.dim};color:${c.main}">${e.icon}</div>
+              <div class="fe-body">
+                <div class="fe-text">${e.text}</div>
+              </div>
+              <span class="fe-type ${e.type}">${e.lbl}</span>
+            </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+}
+
+/* ====================================================================
+   L-SHAPED DOT CONNECTOR (getBoundingClientRect)
+   Uses canvas overlay. Draws down from active card, then right to active substep.
+   3-4 continuous dots.
+   ==================================================================== */
+const dotCanvas = document.getElementById('dotCanvas');
+const dotCtx = dotCanvas.getContext('2d');
+let lDots = [];
+let lDotPhase = 0;
+
+function resizeDotCanvas() {
+  dotCanvas.width = window.innerWidth;
+  dotCanvas.height = window.innerHeight;
+}
+resizeDotCanvas();
+window.addEventListener('resize', resizeDotCanvas);
+
+function drawLShapedDots() {
+  dotCtx.clearRect(0, 0, dotCanvas.width, dotCanvas.height);
+
+  // Source: bottom center of active card
+  const activeCard = document.querySelector('.mod-card.active-card');
+  if (!activeCard) return;
+  const cardRect = activeCard.getBoundingClientRect();
+  const srcX = cardRect.left + cardRect.width / 2;
+  const srcY = cardRect.bottom;
+
+  // Target: the active substep row
+  const activeStep = document.querySelector('.substep-row.active-step');
+  if (!activeStep) return;
+  const stepRect = activeStep.getBoundingClientRect();
+  const tgtX = stepRect.left + 5;
+  const tgtY = stepRect.top + stepRect.height / 2;
+
+  // L-shape: go DOWN from card bottom, then RIGHT to substep
+  const cornerX = srcX;
+  const cornerY = tgtY;
+
+  // Total path length
+  const legDown = cornerY - srcY;
+  const legRight = tgtX - cornerX;
+  const totalLen = Math.abs(legDown) + Math.abs(legRight);
+
+  if (totalLen < 20) return;
+
+  // Draw 3-4 continuous dots traveling along the L-path
+  const numDots = 4;
+  const c = COLOR_MAP.blue;
+
+  lDotPhase += 0.006;
+  if (lDotPhase > 1) lDotPhase -= 1;
+
+  for (let i = 0; i < numDots; i++) {
+    const t = (lDotPhase + i / numDots) % 1;
+    const dist = t * totalLen;
+    let dx, dy;
+
+    if (dist <= Math.abs(legDown)) {
+      // On the vertical leg
+      dx = srcX;
+      dy = srcY + dist * Math.sign(legDown);
+    } else {
+      // On the horizontal leg
+      dx = cornerX + (dist - Math.abs(legDown)) * Math.sign(legRight);
+      dy = cornerY;
+    }
+
+    const alpha = Math.sin(t * Math.PI) * 0.7 + 0.15;
+    const radius = 2.5;
+
+    // Glow
+    dotCtx.beginPath();
+    dotCtx.arc(dx, dy, radius * 3, 0, Math.PI * 2);
+    dotCtx.fillStyle = `rgba(96,165,250,${alpha * 0.25})`;
+    dotCtx.fill();
+
+    // Dot
+    dotCtx.beginPath();
+    dotCtx.arc(dx, dy, radius, 0, Math.PI * 2);
+    dotCtx.fillStyle = `rgba(96,165,250,${alpha})`;
+    dotCtx.fill();
+  }
+
+  // Faint path line for the L-shape
+  dotCtx.beginPath();
+  dotCtx.moveTo(srcX, srcY);
+  dotCtx.lineTo(cornerX, cornerY);
+  dotCtx.lineTo(tgtX, tgtY);
+  dotCtx.strokeStyle = 'rgba(96,165,250,0.06)';
+  dotCtx.lineWidth = 1;
+  dotCtx.stroke();
+}
+
+function animateLDots() {
+  drawLShapedDots();
+  requestAnimationFrame(animateLDots);
+}
+
+/* ====================================================================
+   AMBIENT PARTICLE SYSTEM
+   ==================================================================== */
+function initAmbientParticles() {
+  const canvas = document.getElementById('ambientCanvas');
+  const ctx = canvas.getContext('2d');
+  let particles = [];
+  const COUNT = 50;
+
+  function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  for (let i = 0; i < COUNT; i++) {
+    particles.push({
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height,
+      vx: (Math.random() - .5) * .12,
+      vy: (Math.random() - .5) * .08,
+      r: Math.random() * 1.3 + .4,
+      o: Math.random() * .12 + .025,
+      color: ['rgba(167,139,250,', 'rgba(96,165,250,', 'rgba(251,146,60,'][Math.floor(Math.random() * 3)],
+    });
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    particles.forEach(p => {
+      p.x += p.vx; p.y += p.vy;
+      if (p.x < 0) p.x = canvas.width;
+      if (p.x > canvas.width) p.x = 0;
+      if (p.y < 0) p.y = canvas.height;
+      if (p.y > canvas.height) p.y = 0;
+
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = p.color + p.o + ')';
+      ctx.fill();
+    });
+
+    for (let i = 0; i < particles.length; i++) {
+      for (let j = i + 1; j < particles.length; j++) {
+        const dx = particles[i].x - particles[j].x;
+        const dy = particles[i].y - particles[j].y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 110) {
+          ctx.beginPath();
+          ctx.moveTo(particles[i].x, particles[i].y);
+          ctx.lineTo(particles[j].x, particles[j].y);
+          ctx.strokeStyle = `rgba(148,163,184,${.012 * (1 - dist / 110)})`;
+          ctx.lineWidth = .5;
+          ctx.stroke();
+        }
+      }
+    }
+    requestAnimationFrame(draw);
+  }
+  draw();
+}
+
+/* ====================================================================
+   PARTICLE CANVAS (scoped to module row)
+   ==================================================================== */
+function initModuleParticles() {
+  const canvas = document.getElementById('particleCanvas');
+  const row = document.getElementById('modulesRow');
+  const ctx = canvas.getContext('2d');
+  let particles = [];
+  const COUNT = 20;
+
+  function resize() {
+    const rect = row.getBoundingClientRect();
+    canvas.width = rect.width + 40;
+    canvas.height = rect.height + 40;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  for (let i = 0; i < COUNT; i++) {
+    particles.push({
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height,
+      vx: (Math.random() - .5) * .2,
+      vy: (Math.random() - .5) * .15,
+      r: Math.random() * 1.2 + .3,
+      o: Math.random() * .1 + .02,
+      color: ['rgba(167,139,250,', 'rgba(96,165,250,', 'rgba(251,146,60,'][Math.floor(Math.random() * 3)],
+    });
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    particles.forEach(p => {
+      p.x += p.vx; p.y += p.vy;
+      if (p.x < 0) p.x = canvas.width;
+      if (p.x > canvas.width) p.x = 0;
+      if (p.y < 0) p.y = canvas.height;
+      if (p.y > canvas.height) p.y = 0;
+
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = p.color + p.o + ')';
+      ctx.fill();
+    });
+    requestAnimationFrame(draw);
+  }
+  draw();
+}
+
+/* ====================================================================
+   LIVE TIMER (updates token bar, sidebar ring)
+   ==================================================================== */
+let baseTimeSec = 14 * 60 + 38;
+function initLiveTimer() {
+  // Token bar initial
+  requestAnimationFrame(() => {
+    document.getElementById('tokenBarFill').style.width = '57%';
+  });
+
+  setInterval(() => {
+    baseTimeSec++;
+    const m = Math.floor(baseTimeSec / 60);
+    const s = baseTimeSec % 60;
+
+    // Update sidebar ring progress slowly
+    const progress = Math.min(54 + (baseTimeSec - (14 * 60 + 38)) * 0.012, 72);
+    const circumference = 72.26;
+    const offset = circumference * (1 - progress / 100);
+    document.getElementById('sRingFill').setAttribute('stroke-dashoffset', offset.toFixed(2));
+    document.getElementById('sRingText').textContent = Math.round(progress) + '%';
+
+    // Update token bar
+    const tokenPct = Math.min(57 + (baseTimeSec - (14 * 60 + 38)) * 0.008, 85);
+    document.getElementById('tokenBarFill').style.width = tokenPct.toFixed(1) + '%';
+    document.getElementById('tokenBarLabel').textContent = `${Math.round(284 + (baseTimeSec - (14 * 60 + 38)) * 0.3)}k / 500k tokens`;
+  }, 1000);
+}
+
+/* ====================================================================
+   PERIODIC FEED UPDATE
+   ==================================================================== */
+const LIVE_EVENTS = [
+  'Gradient norm stabilized at 0.42 for layer 4 epoch 12',
+  'Memory checkpoint written: 847MB compressed state',
+  'Layer 4 convergence tracking at 68% -- above projection',
+  'Cross-layer coupling coefficient: 0.834 for layers 1-3',
+  'Thermal conductivity tensor computed for sublattice A',
+  'Batch processing rate: 142 samples/sec on A100 node',
+  'Residual norm dropped below 1e-7 for layer 3 coupling',
+  'Auto-scaling triggered: gradient checkpointing active',
+];
+let feedIdx = 0;
+
+function initPeriodicFeedUpdate() {
+  setInterval(() => {
+    const feedList = document.getElementById('feedList');
+    if (!feedList) return;
+
+    const evt = LIVE_EVENTS[feedIdx % LIVE_EVENTS.length];
+    feedIdx++;
+
+    const now = new Date();
+    const ts = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+
+    const el = document.createElement('div');
+    el.className = 'feed-event is-new';
+    el.innerHTML = `
+      <span class="fe-time">${ts}</span>
+      <div class="fe-icon" style="background:var(--blue-dim);color:var(--blue)">\u26a1</div>
+      <div class="fe-body">
+        <div class="fe-text">${evt}</div>
+      </div>
+      <span class="fe-type t-info">Live</span>
+    `;
+
+    feedList.insertBefore(el, feedList.firstChild);
+    while (feedList.children.length > 10) {
+      feedList.removeChild(feedList.lastChild);
+    }
+
+    const countEl = feedList.closest('.feed-section')?.querySelector('.feed-count');
+    if (countEl) countEl.textContent = feedList.children.length + ' events';
+  }, 7000);
+}
+
+/* ====================================================================
+   KEYBOARD NAVIGATION
+   ==================================================================== */
+document.addEventListener('keydown', (e) => {
+  const mod = MODULES[1]; // Only module with rounds
+
+  if (e.key === 'ArrowRight') {
+    e.preventDefault();
+    const next = Math.min((selectedCard < 0 ? 0 : selectedCard + 1), MODULES.length - 1);
+    onCardClick(next);
+  } else if (e.key === 'ArrowLeft') {
+    e.preventDefault();
+    const prev = Math.max((selectedCard <= 0 ? 0 : selectedCard - 1), 0);
+    onCardClick(prev);
+  } else if (e.key === 'ArrowDown' && treeVisible && mod.rounds) {
+    e.preventDefault();
+    if (selectedRound < 0) {
+      onRoundClick(0, mod);
+    } else if (selectedRound < mod.rounds.length - 1) {
+      onRoundClick(selectedRound + 1, mod);
+    }
+  } else if (e.key === 'ArrowUp' && treeVisible && selectedRound > 0) {
+    e.preventDefault();
+    onRoundClick(selectedRound - 1, mod);
+  } else if (e.key === 'Enter' && treeVisible && selectedRound >= 0) {
+    e.preventDefault();
+    const round = mod.rounds[selectedRound];
+    if (round.substeps && round.substeps.length > 0) {
+      // Find active or first step
+      const activeIdx = round.substeps.findIndex(s => s.state === 'active');
+      const idx = activeIdx >= 0 ? activeIdx : 0;
+      onStepClick(selectedRound, idx, mod);
+    }
+  } else if (e.key === 'Escape') {
+    if (detailVisible) {
+      closeDetail();
+    } else if (treeVisible) {
+      closeTree();
+      selectedCard = -1;
+      updateSidebarActive(-1);
+    }
+  }
+});
+
+/* Sidebar nav clicks */
+document.querySelectorAll('.sidebar-item[data-mod]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const mi = parseInt(btn.dataset.mod);
+    onCardClick(mi);
+  });
+});
+
+/* ====================================================================
+   TOOLTIP SYSTEM (360px glassmorphism on hover)
+   ==================================================================== */
+let tooltipTimer = null;
+
+function showTooltip(evt, round, step) {
+  clearTimeout(tooltipTimer);
+  tooltipTimer = setTimeout(() => {
+    const data = step || round;
+    if (!data) return;
+    const c = COLOR_MAP.blue;
+    const tt = document.getElementById('tooltip');
+
+    const badgeCls = data.state === 'active' ? 'running' : data.state === 'done' ? 'done' : 'pending';
+    const badgeText = data.state === 'active' ? 'Running' : data.state === 'done' ? 'Complete' : 'Pending';
+    const badgeBg = badgeCls === 'done' ? 'var(--green-dim)' : badgeCls === 'running' ? 'var(--blue-dim)' : 'rgba(100,116,139,.08)';
+    const badgeColor = badgeCls === 'done' ? 'var(--green)' : badgeCls === 'running' ? 'var(--blue)' : 'var(--text-muted)';
+
+    const progressVal = data.state === 'done' ? 100 : data.state === 'active' ? 55 : 0;
+
+    tt.innerHTML = `
+      <div class="tt-header">
+        <div class="tt-dot" style="background:${c.main}"></div>
+        <div class="tt-title">${data.label}</div>
+        <span class="tt-badge" style="background:${badgeBg};color:${badgeColor}">${badgeText}</span>
+      </div>
+      <div class="tt-progress"><div class="tt-progress-fill" style="width:${progressVal}%;background:${c.main}"></div></div>
+      <div class="tt-summary">${data.summary || 'No details available yet.'}</div>
+      ${data.items ? `<div class="tt-items">
+        ${data.items.map(it => {
+          const dotColor = it.done ? 'var(--green)' : it.running ? 'var(--blue)' : 'var(--text-faint)';
+          return `<div class="tt-item">
+            <div class="tt-item-dot" style="background:${dotColor}"></div>
+            <span class="tt-item-label">${it.label}</span>
+            <span class="tt-item-meta">${it.meta}</span>
+          </div>`;
+        }).join('')}
+      </div>` : ''}
+    `;
+
+    // Position tooltip near the hovered element
+    const el = evt.target.closest('.round-row, .substep-row');
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    let top = rect.top - 8;
+    let left = rect.right + 16;
+
+    if (left + 380 > window.innerWidth) {
+      left = rect.left - 380;
+    }
+    if (top + tt.offsetHeight > window.innerHeight - 20) {
+      top = window.innerHeight - tt.offsetHeight - 20;
+    }
+    if (top < 20) top = 20;
+
+    tt.style.top = top + 'px';
+    tt.style.left = left + 'px';
+    tt.classList.add('show');
+  }, 400);
+}
+
+function hideTooltip() {
+  clearTimeout(tooltipTimer);
+  document.getElementById('tooltip').classList.remove('show');
+}
+
+/* ====================================================================
+   RESIZE HANDLER
+   ==================================================================== */
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    if (treeVisible) {
+      updateTreeSectionHeight();
+    }
+    // Re-position L-shaped dots
+    drawLShapedDots();
+  }, 150);
+});
+
+/* ====================================================================
+   SCROLL HANDLER (hide tooltip on scroll)
+   ==================================================================== */
+window.addEventListener('scroll', () => {
+  hideTooltip();
+}, { passive: true });
+
+/* ====================================================================
+   SIDEBAR HOVER WIDTH ADJUSTMENT
+   ==================================================================== */
+const sidebarEl = document.getElementById('sidebar');
+sidebarEl.addEventListener('mouseenter', () => {
+  // Optionally adjust main margin on wide sidebar hover
+  // document.getElementById('mainContent').style.marginLeft = '240px';
+});
+sidebarEl.addEventListener('mouseleave', () => {
+  // document.getElementById('mainContent').style.marginLeft = '48px';
+});
+
+/* ====================================================================
+   STAGGERED ENTRY ANIMATIONS
+   ==================================================================== */
+function animateEntry() {
+  document.querySelectorAll('.mod-card').forEach((card, i) => {
+    card.style.opacity = '0';
+    card.style.transform = 'translateY(16px)';
+    card.style.transition = 'opacity .5s var(--ease), transform .5s var(--ease)';
+    setTimeout(() => {
+      card.style.opacity = card.classList.contains('pending-card') ? '.5' : '1';
+      card.style.transform = 'translateY(0)';
+    }, 100 + i * 130);
+  });
+}
+
+/* ====================================================================
+   INITIALIZE
+   ==================================================================== */
+renderModuleCards();
+initAmbientParticles();
+initModuleParticles();
+initLiveTimer();
+animateEntry();
+animateLDots();
+
+// Auto-select "Test Ideas" (module 1) after entry
+setTimeout(() => onCardClick(1), 650);
+// Start periodic feed updates once dashboard might be open
+setTimeout(() => initPeriodicFeedUpdate(), 3000);
+</script>
+</body>
+</html>
