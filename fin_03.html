@@ -1,0 +1,1597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor Pipeline — fin_03 (Strong Glassmorphism)</title>
+<style>
+/* ── Reset + Variables ───────────────────────────────────── */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --s950: #020617; --s900: #0f172a; --s850: #131c2e;
+  --s800: #1e293b; --s750: #253349; --s700: #334155;
+  --s600: #475569; --s500: #64748b; --s400: #94a3b8;
+  --s300: #cbd5e1; --s200: #e2e8f0; --s100: #f1f5f9;
+
+  --c1: #38bdf8; --c1g: rgba(56,189,248,.18); --c1d: rgba(56,189,248,.55);
+  --c2: #a78bfa; --c2g: rgba(167,139,250,.18); --c2d: rgba(167,139,250,.55);
+  --c3: #34d399; --c3g: rgba(52,211,153,.18); --c3d: rgba(52,211,153,.55);
+  --c4: #fb923c; --c4g: rgba(251,146,60,.18); --c4d: rgba(251,146,60,.55);
+
+  /* strong glass tokens */
+  --glass: rgba(15,23,42,.45);
+  --glass-border: rgba(148,163,184,.12);
+  --glass-shine: linear-gradient(135deg, rgba(255,255,255,.08) 0%, rgba(255,255,255,.02) 40%, transparent 60%);
+  --glass-blur: 16px;
+  --surface: rgba(30,41,59,.55);
+  --surface-hi: rgba(51,65,85,.45);
+  --radius: 12px; --radius-sm: 8px;
+  --sidebar-w: 52px;
+  font-size: 14px;
+}
+
+html { height: 100%; }
+body {
+  min-height: 100%; background: var(--s950); color: var(--s300);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  overflow-x: hidden; line-height: 1.5;
+}
+
+/* subtle grid background */
+body::before {
+  content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background-image:
+    linear-gradient(rgba(148,163,184,.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148,163,184,.03) 1px, transparent 1px);
+  background-size: 48px 48px;
+}
+
+/* radial ambience */
+body::after {
+  content: ''; position: fixed; top: -200px; left: 50%; transform: translateX(-50%);
+  width: 900px; height: 600px; border-radius: 50%; pointer-events: none; z-index: 0;
+  background: radial-gradient(ellipse, rgba(56,189,248,.04), transparent 70%);
+}
+
+#bgCanvas { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+
+/* ── Collapsed Sidebar ──────────────────────────────────── */
+.sidebar {
+  position: fixed; top: 0; left: 0; bottom: 0; width: var(--sidebar-w); z-index: 110;
+  background: rgba(15,23,42,.55); backdrop-filter: blur(var(--glass-blur));
+  border-right: 1px solid var(--glass-border);
+  display: flex; flex-direction: column; align-items: center;
+  padding: 10px 0 14px; gap: 2px;
+}
+
+.sb-brand {
+  width: 34px; height: 34px; border-radius: 8px; margin-bottom: 10px;
+  background: linear-gradient(135deg, var(--c1), var(--c2));
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 13px; color: #fff; letter-spacing: -.5px;
+  box-shadow: 0 0 18px rgba(56,189,248,.25);
+}
+
+.sb-item {
+  width: 36px; height: 36px; border-radius: 8px; display: flex;
+  align-items: center; justify-content: center; position: relative;
+  cursor: pointer; transition: all .25s ease; color: var(--s500);
+  font-size: 15px; background: transparent;
+}
+.sb-item:hover { background: rgba(148,163,184,.08); color: var(--s400); }
+.sb-item.active { background: rgba(56,189,248,.10); color: var(--c1); }
+.sb-item.active::before {
+  content: ''; position: absolute; left: 0; top: 8px; bottom: 8px;
+  width: 3px; border-radius: 0 3px 3px 0; background: var(--c1);
+  box-shadow: 0 0 8px var(--c1d);
+}
+
+/* sidebar tooltip */
+.sb-tip {
+  position: absolute; left: calc(var(--sidebar-w) + 8px); top: 50%;
+  transform: translateY(-50%); padding: 4px 10px; border-radius: 6px;
+  background: rgba(15,23,42,.92); backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border); font-size: 11.5px; color: var(--s200);
+  white-space: nowrap; pointer-events: none; opacity: 0;
+  transition: opacity .2s ease, transform .2s ease;
+  transform: translateY(-50%) translateX(-4px);
+}
+.sb-item:hover .sb-tip { opacity: 1; transform: translateY(-50%) translateX(0); }
+.sb-spacer { flex: 1; }
+
+/* ── Header ──────────────────────────────────────────────── */
+.header {
+  position: fixed; top: 0; left: var(--sidebar-w); right: 0; height: 46px; z-index: 100;
+  display: flex; align-items: center; gap: 14px; padding: 0 22px;
+  background: rgba(15,23,42,.50); backdrop-filter: blur(var(--glass-blur));
+  border-bottom: 1px solid var(--glass-border);
+}
+.breadcrumb { font-size: 12px; color: var(--s500); white-space: nowrap; }
+.breadcrumb b { color: var(--s300); font-weight: 600; }
+.header-spacer { flex: 1; }
+
+/* mini ring */
+.header-ring { width: 36px; height: 36px; position: relative; flex-shrink: 0; }
+.header-ring svg { width: 100%; height: 100%; }
+.header-ring .ring-track { fill: none; stroke: var(--s700); stroke-width: 3; }
+.header-ring .ring-fill {
+  fill: none; stroke: var(--c1); stroke-width: 3; stroke-linecap: round;
+  transform: rotate(-90deg); transform-origin: 50% 50%;
+  transition: stroke-dashoffset .8s ease, stroke .5s ease;
+  filter: drop-shadow(0 0 4px var(--c1d));
+}
+.header-ring .ring-label {
+  position: absolute; inset: 0; display: flex; align-items: center;
+  justify-content: center; font-size: 9px; font-weight: 700; color: var(--s200);
+}
+.header-ring::after {
+  content: ''; position: absolute; inset: -4px; border-radius: 50%;
+  border: 1.5px dashed var(--c1d); opacity: .5;
+  animation: ringRotate 12s linear infinite;
+}
+@keyframes ringRotate { to { transform: rotate(360deg); } }
+.header-ring::before {
+  content: ''; position: absolute; inset: -2px; border-radius: 50%;
+  background: radial-gradient(circle, var(--c1g), transparent 70%);
+  animation: ringGlow 2.5s ease-in-out infinite;
+}
+@keyframes ringGlow { 0%, 100% { opacity: .35; } 50% { opacity: .8; } }
+
+.header-sep { width: 1px; height: 20px; background: var(--glass-border); flex-shrink: 0; }
+.header-stat { font-size: 12px; color: var(--s400); white-space: nowrap; }
+.header-stat strong { color: var(--s200); font-weight: 600; }
+.header-stat .label {
+  color: var(--s600); font-size: 10px; margin-right: 3px;
+  text-transform: uppercase; letter-spacing: .4px;
+}
+
+/* ── Main Layout ─────────────────────────────────────────── */
+.main {
+  position: relative; z-index: 1;
+  padding: 60px 24px 32px calc(var(--sidebar-w) + 20px);
+  max-width: calc(1380px + var(--sidebar-w)); margin: 0 auto;
+}
+
+/* ── Module Cards Row ────────────────────────────────────── */
+.modules-row {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 14px; position: relative;
+}
+#particleCanvasH { position: absolute; inset: -10px -24px; z-index: 0; pointer-events: none; }
+
+/* ── STRONG GLASSMORPHISM MODULE CARDS ───────────────────── */
+.mod-card {
+  position: relative; z-index: 1; cursor: pointer;
+  background: var(--glass); backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border); border-radius: var(--radius);
+  padding: 14px 16px; transition: all .35s ease; overflow: hidden;
+}
+
+/* glass shine overlay */
+.mod-card .glass-shine {
+  position: absolute; inset: 0; border-radius: var(--radius);
+  background: var(--glass-shine); pointer-events: none; z-index: 1;
+}
+
+/* color glow HALO behind active card */
+.mod-card .glow-halo {
+  position: absolute; inset: -20px; border-radius: 24px;
+  opacity: 0; transition: opacity .5s ease; pointer-events: none; z-index: -1;
+  filter: blur(28px);
+}
+.mod-card[data-color="1"] .glow-halo { background: var(--c1); }
+.mod-card[data-color="2"] .glow-halo { background: var(--c2); }
+.mod-card[data-color="3"] .glow-halo { background: var(--c3); }
+.mod-card[data-color="4"] .glow-halo { background: var(--c4); }
+.mod-card.active .glow-halo { opacity: .14; animation: haloPulse 3s ease-in-out infinite; }
+@keyframes haloPulse { 0%, 100% { opacity: .10; } 50% { opacity: .22; } }
+
+/* inner glass card glow */
+.mod-card::before {
+  content: ''; position: absolute; inset: -1px; border-radius: var(--radius);
+  opacity: 0; transition: opacity .4s ease; pointer-events: none; z-index: -1;
+}
+.mod-card[data-color="1"]::before { box-shadow: 0 0 40px 10px var(--c1g), inset 0 0 20px var(--c1g); }
+.mod-card[data-color="2"]::before { box-shadow: 0 0 40px 10px var(--c2g), inset 0 0 20px var(--c2g); }
+.mod-card[data-color="3"]::before { box-shadow: 0 0 40px 10px var(--c3g), inset 0 0 20px var(--c3g); }
+.mod-card[data-color="4"]::before { box-shadow: 0 0 40px 10px var(--c4g), inset 0 0 20px var(--c4g); }
+.mod-card.active::before { opacity: 1; animation: cardGlowPulse 2.5s ease-in-out infinite; }
+@keyframes cardGlowPulse { 0%, 100% { opacity: .6; } 50% { opacity: 1; } }
+
+/* shimmer sweep */
+.mod-card::after {
+  content: ''; position: absolute; top: 0; left: -100%; width: 60%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.06), transparent);
+  transform: skewX(-20deg); pointer-events: none; z-index: 2;
+}
+.mod-card.active::after { animation: shimmerSweep 3s ease-in-out infinite; }
+@keyframes shimmerSweep { 0% { left: -100%; } 50% { left: 160%; } 100% { left: 160%; } }
+
+.mod-card.active { border-color: rgba(148,163,184,.22); }
+.mod-card:not(.active):hover {
+  background: rgba(15,23,42,.55); border-color: rgba(148,163,184,.18);
+  transform: translateY(-2px);
+}
+.mod-card:not(.active):hover .glow-halo { opacity: .06; }
+
+.mc-top { display: flex; align-items: center; gap: 9px; margin-bottom: 7px; position: relative; z-index: 3; }
+.mc-dot {
+  width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+  position: relative;
+}
+/* spinner ring on running dot */
+.mod-card[data-status="running"] .mc-dot::after {
+  content: ''; position: absolute; inset: -4px; border-radius: 50%;
+  border: 2px solid transparent; border-top-color: currentColor;
+  animation: dotSpin 1s linear infinite;
+}
+@keyframes dotSpin { to { transform: rotate(360deg); } }
+
+.mod-card[data-color="1"] .mc-dot { background: var(--c1); box-shadow: 0 0 8px var(--c1d); color: var(--c1); }
+.mod-card[data-color="2"] .mc-dot { background: var(--c2); box-shadow: 0 0 8px var(--c2d); color: var(--c2); }
+.mod-card[data-color="3"] .mc-dot { background: var(--c3); box-shadow: 0 0 8px var(--c3d); color: var(--c3); }
+.mod-card[data-color="4"] .mc-dot { background: var(--c4); box-shadow: 0 0 8px var(--c4d); color: var(--c4); }
+.mc-label { font-size: 13px; font-weight: 600; color: var(--s200); position: relative; z-index: 3; }
+.mc-status { font-size: 11px; color: var(--s500); margin-left: auto; position: relative; z-index: 3; }
+.mc-status.st-running { color: var(--c2); }
+.mc-meta { display: flex; gap: 12px; margin-bottom: 8px; font-size: 11px; color: var(--s500); position: relative; z-index: 3; }
+.mc-bar { height: 3px; border-radius: 2px; background: var(--s800); overflow: hidden; position: relative; z-index: 3; }
+.mc-bar-fill { height: 100%; border-radius: 2px; width: 0; transition: width .6s ease; }
+.mod-card[data-color="1"] .mc-bar-fill { background: var(--c1); box-shadow: 0 0 6px var(--c1d); }
+.mod-card[data-color="2"] .mc-bar-fill { background: var(--c2); box-shadow: 0 0 6px var(--c2d); }
+.mod-card[data-color="3"] .mc-bar-fill { background: var(--c3); box-shadow: 0 0 6px var(--c3d); }
+.mod-card[data-color="4"] .mc-bar-fill { background: var(--c4); box-shadow: 0 0 6px var(--c4d); }
+
+/* ── Tree Columns Area ───────────────────────────────────── */
+.tree-area {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  gap: 14px; margin-top: 14px; min-height: 200px; position: relative;
+}
+#particleCanvasT { position: absolute; inset: -10px -24px; z-index: 0; pointer-events: none; }
+.tree-col { position: relative; z-index: 1; min-height: 60px; }
+.tree-list { padding: 2px 0 0; list-style: none; }
+
+.tree-node {
+  display: flex; align-items: center; height: 38px; position: relative;
+  opacity: 0; transform: translateY(8px);
+  transition: opacity .28s ease, transform .28s ease;
+}
+.tree-col.visible .tree-node,
+.tree-col.visible .tree-child-node { opacity: 1; transform: translateY(0); }
+
+/* tree gutter (vertical + horizontal connector lines) */
+.tree-gutter {
+  display: flex; flex-direction: column; align-items: center;
+  width: 24px; flex-shrink: 0; position: relative; align-self: stretch;
+}
+.tree-gutter::before {
+  content: ''; position: absolute; left: 11px; top: 0; bottom: 0;
+  width: 2px; border-radius: 1px;
+}
+.tree-node:last-child > .tree-gutter::before { bottom: 50%; }
+.tree-gutter::after {
+  content: ''; position: absolute; left: 11px; top: 50%;
+  width: 10px; height: 2px; border-radius: 1px;
+}
+
+/* colored tree lines */
+.tree-col[data-color="1"] .tree-gutter::before,
+.tree-col[data-color="1"] .tree-gutter::after { background: rgba(56,189,248,.18); }
+.tree-col[data-color="2"] .tree-gutter::before,
+.tree-col[data-color="2"] .tree-gutter::after { background: rgba(167,139,250,.18); }
+.tree-col[data-color="3"] .tree-gutter::before,
+.tree-col[data-color="3"] .tree-gutter::after { background: rgba(52,211,153,.18); }
+.tree-col[data-color="4"] .tree-gutter::before,
+.tree-col[data-color="4"] .tree-gutter::after { background: rgba(251,146,60,.18); }
+
+/* active branch glow */
+.tree-node.active .tree-gutter::before,
+.tree-node.active .tree-gutter::after { animation: branchGlow 2.5s ease-in-out infinite; }
+.tree-col[data-color="1"] .tree-node.active .tree-gutter::before,
+.tree-col[data-color="1"] .tree-node.active .tree-gutter::after {
+  background: rgba(56,189,248,.55); box-shadow: 0 0 6px rgba(56,189,248,.3);
+}
+.tree-col[data-color="2"] .tree-node.active .tree-gutter::before,
+.tree-col[data-color="2"] .tree-node.active .tree-gutter::after {
+  background: rgba(167,139,250,.55); box-shadow: 0 0 6px rgba(167,139,250,.3);
+}
+.tree-col[data-color="3"] .tree-node.active .tree-gutter::before,
+.tree-col[data-color="3"] .tree-node.active .tree-gutter::after {
+  background: rgba(52,211,153,.55); box-shadow: 0 0 6px rgba(52,211,153,.3);
+}
+.tree-col[data-color="4"] .tree-node.active .tree-gutter::before,
+.tree-col[data-color="4"] .tree-node.active .tree-gutter::after {
+  background: rgba(251,146,60,.55); box-shadow: 0 0 6px rgba(251,146,60,.3);
+}
+@keyframes branchGlow { 0%, 100% { opacity: .7; } 50% { opacity: 1; } }
+
+/* ── 3-Level Tree: Level-2 Children ──────────────────────── */
+.tree-children { list-style: none; padding: 0; margin: 0; }
+.tree-child-node {
+  display: flex; align-items: center; height: 34px; position: relative;
+  opacity: 0; transform: translateY(6px);
+  transition: opacity .28s ease, transform .28s ease;
+}
+.tree-child-gutter {
+  display: flex; flex-direction: column; align-items: center;
+  width: 20px; flex-shrink: 0; position: relative; align-self: stretch;
+  margin-left: 24px;
+}
+.tree-child-gutter::before {
+  content: ''; position: absolute; left: 9px; top: 0; bottom: 0;
+  width: 1.5px; border-radius: 1px;
+}
+.tree-child-node:last-child > .tree-child-gutter::before { bottom: 50%; }
+.tree-child-gutter::after {
+  content: ''; position: absolute; left: 9px; top: 50%;
+  width: 8px; height: 1.5px; border-radius: 1px;
+}
+
+/* child line colors */
+.tree-col[data-color="1"] .tree-child-gutter::before,
+.tree-col[data-color="1"] .tree-child-gutter::after { background: rgba(56,189,248,.12); }
+.tree-col[data-color="2"] .tree-child-gutter::before,
+.tree-col[data-color="2"] .tree-child-gutter::after { background: rgba(167,139,250,.12); }
+.tree-col[data-color="3"] .tree-child-gutter::before,
+.tree-col[data-color="3"] .tree-child-gutter::after { background: rgba(52,211,153,.12); }
+.tree-col[data-color="4"] .tree-child-gutter::before,
+.tree-col[data-color="4"] .tree-child-gutter::after { background: rgba(251,146,60,.12); }
+
+/* active child line glow */
+.tree-child-node.active .tree-child-gutter::before,
+.tree-child-node.active .tree-child-gutter::after { animation: branchGlow 2.5s ease-in-out infinite; }
+.tree-col[data-color="1"] .tree-child-node.active .tree-child-gutter::before,
+.tree-col[data-color="1"] .tree-child-node.active .tree-child-gutter::after {
+  background: rgba(56,189,248,.45); box-shadow: 0 0 5px rgba(56,189,248,.25);
+}
+.tree-col[data-color="2"] .tree-child-node.active .tree-child-gutter::before,
+.tree-col[data-color="2"] .tree-child-node.active .tree-child-gutter::after {
+  background: rgba(167,139,250,.45); box-shadow: 0 0 5px rgba(167,139,250,.25);
+}
+.tree-col[data-color="3"] .tree-child-node.active .tree-child-gutter::before,
+.tree-col[data-color="3"] .tree-child-node.active .tree-child-gutter::after {
+  background: rgba(52,211,153,.45); box-shadow: 0 0 5px rgba(52,211,153,.25);
+}
+.tree-col[data-color="4"] .tree-child-node.active .tree-child-gutter::before,
+.tree-col[data-color="4"] .tree-child-node.active .tree-child-gutter::after {
+  background: rgba(251,146,60,.45); box-shadow: 0 0 5px rgba(251,146,60,.25);
+}
+.tree-node.has-children > .tree-gutter::before { bottom: 0 !important; }
+
+/* ── 3-Level Tree: Level-3 Grandchildren ─────────────────── */
+.tree-grandchildren { list-style: none; padding: 0; margin: 0; }
+.tree-grand-node {
+  display: flex; align-items: center; height: 30px; position: relative;
+  opacity: 0; transform: translateY(5px);
+  transition: opacity .25s ease, transform .25s ease;
+}
+.tree-col.visible .tree-grand-node { opacity: 1; transform: translateY(0); }
+.tree-grand-gutter {
+  display: flex; flex-direction: column; align-items: center;
+  width: 18px; flex-shrink: 0; position: relative; align-self: stretch;
+  margin-left: 44px;
+}
+.tree-grand-gutter::before {
+  content: ''; position: absolute; left: 8px; top: 0; bottom: 0;
+  width: 1px; border-radius: 1px;
+}
+.tree-grand-node:last-child > .tree-grand-gutter::before { bottom: 50%; }
+.tree-grand-gutter::after {
+  content: ''; position: absolute; left: 8px; top: 50%;
+  width: 7px; height: 1px; border-radius: 1px;
+}
+.tree-col[data-color="1"] .tree-grand-gutter::before,
+.tree-col[data-color="1"] .tree-grand-gutter::after { background: rgba(56,189,248,.08); }
+.tree-col[data-color="2"] .tree-grand-gutter::before,
+.tree-col[data-color="2"] .tree-grand-gutter::after { background: rgba(167,139,250,.08); }
+.tree-col[data-color="3"] .tree-grand-gutter::before,
+.tree-col[data-color="3"] .tree-grand-gutter::after { background: rgba(52,211,153,.08); }
+.tree-col[data-color="4"] .tree-grand-gutter::before,
+.tree-col[data-color="4"] .tree-grand-gutter::after { background: rgba(251,146,60,.08); }
+.tree-grand-node.active .tree-grand-gutter::before,
+.tree-grand-node.active .tree-grand-gutter::after { animation: branchGlow 2.5s ease-in-out infinite; }
+.tree-col[data-color="3"] .tree-grand-node.active .tree-grand-gutter::before,
+.tree-col[data-color="3"] .tree-grand-node.active .tree-grand-gutter::after {
+  background: rgba(52,211,153,.35); box-shadow: 0 0 4px rgba(52,211,153,.2);
+}
+
+/* ── Tree Sub Cards (glass) ──────────────────────────────── */
+.tree-sub {
+  display: flex; align-items: center; gap: 7px; height: 32px; padding: 0 10px;
+  background: var(--surface); backdrop-filter: blur(10px);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm); font-size: 12.5px; color: var(--s400);
+  cursor: pointer; transition: all .2s ease;
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tree-sub:hover { background: var(--surface-hi); color: var(--s300); }
+.tree-node.active .tree-sub {
+  color: var(--s200); border-color: rgba(148,163,184,.18); background: var(--surface-hi);
+}
+.tree-node.done .tree-sub { color: var(--s500); }
+
+.tree-child-sub {
+  display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px;
+  background: rgba(30,41,59,.40); backdrop-filter: blur(8px);
+  border: 1px solid rgba(148,163,184,.07);
+  border-radius: 6px; font-size: 11.5px; color: var(--s500);
+  cursor: pointer; transition: all .2s ease;
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tree-child-sub:hover { background: var(--surface-hi); color: var(--s400); }
+.tree-child-node.active .tree-child-sub {
+  color: var(--s200); border-color: rgba(148,163,184,.15); background: var(--surface-hi);
+}
+.tree-child-node.done .tree-child-sub { color: var(--s500); }
+
+.tree-grand-sub {
+  display: flex; align-items: center; gap: 5px; height: 24px; padding: 0 7px;
+  background: rgba(30,41,59,.30); backdrop-filter: blur(6px);
+  border: 1px solid rgba(148,163,184,.05); border-radius: 5px;
+  font-size: 10.5px; color: var(--s500); cursor: pointer; transition: all .2s ease;
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.tree-grand-sub:hover { background: var(--surface-hi); color: var(--s400); }
+.tree-grand-node.active .tree-grand-sub { color: var(--s300); border-color: rgba(148,163,184,.12); }
+.tree-grand-node.done .tree-grand-sub { color: var(--s600); }
+
+/* ── Tree Dots (dependency pulse on active) ──────────────── */
+.tree-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; background: var(--s600); transition: all .2s ease; }
+.tree-child-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; background: var(--s600); transition: all .2s ease; }
+.tree-grand-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; background: var(--s600); transition: all .2s ease; }
+
+.tree-col[data-color="1"] .tree-node.active .tree-dot,
+.tree-col[data-color="1"] .tree-child-node.active .tree-child-dot,
+.tree-col[data-color="1"] .tree-grand-node.active .tree-grand-dot {
+  background: var(--c1); width: 14px; height: 14px;
+  box-shadow: 0 0 10px var(--c1d); animation: dp1 2s ease-in-out infinite;
+}
+.tree-col[data-color="2"] .tree-node.active .tree-dot,
+.tree-col[data-color="2"] .tree-child-node.active .tree-child-dot,
+.tree-col[data-color="2"] .tree-grand-node.active .tree-grand-dot {
+  background: var(--c2); width: 14px; height: 14px;
+  box-shadow: 0 0 10px var(--c2d); animation: dp2 2s ease-in-out infinite;
+}
+.tree-col[data-color="3"] .tree-node.active .tree-dot,
+.tree-col[data-color="3"] .tree-child-node.active .tree-child-dot,
+.tree-col[data-color="3"] .tree-grand-node.active .tree-grand-dot {
+  background: var(--c3); width: 14px; height: 14px;
+  box-shadow: 0 0 10px var(--c3d); animation: dp3 2s ease-in-out infinite;
+}
+.tree-col[data-color="4"] .tree-node.active .tree-dot,
+.tree-col[data-color="4"] .tree-child-node.active .tree-child-dot,
+.tree-col[data-color="4"] .tree-grand-node.active .tree-grand-dot {
+  background: var(--c4); width: 14px; height: 14px;
+  box-shadow: 0 0 10px var(--c4d); animation: dp4 2s ease-in-out infinite;
+}
+@keyframes dp1 { 0%,100% { box-shadow: 0 0 6px var(--c1d); transform: scale(1); } 50% { box-shadow: 0 0 16px var(--c1d); transform: scale(1.25); } }
+@keyframes dp2 { 0%,100% { box-shadow: 0 0 6px var(--c2d); transform: scale(1); } 50% { box-shadow: 0 0 16px var(--c2d); transform: scale(1.25); } }
+@keyframes dp3 { 0%,100% { box-shadow: 0 0 6px var(--c3d); transform: scale(1); } 50% { box-shadow: 0 0 16px var(--c3d); transform: scale(1.25); } }
+@keyframes dp4 { 0%,100% { box-shadow: 0 0 6px var(--c4d); transform: scale(1); } 50% { box-shadow: 0 0 16px var(--c4d); transform: scale(1.25); } }
+
+.tree-node.done .tree-dot,
+.tree-child-node.done .tree-child-dot,
+.tree-grand-node.done .tree-grand-dot { background: var(--s600); opacity: .5; }
+.tree-check { font-size: 10px; color: var(--s500); margin-left: auto; flex-shrink: 0; padding-right: 2px; }
+.tree-child-check { font-size: 9px; color: var(--s500); margin-left: auto; flex-shrink: 0; padding-right: 2px; }
+.tree-grand-check { font-size: 8px; color: var(--s600); margin-left: auto; flex-shrink: 0; padding-right: 2px; }
+
+/* ── Collapsed Tree ──────────────────────────────────────── */
+.tree-collapsed {
+  padding: 8px 14px; font-size: 11.5px; color: var(--s500);
+  background: var(--surface); backdrop-filter: blur(10px);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm); margin-top: 4px; cursor: pointer;
+  transition: all .2s ease; display: flex; align-items: center; gap: 8px;
+}
+.tree-collapsed:hover { color: var(--s400); background: var(--surface-hi); }
+.tree-collapsed .tc-icon { font-size: 10px; opacity: .6; }
+
+/* ── Dashboard (glass panels) ────────────────────────────── */
+.dashboard {
+  display: grid; grid-template-columns: 1fr 360px;
+  gap: 16px; margin-top: 18px;
+}
+.panel {
+  background: var(--glass); backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border); border-radius: var(--radius);
+  padding: 18px 20px; overflow: hidden; position: relative;
+}
+/* glass shine on panels */
+.panel::before {
+  content: ''; position: absolute; inset: 0; border-radius: var(--radius);
+  background: var(--glass-shine); pointer-events: none; z-index: 0;
+}
+.panel-content {
+  position: relative; z-index: 1;
+  opacity: 1; transform: translateY(0);
+  transition: opacity .3s ease, transform .3s ease;
+}
+.panel-content.fading { opacity: 0; transform: translateY(10px); }
+
+.panel-title {
+  font-size: 13px; font-weight: 600; color: var(--s200);
+  margin-bottom: 12px; display: flex; align-items: center; gap: 8px;
+}
+.panel-title .pt-dot { width: 7px; height: 7px; border-radius: 50%; }
+.panel-title .pt-badge {
+  margin-left: auto; font-size: 10px; font-weight: 500;
+  color: var(--s500); background: var(--s800); padding: 2px 8px; border-radius: 4px;
+}
+.summary-text {
+  font-size: 13px; line-height: 1.72; color: var(--s400);
+  margin-bottom: 16px; padding-bottom: 14px; border-bottom: 1px solid var(--glass-border);
+}
+.item-list { display: flex; flex-direction: column; gap: 5px; }
+
+.item-row {
+  display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface); backdrop-filter: blur(8px);
+  border: 1px solid transparent; cursor: pointer;
+  transition: all .2s ease; position: relative; overflow: hidden;
+}
+.item-row:hover { background: var(--surface-hi); border-color: var(--glass-border); }
+.item-row .ir-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.item-row .ir-label {
+  font-size: 12.5px; color: var(--s300); flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.item-row .ir-meta { font-size: 11px; color: var(--s500); white-space: nowrap; }
+.item-row .ir-arrow {
+  font-size: 14px; color: var(--s600);
+  transition: color .2s, transform .2s; flex-shrink: 0; width: 14px; text-align: center;
+}
+.item-row:hover .ir-arrow { color: var(--s400); }
+.item-row.expanded .ir-arrow { transform: rotate(90deg); color: var(--s400); }
+
+/* spinner on running items */
+.item-row.running .ir-dot {
+  animation: irDotPulse 1.5s ease-in-out infinite;
+}
+@keyframes irDotPulse { 0%,100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.4); opacity: .7; } }
+
+/* running item shimmer */
+.item-row.running::after {
+  content: ''; position: absolute; top: 0; left: -100%; width: 50%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.03), transparent);
+  animation: itemShimmer 2s ease-in-out infinite;
+}
+@keyframes itemShimmer { 0% { left: -100%; } 60% { left: 150%; } 100% { left: 150%; } }
+
+.item-detail {
+  max-height: 0; overflow: hidden;
+  transition: max-height .35s ease, padding .35s ease;
+  padding: 0 12px; font-size: 12px; color: var(--s500); line-height: 1.65;
+  background: rgba(15,23,42,.4); border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  margin-top: -2px; border: 1px solid transparent; border-top: none;
+}
+.item-detail.open { max-height: 140px; padding: 10px 12px; border-color: var(--glass-border); }
+
+/* ── Right Column ────────────────────────────────────────── */
+.right-col { display: flex; flex-direction: column; gap: 14px; }
+.stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.stat-card {
+  background: var(--surface); backdrop-filter: blur(10px);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm); padding: 12px 14px;
+}
+.sc-label { font-size: 10px; color: var(--s500); margin-bottom: 3px; text-transform: uppercase; letter-spacing: .5px; }
+.sc-value { font-size: 20px; font-weight: 700; color: var(--s200); margin-bottom: 6px; letter-spacing: -.3px; }
+.sc-bar { height: 4px; border-radius: 2px; background: var(--s800); overflow: hidden; }
+.sc-bar-fill { height: 100%; border-radius: 2px; width: 0; transition: width .6s ease; }
+
+.activity-section { margin-top: 2px; }
+.activity-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 12px; }
+.activity-row .ar-color { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+.activity-row .ar-label { color: var(--s400); flex: 1; }
+.activity-row .ar-val { color: var(--s300); font-weight: 600; min-width: 32px; text-align: right; }
+.activity-row .ar-bar { flex: 0 0 56px; height: 4px; border-radius: 2px; background: var(--s800); overflow: hidden; }
+.activity-row .ar-bar-fill { height: 100%; border-radius: 2px; width: 0; transition: width .6s ease; }
+
+.live-feed { margin-top: 2px; }
+.feed-window {
+  height: 108px; overflow: hidden; position: relative;
+  background: var(--surface); backdrop-filter: blur(10px);
+  border: 1px solid var(--glass-border); border-radius: var(--radius-sm);
+}
+.feed-item {
+  position: absolute; left: 0; right: 0; padding: 8px 12px;
+  display: flex; align-items: flex-start; gap: 8px;
+  font-size: 11.5px; line-height: 1.45;
+  opacity: 0; transform: translateY(10px); transition: all .45s ease;
+}
+.feed-item.visible { opacity: 1; transform: translateY(0); }
+.feed-item.exiting { opacity: 0; transform: translateY(-10px); }
+.feed-time {
+  color: var(--s600); white-space: nowrap; flex-shrink: 0; font-size: 10.5px;
+  margin-top: 1px; font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+.feed-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
+.feed-msg { color: var(--s400); flex: 1; }
+
+/* ── Keyboard Hint + Scrollbar ───────────────────────────── */
+.kbd-hint { position: fixed; bottom: 12px; right: 20px; font-size: 10.5px; color: var(--s600); z-index: 50; }
+.kbd-hint kbd {
+  display: inline-block; padding: 1px 5px; background: var(--s800);
+  border: 1px solid var(--glass-border); border-radius: 3px;
+  font-family: inherit; font-size: 10px; color: var(--s500); margin: 0 2px;
+}
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--s700); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<canvas id="bgCanvas"></canvas>
+
+<!-- Collapsed Sidebar -->
+<nav class="sidebar">
+  <div class="sb-brand">AI</div>
+  <div class="sb-item active">
+    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 4h12M2 8h12M2 12h12"/></svg>
+    <span class="sb-tip">Pipeline</span>
+  </div>
+  <div class="sb-item">
+    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/></svg>
+    <span class="sb-tip">History</span>
+  </div>
+  <div class="sb-item">
+    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h10v10H3z"/><path d="M7 3v10M3 7h10"/></svg>
+    <span class="sb-tip">Artifacts</span>
+  </div>
+  <div class="sb-item">
+    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="5" r="3"/><path d="M3 14c0-3 2-5 5-5s5 2 5 5"/></svg>
+    <span class="sb-tip">Settings</span>
+  </div>
+  <div class="sb-spacer"></div>
+  <div class="sb-item">
+    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="8" r="6"/><path d="M8 5v6M5 8h6"/></svg>
+    <span class="sb-tip">New Run</span>
+  </div>
+</nav>
+
+<!-- Header -->
+<header class="header">
+  <div class="breadcrumb">Pipeline <b>&rsaquo;</b> Run #47 <b>&rsaquo;</b> <b id="breadcrumbActive">Invention Loop</b></div>
+  <div class="header-spacer"></div>
+  <div class="header-ring">
+    <svg viewBox="0 0 36 36">
+      <circle class="ring-track" cx="18" cy="18" r="14"/>
+      <circle class="ring-fill" cx="18" cy="18" r="14" id="ringFill"
+        stroke-dasharray="87.96" stroke-dashoffset="35.18"/>
+    </svg>
+    <div class="ring-label" id="ringLabel">58%</div>
+  </div>
+  <div class="header-sep"></div>
+  <div class="header-stat"><span class="label">Time</span> <strong id="hTime">22m 18s</strong></div>
+  <div class="header-sep"></div>
+  <div class="header-stat"><span class="label">Cost</span> $<strong id="hCost">4.71</strong></div>
+</header>
+
+<!-- Main Content -->
+<div class="main">
+  <div class="modules-row" id="modulesRow"><canvas id="particleCanvasH"></canvas></div>
+  <div class="tree-area" id="treeArea"><canvas id="particleCanvasT"></canvas></div>
+  <div class="dashboard">
+    <div class="panel" id="leftPanel"><div class="panel-content" id="leftContent"></div></div>
+    <div class="panel right-col" id="rightPanel"><div class="panel-content" id="rightContent"></div></div>
+  </div>
+</div>
+
+<div class="kbd-hint">
+  <kbd>&larr;</kbd><kbd>&rarr;</kbd> modules &nbsp;
+  <kbd>&uarr;</kbd><kbd>&darr;</kbd> sub-modules
+</div>
+
+<script>
+/* ── Color Constants ─────────────────────────────────────── */
+const COLORS   = ['#38bdf8', '#a78bfa', '#34d399', '#fb923c'];
+const COLORS_G = ['rgba(56,189,248,.18)', 'rgba(167,139,250,.18)', 'rgba(52,211,153,.18)', 'rgba(251,146,60,.18)'];
+const COLORS_D = ['rgba(56,189,248,.55)', 'rgba(167,139,250,.55)', 'rgba(52,211,153,.55)', 'rgba(251,146,60,.55)'];
+
+/* ── Mock Data (3-level tree in Invention Loop) ──────────── */
+const MODULES = [
+  { id: 'seed', label: 'Seed Hypotheses', color: 1, status: 'done',
+    progress: 100, time: '4m 12s', tokens: '84k',
+    subs: [
+      { id: 'kg_build', label: 'Build Knowledge Graph', state: 'done',
+        summary: "Parsed 2,847 papers and extracted 14,300 entity-relation triples covering materials science, energy harvesting, and bio-inspired design. Graph density 0.034 with strong clustering around piezoelectric and thermoelectric nodes.",
+        items: [
+          { label: 'Entity extraction (NER)', meta: '6,420 entities', done: true,
+            detail: 'SciBERT-NER across all abstracts. 12 domain categories. Processing: 2m 14s.' },
+          { label: 'Relation linking', meta: '14.3k triples', done: true,
+            detail: 'Co-occurrence + dependency-parse linking with confidence > 0.72.' },
+          { label: 'Graph pruning', meta: 'density 0.034', done: true,
+            detail: 'Final graph: 5,180 nodes, 13,100 edges. Validated against 3 ontologies.' },
+        ] },
+      { id: 'gap_find', label: 'Identify Research Gaps', state: 'done',
+        summary: "Identified 23 high-potential research gaps via structural hole analysis. Strongest: bio-luminescent proteins + flexible electronics intersection with zero direct citations.",
+        items: [
+          { label: 'Structural hole detection', meta: '23 gaps', done: true,
+            detail: 'Burt constraint analysis on KG. Inter-cluster bridges prioritized.' },
+          { label: 'Gap scoring & ranking', meta: 'top 5 selected', done: true,
+            detail: 'Scored by indirect path strength x novelty x feasibility. Top: 0.94.' },
+        ] },
+      { id: 'seed_gen', label: 'Generate Seed Ideas', state: 'done',
+        summary: "Generated 40 seed hypotheses via diversified prompting, deduplicated to 12 high-quality seeds spanning bio-electronic interfaces, energy-harvesting metamaterials, and self-healing sensors.",
+        items: [
+          { label: 'Prompt-based ideation', meta: '40 raw seeds', done: true,
+            detail: '8 seeds per gap via analogy, inversion, combination, constraint-relaxation.' },
+          { label: 'Dedup + quality filter', meta: '12 final seeds', done: true,
+            detail: 'Semantic similarity filtering + LLM-judge scoring. Mean 8.1/10.' },
+        ] },
+    ] },
+  { id: 'hypo', label: 'Hypothesis Loop', color: 2, status: 'done',
+    progress: 100, time: '11m 03s', tokens: '198k',
+    subs: [
+      { id: 'gen_hypo', label: 'Generate Hypotheses', state: 'done',
+        summary: "Expanded 12 seeds into 36 hypotheses with mechanisms, boundary conditions, and testable predictions. Strongest cluster: bio-luminescent protein + OLED substrate integration.",
+        items: [
+          { label: 'Hypothesis expansion', meta: '36 hypotheses', done: true,
+            detail: '3 variants per seed. Different mechanisms and boundary conditions.' },
+          { label: 'Argument chain construction', meta: 'avg 4.2 steps', done: true,
+            detail: 'Causal chains from mechanism to prediction. All symbolically validated.' },
+        ] },
+      { id: 'review_hypo', label: 'Review Hypotheses', state: 'done',
+        summary: "All 36 reviewed: 28 passed, 6 restructured, 2 flagged for thermodynamic feasibility issues.",
+        items: [
+          { label: 'Novelty verification', meta: '36/36 checked', done: true,
+            detail: 'Cross-referenced against S2 corpus. No prior art within 2-hop radius.' },
+          { label: 'Mechanism plausibility', meta: '28 passed', done: true,
+            detail: 'Physics-informed LLM check. 6 needed revision, 2 fundamental issues.' },
+        ] },
+      { id: 'refine_hypo', label: 'Refine & Select', state: 'done',
+        summary: "Multi-criteria ranking (novelty 25%, feasibility 25%, impact 30%, testability 20%). Selected top 8 + 2 high-risk wildcards.",
+        items: [
+          { label: 'Multi-criteria ranking', meta: '28 ranked', done: true,
+            detail: 'Weighted sum scoring. Sensitivity analysis confirmed top-8 stability.' },
+          { label: 'Final selection', meta: '10 selected', done: true,
+            detail: 'Top 8 robust selections + 2 wildcard high-risk/high-reward candidates.' },
+        ] },
+    ] },
+  { id: 'inv', label: 'Invention Loop', color: 3, status: 'running',
+    progress: 52, time: '7m 03s', tokens: '156k',
+    subs: [
+      { id: 'gen_strat', label: 'Strategy Generation', state: 'done',
+        summary: "Generated 24 strategies (3 per hypothesis) spanning analogy, first-principles, and hybrid approaches. After feasibility screening, 18 remain.",
+        items: [
+          { label: 'Strategy brainstorm', meta: '24 strategies', done: true,
+            detail: 'Analogy-based, first-principles, and hybrid approaches per hypothesis.' },
+          { label: 'Feasibility pre-screen', meta: '18 viable', done: true,
+            detail: '6 eliminated: resource constraints or physical law violations.' },
+        ] },
+      { id: 'gen_plan', label: 'Plan Generation', state: 'done',
+        summary: "Detailed plans for all 18 strategies: experimental design, success criteria, and resource estimates.",
+        items: [
+          { label: 'Experiment design', meta: '18 plans', done: true,
+            detail: 'Full protocols with controls, independent/dependent variables.' },
+          { label: 'Success criteria', meta: '54 criteria', done: true,
+            detail: 'Quantitative thresholds for binary pass/fail evaluation.' },
+        ] },
+      { id: 'gen_paper', label: 'Draft Paper Text', state: 'done',
+        summary: "Drafted 8 complete papers with abstract, intro, methodology, expected results, and KG-integrated citations.",
+        items: [
+          { label: 'Abstract generation', meta: '8 abstracts', done: true,
+            detail: '150-250 words each. Multiple variants for A/B quality comparison.' },
+          { label: 'Section drafting', meta: '8 full drafts', done: true,
+            detail: 'Intro, related work, methodology, expected results, discussion.' },
+          { label: 'Figure slot planning', meta: '32 slots', done: true,
+            detail: 'Architecture diagrams, data flows, result plots, comparison tables.' },
+        ] },
+      { id: 'gen_artifact', label: 'Artifacts', state: 'active',
+        /* 3-LEVEL TREE: children with grandchildren under Ablation */
+        children: [
+          { id: 'art_baseline', label: 'Baseline', state: 'done',
+            summary: "Implemented 8 baseline comparison models from top-cited papers.",
+            items: [
+              { label: 'Literature baselines', meta: '8 models', done: true,
+                detail: 'Implemented from top-cited papers in each sub-domain.' },
+              { label: 'Hyperparameter tuning', meta: 'grid search', done: true,
+                detail: 'Fair tuning to avoid strawman comparisons. 3 seeds per config.' },
+            ] },
+          { id: 'art_dataset', label: 'Dataset', state: 'done',
+            summary: "Curated 8 evaluation datasets with stratified train/val/test splits.",
+            items: [
+              { label: 'Data collection', meta: '8 datasets', done: true,
+                detail: 'Sourced from public benchmarks. Proper licensing verified.' },
+              { label: 'Split generation', meta: '3-way splits', done: true,
+                detail: 'Stratified with distribution analysis and reproducible seeds.' },
+            ] },
+          { id: 'art_proof', label: 'Proof', state: 'done',
+            summary: "Formal mathematical proofs for key theoretical claims in 5 papers.",
+            items: [
+              { label: 'Proof construction', meta: '5 proofs', done: true,
+                detail: 'Convergence theorems, bounds, and complexity claims formalized.' },
+              { label: 'Symbolic verification', meta: '5/5 pass', done: true,
+                detail: 'Lean4 verified all proof steps. Zero unresolved goals.' },
+            ] },
+          { id: 'art_ablation', label: 'Ablation', state: 'active',
+            children: [
+              { id: 'abl_isolate', label: 'Component Isolation', state: 'done',
+                summary: "Isolated each module for removal testing across papers 1-4.",
+                items: [
+                  { label: 'Module mapping', meta: '32 components', done: true,
+                    detail: 'Identified all removable components per paper architecture.' },
+                ] },
+              { id: 'abl_runs', label: 'Ablation Runs', state: 'active',
+                summary: "Running ablation for paper 5. Papers 1-4 complete.",
+                items: [
+                  { label: 'Paper 5 ablation', meta: '3/7 components', running: true,
+                    detail: 'Currently removing attention mechanism, running 5 seeds.' },
+                ] },
+              { id: 'abl_stats', label: 'Statistical Tests', state: 'pending',
+                summary: "Pending ablation run completion for papers 5-8.",
+                items: [
+                  { label: 'Paired t-tests', meta: 'queued', done: false,
+                    detail: 'Bonferroni correction. 5 random seeds each.' },
+                ] },
+            ],
+            summary: "Running ablation studies for paper 5 of 8. Systematically removing each component to quantify its contribution.",
+            items: [
+              { label: 'Component isolation', meta: '5/8 papers', running: true,
+                detail: 'Removing each module one at a time. Currently: attention in paper 5.' },
+              { label: 'Statistical significance', meta: '4/8 done', running: true,
+                detail: 'Paired t-tests with Bonferroni correction. 5 random seeds each.' },
+              { label: 'Ablation table gen', meta: '4 complete', done: false,
+                detail: 'LaTeX tables with delta columns showing component contribution %.' },
+            ] },
+          { id: 'art_eval', label: 'Eval', state: 'pending',
+            summary: "Pending ablation completion. Will run full evaluation suite.",
+            items: [
+              { label: 'Full evaluation runs', meta: 'queued', done: false,
+                detail: 'All methods on all datasets. 5 seeds per configuration.' },
+              { label: 'Result aggregation', meta: 'queued', done: false,
+                detail: 'Comparison tables: mean +/- std with significance markers.' },
+              { label: 'Visualization generation', meta: 'queued', done: false,
+                detail: 'Bar charts, radar plots, ablation heatmaps for each paper.' },
+            ] },
+        ],
+        summary: "Generating supporting artifacts for all 8 papers. Baselines, datasets, and proofs are complete. Ablation studies in progress (paper 5/8). Full evaluation pending.",
+        items: [
+          { label: 'Baseline implementations', meta: '8/8', done: true,
+            detail: 'All baselines implemented, tuned, and validated.' },
+          { label: 'Dataset curation', meta: '8/8', done: true,
+            detail: 'All datasets curated with stratified splits.' },
+          { label: 'Formal proofs', meta: '5/5', done: true,
+            detail: 'All proofs symbolically verified via Lean4.' },
+          { label: 'Ablation studies', meta: '5/8', running: true,
+            detail: 'Component ablation in progress for papers 5-8.' },
+          { label: 'Full evaluation', meta: 'pending', done: false,
+            detail: 'Waiting for ablation completion to begin full suite.' },
+        ] },
+      { id: 'review_paper', label: 'Review & Revise', state: 'pending',
+        summary: "Pending artifact completion. Multi-round review covering scientific rigor, argument clarity, novelty substantiation, and citation accuracy.",
+        items: [
+          { label: 'Scientific rigor review', meta: 'queued', done: false,
+            detail: 'Verify all claims against evidence. Zero tolerance for hallucination.' },
+          { label: 'Clarity & coherence pass', meta: 'queued', done: false,
+            detail: 'Logical flow, jargon consistency, reader accessibility.' },
+          { label: 'Revision cycle', meta: 'queued', done: false,
+            detail: 'Address flagged issues. Minimum 2 rounds until convergence.' },
+        ] },
+    ] },
+  { id: 'paper', label: 'Paper Repository', color: 4, status: 'queued',
+    progress: 0, time: '--', tokens: '--',
+    subs: [
+      { id: 'gen_viz', label: 'Generate Visualizations', state: 'pending',
+        summary: "Waiting for reviewed papers. Will create publication-quality SVG figures and interactive D3.js visualizations.",
+        items: [
+          { label: 'Static figures', meta: 'queued', done: false,
+            detail: 'SVG/PNG at 300 DPI. Architecture diagrams, result plots.' },
+          { label: 'Interactive D3 viz', meta: 'queued', done: false,
+            detail: 'Filterable tables, zoomable plots, parameter sweep dashboards.' },
+        ] },
+      { id: 'gen_full', label: 'Compile Full Papers', state: 'pending',
+        summary: "Final compilation into submission-ready papers with LaTeX, BibTeX, and companion GitHub repositories.",
+        items: [
+          { label: 'LaTeX compilation', meta: 'queued', done: false,
+            detail: 'Full build with acmart/neurips template. Zero warnings target.' },
+          { label: 'Repository packaging', meta: 'queued', done: false,
+            detail: 'GitHub repo: paper PDF, source, code, data, README.' },
+        ] },
+    ] },
+];
+
+const FEED_ENTRIES = [
+  { time: '22:18', color: '#34d399', msg: 'Ablation paper 5 -- removing attention mechanism, running 5 seeds' },
+  { time: '22:16', color: '#34d399', msg: 'Paper 4 ablation done -- attention contributes 12.3% of performance' },
+  { time: '22:14', color: '#34d399', msg: 'Formal proof paper 5 verified -- Lean4 passed all 42 steps' },
+  { time: '22:11', color: '#34d399', msg: 'Dataset split validation -- KL divergence < 0.02 across all splits' },
+  { time: '22:08', color: '#a78bfa', msg: 'Hypothesis refinement finalized -- 8 primary + 2 wildcards' },
+  { time: '22:05', color: '#34d399', msg: 'Baseline 7 tuned -- grid search optimal lr=3e-4, dropout=0.15' },
+  { time: '22:02', color: '#34d399', msg: 'Paper 3 ablation: normalization removal causes 8.7% perf drop' },
+  { time: '21:58', color: '#38bdf8', msg: 'KG query: 23 cross-domain bridges found for ablation context' },
+  { time: '21:55', color: '#34d399', msg: 'All 8 abstracts generated -- mean novelty score 8.4/10' },
+  { time: '21:51', color: '#a78bfa', msg: 'Multi-criteria ranking stable under perturbation -- top 8 robust' },
+];
+
+/* ── State ───────────────────────────────────────────────── */
+let activeModule = 2;
+let activeSubIdx = 3;
+let activeChildIdx = 3;
+let activeGrandIdx = 1;
+let expandedItem = null;
+
+/* ── Render: Module Cards (with glass halo + shine) ──────── */
+function renderModuleCards() {
+  const row = document.getElementById('modulesRow');
+  row.querySelectorAll('.mod-card').forEach(c => c.remove());
+
+  MODULES.forEach((m, i) => {
+    const card = document.createElement('div');
+    card.className = 'mod-card' + (i === activeModule ? ' active' : '');
+    card.dataset.color = m.color;
+    card.dataset.status = m.status;
+    card.dataset.idx = i;
+    card.onclick = () => selectModule(i);
+    const stLabel = { done: 'Complete', running: 'Running', queued: 'Queued' }[m.status];
+    card.innerHTML = `
+      <div class="glow-halo"></div>
+      <div class="glass-shine"></div>
+      <div class="mc-top">
+        <div class="mc-dot"></div>
+        <div class="mc-label">${m.label}</div>
+        <div class="mc-status st-${m.status}">${stLabel}</div>
+      </div>
+      <div class="mc-meta"><span>${m.time}</span><span>${m.tokens} tokens</span></div>
+      <div class="mc-bar"><div class="mc-bar-fill" data-width="${m.progress}"></div></div>`;
+    row.appendChild(card);
+  });
+
+  requestAnimationFrame(() => {
+    row.querySelectorAll('.mc-bar-fill[data-width]').forEach(el => {
+      el.style.width = el.dataset.width + '%';
+    });
+  });
+}
+
+/* ── Render: Tree Columns (3-level support) ──────────────── */
+function renderTreeColumns() {
+  const area = document.getElementById('treeArea');
+  area.querySelectorAll('.tree-col').forEach(c => c.remove());
+
+  MODULES.forEach((m, mi) => {
+    const col = document.createElement('div');
+    col.className = 'tree-col';
+    col.dataset.color = m.color;
+    col.dataset.idx = mi;
+    const isActive = mi === activeModule;
+    const isDone = m.status === 'done';
+    const isQueued = m.status === 'queued';
+
+    if (!isActive && isQueued) {
+      col.innerHTML = `<div class="tree-collapsed" onclick="selectModule(${mi})">
+        <span class="tc-icon">&#9654;</span>${m.subs.length} sub-modules &middot; queued</div>`;
+    } else if (!isActive && isDone) {
+      col.innerHTML = `<div class="tree-collapsed" onclick="selectModule(${mi})">
+        <span class="tc-icon">&#10003;</span>${m.subs.length} sub-modules &middot; complete</div>`;
+    } else {
+      let html = '<ul class="tree-list">';
+      m.subs.forEach((s, si) => {
+        const cls = isActive
+          ? (si === activeSubIdx ? ' active' : (s.state === 'done' ? ' done' : ''))
+          : (s.state === 'active' ? ' active' : s.state === 'done' ? ' done' : '');
+        const hc = (s.children && s.children.length) ? ' has-children' : '';
+        const chk = s.state === 'done' ? '<span class="tree-check">&#10003;</span>' : '';
+        html += `<li class="tree-node${cls}${hc}" data-sub="${s.id}" data-sidx="${si}"
+          onclick="selectSub(${mi},${si})">
+          <div class="tree-gutter"></div>
+          <div class="tree-sub"><span class="tree-dot"></span><span>${s.label}</span>${chk}</div>
+        </li>`;
+
+        /* render 2nd-level children when parent is expanded */
+        if (s.children && s.children.length && isActive && si === activeSubIdx) {
+          html += '<ul class="tree-children">';
+          s.children.forEach((ch, ci) => {
+            const cc = ci === activeChildIdx ? ' active' : ch.state === 'done' ? ' done' : '';
+            const hgc = (ch.children && ch.children.length) ? ' has-children' : '';
+            const ico = ch.state === 'done' ? '&#10003;'
+              : ch.state === 'active' ? '&#9654;' : '&#9675;';
+            html += `<li class="tree-child-node${cc}${hgc}" data-child="${ch.id}" data-cidx="${ci}"
+              onclick="event.stopPropagation();selectChild(${mi},${si},${ci})">
+              <div class="tree-child-gutter"></div>
+              <div class="tree-child-sub">
+                <span class="tree-child-dot"></span><span>${ch.label}</span>
+                <span class="tree-child-check">${ico}</span>
+              </div>
+            </li>`;
+
+            /* render 3rd-level grandchildren */
+            if (ch.children && ch.children.length && ci === activeChildIdx) {
+              html += '<ul class="tree-grandchildren">';
+              ch.children.forEach((gc, gi) => {
+                const gcCls = gi === activeGrandIdx ? ' active' : gc.state === 'done' ? ' done' : '';
+                const gIco = gc.state === 'done' ? '&#10003;'
+                  : gc.state === 'active' ? '&#9654;' : '&#9675;';
+                html += `<li class="tree-grand-node${gcCls}" data-gidx="${gi}"
+                  onclick="event.stopPropagation();selectGrand(${mi},${si},${ci},${gi})">
+                  <div class="tree-grand-gutter"></div>
+                  <div class="tree-grand-sub">
+                    <span class="tree-grand-dot"></span><span>${gc.label}</span>
+                    <span class="tree-grand-check">${gIco}</span>
+                  </div>
+                </li>`;
+              });
+              html += '</ul>';
+            }
+          });
+          html += '</ul>';
+        }
+      });
+      html += '</ul>';
+      col.innerHTML = html;
+    }
+
+    area.appendChild(col);
+
+    /* staggered tree-grow entrance */
+    if (isActive || !isQueued) {
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          col.classList.add('visible');
+          let delay = 0;
+          col.querySelectorAll('.tree-node').forEach(n => {
+            n.style.transitionDelay = delay + 'ms'; delay += 90;
+          });
+          col.querySelectorAll('.tree-child-node').forEach(n => {
+            n.style.transitionDelay = delay + 'ms'; delay += 70;
+          });
+          col.querySelectorAll('.tree-grand-node').forEach(n => {
+            n.style.transitionDelay = delay + 'ms'; delay += 55;
+          });
+        }, isActive ? 40 : 180);
+      });
+    }
+  });
+}
+
+/* ── Render: Dashboard ───────────────────────────────────── */
+function getActiveSub() { return MODULES[activeModule].subs[activeSubIdx] || MODULES[activeModule].subs[0]; }
+
+function getActiveContent() {
+  const sub = getActiveSub();
+  if (sub.children && sub.children.length && activeChildIdx >= 0 && activeChildIdx < sub.children.length) {
+    const child = sub.children[activeChildIdx];
+    if (child.children && child.children.length && activeGrandIdx >= 0 && activeGrandIdx < child.children.length) {
+      return child.children[activeGrandIdx];
+    }
+    return child;
+  }
+  return sub;
+}
+
+function renderDashboard(animate) {
+  const content = getActiveContent();
+  const m = MODULES[activeModule];
+  const c = COLORS[m.color - 1];
+  if (animate) {
+    document.getElementById('leftContent').classList.add('fading');
+    document.getElementById('rightContent').classList.add('fading');
+    setTimeout(() => renderDashInner(content, m, c), 280);
+  } else {
+    renderDashInner(content, m, c);
+  }
+}
+
+function renderDashInner(content, m, c) {
+  const le = document.getElementById('leftContent');
+  const re = document.getElementById('rightContent');
+  const sl = content.state === 'active' ? 'Active' : content.state === 'done' ? 'Complete' : 'Pending';
+
+  /* Left panel */
+  let lh = `<div class="panel-title">
+    <span class="pt-dot" style="background:${c}"></span>${content.label}
+    <span class="pt-badge">${sl}</span></div>
+    <div class="summary-text">${content.summary}</div><div class="item-list">`;
+  content.items.forEach((it, ii) => {
+    const dc = it.done ? 'var(--s500)' : (it.running ? c : 'var(--s700)');
+    lh += `<div class="item-row${it.running ? ' running' : ''}" onclick="toggleDetail(${ii})" data-item="${ii}">
+      <span class="ir-dot" style="background:${dc}"></span>
+      <span class="ir-label">${it.label}</span>
+      <span class="ir-meta">${it.meta}</span>
+      <span class="ir-arrow">&#8250;</span>
+    </div>
+    <div class="item-detail" data-detail="${ii}">${it.detail}</div>`;
+  });
+  lh += '</div>';
+  le.innerHTML = lh;
+  le.classList.remove('fading');
+
+  /* Right panel */
+  const stats = getStats(m);
+  let rh = '<div class="stat-grid">';
+  stats.forEach(st => {
+    rh += `<div class="stat-card"><div class="sc-label">${st.label}</div>
+      <div class="sc-value" style="color:${st.vc || 'var(--s200)'}">${st.value}</div>
+      <div class="sc-bar"><div class="sc-bar-fill" data-width="${st.bar}" style="background:${st.bc || c}"></div></div></div>`;
+  });
+  rh += '</div><div class="activity-section"><div class="panel-title" style="margin-top:6px">Activity Breakdown</div>';
+  getActivity(m).forEach(a => {
+    rh += `<div class="activity-row"><span class="ar-color" style="background:${a.color}"></span>
+      <span class="ar-label">${a.label}</span><span class="ar-val">${a.value}</span>
+      <span class="ar-bar"><span class="ar-bar-fill" data-width="${a.bar}" style="background:${a.color}"></span></span></div>`;
+  });
+  rh += '</div><div class="live-feed"><div class="panel-title">Live Feed</div><div class="feed-window" id="feedWindow"></div></div>';
+  re.innerHTML = rh;
+  re.classList.remove('fading');
+
+  setTimeout(() => {
+    document.querySelectorAll('.sc-bar-fill[data-width],.ar-bar-fill[data-width]').forEach(el => {
+      el.style.width = el.dataset.width + '%';
+    });
+  }, 60);
+  startFeed();
+}
+
+function getStats(m) {
+  const S = {
+    seed: [
+      { label: 'Papers', value: '2,847', bar: 100, bc: '#38bdf8', vc: '#38bdf8' },
+      { label: 'KG Nodes', value: '5,180', bar: 100, bc: '#38bdf8' },
+      { label: 'Gaps', value: '23', bar: 100, bc: '#38bdf8' },
+      { label: 'Seeds', value: '12', bar: 100, bc: '#38bdf8' },
+    ],
+    hypo: [
+      { label: 'Hypotheses', value: '36', bar: 100, bc: '#a78bfa', vc: '#a78bfa' },
+      { label: 'Reviewed', value: '36/36', bar: 100, bc: '#a78bfa' },
+      { label: 'Passed', value: '28', bar: 78, bc: '#34d399', vc: '#34d399' },
+      { label: 'Selected', value: '10', bar: 36, bc: '#fb923c', vc: '#fb923c' },
+    ],
+    inv: [
+      { label: 'Strategies', value: '18', bar: 100, bc: '#34d399', vc: '#34d399' },
+      { label: 'Plans', value: '18', bar: 100, bc: '#34d399' },
+      { label: 'Drafts', value: '8', bar: 100, bc: '#34d399' },
+      { label: 'Ablations', value: '5/8', bar: 62, bc: '#fb923c', vc: '#fb923c' },
+    ],
+    paper: [
+      { label: 'Artifacts', value: '--', bar: 0, bc: '#fb923c' },
+      { label: 'Figures', value: '--', bar: 0, bc: '#fb923c' },
+      { label: 'Papers', value: '--', bar: 0, bc: '#fb923c' },
+      { label: 'Repos', value: '--', bar: 0, bc: '#fb923c' },
+    ],
+  };
+  return S[m.id] || S.paper;
+}
+
+function getActivity(m) {
+  const A = {
+    seed: [
+      { label: 'NER & Extraction', value: '42%', bar: 42, color: '#38bdf8' },
+      { label: 'Graph Build', value: '28%', bar: 28, color: '#22d3ee' },
+      { label: 'Gap Analysis', value: '18%', bar: 18, color: '#06b6d4' },
+      { label: 'Seed Generation', value: '12%', bar: 12, color: '#0891b2' },
+    ],
+    hypo: [
+      { label: 'Hypo Gen', value: '31%', bar: 31, color: '#a78bfa' },
+      { label: 'Novelty Check', value: '26%', bar: 26, color: '#8b5cf6' },
+      { label: 'Plausibility', value: '24%', bar: 24, color: '#7c3aed' },
+      { label: 'Consistency', value: '19%', bar: 19, color: '#6d28d9' },
+    ],
+    inv: [
+      { label: 'Strategy', value: '22%', bar: 22, color: '#34d399' },
+      { label: 'Planning', value: '18%', bar: 18, color: '#10b981' },
+      { label: 'Drafting', value: '28%', bar: 28, color: '#059669' },
+      { label: 'Ablation', value: '32%', bar: 32, color: '#047857' },
+    ],
+    paper: [
+      { label: 'Artifacts', value: '--', bar: 0, color: '#fb923c' },
+      { label: 'Visualization', value: '--', bar: 0, color: '#f97316' },
+      { label: 'Compilation', value: '--', bar: 0, color: '#ea580c' },
+      { label: 'Packaging', value: '--', bar: 0, color: '#dc2626' },
+    ],
+  };
+  return A[m.id] || A.paper;
+}
+
+/* ── Interactions ────────────────────────────────────────── */
+function selectModule(idx) {
+  if (idx === activeModule) return;
+  activeModule = idx;
+  expandedItem = null;
+  activeChildIdx = -1; activeGrandIdx = -1;
+  const m = MODULES[idx];
+  const ni = m.subs.findIndex(s => s.state === 'active');
+  activeSubIdx = ni >= 0 ? ni : 0;
+  const sub = m.subs[activeSubIdx];
+  if (sub.children && sub.children.length) {
+    const ci = sub.children.findIndex(c => c.state === 'active');
+    activeChildIdx = ci >= 0 ? ci : 0;
+    const child = sub.children[activeChildIdx];
+    if (child && child.children && child.children.length) {
+      const gi = child.children.findIndex(g => g.state === 'active');
+      activeGrandIdx = gi >= 0 ? gi : 0;
+    }
+  }
+  document.getElementById('breadcrumbActive').textContent = m.label;
+  updateRing(); renderModuleCards(); renderTreeColumns(); renderDashboard(true);
+  setTimeout(() => initTreeParticles(), 120);
+}
+
+function selectSub(mi, si) {
+  if (mi !== activeModule) {
+    activeModule = mi;
+    document.getElementById('breadcrumbActive').textContent = MODULES[mi].label;
+    updateRing(); renderModuleCards();
+  }
+  activeSubIdx = si;
+  expandedItem = null;
+  const sub = MODULES[activeModule].subs[si];
+  if (sub.children && sub.children.length) {
+    const ci = sub.children.findIndex(c => c.state === 'active');
+    activeChildIdx = ci >= 0 ? ci : 0;
+    const child = sub.children[activeChildIdx];
+    if (child && child.children && child.children.length) {
+      const gi = child.children.findIndex(g => g.state === 'active');
+      activeGrandIdx = gi >= 0 ? gi : 0;
+    } else { activeGrandIdx = -1; }
+  } else { activeChildIdx = -1; activeGrandIdx = -1; }
+  renderTreeColumns(); renderDashboard(true);
+  setTimeout(() => initTreeParticles(), 120);
+}
+
+function selectChild(mi, si, ci) {
+  if (mi !== activeModule || si !== activeSubIdx) {
+    activeModule = mi; activeSubIdx = si;
+    document.getElementById('breadcrumbActive').textContent = MODULES[mi].label;
+    updateRing(); renderModuleCards();
+  }
+  activeChildIdx = ci;
+  activeGrandIdx = -1;
+  expandedItem = null;
+  const child = MODULES[activeModule].subs[activeSubIdx].children[ci];
+  if (child && child.children && child.children.length) {
+    const gi = child.children.findIndex(g => g.state === 'active');
+    activeGrandIdx = gi >= 0 ? gi : 0;
+  }
+  renderTreeColumns(); renderDashboard(true);
+  setTimeout(() => initTreeParticles(), 120);
+}
+
+function selectGrand(mi, si, ci, gi) {
+  if (mi !== activeModule || si !== activeSubIdx || ci !== activeChildIdx) {
+    activeModule = mi; activeSubIdx = si; activeChildIdx = ci;
+    document.getElementById('breadcrumbActive').textContent = MODULES[mi].label;
+    updateRing(); renderModuleCards();
+  }
+  activeGrandIdx = gi;
+  expandedItem = null;
+  const col = document.querySelector(`.tree-col[data-idx="${activeModule}"]`);
+  if (col) {
+    col.querySelectorAll('.tree-grand-node').forEach(n => {
+      const i = parseInt(n.dataset.gidx);
+      const ch = MODULES[activeModule].subs[activeSubIdx].children[activeChildIdx].children[i];
+      n.classList.remove('active', 'done');
+      if (i === gi) n.classList.add('active');
+      else if (ch && ch.state === 'done') n.classList.add('done');
+    });
+  }
+  renderDashboard(true);
+  setTimeout(() => initTreeParticles(), 120);
+}
+
+function toggleDetail(idx) {
+  const d = document.querySelector(`.item-detail[data-detail="${idx}"]`);
+  const r = document.querySelector(`.item-row[data-item="${idx}"]`);
+  if (!d) return;
+  if (expandedItem === idx) {
+    d.classList.remove('open'); if (r) r.classList.remove('expanded'); expandedItem = null;
+  } else {
+    document.querySelectorAll('.item-detail.open').forEach(x => x.classList.remove('open'));
+    document.querySelectorAll('.item-row.expanded').forEach(x => x.classList.remove('expanded'));
+    d.classList.add('open'); if (r) r.classList.add('expanded'); expandedItem = idx;
+  }
+}
+
+function updateRing() {
+  const p = MODULES.reduce((s, m) => s + m.progress, 0) / MODULES.length;
+  const circ = 87.96;
+  document.getElementById('ringFill').style.strokeDashoffset = circ * (1 - p / 100);
+  document.getElementById('ringFill').style.stroke = COLORS[MODULES[activeModule].color - 1];
+  document.getElementById('ringLabel').textContent = Math.round(p) + '%';
+}
+
+/* keyboard nav */
+document.addEventListener('keydown', e => {
+  const sub = getActiveSub();
+  const hc = sub.children && sub.children.length;
+  const child = hc && activeChildIdx >= 0 ? sub.children[activeChildIdx] : null;
+  const hgc = child && child.children && child.children.length;
+
+  if (e.key === 'ArrowLeft') { e.preventDefault(); selectModule(Math.max(0, activeModule - 1)); }
+  else if (e.key === 'ArrowRight') { e.preventDefault(); selectModule(Math.min(MODULES.length - 1, activeModule + 1)); }
+  else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (hgc && activeGrandIdx > 0) selectGrand(activeModule, activeSubIdx, activeChildIdx, activeGrandIdx - 1);
+    else if (hgc && activeGrandIdx === 0 && activeChildIdx > 0) selectChild(activeModule, activeSubIdx, activeChildIdx - 1);
+    else if (hc && activeChildIdx > 0) selectChild(activeModule, activeSubIdx, activeChildIdx - 1);
+    else if ((hc || hgc) && activeChildIdx === 0 && activeSubIdx > 0) selectSub(activeModule, activeSubIdx - 1);
+    else selectSub(activeModule, Math.max(0, activeSubIdx - 1));
+  }
+  else if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    if (hgc && activeGrandIdx < child.children.length - 1) selectGrand(activeModule, activeSubIdx, activeChildIdx, activeGrandIdx + 1);
+    else if (hgc && activeGrandIdx >= child.children.length - 1 && hc && activeChildIdx < sub.children.length - 1) selectChild(activeModule, activeSubIdx, activeChildIdx + 1);
+    else if (hc && !hgc && activeChildIdx < sub.children.length - 1) selectChild(activeModule, activeSubIdx, activeChildIdx + 1);
+    else if (hc && activeChildIdx >= sub.children.length - 1 && activeSubIdx < MODULES[activeModule].subs.length - 1) selectSub(activeModule, activeSubIdx + 1);
+    else selectSub(activeModule, Math.min(MODULES[activeModule].subs.length - 1, activeSubIdx + 1));
+  }
+});
+
+/* ── Live Feed ───────────────────────────────────────────── */
+let feedIdx = 0, feedInterval = null;
+function startFeed() {
+  if (feedInterval) clearInterval(feedInterval);
+  feedIdx = 0;
+  const win = document.getElementById('feedWindow');
+  if (!win) return;
+  function show() {
+    win.innerHTML = '';
+    for (let i = 0; i < 3; i++) {
+      const e = FEED_ENTRIES[(feedIdx + i) % FEED_ENTRIES.length];
+      const fi = document.createElement('div');
+      fi.className = 'feed-item';
+      fi.style.top = (i * 36) + 'px';
+      fi.innerHTML = `<span class="feed-time">${e.time}</span>
+        <span class="feed-dot" style="background:${e.color}"></span>
+        <span class="feed-msg">${e.msg}</span>`;
+      win.appendChild(fi);
+      setTimeout(() => fi.classList.add('visible'), 40 + i * 70);
+    }
+  }
+  show();
+  feedInterval = setInterval(() => {
+    win.querySelectorAll('.feed-item').forEach(it => {
+      it.classList.remove('visible'); it.classList.add('exiting');
+    });
+    setTimeout(() => { feedIdx = (feedIdx + 1) % FEED_ENTRIES.length; show(); }, 420);
+  }, 5000);
+}
+
+/* ── Background Particles ────────────────────────────────── */
+const bgCanvas = document.getElementById('bgCanvas');
+const bgCtx = bgCanvas.getContext('2d');
+let bgParticles = [];
+
+function resizeBg() { bgCanvas.width = window.innerWidth; bgCanvas.height = window.innerHeight; }
+
+class BgP {
+  constructor() { this.reset(true); }
+  reset(init) {
+    this.x = Math.random() * bgCanvas.width;
+    this.y = init ? Math.random() * bgCanvas.height : bgCanvas.height + 10;
+    this.sz = 0.5 + Math.random() * 1.5;
+    this.vy = -(0.12 + Math.random() * 0.35);
+    this.vx = (Math.random() - 0.5) * 0.15;
+    this.a = 0.05 + Math.random() * 0.15;
+    this.c = COLORS[Math.floor(Math.random() * 4)];
+  }
+  update() { this.y += this.vy; this.x += this.vx; if (this.y < -10) this.reset(false); }
+  draw(ctx) {
+    ctx.beginPath(); ctx.arc(this.x, this.y, this.sz, 0, Math.PI * 2);
+    ctx.fillStyle = this.c; ctx.globalAlpha = this.a; ctx.fill(); ctx.globalAlpha = 1;
+  }
+}
+function initBg() { resizeBg(); bgParticles = []; for (let i = 0; i < 60; i++) bgParticles.push(new BgP()); }
+
+/* ── Horizontal Particles ────────────────────────────────── */
+const hCanvas = document.getElementById('particleCanvasH');
+const hCtx = hCanvas.getContext('2d');
+let hParticles = [];
+
+function resizeH() {
+  const r = document.getElementById('modulesRow');
+  hCanvas.width = r.offsetWidth + 48; hCanvas.height = r.offsetHeight + 20;
+}
+
+class HP {
+  constructor() { this.reset(); }
+  reset() {
+    const cards = document.querySelectorAll('.mod-card');
+    if (cards.length < 2) return;
+    const seg = Math.floor(Math.random() * (cards.length - 1));
+    const c1 = cards[seg], c2 = cards[seg + 1];
+    const row = document.getElementById('modulesRow');
+    const rr = row.getBoundingClientRect();
+    const r1 = c1.getBoundingClientRect(), r2 = c2.getBoundingClientRect();
+    this.sx = r1.right - rr.left + 10;
+    this.sy = r1.top - rr.top + r1.height * 0.5 + (Math.random() - 0.5) * 14;
+    this.tx = r2.left - rr.left - 10;
+    this.x = this.sx; this.y = this.sy;
+    this.spd = 0.35 + Math.random() * 0.55;
+    this.sz = 1.2 + Math.random() * 1.6;
+    this.c = COLORS[MODULES[seg].color - 1];
+    this.a = 0.25 + Math.random() * 0.4;
+    this.dr = (Math.random() - 0.5) * 0.15;
+    this.life = 1;
+  }
+  update() {
+    this.x += this.spd; this.y += this.dr;
+    if (this.x >= this.tx) { this.life -= 0.06; this.a *= 0.9; }
+    if (this.life <= 0 || this.a < 0.01) this.reset();
+  }
+  draw(ctx) {
+    ctx.beginPath(); ctx.arc(this.x + 24, this.y + 10, this.sz, 0, Math.PI * 2);
+    ctx.fillStyle = this.c; ctx.globalAlpha = this.a; ctx.fill();
+    ctx.beginPath(); ctx.arc(this.x + 20, this.y + 10, this.sz * 0.5, 0, Math.PI * 2);
+    ctx.globalAlpha = this.a * 0.3; ctx.fill(); ctx.globalAlpha = 1;
+  }
+}
+function initH() {
+  resizeH(); hParticles = [];
+  for (let i = 0; i < 35; i++) {
+    const p = new HP();
+    if (p.tx > p.sx) p.x = p.sx + Math.random() * (p.tx - p.sx);
+    hParticles.push(p);
+  }
+}
+
+/* ── Tree-Path Particles (flow to deepest active node) ──── */
+const tCanvas = document.getElementById('particleCanvasT');
+const tCtx = tCanvas.getContext('2d');
+let tParticles = [];
+
+function resizeT() {
+  const a = document.getElementById('treeArea');
+  tCanvas.width = a.offsetWidth + 48; tCanvas.height = a.offsetHeight + 20;
+}
+
+class TP {
+  constructor() { this.alive = false; this.flash = 0; this.segs = []; this.si = 0; this.reset(); }
+
+  reset() {
+    const col = document.querySelector(`.tree-col[data-idx="${activeModule}"]`);
+    if (!col) { this.alive = false; return; }
+
+    /* target: deepest active (grand > child > parent) */
+    let tgt = col.querySelector('.tree-grand-node.active')
+           || col.querySelector('.tree-child-node.active')
+           || col.querySelector('.tree-node.active');
+    if (!tgt) { this.alive = false; return; }
+
+    const area = document.getElementById('treeArea');
+    const ar = area.getBoundingClientRect(), cr = col.getBoundingClientRect();
+    const nr = tgt.getBoundingClientRect();
+    const sx = cr.left - ar.left + 12;
+    const sy = Math.max(cr.top - ar.top - 4, 0);
+    const ty = nr.top - ar.top + nr.height * 0.5;
+    const tx = nr.left - ar.left + nr.offsetWidth * 0.45;
+
+    /* L-path: vertical then horizontal */
+    this.segs = [
+      { sx, sy, tx: sx, ty, dir: 'v' },
+      { sx, sy: ty, tx, ty, dir: 'h' },
+    ];
+    this.si = 0; this.x = sx; this.y = sy;
+    this.spd = 0.8 + Math.random() * 1.6;
+    this.sz = 1.0 + Math.random() * 1.4;
+    this.c = COLORS[MODULES[activeModule].color - 1];
+    this.a = 0.4 + Math.random() * 0.35;
+    this.alive = true; this.flash = 0;
+  }
+
+  update() {
+    if (!this.alive && this.flash <= 0) return this.reset();
+    if (this.flash > 0) { this.flash -= 0.04; return; }
+    const s = this.segs[this.si];
+    if (s.dir === 'v') {
+      this.y += this.spd;
+      if (this.y >= s.ty) { this.y = s.ty; this.si++; if (this.si >= this.segs.length) { this.flash = 1; this.alive = false; } }
+    } else {
+      this.x += this.spd;
+      if (this.x >= s.tx) { this.x = s.tx; this.si++; if (this.si >= this.segs.length) { this.flash = 1; this.alive = false; } }
+    }
+  }
+
+  draw(ctx) {
+    const ox = 24, oy = 10;
+    if (!this.alive && this.flash > 0) {
+      const ls = this.segs[this.segs.length - 1];
+      ctx.beginPath(); ctx.arc(ls.tx + ox, ls.ty + oy, 5 + (1 - this.flash) * 4, 0, Math.PI * 2);
+      ctx.fillStyle = this.c; ctx.globalAlpha = this.flash * 0.45; ctx.fill(); ctx.globalAlpha = 1;
+      return;
+    }
+    if (!this.alive) return;
+    ctx.beginPath(); ctx.arc(this.x + ox, this.y + oy, this.sz, 0, Math.PI * 2);
+    ctx.fillStyle = this.c; ctx.globalAlpha = this.a; ctx.fill();
+    const s = this.segs[this.si];
+    const tdx = s && s.dir === 'h' ? -3 : 0;
+    const tdy = s && s.dir === 'v' ? -3 : 0;
+    ctx.beginPath(); ctx.arc(this.x + ox + tdx, this.y + oy + tdy, this.sz * 0.55, 0, Math.PI * 2);
+    ctx.globalAlpha = this.a * 0.35; ctx.fill(); ctx.globalAlpha = 1;
+  }
+}
+
+function initTreeParticles() {
+  resizeT(); tParticles = [];
+  for (let i = 0; i < 16; i++) {
+    const p = new TP();
+    if (p.alive && p.segs.length) {
+      let td = 0;
+      const sd = p.segs.map(s => {
+        const d = s.dir === 'v' ? Math.abs(s.ty - s.sy) : Math.abs(s.tx - s.sx);
+        td += d; return d;
+      });
+      const pos = Math.random() * td;
+      let acc = 0;
+      for (let si = 0; si < p.segs.length; si++) {
+        if (acc + sd[si] >= pos) {
+          p.si = si;
+          const lp = pos - acc, s = p.segs[si];
+          if (s.dir === 'v') { p.x = s.sx; p.y = s.sy + lp; }
+          else { p.x = s.sx + lp; p.y = s.sy; }
+          break;
+        }
+        acc += sd[si];
+      }
+    }
+    tParticles.push(p);
+  }
+}
+
+/* ── Animation Loop ──────────────────────────────────────── */
+function loop() {
+  bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
+  for (const p of bgParticles) { p.update(); p.draw(bgCtx); }
+
+  hCtx.clearRect(0, 0, hCanvas.width, hCanvas.height);
+  for (const p of hParticles) { p.update(); p.draw(hCtx); }
+
+  tCtx.clearRect(0, 0, tCanvas.width, tCanvas.height);
+  for (const p of tParticles) { p.update(); p.draw(tCtx); }
+
+  requestAnimationFrame(loop);
+}
+
+/* ── Resize Handler ──────────────────────────────────────── */
+let rt;
+window.addEventListener('resize', () => {
+  clearTimeout(rt);
+  rt = setTimeout(() => {
+    resizeBg(); resizeH(); resizeT();
+    initBg(); initH(); initTreeParticles();
+  }, 100);
+});
+
+/* ── Clock + Cost Ticker ─────────────────────────────────── */
+(function startClock() {
+  let s = 1338;
+  setInterval(() => {
+    s++;
+    const m = Math.floor(s / 60), ss = s % 60;
+    document.getElementById('hTime').textContent = m + 'm ' + String(ss).padStart(2, '0') + 's';
+    document.getElementById('hCost').textContent = (4.71 + (s - 1338) * 0.0028).toFixed(2);
+  }, 1000);
+})();
+
+/* ── Init ────────────────────────────────────────────────── */
+(function init() {
+  const m = MODULES[activeModule];
+  const ai = m.subs.findIndex(s => s.state === 'active');
+  activeSubIdx = ai >= 0 ? ai : 0;
+  const sub = m.subs[activeSubIdx];
+  if (sub.children && sub.children.length) {
+    const ci = sub.children.findIndex(c => c.state === 'active');
+    activeChildIdx = ci >= 0 ? ci : 0;
+    const child = sub.children[activeChildIdx];
+    if (child && child.children && child.children.length) {
+      const gi = child.children.findIndex(g => g.state === 'active');
+      activeGrandIdx = gi >= 0 ? gi : 0;
+    }
+  }
+  updateRing();
+  renderModuleCards();
+  renderTreeColumns();
+  renderDashboard(false);
+  initBg();
+  initH();
+  initTreeParticles();
+  loop();
+})();
+</script>
+</body>
+</html>
