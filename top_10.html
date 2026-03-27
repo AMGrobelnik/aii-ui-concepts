@@ -1,0 +1,1682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor Pipeline</title>
+<style>
+  /* ===== RESET & BASE ===== */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0f1219;
+    --bg-card: rgba(30, 35, 50, 0.55);
+    --bg-card-hover: rgba(40, 46, 65, 0.7);
+    --bg-sidebar: rgba(20, 24, 36, 0.85);
+    --border: rgba(100, 116, 155, 0.18);
+    --border-hover: rgba(130, 150, 200, 0.3);
+    --text: #c8d0e0;
+    --text-dim: #6b7a99;
+    --text-bright: #e4eaf6;
+    --accent-blue: #5b8def;
+    --accent-cyan: #40c9c0;
+    --accent-purple: #9b7cf7;
+    --accent-amber: #e8a84c;
+    --accent-rose: #e06080;
+    --accent-green: #50c878;
+    --success: #50c878;
+    --running: #5b8def;
+    --pending: #6b7a99;
+    --glass: rgba(30, 35, 50, 0.6);
+    --glass-border: rgba(100, 116, 155, 0.22);
+    --radius: 12px;
+    --radius-sm: 8px;
+    --radius-xs: 6px;
+    --shadow: 0 4px 24px rgba(0,0,0,0.3);
+    --shadow-lg: 0 8px 40px rgba(0,0,0,0.4);
+    --transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    --sidebar-collapsed: 48px;
+    --sidebar-expanded: 240px;
+    --header-h: 44px;
+  }
+  html { font-size: 14px; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+    line-height: 1.5;
+  }
+
+  /* ===== AMBIENT PARTICLES ===== */
+  #particles-canvas {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  }
+
+  /* ===== HEADER (44px glassmorphism) ===== */
+  .header {
+    position: fixed; top: 0; left: 0; right: 0; height: var(--header-h);
+    background: rgba(15, 18, 25, 0.8);
+    backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--glass-border);
+    display: flex; align-items: center; padding: 0 20px;
+    z-index: 1000; gap: 16px;
+  }
+  .header-logo {
+    font-weight: 700; font-size: 13px; color: var(--accent-blue);
+    letter-spacing: 0.5px; white-space: nowrap;
+  }
+  .breadcrumb { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+  .breadcrumb span { color: var(--text-dim); }
+  .breadcrumb .sep { color: rgba(100,116,155,0.4); font-size: 10px; }
+  .breadcrumb .active { color: var(--text); font-weight: 500; }
+  .header-right { margin-left: auto; display: flex; align-items: center; gap: 14px; }
+  .header-stat {
+    font-size: 11px; color: var(--text-dim);
+    display: flex; align-items: center; gap: 5px;
+  }
+  .header-stat .val { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .live-dot {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--accent-green);
+    animation: livePulse 2s ease-in-out infinite;
+  }
+  @keyframes livePulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 4px var(--accent-green); }
+    50% { opacity: 0.4; box-shadow: 0 0 8px var(--accent-green); }
+  }
+
+  /* ===== SIDEBAR (collapsed 48px -> expanded 240px) ===== */
+  .sidebar {
+    position: fixed; top: var(--header-h); left: 0; bottom: 0;
+    width: var(--sidebar-collapsed);
+    background: var(--bg-sidebar);
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    border-right: 1px solid var(--glass-border);
+    z-index: 900; transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow: hidden; display: flex; flex-direction: column;
+  }
+  .sidebar:hover, .sidebar.expanded { width: var(--sidebar-expanded); }
+  .sidebar-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 12px; cursor: pointer; transition: var(--transition);
+    white-space: nowrap; position: relative;
+  }
+  .sidebar-item:hover { background: rgba(91, 141, 239, 0.08); }
+  .sidebar-item.active { background: rgba(91, 141, 239, 0.12); }
+  .sidebar-item.active::before {
+    content: ''; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+    width: 3px; height: 20px; background: var(--accent-blue); border-radius: 0 3px 3px 0;
+  }
+  .sidebar-ring {
+    width: 24px; height: 24px; flex-shrink: 0; position: relative;
+  }
+  .sidebar-ring svg { width: 24px; height: 24px; }
+  .sidebar-ring .ring-track { fill: none; stroke: rgba(100,116,155,0.15); stroke-width: 2.5; }
+  .sidebar-ring .ring-fill { fill: none; stroke-width: 2.5; stroke-linecap: round;
+    transition: stroke-dashoffset 0.8s ease; }
+  .sidebar-ring .ring-icon { font-size: 9px; position: absolute;
+    top: 50%; left: 50%; transform: translate(-50%, -50%); }
+  .sidebar-label { font-size: 12px; color: var(--text-dim); font-weight: 500;
+    opacity: 0; transition: opacity 0.2s ease 0.1s; }
+  .sidebar:hover .sidebar-label, .sidebar.expanded .sidebar-label { opacity: 1; }
+
+  /* ===== MAIN LAYOUT ===== */
+  .main {
+    margin-left: var(--sidebar-collapsed); margin-top: var(--header-h);
+    padding: 24px 28px 60px; transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative; z-index: 1;
+  }
+
+  /* ===== TOP STAT CARDS (4 horizontal glassmorphism) ===== */
+  .stat-cards {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px;
+    margin-bottom: 28px;
+  }
+  .stat-card {
+    background: var(--glass);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius); padding: 16px 18px;
+    display: flex; align-items: center; gap: 14px;
+    transition: var(--transition); position: relative; overflow: hidden;
+  }
+  .stat-card::before {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, transparent 60%);
+    pointer-events: none;
+  }
+  .stat-card:hover { border-color: var(--border-hover); transform: translateY(-1px);
+    box-shadow: var(--shadow); }
+  .stat-card-ring { width: 40px; height: 40px; flex-shrink: 0; position: relative; }
+  .stat-card-ring svg { width: 40px; height: 40px; }
+  .stat-card-ring .track { fill: none; stroke: rgba(100,116,155,0.12); stroke-width: 3; }
+  .stat-card-ring .fill { fill: none; stroke-width: 3; stroke-linecap: round;
+    transition: stroke-dashoffset 1.2s ease; }
+  .stat-card-ring .center-val {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums;
+  }
+  .stat-card-info { flex: 1; min-width: 0; }
+  .stat-card-label { font-size: 11px; color: var(--text-dim); font-weight: 500;
+    text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
+  .stat-card-value { font-size: 20px; font-weight: 700; color: var(--text-bright);
+    font-variant-numeric: tabular-nums; line-height: 1.2; }
+  .stat-card-sub { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+  .sparkline-wrap { width: 64px; height: 28px; flex-shrink: 0; }
+  .sparkline-wrap svg { width: 100%; height: 100%; }
+
+  /* ===== MODULE TREE ===== */
+  .tree { display: flex; flex-direction: column; gap: 0; }
+
+  /* --- Module card (top level) --- */
+  .module {
+    position: relative; margin-bottom: 2px;
+    animation: treeGrow 0.5s ease-out both;
+  }
+  .module:nth-child(2) { animation-delay: 0.08s; }
+  .module:nth-child(3) { animation-delay: 0.16s; }
+  .module:nth-child(4) { animation-delay: 0.24s; }
+  @keyframes treeGrow {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .module-header {
+    display: flex; align-items: center; gap: 14px;
+    padding: 14px 18px; cursor: pointer;
+    background: var(--glass);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius);
+    transition: var(--transition); position: relative; overflow: hidden;
+  }
+  .module-header::before {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,0.02) 0%, transparent 50%);
+    pointer-events: none;
+  }
+  .module-header:hover { border-color: var(--border-hover); background: var(--bg-card-hover); }
+
+  .module-chevron {
+    width: 18px; height: 18px; color: var(--text-dim); flex-shrink: 0;
+    transition: transform 0.3s ease;
+  }
+  .module.collapsed .module-chevron { transform: rotate(-90deg); }
+
+  .module-num {
+    width: 28px; height: 28px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700; flex-shrink: 0;
+  }
+  .module-title { font-size: 14px; font-weight: 600; color: var(--text-bright); flex: 1; }
+  .module-meta { display: flex; align-items: center; gap: 12px; }
+  .module-progress-wrap { width: 80px; }
+  .module-progress-bg {
+    height: 4px; border-radius: 2px; background: rgba(100,116,155,0.15);
+    overflow: hidden;
+  }
+  .module-progress-fill { height: 100%; border-radius: 2px; transition: width 0.8s ease; }
+  .module-progress-label {
+    font-size: 10px; color: var(--text-dim); text-align: right;
+    margin-top: 2px; font-variant-numeric: tabular-nums;
+  }
+
+  /* Status badge pill */
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 600;
+    letter-spacing: 0.3px; white-space: nowrap;
+  }
+  .badge-completed { background: rgba(80, 200, 120, 0.12); color: var(--accent-green); }
+  .badge-running { background: rgba(91, 141, 239, 0.12); color: var(--accent-blue); }
+  .badge-pending { background: rgba(107, 122, 153, 0.12); color: var(--text-dim); }
+  .badge-dot { width: 5px; height: 5px; border-radius: 50%; }
+  .badge-completed .badge-dot { background: var(--accent-green); }
+  .badge-running .badge-dot { background: var(--accent-blue); animation: livePulse 2s ease infinite; }
+  .badge-pending .badge-dot { background: var(--text-dim); }
+
+  /* --- Dependency dots between modules --- */
+  .dep-dots {
+    display: flex; justify-content: center; align-items: center;
+    height: 20px; gap: 4px; position: relative;
+  }
+  .dep-dot {
+    width: 3px; height: 3px; border-radius: 50%;
+    background: rgba(100, 116, 155, 0.3);
+  }
+  .dep-dots.completed .dep-dot { background: rgba(80, 200, 120, 0.4); }
+  .dep-dots.active .dep-dot {
+    animation: depFlow 1.2s ease-in-out infinite;
+  }
+  .dep-dots.active .dep-dot:nth-child(2) { animation-delay: 0.15s; }
+  .dep-dots.active .dep-dot:nth-child(3) { animation-delay: 0.3s; }
+  @keyframes depFlow {
+    0%, 100% { opacity: 0.3; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.6); background: var(--accent-blue); }
+  }
+
+  /* --- Sub-module children --- */
+  .module-children {
+    overflow: hidden; transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+      opacity 0.3s ease;
+    max-height: 2000px; opacity: 1;
+    padding-left: 22px; position: relative;
+  }
+  .module.collapsed .module-children { max-height: 0; opacity: 0; }
+
+  /* tree branch line */
+  .module-children::before {
+    content: ''; position: absolute; left: 35px; top: 0; bottom: 16px;
+    width: 1px; background: rgba(100,116,155,0.12);
+  }
+  .module-children.glow-branch::before {
+    background: linear-gradient(180deg, rgba(91,141,239,0.3), rgba(91,141,239,0.05));
+    animation: branchGlow 2s ease-in-out infinite;
+  }
+  @keyframes branchGlow {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; }
+  }
+
+  /* --- Sub-module card (XL 44px height) --- */
+  .submodule {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 16px; margin: 4px 0; min-height: 44px;
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    cursor: pointer; transition: var(--transition);
+    position: relative; overflow: hidden;
+    animation: treeGrow 0.4s ease-out both;
+  }
+  .submodule::before {
+    content: ''; position: absolute; inset: 0; opacity: 0.04;
+    pointer-events: none; border-radius: var(--radius-sm);
+  }
+  .submodule:hover {
+    border-color: var(--border-hover); background: var(--bg-card-hover);
+    transform: translateX(2px);
+  }
+  .submodule.selected {
+    border-color: rgba(91, 141, 239, 0.35);
+    background: rgba(91, 141, 239, 0.06);
+  }
+
+  /* tint per section */
+  .submodule[data-tint="blue"]::before { background: var(--accent-blue); }
+  .submodule[data-tint="cyan"]::before { background: var(--accent-cyan); }
+  .submodule[data-tint="purple"]::before { background: var(--accent-purple); }
+  .submodule[data-tint="amber"]::before { background: var(--accent-amber); }
+
+  .sub-branch {
+    width: 14px; height: 1px; background: rgba(100,116,155,0.15); flex-shrink: 0;
+  }
+  .submodule .sub-icon {
+    width: 22px; height: 22px; border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; flex-shrink: 0;
+  }
+  .submodule .sub-title { font-size: 13px; font-weight: 500; color: var(--text); flex: 1; }
+  .submodule .sub-meta { display: flex; align-items: center; gap: 10px; }
+  .sub-progress-wrap { width: 60px; }
+  .sub-progress-bg {
+    height: 3px; border-radius: 2px; background: rgba(100,116,155,0.12); overflow: hidden;
+  }
+  .sub-progress-fill { height: 100%; border-radius: 2px; transition: width 0.6s ease; }
+  .sub-progress-label {
+    font-size: 9px; color: var(--text-dim); text-align: right;
+    margin-top: 1px; font-variant-numeric: tabular-nums;
+  }
+
+  /* Spinner for running sub-modules */
+  .spinner {
+    width: 14px; height: 14px; border: 2px solid rgba(91,141,239,0.2);
+    border-top-color: var(--accent-blue); border-radius: 50%;
+    animation: spin 0.8s linear infinite; flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .checkmark { color: var(--accent-green); font-size: 13px; flex-shrink: 0; }
+
+  /* --- Item list (level 3) --- */
+  .item-list {
+    overflow: hidden; transition: max-height 0.35s ease, opacity 0.25s ease;
+    max-height: 800px; opacity: 1; padding-left: 50px; margin-bottom: 2px;
+  }
+  .submodule-wrap.collapsed-items .item-list { max-height: 0; opacity: 0; }
+  .item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 5px 12px; font-size: 12px; color: var(--text-dim);
+    position: relative;
+    animation: itemFade 0.3s ease both;
+  }
+  .item:nth-child(2) { animation-delay: 0.05s; }
+  .item:nth-child(3) { animation-delay: 0.1s; }
+  @keyframes itemFade {
+    from { opacity: 0; transform: translateX(-6px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+  .item-dot {
+    width: 4px; height: 4px; border-radius: 50%; flex-shrink: 0;
+  }
+  .item-dot.done { background: var(--accent-green); }
+  .item-dot.active { background: var(--accent-blue); animation: livePulse 2s ease infinite; }
+  .item-dot.wait { background: rgba(100,116,155,0.3); }
+  .item-label { flex: 1; }
+  .item-time { font-size: 10px; color: rgba(100,116,155,0.5); font-variant-numeric: tabular-nums; }
+
+  /* ===== MULTI-TARGET DOT ANIMATION ===== */
+  .dot-anim-container {
+    position: fixed; inset: 0; pointer-events: none; z-index: 500;
+  }
+  .flying-dot {
+    position: absolute; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent-blue);
+    box-shadow: 0 0 8px var(--accent-blue), 0 0 16px rgba(91,141,239,0.3);
+    animation: flyDot 2.5s ease-in-out infinite;
+  }
+  @keyframes flyDot {
+    0% { opacity: 0; transform: scale(0.5); }
+    10% { opacity: 1; transform: scale(1); }
+    90% { opacity: 1; transform: scale(1); }
+    100% { opacity: 0; transform: scale(0.5); }
+  }
+
+  /* ===== HOVER TOOLTIP (400px glassmorphism) ===== */
+  .tooltip-portal {
+    position: fixed; z-index: 2000; pointer-events: none;
+    width: 400px; opacity: 0; transform: translateY(6px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+  }
+  .tooltip-portal.visible { opacity: 1; transform: translateY(0); }
+  .tooltip-inner {
+    background: rgba(20, 24, 36, 0.92);
+    backdrop-filter: blur(24px); -webkit-backdrop-filter: blur(24px);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius); padding: 16px 20px;
+    box-shadow: var(--shadow-lg);
+  }
+  .tooltip-title {
+    font-size: 13px; font-weight: 600; color: var(--text-bright); margin-bottom: 8px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .tooltip-summary { font-size: 12px; color: var(--text-dim); line-height: 1.6; margin-bottom: 10px; }
+  .tooltip-stats { display: flex; gap: 16px; }
+  .tooltip-stat { text-align: center; }
+  .tooltip-stat-val { font-size: 16px; font-weight: 700; color: var(--text-bright); }
+  .tooltip-stat-label { font-size: 10px; color: var(--text-dim); }
+
+  /* ===== BELOW-TREE DASHBOARD (slides open) ===== */
+  .dashboard-panel {
+    overflow: hidden; max-height: 0; opacity: 0;
+    transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease;
+    margin-top: 20px;
+  }
+  .dashboard-panel.open { max-height: 800px; opacity: 1; }
+  .dashboard-inner {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 20px;
+    background: var(--glass);
+    backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius); padding: 24px;
+    animation: dashSlide 0.3s ease-out;
+  }
+  @keyframes dashSlide {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .dash-left {}
+  .dash-section-title {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.6px; color: var(--text-dim); margin-bottom: 10px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .dash-summary {
+    font-size: 13px; color: var(--text); line-height: 1.7;
+    margin-bottom: 16px; padding: 12px 14px;
+    background: rgba(15, 18, 25, 0.4); border-radius: var(--radius-sm);
+    border-left: 2px solid var(--accent-blue);
+  }
+  .dash-item-list { list-style: none; }
+  .dash-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 0; font-size: 12px; color: var(--text-dim);
+    border-bottom: 1px solid rgba(100,116,155,0.06);
+    animation: feedFadeIn 0.3s ease both;
+  }
+  .dash-item:nth-child(2) { animation-delay: 0.05s; }
+  .dash-item:nth-child(3) { animation-delay: 0.1s; }
+  .dash-item:nth-child(4) { animation-delay: 0.15s; }
+  .dash-item-icon { font-size: 10px; width: 18px; text-align: center; }
+  .dash-item-label { flex: 1; }
+  .dash-item-status { font-size: 10px; }
+
+  .dash-right {}
+  .dash-stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+  .dash-stat-card {
+    background: rgba(15, 18, 25, 0.4); border-radius: var(--radius-sm);
+    padding: 12px 14px; text-align: center;
+    border: 1px solid rgba(100,116,155,0.08);
+  }
+  .dash-stat-val { font-size: 22px; font-weight: 700; color: var(--text-bright);
+    font-variant-numeric: tabular-nums; }
+  .dash-stat-label { font-size: 10px; color: var(--text-dim); margin-top: 2px; }
+
+  .dash-feed-title {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.6px; color: var(--text-dim); margin-bottom: 8px;
+  }
+  .dash-feed { max-height: 160px; overflow-y: auto; }
+  .dash-feed::-webkit-scrollbar { width: 4px; }
+  .dash-feed::-webkit-scrollbar-track { background: transparent; }
+  .dash-feed::-webkit-scrollbar-thumb { background: rgba(100,116,155,0.2); border-radius: 2px; }
+  .feed-entry {
+    display: flex; gap: 8px; padding: 6px 0;
+    font-size: 11px; border-bottom: 1px solid rgba(100,116,155,0.05);
+    animation: feedFadeIn 0.35s ease both;
+  }
+  .feed-entry:nth-child(2) { animation-delay: 0.08s; }
+  .feed-entry:nth-child(3) { animation-delay: 0.16s; }
+  .feed-entry:nth-child(4) { animation-delay: 0.24s; }
+  @keyframes feedFadeIn {
+    from { opacity: 0; transform: translateX(6px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+  .feed-time { color: rgba(100,116,155,0.5); font-variant-numeric: tabular-nums;
+    white-space: nowrap; min-width: 44px; }
+  .feed-msg { color: var(--text-dim); flex: 1; }
+
+  /* Dashboard close button */
+  .dash-close {
+    position: absolute; top: 12px; right: 14px;
+    width: 24px; height: 24px; border-radius: 6px; border: none;
+    background: rgba(100,116,155,0.1); color: var(--text-dim);
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    font-size: 12px; transition: var(--transition);
+  }
+  .dash-close:hover { background: rgba(100,116,155,0.2); color: var(--text); }
+  .dashboard-inner { position: relative; }
+
+  /* ===== SHIMMER ANIMATION ON CARDS ===== */
+  .shimmer {
+    position: relative; overflow: hidden;
+  }
+  .shimmer::after {
+    content: ''; position: absolute; top: 0; left: -100%; width: 60%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.03), transparent);
+    animation: shimmer 3s ease-in-out infinite;
+  }
+  @keyframes shimmer {
+    0% { left: -100%; }
+    100% { left: 200%; }
+  }
+
+  /* ===== GLOW on running modules ===== */
+  .module-header.glow-running {
+    box-shadow: 0 0 20px rgba(91, 141, 239, 0.08);
+  }
+
+  /* ===== EXPANDABLE ITEMS TOGGLE ===== */
+  .items-toggle {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11px; color: var(--accent-blue); cursor: pointer;
+    padding: 4px 0; border: none; background: none;
+    transition: var(--transition);
+  }
+  .items-toggle:hover { color: var(--text-bright); }
+  .items-toggle svg { width: 12px; height: 12px; transition: transform 0.2s ease; }
+  .items-toggle.expanded svg { transform: rotate(180deg); }
+
+  /* ===== RESPONSIVE ===== */
+  @media (max-width: 1100px) {
+    .stat-cards { grid-template-columns: repeat(2, 1fr); }
+    .dashboard-inner { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Ambient Particles -->
+<canvas id="particles-canvas"></canvas>
+
+<!-- Dot Animation Container -->
+<div class="dot-anim-container" id="dotAnimContainer"></div>
+
+<!-- Tooltip Portal -->
+<div class="tooltip-portal" id="tooltipPortal">
+  <div class="tooltip-inner">
+    <div class="tooltip-title" id="tooltipTitle"></div>
+    <div class="tooltip-summary" id="tooltipSummary"></div>
+    <div class="tooltip-stats" id="tooltipStats"></div>
+  </div>
+</div>
+
+<!-- ===== HEADER ===== -->
+<header class="header">
+  <div class="header-logo">AI Inventor</div>
+  <nav class="breadcrumb">
+    <span class="sep">/</span>
+    <span>Pipeline</span>
+    <span class="sep">/</span>
+    <span class="active">run-2026-03-26-001</span>
+  </nav>
+  <div class="header-right">
+    <div class="header-stat"><span class="val">4</span> modules</div>
+    <div class="header-stat"><span class="val">12</span> sub-modules</div>
+    <div class="header-stat"><span class="val">2</span> active</div>
+    <div class="header-stat"><div class="live-dot"></div> Live</div>
+  </div>
+</header>
+
+<!-- ===== SIDEBAR ===== -->
+<nav class="sidebar" id="sidebar">
+  <div class="sidebar-item active" data-module="0">
+    <div class="sidebar-ring">
+      <svg viewBox="0 0 24 24">
+        <circle class="ring-track" cx="12" cy="12" r="9"/>
+        <circle class="ring-fill" cx="12" cy="12" r="9" stroke="var(--accent-green)"
+          stroke-dasharray="56.5" stroke-dashoffset="0" transform="rotate(-90 12 12)"/>
+      </svg>
+      <span class="ring-icon">&#x2713;</span>
+    </div>
+    <span class="sidebar-label">Seed Hypotheses</span>
+  </div>
+  <div class="sidebar-item" data-module="1">
+    <div class="sidebar-ring">
+      <svg viewBox="0 0 24 24">
+        <circle class="ring-track" cx="12" cy="12" r="9"/>
+        <circle class="ring-fill" cx="12" cy="12" r="9" stroke="var(--accent-blue)"
+          stroke-dasharray="56.5" stroke-dashoffset="19.8" transform="rotate(-90 12 12)"/>
+      </svg>
+      <span class="ring-icon" style="font-size:7px;">&#9654;</span>
+    </div>
+    <span class="sidebar-label">Hypothesis Loop</span>
+  </div>
+  <div class="sidebar-item" data-module="2">
+    <div class="sidebar-ring">
+      <svg viewBox="0 0 24 24">
+        <circle class="ring-track" cx="12" cy="12" r="9"/>
+        <circle class="ring-fill" cx="12" cy="12" r="9" stroke="var(--accent-blue)"
+          stroke-dasharray="56.5" stroke-dashoffset="33.9" transform="rotate(-90 12 12)"/>
+      </svg>
+      <span class="ring-icon" style="font-size:7px;">&#9654;</span>
+    </div>
+    <span class="sidebar-label">Invention Loop</span>
+  </div>
+  <div class="sidebar-item" data-module="3">
+    <div class="sidebar-ring">
+      <svg viewBox="0 0 24 24">
+        <circle class="ring-track" cx="12" cy="12" r="9"/>
+        <circle class="ring-fill" cx="12" cy="12" r="9" stroke="var(--pending)"
+          stroke-dasharray="56.5" stroke-dashoffset="56.5" transform="rotate(-90 12 12)"/>
+      </svg>
+      <span class="ring-icon" style="color:var(--text-dim)">4</span>
+    </div>
+    <span class="sidebar-label">Paper Repo</span>
+  </div>
+</nav>
+
+<!-- ===== MAIN CONTENT ===== -->
+<main class="main" id="mainContent">
+
+  <!-- Top Stat Cards -->
+  <section class="stat-cards">
+    <!-- Card 1: Overall Progress -->
+    <div class="stat-card shimmer">
+      <div class="stat-card-ring">
+        <svg viewBox="0 0 40 40">
+          <circle class="track" cx="20" cy="20" r="16"/>
+          <circle class="fill" cx="20" cy="20" r="16" stroke="var(--accent-blue)"
+            stroke-dasharray="100.5" stroke-dashoffset="38.2" transform="rotate(-90 20 20)"/>
+        </svg>
+        <span class="center-val" style="color:var(--accent-blue)">62%</span>
+      </div>
+      <div class="stat-card-info">
+        <div class="stat-card-label">Overall Progress</div>
+        <div class="stat-card-value">62<span style="font-size:14px;color:var(--text-dim)">%</span></div>
+        <div class="stat-card-sub">8 of 12 steps done</div>
+      </div>
+      <div class="sparkline-wrap">
+        <svg viewBox="0 0 64 28" fill="none">
+          <polyline points="0,24 8,22 16,18 24,20 32,14 40,12 48,8 56,10 64,6"
+            stroke="var(--accent-blue)" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+          <path d="M0,24 8,22 16,18 24,20 32,14 40,12 48,8 56,10 64,6 64,28 0,28Z"
+            fill="url(#sparkGrad1)" opacity="0.15"/>
+          <defs><linearGradient id="sparkGrad1" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="var(--accent-blue)"/>
+            <stop offset="100%" stop-color="transparent"/>
+          </linearGradient></defs>
+        </svg>
+      </div>
+    </div>
+    <!-- Card 2: Hypotheses -->
+    <div class="stat-card shimmer">
+      <div class="stat-card-ring">
+        <svg viewBox="0 0 40 40">
+          <circle class="track" cx="20" cy="20" r="16"/>
+          <circle class="fill" cx="20" cy="20" r="16" stroke="var(--accent-cyan)"
+            stroke-dasharray="100.5" stroke-dashoffset="16.1" transform="rotate(-90 20 20)"/>
+        </svg>
+        <span class="center-val" style="color:var(--accent-cyan)">84%</span>
+      </div>
+      <div class="stat-card-info">
+        <div class="stat-card-label">Hypotheses</div>
+        <div class="stat-card-value">17</div>
+        <div class="stat-card-sub">14 reviewed, 3 active</div>
+      </div>
+      <div class="sparkline-wrap">
+        <svg viewBox="0 0 64 28" fill="none">
+          <polyline points="0,20 10,18 20,22 30,15 40,10 50,8 64,5"
+            stroke="var(--accent-cyan)" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+          <path d="M0,20 10,18 20,22 30,15 40,10 50,8 64,5 64,28 0,28Z"
+            fill="url(#sparkGrad2)" opacity="0.15"/>
+          <defs><linearGradient id="sparkGrad2" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="var(--accent-cyan)"/>
+            <stop offset="100%" stop-color="transparent"/>
+          </linearGradient></defs>
+        </svg>
+      </div>
+    </div>
+    <!-- Card 3: Inventions -->
+    <div class="stat-card shimmer">
+      <div class="stat-card-ring">
+        <svg viewBox="0 0 40 40">
+          <circle class="track" cx="20" cy="20" r="16"/>
+          <circle class="fill" cx="20" cy="20" r="16" stroke="var(--accent-purple)"
+            stroke-dasharray="100.5" stroke-dashoffset="60.3" transform="rotate(-90 20 20)"/>
+        </svg>
+        <span class="center-val" style="color:var(--accent-purple)">40%</span>
+      </div>
+      <div class="stat-card-info">
+        <div class="stat-card-label">Inventions</div>
+        <div class="stat-card-value">6</div>
+        <div class="stat-card-sub">2 complete, 1 drafting</div>
+      </div>
+      <div class="sparkline-wrap">
+        <svg viewBox="0 0 64 28" fill="none">
+          <polyline points="0,26 12,24 24,20 36,16 48,14 64,10"
+            stroke="var(--accent-purple)" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+          <path d="M0,26 12,24 24,20 36,16 48,14 64,10 64,28 0,28Z"
+            fill="url(#sparkGrad3)" opacity="0.15"/>
+          <defs><linearGradient id="sparkGrad3" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="var(--accent-purple)"/>
+            <stop offset="100%" stop-color="transparent"/>
+          </linearGradient></defs>
+        </svg>
+      </div>
+    </div>
+    <!-- Card 4: Tokens -->
+    <div class="stat-card shimmer">
+      <div class="stat-card-ring">
+        <svg viewBox="0 0 40 40">
+          <circle class="track" cx="20" cy="20" r="16"/>
+          <circle class="fill" cx="20" cy="20" r="16" stroke="var(--accent-amber)"
+            stroke-dasharray="100.5" stroke-dashoffset="43.2" transform="rotate(-90 20 20)"/>
+        </svg>
+        <span class="center-val" style="color:var(--accent-amber)">57%</span>
+      </div>
+      <div class="stat-card-info">
+        <div class="stat-card-label">Tokens Used</div>
+        <div class="stat-card-value">2.4M</div>
+        <div class="stat-card-sub">~$18.40 estimated</div>
+      </div>
+      <div class="sparkline-wrap">
+        <svg viewBox="0 0 64 28" fill="none">
+          <polyline points="0,25 8,22 16,20 24,16 32,18 40,12 48,10 56,8 64,4"
+            stroke="var(--accent-amber)" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+          <path d="M0,25 8,22 16,20 24,16 32,18 40,12 48,10 56,8 64,4 64,28 0,28Z"
+            fill="url(#sparkGrad4)" opacity="0.15"/>
+          <defs><linearGradient id="sparkGrad4" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="var(--accent-amber)"/>
+            <stop offset="100%" stop-color="transparent"/>
+          </linearGradient></defs>
+        </svg>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== MODULE TREE ===== -->
+  <section class="tree" id="tree">
+
+    <!-- MODULE 1: Seed Hypotheses (COMPLETED, COLLAPSED) -->
+    <div class="module collapsed" data-module-id="0" data-status="completed">
+      <div class="module-header" onclick="toggleModule(this.parentElement)">
+        <svg class="module-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+        <div class="module-num" style="background:rgba(80,200,120,0.12);color:var(--accent-green)">1</div>
+        <span class="module-title">Seed Hypotheses</span>
+        <div class="module-meta">
+          <div class="module-progress-wrap">
+            <div class="module-progress-bg"><div class="module-progress-fill" style="width:100%;background:var(--accent-green)"></div></div>
+            <div class="module-progress-label">3/3</div>
+          </div>
+          <span class="badge badge-completed"><span class="badge-dot"></span>Completed</span>
+        </div>
+      </div>
+      <div class="module-children">
+        <div class="submodule-wrap collapsed-items">
+          <div class="submodule" data-tint="cyan" data-sub-id="s0-0">
+            <span class="sub-branch"></span>
+            <div class="sub-icon" style="background:rgba(64,201,192,0.12);color:var(--accent-cyan)">&#x1F4D6;</div>
+            <span class="sub-title">Literature Scan</span>
+            <div class="sub-meta">
+              <span class="checkmark">&#x2713;</span>
+              <span class="badge badge-completed" style="font-size:10px;padding:2px 7px;"><span class="badge-dot"></span>Done</span>
+            </div>
+          </div>
+          <div class="item-list">
+            <div class="item"><span class="item-dot done"></span><span class="item-label">Scanned 340 papers from arXiv + Semantic Scholar</span><span class="item-time">4m 12s</span></div>
+            <div class="item"><span class="item-dot done"></span><span class="item-label">Extracted 89 relevant abstracts</span><span class="item-time">1m 30s</span></div>
+            <div class="item"><span class="item-dot done"></span><span class="item-label">Built knowledge graph (214 nodes, 387 edges)</span><span class="item-time">2m 45s</span></div>
+          </div>
+        </div>
+        <div class="submodule-wrap collapsed-items">
+          <div class="submodule" data-tint="cyan" data-sub-id="s0-1">
+            <span class="sub-branch"></span>
+            <div class="sub-icon" style="background:rgba(64,201,192,0.12);color:var(--accent-cyan)">&#x1F9E0;</div>
+            <span class="sub-title">Gap Identification</span>
+            <div class="sub-meta">
+              <span class="checkmark">&#x2713;</span>
+              <span class="badge badge-completed" style="font-size:10px;padding:2px 7px;"><span class="badge-dot"></span>Done</span>
+            </div>
+          </div>
+          <div class="item-list">
+            <div class="item"><span class="item-dot done"></span><span class="item-label">Identified 23 research gaps via cluster analysis</span><span class="item-time">3m 08s</span></div>
+            <div class="item"><span class="item-dot done"></span><span class="item-label">Ranked gaps by novelty + feasibility score</span><span class="item-time">1m 55s</span></div>
+          </div>
+        </div>
+        <div class="submodule-wrap collapsed-items">
+          <div class="submodule" data-tint="cyan" data-sub-id="s0-2">
+            <span class="sub-branch"></span>
+            <div class="sub-icon" style="background:rgba(64,201,192,0.12);color:var(--accent-cyan)">&#x1F4A1;</div>
+            <span class="sub-title">Hypothesis Generation</span>
+            <div class="sub-meta">
+              <span class="checkmark">&#x2713;</span>
+              <span class="badge badge-completed" style="font-size:10px;padding:2px 7px;"><span class="badge-dot"></span>Done</span>
+            </div>
+          </div>
+          <div class="item-list">
+            <div class="item"><span class="item-dot done"></span><span class="item-label">Generated 17 candidate hypotheses</span><span class="item-time">6m 22s</span></div>
+            <div class="item"><span class="item-dot done"></span><span class="item-label">Deduplicated against prior art (removed 4)</span><span class="item-time">2m 11s</span></div>
+            <div class="item"><span class="item-dot done"></span><span class="item-label">Formatted output for hypothesis loop</span><span class="item-time">0m 18s</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="dep-dots completed"><span class="dep-dot"></span><span class="dep-dot"></span><span class="dep-dot"></span></div>
+
+    <!-- MODULE 2: Hypothesis Loop (RUNNING, EXPANDED) -->
+    <div class="module" data-module-id="1" data-status="running">
+      <div class="module-header glow-running shimmer" onclick="toggleModule(this.parentElement)">
+        <svg class="module-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+        <div class="module-num" style="background:rgba(91,141,239,0.12);color:var(--accent-blue)">2</div>
+        <span class="module-title">Hypothesis Loop</span>
+        <div class="module-meta">
+          <div class="module-progress-wrap">
+            <div class="module-progress-bg"><div class="module-progress-fill" style="width:65%;background:var(--accent-blue)"></div></div>
+            <div class="module-progress-label">2/3</div>
+          </div>
+          <span class="badge badge-running"><span class="badge-dot"></span>Running</span>
+        </div>
+      </div>
+      <div class="module-children glow-branch">
+        <div class="submodule-wrap collapsed-items">
+          <div class="submodule" data-tint="blue" data-sub-id="s1-0"
+            data-tooltip-title="Expand Hypotheses"
+            data-tooltip-summary="I expanded each of the 17 seed hypotheses into structured research proposals. Each proposal now includes a formal problem statement, proposed methodology, expected outcomes, and evaluation criteria. All 17 have been validated against the knowledge graph for consistency."
+            data-tooltip-items="17" data-tooltip-time="8m 44s" data-tooltip-tokens="312K">
+            <span class="sub-branch"></span>
+            <div class="sub-icon" style="background:rgba(91,141,239,0.12);color:var(--accent-blue)">&#x1F52C;</div>
+            <span class="sub-title">Expand Hypotheses</span>
+            <div class="sub-meta">
+              <span class="checkmark">&#x2713;</span>
+              <span class="badge badge-completed" style="font-size:10px;padding:2px 7px;"><span class="badge-dot"></span>Done</span>
+            </div>
+          </div>
+          <div class="item-list">
+            <div class="item"><span class="item-dot done"></span><span class="item-label">Expanded 17 hypotheses into structured proposals</span><span class="item-time">5m 32s</span></div>
+            <div class="item"><span class="item-dot done"></span><span class="item-label">Validated methodology sections against KG</span><span class="item-time">2m 18s</span></div>
+            <div class="item"><span class="item-dot done"></span><span class="item-label">Cross-referenced expected outcomes</span><span class="item-time">0m 54s</span></div>
+          </div>
+        </div>
+        <div class="submodule-wrap" data-running="true">
+          <div class="submodule" data-tint="blue" data-sub-id="s1-1"
+            data-tooltip-title="Review Hypotheses"
+            data-tooltip-summary="I am currently evaluating each expanded hypothesis against five criteria: novelty, feasibility, scientific rigor, potential impact, and clarity of methodology. So far 11 of 17 have passed initial screening. I am deep-reviewing the remaining 6 edge cases now."
+            data-tooltip-items="11/17" data-tooltip-time="running" data-tooltip-tokens="186K">
+            <span class="sub-branch"></span>
+            <div class="sub-icon" style="background:rgba(91,141,239,0.15);color:var(--accent-blue)">&#x1F50D;</div>
+            <span class="sub-title">Review Hypotheses</span>
+            <div class="sub-meta">
+              <div class="sub-progress-wrap">
+                <div class="sub-progress-bg"><div class="sub-progress-fill" style="width:65%;background:var(--accent-blue)"></div></div>
+                <div class="sub-progress-label">11/17</div>
+              </div>
+              <div class="spinner"></div>
+              <span class="badge badge-running" style="font-size:10px;padding:2px 7px;"><span class="badge-dot"></span>Running</span>
+            </div>
+          </div>
+          <div class="item-list">
+            <div class="item"><span class="item-dot done"></span><span class="item-label">Novelty + feasibility pre-screen passed (11/17)</span><span class="item-time">3m 10s</span></div>
+            <div class="item"><span class="item-dot done"></span><span class="item-label">Scientific rigor audit on batch 1 (8 hypotheses)</span><span class="item-time">4m 22s</span></div>
+            <div class="item"><span class="item-dot active"></span><span class="item-label">Deep review: edge-case hypotheses #12, #14, #15</span><span class="item-time">2m 05s</span></div>
+            <div class="item"><span class="item-dot wait"></span><span class="item-label">Final scoring + ranking</span><span class="item-time">--</span></div>
+          </div>
+        </div>
+        <div class="submodule-wrap collapsed-items">
+          <div class="submodule" data-tint="blue" data-sub-id="s1-2"
+            data-tooltip-title="Select Top Hypotheses"
+            data-tooltip-summary="Waiting for the review phase to complete. I will select the top 6 hypotheses based on composite scores, then prepare them as input for the invention loop."
+            data-tooltip-items="0/6" data-tooltip-time="pending" data-tooltip-tokens="--">
+            <span class="sub-branch"></span>
+            <div class="sub-icon" style="background:rgba(107,122,153,0.1);color:var(--text-dim)">&#x1F3AF;</div>
+            <span class="sub-title">Select Top Hypotheses</span>
+            <div class="sub-meta">
+              <span class="badge badge-pending" style="font-size:10px;padding:2px 7px;"><span class="badge-dot"></span>Pending</span>
+            </div>
+          </div>
+          <div class="item-list">
+            <div class="item"><span class="item-dot wait"></span><span class="item-label">Composite scoring (novelty * feasibility * impact)</span><span class="item-time">--</span></div>
+            <div class="item"><span class="item-dot wait"></span><span class="item-label">Select top 6 candidates</span><span class="item-time">--</span></div>
+            <div class="item"><span class="item-dot wait"></span><span class="item-label">Format for invention loop intake</span><span class="item-time">--</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="dep-dots active"><span class="dep-dot"></span><span class="dep-dot"></span><span class="dep-dot"></span></div>
+
+    <!-- MODULE 3: Invention Loop (RUNNING, EXPANDED) -->
+    <div class="module" data-module-id="2" data-status="running">
+      <div class="module-header glow-running shimmer" onclick="toggleModule(this.parentElement)">
+        <svg class="module-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+        <div class="module-num" style="background:rgba(155,124,247,0.12);color:var(--accent-purple)">3</div>
+        <span class="module-title">Invention Loop</span>
+        <div class="module-meta">
+          <div class="module-progress-wrap">
+            <div class="module-progress-bg"><div class="module-progress-fill" style="width:40%;background:var(--accent-purple)"></div></div>
+            <div class="module-progress-label">2/5</div>
+          </div>
+          <span class="badge badge-running"><span class="badge-dot"></span>Running</span>
+        </div>
+      </div>
+      <div class="module-children glow-branch">
+        <div class="submodule-wrap collapsed-items">
+          <div class="submodule" data-tint="purple" data-sub-id="s2-0"
+            data-tooltip-title="Generate Strategy"
+            data-tooltip-summary="I devised an overall invention strategy for hypothesis #3 (adaptive prompt routing). The strategy focuses on a modular architecture with three core components: a context analyzer, a routing engine, and a feedback loop for self-improvement."
+            data-tooltip-items="1" data-tooltip-time="5m 18s" data-tooltip-tokens="142K">
+            <span class="sub-branch"></span>
+            <div class="sub-icon" style="background:rgba(155,124,247,0.12);color:var(--accent-purple)">&#x1F9ED;</div>
+            <span class="sub-title">Generate Strategy</span>
+            <div class="sub-meta">
+              <span class="checkmark">&#x2713;</span>
+              <span class="badge badge-completed" style="font-size:10px;padding:2px 7px;"><span class="badge-dot"></span>Done</span>
+            </div>
+          </div>
+          <div class="item-list">
+            <div class="item"><span class="item-dot done"></span><span class="item-label">Defined modular architecture (3 components)</span><span class="item-time">2m 40s</span></div>
+            <div class="item"><span class="item-dot done"></span><span class="item-label">Mapped component dependencies</span><span class="item-time">1m 12s</span></div>
+            <div class="item"><span class="item-dot done"></span><span class="item-label">Validated against literature constraints</span><span class="item-time">1m 26s</span></div>
+          </div>
+        </div>
+        <div class="submodule-wrap collapsed-items">
+          <div class="submodule" data-tint="purple" data-sub-id="s2-1"
+            data-tooltip-title="Generate Plan"
+            data-tooltip-summary="I created a detailed execution plan breaking the invention into 8 concrete steps. Each step has estimated token budgets, expected outputs, and success criteria. The plan accounts for two potential pivot points if initial results are weak."
+            data-tooltip-items="8 steps" data-tooltip-time="4m 05s" data-tooltip-tokens="198K">
+            <span class="sub-branch"></span>
+            <div class="sub-icon" style="background:rgba(155,124,247,0.12);color:var(--accent-purple)">&#x1F4CB;</div>
+            <span class="sub-title">Generate Plan</span>
+            <div class="sub-meta">
+              <span class="checkmark">&#x2713;</span>
+              <span class="badge badge-completed" style="font-size:10px;padding:2px 7px;"><span class="badge-dot"></span>Done</span>
+            </div>
+          </div>
+          <div class="item-list">
+            <div class="item"><span class="item-dot done"></span><span class="item-label">Broke invention into 8 execution steps</span><span class="item-time">2m 15s</span></div>
+            <div class="item"><span class="item-dot done"></span><span class="item-label">Assigned token budgets per step</span><span class="item-time">0m 48s</span></div>
+            <div class="item"><span class="item-dot done"></span><span class="item-label">Defined 2 pivot conditions for weak results</span><span class="item-time">1m 02s</span></div>
+          </div>
+        </div>
+        <div class="submodule-wrap" data-running="true">
+          <div class="submodule" data-tint="purple" data-sub-id="s2-2"
+            data-tooltip-title="Generate Paper Text"
+            data-tooltip-summary="I am writing the core paper sections right now. The introduction and related work are complete. I am currently drafting the methodology section, which requires careful alignment with the formal problem statement and the modular architecture from the strategy phase."
+            data-tooltip-items="2/5 sections" data-tooltip-time="running" data-tooltip-tokens="267K">
+            <span class="sub-branch"></span>
+            <div class="sub-icon" style="background:rgba(155,124,247,0.15);color:var(--accent-purple)">&#x270D;&#xFE0F;</div>
+            <span class="sub-title">Generate Paper Text</span>
+            <div class="sub-meta">
+              <div class="sub-progress-wrap">
+                <div class="sub-progress-bg"><div class="sub-progress-fill" style="width:40%;background:var(--accent-purple)"></div></div>
+                <div class="sub-progress-label">2/5</div>
+              </div>
+              <div class="spinner" style="border-top-color:var(--accent-purple)"></div>
+              <span class="badge badge-running" style="font-size:10px;padding:2px 7px;"><span class="badge-dot"></span>Running</span>
+            </div>
+          </div>
+          <div class="item-list">
+            <div class="item"><span class="item-dot done"></span><span class="item-label">Introduction + problem statement drafted</span><span class="item-time">3m 44s</span></div>
+            <div class="item"><span class="item-dot done"></span><span class="item-label">Related work section (32 citations integrated)</span><span class="item-time">5m 18s</span></div>
+            <div class="item"><span class="item-dot active"></span><span class="item-label">Methodology: formal definitions + architecture</span><span class="item-time">4m 12s</span></div>
+            <div class="item"><span class="item-dot wait"></span><span class="item-label">Results + experimental setup</span><span class="item-time">--</span></div>
+            <div class="item"><span class="item-dot wait"></span><span class="item-label">Conclusion + future work</span><span class="item-time">--</span></div>
+          </div>
+        </div>
+        <div class="submodule-wrap collapsed-items">
+          <div class="submodule" data-tint="purple" data-sub-id="s2-3"
+            data-tooltip-title="Review Paper"
+            data-tooltip-summary="Waiting for the paper text generation to finish. I will then perform a multi-pass review: structural integrity, argument coherence, citation accuracy, and novelty verification against the knowledge graph."
+            data-tooltip-items="0/4 passes" data-tooltip-time="pending" data-tooltip-tokens="--">
+            <span class="sub-branch"></span>
+            <div class="sub-icon" style="background:rgba(107,122,153,0.1);color:var(--text-dim)">&#x1F4DD;</div>
+            <span class="sub-title">Review Paper</span>
+            <div class="sub-meta">
+              <span class="badge badge-pending" style="font-size:10px;padding:2px 7px;"><span class="badge-dot"></span>Pending</span>
+            </div>
+          </div>
+          <div class="item-list">
+            <div class="item"><span class="item-dot wait"></span><span class="item-label">Structural integrity check</span><span class="item-time">--</span></div>
+            <div class="item"><span class="item-dot wait"></span><span class="item-label">Argument coherence analysis</span><span class="item-time">--</span></div>
+            <div class="item"><span class="item-dot wait"></span><span class="item-label">Citation accuracy verification</span><span class="item-time">--</span></div>
+            <div class="item"><span class="item-dot wait"></span><span class="item-label">Novelty cross-check vs knowledge graph</span><span class="item-time">--</span></div>
+          </div>
+        </div>
+        <div class="submodule-wrap collapsed-items">
+          <div class="submodule" data-tint="purple" data-sub-id="s2-4"
+            data-tooltip-title="Revise Paper"
+            data-tooltip-summary="Waiting for the review phase. I will incorporate all review feedback, fix any identified issues, and produce the final polished draft ready for the paper repo generation step."
+            data-tooltip-items="0" data-tooltip-time="pending" data-tooltip-tokens="--">
+            <span class="sub-branch"></span>
+            <div class="sub-icon" style="background:rgba(107,122,153,0.1);color:var(--text-dim)">&#x1F504;</div>
+            <span class="sub-title">Revise Paper</span>
+            <div class="sub-meta">
+              <span class="badge badge-pending" style="font-size:10px;padding:2px 7px;"><span class="badge-dot"></span>Pending</span>
+            </div>
+          </div>
+          <div class="item-list">
+            <div class="item"><span class="item-dot wait"></span><span class="item-label">Incorporate review feedback</span><span class="item-time">--</span></div>
+            <div class="item"><span class="item-dot wait"></span><span class="item-label">Polish language + formatting</span><span class="item-time">--</span></div>
+            <div class="item"><span class="item-dot wait"></span><span class="item-label">Final consistency pass</span><span class="item-time">--</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="dep-dots"><span class="dep-dot"></span><span class="dep-dot"></span><span class="dep-dot"></span></div>
+
+    <!-- MODULE 4: Paper Repo (PENDING, COLLAPSED) -->
+    <div class="module collapsed" data-module-id="3" data-status="pending">
+      <div class="module-header" onclick="toggleModule(this.parentElement)">
+        <svg class="module-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+        <div class="module-num" style="background:rgba(107,122,153,0.1);color:var(--text-dim)">4</div>
+        <span class="module-title">Paper Repo Generation</span>
+        <div class="module-meta">
+          <div class="module-progress-wrap">
+            <div class="module-progress-bg"><div class="module-progress-fill" style="width:0%;background:var(--pending)"></div></div>
+            <div class="module-progress-label">0/4</div>
+          </div>
+          <span class="badge badge-pending"><span class="badge-dot"></span>Pending</span>
+        </div>
+      </div>
+      <div class="module-children">
+        <div class="submodule-wrap collapsed-items">
+          <div class="submodule" data-tint="amber" data-sub-id="s3-0"
+            data-tooltip-title="Generate LaTeX"
+            data-tooltip-summary="Waiting for invention loop. I will convert the final paper text into a complete LaTeX document with proper formatting, bibliography, and figure placeholders."
+            data-tooltip-items="0" data-tooltip-time="pending" data-tooltip-tokens="--">
+            <span class="sub-branch"></span>
+            <div class="sub-icon" style="background:rgba(107,122,153,0.1);color:var(--text-dim)">&#x1F4C4;</div>
+            <span class="sub-title">Generate LaTeX Document</span>
+            <div class="sub-meta">
+              <span class="badge badge-pending" style="font-size:10px;padding:2px 7px;"><span class="badge-dot"></span>Pending</span>
+            </div>
+          </div>
+        </div>
+        <div class="submodule-wrap collapsed-items">
+          <div class="submodule" data-tint="amber" data-sub-id="s3-1"
+            data-tooltip-title="Generate Artifact Demos"
+            data-tooltip-summary="Waiting for LaTeX generation. I will create runnable Python demos that showcase the key ideas from the paper, making the research interactive and reproducible."
+            data-tooltip-items="0" data-tooltip-time="pending" data-tooltip-tokens="--">
+            <span class="sub-branch"></span>
+            <div class="sub-icon" style="background:rgba(107,122,153,0.1);color:var(--text-dim)">&#x1F3AE;</div>
+            <span class="sub-title">Generate Artifact Demos</span>
+            <div class="sub-meta">
+              <span class="badge badge-pending" style="font-size:10px;padding:2px 7px;"><span class="badge-dot"></span>Pending</span>
+            </div>
+          </div>
+        </div>
+        <div class="submodule-wrap collapsed-items">
+          <div class="submodule" data-tint="amber" data-sub-id="s3-2"
+            data-tooltip-title="Generate Visualizations"
+            data-tooltip-summary="Waiting. I will generate publication-quality figures: architecture diagrams, result plots, and comparison tables using matplotlib and tikz."
+            data-tooltip-items="0" data-tooltip-time="pending" data-tooltip-tokens="--">
+            <span class="sub-branch"></span>
+            <div class="sub-icon" style="background:rgba(107,122,153,0.1);color:var(--text-dim)">&#x1F4CA;</div>
+            <span class="sub-title">Generate Visualizations</span>
+            <div class="sub-meta">
+              <span class="badge badge-pending" style="font-size:10px;padding:2px 7px;"><span class="badge-dot"></span>Pending</span>
+            </div>
+          </div>
+        </div>
+        <div class="submodule-wrap collapsed-items">
+          <div class="submodule" data-tint="amber" data-sub-id="s3-3"
+            data-tooltip-title="Generate Full Paper"
+            data-tooltip-summary="Final assembly. I will combine all generated assets into a complete paper repository with build scripts, README, and reproducibility instructions."
+            data-tooltip-items="0" data-tooltip-time="pending" data-tooltip-tokens="--">
+            <span class="sub-branch"></span>
+            <div class="sub-icon" style="background:rgba(107,122,153,0.1);color:var(--text-dim)">&#x1F4E6;</div>
+            <span class="sub-title">Assemble Full Paper</span>
+            <div class="sub-meta">
+              <span class="badge badge-pending" style="font-size:10px;padding:2px 7px;"><span class="badge-dot"></span>Pending</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ===== BELOW-TREE DASHBOARD ===== -->
+  <div class="dashboard-panel" id="dashboardPanel">
+    <div class="dashboard-inner" id="dashboardInner">
+      <button class="dash-close" id="dashClose" onclick="closeDashboard()">&times;</button>
+      <div class="dash-left">
+        <div class="dash-section-title">
+          <span id="dashIcon"></span>
+          <span id="dashTitleText"></span>
+        </div>
+        <div class="dash-summary" id="dashSummary"></div>
+        <div class="dash-section-title" style="margin-top:8px;">
+          <span>Items</span>
+          <button class="items-toggle" id="dashItemsToggle" onclick="toggleDashItems()">
+            <span id="dashItemsToggleLabel">Show all</span>
+            <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="2 4 6 8 10 4"/></svg>
+          </button>
+        </div>
+        <ul class="dash-item-list" id="dashItemList"></ul>
+      </div>
+      <div class="dash-right">
+        <div class="dash-section-title">Statistics</div>
+        <div class="dash-stat-grid" id="dashStatGrid"></div>
+        <div class="dash-feed-title">Live Feed</div>
+        <div class="dash-feed" id="dashFeed"></div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+// ===== MOCK DATA =====
+const MOCK_DATA = {
+  's1-0': {
+    icon: '\u{1F52C}', title: 'Expand Hypotheses', status: 'completed',
+    summary: 'I expanded each of the 17 seed hypotheses into fully structured research proposals. Each proposal now includes a formal problem statement, a proposed methodology with concrete steps, expected outcomes with measurable criteria, and a detailed evaluation framework. All 17 proposals have been validated against the knowledge graph to ensure consistency with existing literature and to confirm that none duplicate prior work.',
+    items: [
+      { label: 'Expanded 17 hypotheses into structured proposals', status: 'done', time: '5m 32s' },
+      { label: 'Validated methodology sections against knowledge graph', status: 'done', time: '2m 18s' },
+      { label: 'Cross-referenced expected outcomes with prior results', status: 'done', time: '0m 54s' },
+    ],
+    stats: { 'Duration': '8m 44s', 'Tokens': '312K', 'Hypotheses': '17', 'KG Lookups': '89' },
+    feed: [
+      { time: '14:22', msg: 'All 17 hypotheses expanded successfully' },
+      { time: '14:20', msg: 'Knowledge graph validation passed for batch 2 (9-17)' },
+      { time: '14:16', msg: 'Knowledge graph validation passed for batch 1 (1-8)' },
+      { time: '14:12', msg: 'Expansion complete -- formatting structured outputs' },
+      { time: '14:05', msg: 'Starting hypothesis expansion phase' },
+    ],
+  },
+  's1-1': {
+    icon: '\u{1F50D}', title: 'Review Hypotheses', status: 'running',
+    summary: 'I am currently evaluating each expanded hypothesis against five criteria: novelty, feasibility, scientific rigor, potential impact, and clarity of methodology. So far 11 of 17 have passed the initial screening with scores above the threshold. I am now deep-reviewing the remaining 6 edge cases -- hypotheses #12, #14, and #15 are particularly interesting as they sit right on the boundary and may need minor reformulation rather than outright rejection.',
+    items: [
+      { label: 'Novelty + feasibility pre-screen passed (11/17)', status: 'done', time: '3m 10s' },
+      { label: 'Scientific rigor audit on batch 1 (8 hypotheses)', status: 'done', time: '4m 22s' },
+      { label: 'Deep review: edge-case hypotheses #12, #14, #15', status: 'active', time: '2m 05s' },
+      { label: 'Impact scoring for passing hypotheses', status: 'wait', time: '--' },
+      { label: 'Final composite ranking', status: 'wait', time: '--' },
+    ],
+    stats: { 'Reviewed': '11/17', 'Tokens': '186K', 'Avg Score': '7.4', 'Duration': '9m 37s' },
+    feed: [
+      { time: '14:31', msg: 'Deep-reviewing hypothesis #15 -- borderline novelty score' },
+      { time: '14:29', msg: 'Hypothesis #14 reformulated -- now passes rigor check' },
+      { time: '14:26', msg: 'Starting edge-case deep review (6 hypotheses)' },
+      { time: '14:23', msg: 'Batch 1 rigor audit complete -- all 8 passed' },
+      { time: '14:19', msg: 'Pre-screening complete: 11/17 above threshold' },
+    ],
+  },
+  's1-2': {
+    icon: '\u{1F3AF}', title: 'Select Top Hypotheses', status: 'pending',
+    summary: 'Waiting for the review phase to complete. Once all 17 hypotheses have final scores, I will compute a composite ranking using a weighted formula (novelty * 0.3 + feasibility * 0.25 + impact * 0.25 + rigor * 0.2) and select the top 6 candidates. These will be formatted as structured input for the invention loop.',
+    items: [
+      { label: 'Composite scoring (novelty * feasibility * impact)', status: 'wait', time: '--' },
+      { label: 'Select top 6 candidates', status: 'wait', time: '--' },
+      { label: 'Format for invention loop intake', status: 'wait', time: '--' },
+    ],
+    stats: { 'Target': '6', 'Tokens': '--', 'Status': 'Queued', 'ETA': '~3m' },
+    feed: [
+      { time: '--', msg: 'Waiting for review phase to complete...' },
+    ],
+  },
+  's2-0': {
+    icon: '\u{1F9ED}', title: 'Generate Strategy', status: 'completed',
+    summary: 'I devised the overall invention strategy for hypothesis #3 (adaptive prompt routing for multi-model orchestration). The strategy centers on a modular architecture with three core components: (1) a context analyzer that classifies incoming tasks by complexity and domain, (2) a routing engine that selects the optimal model configuration, and (3) a feedback loop that continuously refines routing decisions based on output quality signals.',
+    items: [
+      { label: 'Defined modular architecture (3 components)', status: 'done', time: '2m 40s' },
+      { label: 'Mapped inter-component dependencies', status: 'done', time: '1m 12s' },
+      { label: 'Validated against literature constraints', status: 'done', time: '1m 26s' },
+    ],
+    stats: { 'Duration': '5m 18s', 'Tokens': '142K', 'Components': '3', 'Refs': '18' },
+    feed: [
+      { time: '14:08', msg: 'Strategy generation complete' },
+      { time: '14:06', msg: 'Literature constraint validation passed' },
+      { time: '14:04', msg: 'Component dependency graph finalized' },
+      { time: '14:01', msg: 'Modular architecture defined (3 components)' },
+      { time: '13:58', msg: 'Starting strategy generation for hypothesis #3' },
+    ],
+  },
+  's2-1': {
+    icon: '\u{1F4CB}', title: 'Generate Plan', status: 'completed',
+    summary: 'I created a detailed 8-step execution plan for building the adaptive prompt routing system. Each step includes estimated token budgets, concrete expected outputs, and success criteria. The plan also accounts for two potential pivot points: if the context analyzer accuracy falls below 80% (pivot to simpler heuristics), or if routing overhead exceeds 200ms (pivot to cached routing tables).',
+    items: [
+      { label: 'Broke invention into 8 execution steps', status: 'done', time: '2m 15s' },
+      { label: 'Assigned token budgets per step (total: 1.2M)', status: 'done', time: '0m 48s' },
+      { label: 'Defined 2 pivot conditions for weak results', status: 'done', time: '1m 02s' },
+    ],
+    stats: { 'Duration': '4m 05s', 'Tokens': '198K', 'Steps': '8', 'Pivots': '2' },
+    feed: [
+      { time: '14:14', msg: 'Plan generation complete -- 8 steps defined' },
+      { time: '14:12', msg: 'Pivot conditions documented' },
+      { time: '14:11', msg: 'Token budgets assigned (1.2M total)' },
+      { time: '14:09', msg: 'Starting plan generation' },
+    ],
+  },
+  's2-2': {
+    icon: '\u{270D}\u{FE0F}', title: 'Generate Paper Text', status: 'running',
+    summary: 'I am writing the core paper sections now. The introduction clearly frames the problem of static model selection in multi-model pipelines, and the related work section covers 32 relevant papers across prompt engineering, model routing, and adaptive systems. I am currently drafting the methodology section, which needs to formally define the routing function, specify the context feature space, and describe the feedback mechanism with mathematical precision.',
+    items: [
+      { label: 'Introduction + formal problem statement', status: 'done', time: '3m 44s' },
+      { label: 'Related work section (32 citations)', status: 'done', time: '5m 18s' },
+      { label: 'Methodology: formal definitions + architecture', status: 'active', time: '4m 12s' },
+      { label: 'Experimental setup + results', status: 'wait', time: '--' },
+      { label: 'Conclusion + future work', status: 'wait', time: '--' },
+    ],
+    stats: { 'Sections': '2/5', 'Tokens': '267K', 'Citations': '32', 'Duration': '13m 14s' },
+    feed: [
+      { time: '14:31', msg: 'Drafting routing function formal definition (Def. 3.1)' },
+      { time: '14:28', msg: 'Context feature space specified -- 12 dimensions' },
+      { time: '14:25', msg: 'Starting methodology section' },
+      { time: '14:22', msg: 'Related work complete -- 32 citations integrated' },
+      { time: '14:16', msg: 'Introduction draft complete' },
+      { time: '14:12', msg: 'Starting paper text generation' },
+    ],
+  },
+  's2-3': {
+    icon: '\u{1F4DD}', title: 'Review Paper', status: 'pending',
+    summary: 'Waiting for paper text generation to finish. I will then perform a thorough multi-pass review: (1) structural integrity -- checking that all sections flow logically, (2) argument coherence -- ensuring claims are supported, (3) citation accuracy -- verifying all 32+ references are correctly attributed, and (4) novelty verification -- cross-checking against the knowledge graph to confirm our contributions are genuinely new.',
+    items: [
+      { label: 'Structural integrity check', status: 'wait', time: '--' },
+      { label: 'Argument coherence analysis', status: 'wait', time: '--' },
+      { label: 'Citation accuracy verification', status: 'wait', time: '--' },
+      { label: 'Novelty cross-check vs knowledge graph', status: 'wait', time: '--' },
+    ],
+    stats: { 'Passes': '0/4', 'Tokens': '--', 'Status': 'Queued', 'ETA': '~8m' },
+    feed: [{ time: '--', msg: 'Waiting for paper text generation...' }],
+  },
+  's2-4': {
+    icon: '\u{1F504}', title: 'Revise Paper', status: 'pending',
+    summary: 'Waiting for the review phase. I will incorporate all review feedback, fix any structural or coherence issues, update citations if needed, and produce the final polished draft. This draft will be the canonical input for the paper repo generation module.',
+    items: [
+      { label: 'Incorporate review feedback', status: 'wait', time: '--' },
+      { label: 'Polish language + formatting', status: 'wait', time: '--' },
+      { label: 'Final consistency pass', status: 'wait', time: '--' },
+    ],
+    stats: { 'Status': 'Queued', 'Tokens': '--', 'ETA': '~5m', 'Depends': 'Review' },
+    feed: [{ time: '--', msg: 'Waiting for review phase...' }],
+  },
+  's0-0': {
+    icon: '\u{1F4D6}', title: 'Literature Scan', status: 'completed',
+    summary: 'I scanned 340 papers from arXiv and Semantic Scholar using targeted keyword queries across prompt engineering, model routing, adaptive AI systems, and multi-agent orchestration. From these, I extracted 89 highly relevant abstracts and built a comprehensive knowledge graph with 214 concept nodes and 387 relationship edges to map the current research landscape.',
+    items: [
+      { label: 'Scanned 340 papers from arXiv + Semantic Scholar', status: 'done', time: '4m 12s' },
+      { label: 'Extracted 89 relevant abstracts', status: 'done', time: '1m 30s' },
+      { label: 'Built knowledge graph (214 nodes, 387 edges)', status: 'done', time: '2m 45s' },
+    ],
+    stats: { 'Duration': '8m 27s', 'Papers': '340', 'Abstracts': '89', 'KG Nodes': '214' },
+    feed: [
+      { time: '13:42', msg: 'Knowledge graph construction complete' },
+      { time: '13:38', msg: '89 abstracts extracted and categorized' },
+      { time: '13:34', msg: 'Paper scan complete: 340 papers processed' },
+      { time: '13:26', msg: 'Starting literature scan' },
+    ],
+  },
+  's0-1': {
+    icon: '\u{1F9E0}', title: 'Gap Identification', status: 'completed',
+    summary: 'I analyzed the knowledge graph using spectral clustering to identify sparse regions representing under-explored research areas. This revealed 23 distinct research gaps, which I then ranked by a combined novelty-feasibility score. The top gaps center around adaptive model selection, real-time routing feedback loops, and context-aware prompt assembly -- all of which informed the hypothesis generation phase.',
+    items: [
+      { label: 'Identified 23 research gaps via cluster analysis', status: 'done', time: '3m 08s' },
+      { label: 'Ranked gaps by novelty + feasibility score', status: 'done', time: '1m 55s' },
+    ],
+    stats: { 'Duration': '5m 03s', 'Gaps Found': '23', 'Top Score': '9.2', 'Clusters': '7' },
+    feed: [
+      { time: '13:50', msg: 'Gap ranking complete -- top 10 identified' },
+      { time: '13:47', msg: '23 research gaps found via spectral clustering' },
+      { time: '13:44', msg: 'Starting gap identification' },
+    ],
+  },
+  's0-2': {
+    icon: '\u{1F4A1}', title: 'Hypothesis Generation', status: 'completed',
+    summary: 'I generated 17 candidate hypotheses by combining insights from the top-ranked research gaps with creative analogical reasoning across adjacent fields. After deduplication against prior art (which removed 4 near-duplicates), the final set covers diverse approaches to adaptive AI systems, from lightweight routing heuristics to full neural architecture search for prompt optimization.',
+    items: [
+      { label: 'Generated 17 candidate hypotheses', status: 'done', time: '6m 22s' },
+      { label: 'Deduplicated against prior art (removed 4)', status: 'done', time: '2m 11s' },
+      { label: 'Formatted output for hypothesis loop', status: 'done', time: '0m 18s' },
+    ],
+    stats: { 'Duration': '8m 51s', 'Generated': '21', 'After Dedup': '17', 'Tokens': '245K' },
+    feed: [
+      { time: '14:02', msg: 'Output formatted for hypothesis loop' },
+      { time: '14:00', msg: 'Deduplication complete: 21 -> 17 hypotheses' },
+      { time: '13:56', msg: '21 raw hypotheses generated' },
+      { time: '13:50', msg: 'Starting hypothesis generation' },
+    ],
+  },
+  's3-0': {
+    icon: '\u{1F4C4}', title: 'Generate LaTeX Document', status: 'pending',
+    summary: 'Waiting for the invention loop to produce a finalized paper. I will convert the polished text into a complete LaTeX document using a standard conference template, with proper bibliography management, cross-references, and figure/table placeholders.',
+    items: [{ label: 'Awaiting invention loop output', status: 'wait', time: '--' }],
+    stats: { 'Status': 'Queued', 'Tokens': '--', 'ETA': 'TBD', 'Template': 'NeurIPS' },
+    feed: [{ time: '--', msg: 'Waiting for invention loop...' }],
+  },
+  's3-1': {
+    icon: '\u{1F3AE}', title: 'Generate Artifact Demos', status: 'pending',
+    summary: 'Waiting for LaTeX generation. I will create runnable Python demos that let readers interact with the key ideas from the paper.',
+    items: [{ label: 'Awaiting LaTeX generation', status: 'wait', time: '--' }],
+    stats: { 'Status': 'Queued', 'Tokens': '--', 'ETA': 'TBD', 'Format': 'Python' },
+    feed: [{ time: '--', msg: 'Waiting for LaTeX...' }],
+  },
+  's3-2': {
+    icon: '\u{1F4CA}', title: 'Generate Visualizations', status: 'pending',
+    summary: 'Waiting. I will generate publication-quality figures including architecture diagrams, result comparison plots, and ablation study tables.',
+    items: [{ label: 'Awaiting upstream steps', status: 'wait', time: '--' }],
+    stats: { 'Status': 'Queued', 'Tokens': '--', 'ETA': 'TBD', 'Tools': 'matplotlib' },
+    feed: [{ time: '--', msg: 'Waiting for upstream steps...' }],
+  },
+  's3-3': {
+    icon: '\u{1F4E6}', title: 'Assemble Full Paper', status: 'pending',
+    summary: 'Final assembly step. I will combine all generated assets into a complete paper repository with build scripts, a README, and reproducibility instructions.',
+    items: [{ label: 'Awaiting all upstream steps', status: 'wait', time: '--' }],
+    stats: { 'Status': 'Queued', 'Tokens': '--', 'ETA': 'TBD', 'Output': 'Git repo' },
+    feed: [{ time: '--', msg: 'Waiting for all upstream steps...' }],
+  },
+};
+
+// ===== MODULE COLLAPSE/EXPAND =====
+function toggleModule(moduleEl) {
+  moduleEl.classList.toggle('collapsed');
+}
+
+// ===== TOOLTIP =====
+const tooltipPortal = document.getElementById('tooltipPortal');
+const tooltipTitle = document.getElementById('tooltipTitle');
+const tooltipSummary = document.getElementById('tooltipSummary');
+const tooltipStats = document.getElementById('tooltipStats');
+let tooltipTimeout = null;
+
+document.querySelectorAll('.submodule').forEach(el => {
+  el.addEventListener('mouseenter', (e) => {
+    const subId = el.dataset.subId;
+    const data = MOCK_DATA[subId];
+    if (!data) return;
+    clearTimeout(tooltipTimeout);
+    tooltipTitle.innerHTML = `<span>${data.icon}</span> ${data.title}`;
+    tooltipSummary.textContent = data.summary.substring(0, 200) + (data.summary.length > 200 ? '...' : '');
+    const statsHtml = Object.entries(data.stats).map(([k, v]) =>
+      `<div class="tooltip-stat"><div class="tooltip-stat-val">${v}</div><div class="tooltip-stat-label">${k}</div></div>`
+    ).join('');
+    tooltipStats.innerHTML = statsHtml;
+
+    const rect = el.getBoundingClientRect();
+    const ttWidth = 400;
+    let left = rect.right + 12;
+    let top = rect.top;
+    if (left + ttWidth > window.innerWidth - 20) {
+      left = rect.left - ttWidth - 12;
+    }
+    if (top + 200 > window.innerHeight) {
+      top = window.innerHeight - 220;
+    }
+    tooltipPortal.style.left = left + 'px';
+    tooltipPortal.style.top = top + 'px';
+    tooltipPortal.classList.add('visible');
+  });
+  el.addEventListener('mouseleave', () => {
+    tooltipTimeout = setTimeout(() => {
+      tooltipPortal.classList.remove('visible');
+    }, 100);
+  });
+});
+
+// ===== DASHBOARD =====
+const dashPanel = document.getElementById('dashboardPanel');
+let currentDashSub = null;
+let dashItemsExpanded = false;
+
+document.querySelectorAll('.submodule').forEach(el => {
+  el.addEventListener('click', () => {
+    const subId = el.dataset.subId;
+    const data = MOCK_DATA[subId];
+    if (!data) return;
+
+    // Deselect previous
+    document.querySelectorAll('.submodule.selected').forEach(s => s.classList.remove('selected'));
+    el.classList.add('selected');
+
+    if (currentDashSub === subId && dashPanel.classList.contains('open')) {
+      closeDashboard();
+      return;
+    }
+    currentDashSub = subId;
+    populateDashboard(data);
+    dashPanel.classList.add('open');
+
+    // Scroll dashboard into view
+    setTimeout(() => {
+      dashPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 100);
+  });
+});
+
+function populateDashboard(data) {
+  document.getElementById('dashIcon').textContent = data.icon;
+  document.getElementById('dashTitleText').textContent = data.title;
+  document.getElementById('dashSummary').textContent = data.summary;
+
+  // Items
+  const itemList = document.getElementById('dashItemList');
+  dashItemsExpanded = false;
+  const toggle = document.getElementById('dashItemsToggle');
+  toggle.classList.remove('expanded');
+  document.getElementById('dashItemsToggleLabel').textContent = data.items.length > 3 ? 'Show all' : 'Items';
+
+  const visibleItems = data.items.slice(0, 3);
+  const hiddenItems = data.items.slice(3);
+
+  let html = visibleItems.map(it => `
+    <li class="dash-item">
+      <span class="dash-item-icon">${it.status === 'done' ? '<span style="color:var(--accent-green)">\u2713</span>' :
+        it.status === 'active' ? '<span class="spinner" style="width:10px;height:10px;border-width:1.5px;"></span>' :
+        '<span style="color:var(--text-dim)">\u25CB</span>'}</span>
+      <span class="dash-item-label">${it.label}</span>
+      <span class="dash-item-status" style="color:var(--text-dim)">${it.time}</span>
+    </li>
+  `).join('');
+
+  if (hiddenItems.length > 0) {
+    html += `<div class="dash-hidden-items" style="max-height:0;overflow:hidden;transition:max-height 0.3s ease;">`;
+    html += hiddenItems.map(it => `
+      <li class="dash-item">
+        <span class="dash-item-icon">${it.status === 'done' ? '<span style="color:var(--accent-green)">\u2713</span>' :
+          it.status === 'active' ? '<span class="spinner" style="width:10px;height:10px;border-width:1.5px;"></span>' :
+          '<span style="color:var(--text-dim)">\u25CB</span>'}</span>
+        <span class="dash-item-label">${it.label}</span>
+        <span class="dash-item-status" style="color:var(--text-dim)">${it.time}</span>
+      </li>
+    `).join('');
+    html += '</div>';
+  }
+  itemList.innerHTML = html;
+
+  if (hiddenItems.length === 0) {
+    toggle.style.display = 'none';
+  } else {
+    toggle.style.display = 'inline-flex';
+  }
+
+  // Stats
+  const statGrid = document.getElementById('dashStatGrid');
+  statGrid.innerHTML = Object.entries(data.stats).map(([k, v]) => `
+    <div class="dash-stat-card">
+      <div class="dash-stat-val">${v}</div>
+      <div class="dash-stat-label">${k}</div>
+    </div>
+  `).join('');
+
+  // Feed
+  const feed = document.getElementById('dashFeed');
+  feed.innerHTML = data.feed.map(f => `
+    <div class="feed-entry">
+      <span class="feed-time">${f.time}</span>
+      <span class="feed-msg">${f.msg}</span>
+    </div>
+  `).join('');
+}
+
+function toggleDashItems() {
+  dashItemsExpanded = !dashItemsExpanded;
+  const hidden = document.querySelector('.dash-hidden-items');
+  const toggle = document.getElementById('dashItemsToggle');
+  if (hidden) {
+    hidden.style.maxHeight = dashItemsExpanded ? '400px' : '0';
+  }
+  toggle.classList.toggle('expanded', dashItemsExpanded);
+  document.getElementById('dashItemsToggleLabel').textContent = dashItemsExpanded ? 'Show less' : 'Show all';
+}
+
+function closeDashboard() {
+  dashPanel.classList.remove('open');
+  document.querySelectorAll('.submodule.selected').forEach(s => s.classList.remove('selected'));
+  currentDashSub = null;
+}
+
+// ===== AMBIENT PARTICLES =====
+(function initParticles() {
+  const canvas = document.getElementById('particles-canvas');
+  const ctx = canvas.getContext('2d');
+  let particles = [];
+  const COUNT = 50;
+
+  function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  for (let i = 0; i < COUNT; i++) {
+    particles.push({
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height,
+      r: Math.random() * 1.5 + 0.3,
+      vx: (Math.random() - 0.5) * 0.15,
+      vy: (Math.random() - 0.5) * 0.12,
+      alpha: Math.random() * 0.15 + 0.03,
+    });
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    particles.forEach(p => {
+      p.x += p.vx;
+      p.y += p.vy;
+      if (p.x < 0) p.x = canvas.width;
+      if (p.x > canvas.width) p.x = 0;
+      if (p.y < 0) p.y = canvas.height;
+      if (p.y > canvas.height) p.y = 0;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(91, 141, 239, ${p.alpha})`;
+      ctx.fill();
+    });
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+
+// ===== MULTI-TARGET DOT ANIMATION =====
+(function initDotAnimation() {
+  const container = document.getElementById('dotAnimContainer');
+  const runningSubmodules = document.querySelectorAll('.submodule-wrap[data-running="true"] .submodule');
+  if (runningSubmodules.length === 0) return;
+
+  function createDots() {
+    container.innerHTML = '';
+    runningSubmodules.forEach((target, idx) => {
+      const rect = target.getBoundingClientRect();
+      const startX = 48 + 12; // sidebar right edge
+      const startY = rect.top + rect.height / 2;
+      const endX = rect.left - 8;
+      const endY = rect.top + rect.height / 2;
+
+      for (let i = 0; i < 3; i++) {
+        const dot = document.createElement('div');
+        dot.className = 'flying-dot';
+        dot.style.left = startX + 'px';
+        dot.style.top = (startY - 2) + 'px';
+        dot.style.animationDelay = (i * 0.8 + idx * 0.4) + 's';
+        dot.style.animationDuration = '2.5s';
+
+        // Use CSS custom properties for path animation
+        const midX = (startX + endX) / 2;
+        const midY = startY + (Math.random() - 0.5) * 30;
+        dot.animate([
+          { left: startX + 'px', top: startY + 'px', opacity: 0 },
+          { left: midX + 'px', top: midY + 'px', opacity: 1 },
+          { left: endX + 'px', top: endY + 'px', opacity: 0 },
+        ], {
+          duration: 2500,
+          delay: (i * 800 + idx * 400),
+          iterations: Infinity,
+          easing: 'ease-in-out',
+        });
+        container.appendChild(dot);
+      }
+    });
+  }
+
+  createDots();
+  window.addEventListener('resize', () => { setTimeout(createDots, 100); });
+  window.addEventListener('scroll', () => { requestAnimationFrame(createDots); });
+})();
+
+// ===== SIDEBAR ACTIVE SYNC =====
+document.querySelectorAll('.sidebar-item').forEach(item => {
+  item.addEventListener('click', () => {
+    const modId = item.dataset.module;
+    const modEl = document.querySelector(`[data-module-id="${modId}"]`);
+    if (modEl) {
+      modEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      document.querySelectorAll('.sidebar-item').forEach(s => s.classList.remove('active'));
+      item.classList.add('active');
+    }
+  });
+});
+
+// ===== SIMULATED PROGRESS TICKING =====
+(function simulateProgress() {
+  // Slowly tick the review hypothesis progress
+  let reviewProgress = 65;
+  const reviewFill = document.querySelector('[data-sub-id="s1-1"]')
+    ?.closest('.submodule-wrap')?.querySelector('.sub-progress-fill');
+  const reviewLabel = document.querySelector('[data-sub-id="s1-1"]')
+    ?.closest('.submodule-wrap')?.querySelector('.sub-progress-label');
+
+  // Slowly tick paper text progress
+  let paperProgress = 40;
+  const paperFill = document.querySelector('[data-sub-id="s2-2"]')
+    ?.closest('.submodule-wrap')?.querySelector('.sub-progress-fill');
+  const paperLabel = document.querySelector('[data-sub-id="s2-2"]')
+    ?.closest('.submodule-wrap')?.querySelector('.sub-progress-label');
+
+  setInterval(() => {
+    if (reviewProgress < 76) {
+      reviewProgress += 0.3;
+      if (reviewFill) reviewFill.style.width = reviewProgress + '%';
+    }
+    if (paperProgress < 52) {
+      paperProgress += 0.2;
+      if (paperFill) paperFill.style.width = paperProgress + '%';
+    }
+  }, 2000);
+})();
+
+// ===== SIMULATED LIVE FEED UPDATES =====
+(function simulateFeed() {
+  const feedMessages = [
+    'Analyzing hypothesis #15 methodology section...',
+    'Cross-referencing claim 3.2 against literature...',
+    'Drafting Definition 3.2: context feature mapping...',
+    'Routing function parameterization in progress...',
+    'Verifying hypothesis #12 novelty claim...',
+    'Writing proof sketch for Theorem 1...',
+    'Fetching related work for feedback mechanisms...',
+    'Checking mathematical notation consistency...',
+  ];
+  let msgIdx = 0;
+
+  setInterval(() => {
+    if (currentDashSub && (currentDashSub === 's1-1' || currentDashSub === 's2-2')) {
+      const feed = document.getElementById('dashFeed');
+      if (feed) {
+        const now = new Date();
+        const time = now.getHours().toString().padStart(2, '0') + ':' +
+                     now.getMinutes().toString().padStart(2, '0');
+        const entry = document.createElement('div');
+        entry.className = 'feed-entry';
+        entry.innerHTML = `<span class="feed-time">${time}</span><span class="feed-msg">${feedMessages[msgIdx % feedMessages.length]}</span>`;
+        entry.style.animation = 'feedFadeIn 0.35s ease both';
+        feed.insertBefore(entry, feed.firstChild);
+        msgIdx++;
+        // Keep feed manageable
+        while (feed.children.length > 12) {
+          feed.removeChild(feed.lastChild);
+        }
+      }
+    }
+  }, 5000);
+})();
+
+// ===== STAT CARD COUNTER ANIMATION =====
+(function animateCounters() {
+  document.querySelectorAll('.stat-card-value').forEach(el => {
+    const text = el.textContent;
+    const match = text.match(/^(\d+\.?\d*)/);
+    if (!match) return;
+    const target = parseFloat(match[1]);
+    const suffix = text.replace(match[1], '');
+    let current = 0;
+    const step = target / 40;
+    const interval = setInterval(() => {
+      current += step;
+      if (current >= target) {
+        current = target;
+        clearInterval(interval);
+      }
+      el.innerHTML = (Number.isInteger(target) ? Math.round(current) : current.toFixed(1)) +
+        suffix;
+    }, 30);
+  });
+})();
+
+// ===== RING ANIMATION ON LOAD =====
+(function animateRings() {
+  document.querySelectorAll('.stat-card-ring .fill').forEach(ring => {
+    const target = ring.getAttribute('stroke-dashoffset');
+    ring.setAttribute('stroke-dashoffset', ring.getAttribute('stroke-dasharray'));
+    setTimeout(() => {
+      ring.setAttribute('stroke-dashoffset', target);
+    }, 300);
+  });
+})();
+</script>
+</body>
+</html>
