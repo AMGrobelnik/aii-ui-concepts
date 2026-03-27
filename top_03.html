@@ -1,0 +1,1570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Pipeline Monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   RESET & BASE
+   ============================================================ */
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg:        #1a1d23;
+  --surface:   #22262e;
+  --surface-2: #282d36;
+  --border:    #2e3440;
+  --border-lt: #3b4252;
+  --text:      #d8dee9;
+  --text-dim:  #8892a4;
+  --text-mute: #5c6678;
+  --white:     #eceff4;
+
+  --seed-hue:    160;
+  --hypo-hue:    210;
+  --invent-hue:  270;
+  --paper-hue:   32;
+
+  --seed:      hsl(var(--seed-hue), 55%, 55%);
+  --seed-dim:  hsl(var(--seed-hue), 30%, 18%);
+  --seed-glow: hsl(var(--seed-hue), 60%, 40%);
+
+  --hypo:      hsl(var(--hypo-hue), 55%, 60%);
+  --hypo-dim:  hsl(var(--hypo-hue), 30%, 18%);
+  --hypo-glow: hsl(var(--hypo-hue), 60%, 40%);
+
+  --invent:      hsl(var(--invent-hue), 45%, 62%);
+  --invent-dim:  hsl(var(--invent-hue), 25%, 18%);
+  --invent-glow: hsl(var(--invent-hue), 50%, 42%);
+
+  --paper:      hsl(var(--paper-hue), 60%, 58%);
+  --paper-dim:  hsl(var(--paper-hue), 30%, 18%);
+  --paper-glow: hsl(var(--paper-hue), 55%, 40%);
+
+  --glass-bg:   rgba(34, 38, 46, 0.65);
+  --glass-border: rgba(255,255,255,0.06);
+  --glass-blur: 18px;
+
+  --header-h: 44px;
+  --sidebar-collapsed: 48px;
+  --sidebar-expanded:  240px;
+  --anim-fast: 220ms;
+  --anim-med:  400ms;
+  --anim-slow: 600ms;
+}
+
+html { font-size: 14px; }
+body {
+  font-family: 'Inter', -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+  line-height: 1.5;
+}
+
+/* ============================================================
+   AMBIENT PARTICLES (canvas behind everything)
+   ============================================================ */
+#ambientCanvas {
+  position: fixed; inset: 0;
+  z-index: 0; pointer-events: none;
+}
+
+/* ============================================================
+   GLASSMORPHISM UTILITY
+   ============================================================ */
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+}
+
+/* ============================================================
+   HEADER — 44px fixed glassmorphism
+   ============================================================ */
+#header {
+  position: fixed; top: 0; left: 0; right: 0;
+  height: var(--header-h);
+  z-index: 100;
+  display: flex; align-items: center;
+  padding: 0 16px;
+  gap: 16px;
+  border-bottom: 1px solid var(--glass-border);
+  background: rgba(26, 29, 35, 0.82);
+  backdrop-filter: blur(24px);
+}
+
+#header .logo {
+  font-weight: 700; font-size: 15px;
+  color: var(--white);
+  letter-spacing: -0.3px;
+  white-space: nowrap;
+  display: flex; align-items: center; gap: 8px;
+}
+#header .logo .dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--seed);
+  box-shadow: 0 0 8px var(--seed-glow);
+  animation: logoPulse 2s ease-in-out infinite;
+}
+@keyframes logoPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.breadcrumb {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; color: var(--text-dim);
+}
+.breadcrumb .sep { color: var(--text-mute); }
+.breadcrumb .active { color: var(--text); font-weight: 500; }
+
+.header-spacer { flex: 1; }
+
+.header-stat {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.header-stat .label { color: var(--text-mute); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }
+.header-stat .value { color: var(--text); font-weight: 600; }
+.header-stat .icon { font-size: 13px; opacity: 0.6; }
+
+/* ============================================================
+   SIDEBAR — collapsed 48px, expand 240px
+   ============================================================ */
+#sidebar {
+  position: fixed; top: var(--header-h); left: 0;
+  bottom: 0; width: var(--sidebar-collapsed);
+  z-index: 90;
+  border-right: 1px solid var(--glass-border);
+  background: rgba(26, 29, 35, 0.75);
+  backdrop-filter: blur(16px);
+  transition: width var(--anim-med) cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+  display: flex; flex-direction: column;
+  padding-top: 8px;
+}
+#sidebar:hover, #sidebar.expanded {
+  width: var(--sidebar-expanded);
+}
+
+.sidebar-item {
+  display: flex; align-items: center;
+  height: 40px; padding: 0 14px; gap: 12px;
+  cursor: pointer; white-space: nowrap;
+  color: var(--text-dim);
+  transition: all var(--anim-fast) ease;
+  border-left: 2px solid transparent;
+  font-size: 13px;
+}
+.sidebar-item:hover {
+  background: rgba(255,255,255,0.04);
+  color: var(--text);
+}
+.sidebar-item.active {
+  color: var(--white);
+  border-left-color: var(--hypo);
+  background: rgba(255,255,255,0.03);
+}
+.sidebar-item .s-icon {
+  min-width: 20px; text-align: center;
+  font-size: 16px;
+}
+.sidebar-item .s-label {
+  opacity: 0; transition: opacity var(--anim-fast) ease;
+}
+#sidebar:hover .s-label, #sidebar.expanded .s-label { opacity: 1; }
+
+.sidebar-spacer { flex: 1; }
+
+/* ============================================================
+   MAIN CONTENT
+   ============================================================ */
+#main {
+  margin-left: var(--sidebar-collapsed);
+  margin-top: var(--header-h);
+  padding: 24px 28px 120px;
+  position: relative; z-index: 1;
+  transition: margin-left var(--anim-med) ease;
+}
+
+/* ============================================================
+   MODULE CARDS — 4 horizontal glassmorphism cards
+   ============================================================ */
+.modules-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.module-card {
+  border-radius: 12px;
+  padding: 18px 18px 14px;
+  position: relative;
+  overflow: hidden;
+  cursor: default;
+  transition: all var(--anim-fast) ease;
+}
+.module-card::before {
+  content: '';
+  position: absolute; inset: 0;
+  opacity: 0.08;
+  border-radius: inherit;
+  transition: opacity var(--anim-fast) ease;
+}
+.module-card:hover::before { opacity: 0.13; }
+
+.module-card[data-module="seed"]::before   { background: var(--seed); }
+.module-card[data-module="hypo"]::before   { background: var(--hypo); }
+.module-card[data-module="invent"]::before { background: var(--invent); }
+.module-card[data-module="paper"]::before  { background: var(--paper); }
+
+.module-card .mc-top {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.mc-title {
+  display: flex; align-items: center; gap: 8px;
+}
+.mc-title .mc-num {
+  width: 24px; height: 24px; border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700;
+  color: var(--white);
+}
+.module-card[data-module="seed"]   .mc-num { background: var(--seed-dim); color: var(--seed); }
+.module-card[data-module="hypo"]   .mc-num { background: var(--hypo-dim); color: var(--hypo); }
+.module-card[data-module="invent"] .mc-num { background: var(--invent-dim); color: var(--invent); }
+.module-card[data-module="paper"]  .mc-num { background: var(--paper-dim); color: var(--paper); }
+
+.mc-title .mc-name {
+  font-size: 14px; font-weight: 600; color: var(--white);
+  letter-spacing: -0.2px;
+}
+
+.mc-badge {
+  font-size: 10px; font-weight: 600;
+  padding: 2px 8px; border-radius: 4px;
+  text-transform: uppercase; letter-spacing: 0.6px;
+}
+.mc-badge.done     { background: rgba(76,175,80,0.15); color: #81c784; }
+.mc-badge.running  { background: rgba(100,149,237,0.15); color: #90b8f8; animation: badgePulse 2s ease-in-out infinite; }
+.mc-badge.pending  { background: rgba(255,255,255,0.06); color: var(--text-mute); }
+
+@keyframes badgePulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.mc-progress-bar {
+  height: 3px; border-radius: 2px;
+  background: rgba(255,255,255,0.06);
+  overflow: hidden;
+}
+.mc-progress-fill {
+  height: 100%; border-radius: 2px;
+  transition: width 1s ease;
+}
+.module-card[data-module="seed"]   .mc-progress-fill { background: var(--seed); }
+.module-card[data-module="hypo"]   .mc-progress-fill { background: var(--hypo); }
+.module-card[data-module="invent"] .mc-progress-fill { background: var(--invent); }
+.module-card[data-module="paper"]  .mc-progress-fill { background: var(--paper); }
+
+/* ============================================================
+   SUB-MODULE TREES — XL 44px cards beneath each module
+   ============================================================ */
+.submodule-rows {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-top: 0;
+}
+
+.submodule-col {
+  display: flex; flex-direction: column;
+  gap: 4px;
+}
+
+.submodule-card {
+  height: 44px;
+  border-radius: 8px;
+  display: flex; align-items: center;
+  padding: 0 14px; gap: 10px;
+  cursor: pointer;
+  position: relative;
+  transition: all var(--anim-fast) ease;
+  background: rgba(34, 38, 46, 0.5);
+  border: 1px solid transparent;
+}
+.submodule-card:hover {
+  background: rgba(46, 52, 64, 0.7);
+  border-color: var(--glass-border);
+}
+.submodule-card.selected {
+  border-color: rgba(255,255,255,0.12);
+  background: rgba(46, 52, 64, 0.85);
+}
+
+.submodule-card .sm-indicator {
+  width: 7px; height: 7px; border-radius: 50%;
+  flex-shrink: 0;
+}
+.sm-indicator.done    { background: #66bb6a; box-shadow: 0 0 6px rgba(102,187,106,0.4); }
+.sm-indicator.running { background: #64b5f6; box-shadow: 0 0 6px rgba(100,181,246,0.5); animation: indicRun 1.5s ease-in-out infinite; }
+.sm-indicator.pending { background: var(--text-mute); opacity: 0.4; }
+
+@keyframes indicRun {
+  0%, 100% { box-shadow: 0 0 6px rgba(100,181,246,0.5); }
+  50% { box-shadow: 0 0 12px rgba(100,181,246,0.8); }
+}
+
+.submodule-card .sm-name {
+  font-size: 12.5px; font-weight: 500;
+  color: var(--text);
+  flex: 1;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.submodule-card.pending-state .sm-name { color: var(--text-mute); }
+
+.submodule-card .sm-dur {
+  font-size: 11px; color: var(--text-mute);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.submodule-card .sm-chevron {
+  font-size: 12px; color: var(--text-mute);
+  opacity: 0; transition: opacity var(--anim-fast) ease;
+}
+.submodule-card:hover .sm-chevron { opacity: 0.6; }
+.submodule-card.selected .sm-chevron { opacity: 1; color: var(--white); }
+
+/* tree connector line */
+.submodule-col .tree-line {
+  width: 1px; height: 6px;
+  background: var(--border);
+  margin-left: 22px;
+}
+
+/* collapsed column for completed modules */
+.submodule-col.collapsed .submodule-card { display: none; }
+.submodule-col.collapsed .tree-line { display: none; }
+.submodule-col .collapse-toggle {
+  display: none;
+  height: 32px; border-radius: 6px;
+  align-items: center; justify-content: center;
+  font-size: 11px; color: var(--text-mute);
+  cursor: pointer; gap: 4px;
+  transition: all var(--anim-fast) ease;
+  background: rgba(255,255,255,0.02);
+}
+.submodule-col .collapse-toggle:hover { background: rgba(255,255,255,0.05); color: var(--text-dim); }
+.submodule-col.collapsed .collapse-toggle { display: flex; }
+.submodule-col:not(.collapsed) .collapse-toggle { display: none; }
+
+/* expand button for collapsed */
+.col-expand-btn {
+  display: flex; align-items: center; justify-content: center;
+  height: 30px; border-radius: 6px;
+  font-size: 11px; color: var(--text-mute);
+  cursor: pointer; gap: 4px;
+  margin-top: 2px;
+  transition: all var(--anim-fast) ease;
+}
+.col-expand-btn:hover { color: var(--text-dim); background: rgba(255,255,255,0.03); }
+
+/* ============================================================
+   DOT ANIMATION CANVAS (overlays above cards)
+   ============================================================ */
+#dotCanvas {
+  position: fixed;
+  top: var(--header-h); left: var(--sidebar-collapsed);
+  right: 0; bottom: 0;
+  z-index: 5;
+  pointer-events: none;
+}
+
+/* ============================================================
+   DASHBOARD PANEL — hidden by default, slides up on click
+   ============================================================ */
+#dashboard {
+  position: fixed;
+  left: var(--sidebar-collapsed);
+  right: 0;
+  bottom: 0;
+  height: 0;
+  z-index: 80;
+  overflow: hidden;
+  transition: height var(--anim-slow) cubic-bezier(0.4, 0, 0.2, 1),
+              opacity var(--anim-med) ease;
+  opacity: 0;
+  background: rgba(26, 29, 35, 0.92);
+  backdrop-filter: blur(20px);
+  border-top: 1px solid var(--glass-border);
+}
+#dashboard.open {
+  height: 360px;
+  opacity: 1;
+}
+
+.dash-inner {
+  padding: 22px 28px;
+  height: 100%;
+  display: grid;
+  grid-template-columns: 1fr 1fr 280px;
+  gap: 24px;
+  overflow: hidden;
+}
+
+.dash-close {
+  position: absolute; top: 12px; right: 16px;
+  width: 28px; height: 28px; border-radius: 6px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--glass-border);
+  color: var(--text-dim);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; font-size: 14px;
+  transition: all var(--anim-fast) ease;
+  z-index: 2;
+}
+.dash-close:hover { background: rgba(255,255,255,0.1); color: var(--white); }
+
+/* Dashboard sections */
+.dash-section {
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.dash-section-title {
+  font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.8px;
+  color: var(--text-mute); margin-bottom: 12px;
+}
+
+.dash-desc {
+  font-size: 13px; line-height: 1.65;
+  color: var(--text-dim);
+}
+.dash-desc .highlight {
+  color: var(--text); font-weight: 500;
+}
+
+/* Stats grid */
+.dash-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.dash-stat-card {
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--glass-border);
+}
+.dash-stat-card .ds-label {
+  font-size: 10px; color: var(--text-mute);
+  text-transform: uppercase; letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+.dash-stat-card .ds-value {
+  font-size: 18px; font-weight: 700;
+  color: var(--white);
+  font-variant-numeric: tabular-nums;
+}
+.dash-stat-card .ds-sub {
+  font-size: 11px; color: var(--text-mute);
+  margin-top: 2px;
+}
+
+/* Feed */
+.dash-feed {
+  display: flex; flex-direction: column; gap: 6px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.dash-feed::-webkit-scrollbar { width: 3px; }
+.dash-feed::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+.feed-item {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.02);
+  font-size: 11.5px;
+  animation: feedIn 0.3s ease;
+}
+@keyframes feedIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.feed-item .fi-time {
+  color: var(--text-mute); font-variant-numeric: tabular-nums;
+  flex-shrink: 0; font-size: 10.5px; margin-top: 1px;
+}
+.feed-item .fi-msg { color: var(--text-dim); }
+.feed-item .fi-msg strong { color: var(--text); font-weight: 500; }
+
+/* Dash submodule header */
+.dash-sm-header {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 14px;
+}
+.dash-sm-header .dsm-indicator {
+  width: 10px; height: 10px; border-radius: 50%;
+}
+.dash-sm-header .dsm-name {
+  font-size: 16px; font-weight: 600; color: var(--white);
+}
+.dash-sm-header .dsm-module {
+  font-size: 11px; color: var(--text-mute);
+  padding: 2px 8px; border-radius: 4px;
+  background: rgba(255,255,255,0.04);
+}
+
+/* ============================================================
+   DEPENDENCY FLOW DOTS between module cards
+   ============================================================ */
+.dep-dots-container {
+  position: relative;
+  height: 20px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 12px;
+  pointer-events: none;
+}
+.dep-lane {
+  display: flex; align-items: center; justify-content: flex-end;
+  position: relative;
+}
+.dep-lane::after {
+  content: '';
+  position: absolute;
+  right: -16px;
+  width: 16px; height: 1px;
+  background: var(--border);
+}
+.dep-lane:last-child::after { display: none; }
+
+/* ============================================================
+   ANIMATION KEYFRAMES
+   ============================================================ */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes treeGrow {
+  from { opacity: 0; max-height: 0; }
+  to   { opacity: 1; max-height: 400px; }
+}
+
+.module-card   { animation: fadeInUp 0.5s ease both; }
+.module-card:nth-child(1) { animation-delay: 0.05s; }
+.module-card:nth-child(2) { animation-delay: 0.12s; }
+.module-card:nth-child(3) { animation-delay: 0.19s; }
+.module-card:nth-child(4) { animation-delay: 0.26s; }
+
+.submodule-col { animation: treeGrow 0.6s ease both; }
+.submodule-col:nth-child(1) { animation-delay: 0.2s; }
+.submodule-col:nth-child(2) { animation-delay: 0.3s; }
+.submodule-col:nth-child(3) { animation-delay: 0.4s; }
+.submodule-col:nth-child(4) { animation-delay: 0.5s; }
+
+/* Collapsed state animation */
+.submodule-col.collapsed {
+  animation: none;
+}
+
+/* ============================================================
+   RESPONSIVE TWEAKS
+   ============================================================ */
+@media (max-width: 1200px) {
+  .modules-row, .submodule-rows { grid-template-columns: repeat(2, 1fr); }
+  .dash-inner { grid-template-columns: 1fr 1fr; }
+  .dash-inner .dash-section:last-child { display: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- AMBIENT PARTICLE CANVAS -->
+<canvas id="ambientCanvas"></canvas>
+
+<!-- DOT ANIMATION CANVAS -->
+<canvas id="dotCanvas"></canvas>
+
+<!-- ============================================================
+     HEADER
+     ============================================================ -->
+<header id="header" class="glass">
+  <div class="logo">
+    <span class="dot"></span>
+    AI Inventor
+  </div>
+  <div class="breadcrumb">
+    <span>Pipeline</span>
+    <span class="sep">/</span>
+    <span class="active" id="breadcrumbTarget">Overview</span>
+  </div>
+  <div class="header-spacer"></div>
+  <div class="header-stat">
+    <span class="icon">&#9719;</span>
+    <span class="label">Elapsed</span>
+    <span class="value" id="timerDisplay">02:14:37</span>
+  </div>
+  <div class="header-stat">
+    <span class="icon">&#9670;</span>
+    <span class="label">Cost</span>
+    <span class="value" id="costDisplay">$4.82</span>
+  </div>
+  <div class="header-stat">
+    <span class="icon">&#9881;</span>
+    <span class="label">Tokens</span>
+    <span class="value" id="tokenDisplay">1.24M</span>
+  </div>
+</header>
+
+<!-- ============================================================
+     SIDEBAR
+     ============================================================ -->
+<nav id="sidebar">
+  <div class="sidebar-item active">
+    <span class="s-icon">&#9678;</span>
+    <span class="s-label">Pipeline</span>
+  </div>
+  <div class="sidebar-item">
+    <span class="s-icon">&#9636;</span>
+    <span class="s-label">Runs</span>
+  </div>
+  <div class="sidebar-item">
+    <span class="s-icon">&#9888;</span>
+    <span class="s-label">Logs</span>
+  </div>
+  <div class="sidebar-item">
+    <span class="s-icon">&#9776;</span>
+    <span class="s-label">Metrics</span>
+  </div>
+  <div class="sidebar-item">
+    <span class="s-icon">&#9881;</span>
+    <span class="s-label">Config</span>
+  </div>
+  <div class="sidebar-spacer"></div>
+  <div class="sidebar-item">
+    <span class="s-icon">&#9873;</span>
+    <span class="s-label">Settings</span>
+  </div>
+</nav>
+
+<!-- ============================================================
+     MAIN CONTENT
+     ============================================================ -->
+<main id="main">
+
+  <!-- MODULE CARDS -->
+  <section class="modules-row" id="modulesRow">
+
+    <div class="module-card glass" data-module="seed">
+      <div class="mc-top">
+        <div class="mc-title">
+          <span class="mc-num">1</span>
+          <span class="mc-name">Seed Hypotheses</span>
+        </div>
+        <span class="mc-badge done">Done</span>
+      </div>
+      <div class="mc-progress-bar"><div class="mc-progress-fill" style="width:100%"></div></div>
+    </div>
+
+    <div class="module-card glass" data-module="hypo">
+      <div class="mc-top">
+        <div class="mc-title">
+          <span class="mc-num">2</span>
+          <span class="mc-name">Hypo Loop</span>
+        </div>
+        <span class="mc-badge done">Done</span>
+      </div>
+      <div class="mc-progress-bar"><div class="mc-progress-fill" style="width:100%"></div></div>
+    </div>
+
+    <div class="module-card glass" data-module="invent">
+      <div class="mc-top">
+        <div class="mc-title">
+          <span class="mc-num">3</span>
+          <span class="mc-name">Invention Loop</span>
+        </div>
+        <span class="mc-badge running">Running</span>
+      </div>
+      <div class="mc-progress-bar"><div class="mc-progress-fill" style="width:58%"></div></div>
+    </div>
+
+    <div class="module-card glass" data-module="paper">
+      <div class="mc-top">
+        <div class="mc-title">
+          <span class="mc-num">4</span>
+          <span class="mc-name">Paper Repo</span>
+        </div>
+        <span class="mc-badge pending">Pending</span>
+      </div>
+      <div class="mc-progress-bar"><div class="mc-progress-fill" style="width:0%"></div></div>
+    </div>
+
+  </section>
+
+  <!-- DEPENDENCY FLOW -->
+  <div class="dep-dots-container" id="depDots">
+    <div class="dep-lane"></div>
+    <div class="dep-lane"></div>
+    <div class="dep-lane"></div>
+    <div class="dep-lane" style="visibility:hidden"></div>
+  </div>
+
+  <!-- SUB-MODULE TREES -->
+  <section class="submodule-rows" id="submoduleRows">
+
+    <!-- SEED sub-modules (collapsed — completed) -->
+    <div class="submodule-col collapsed" data-parent="seed" id="colSeed">
+      <div class="collapse-toggle" onclick="toggleCol('colSeed')">
+        &#9662; 4 steps completed
+      </div>
+      <div class="submodule-card" data-sm="seed-kg" data-status="done" onclick="selectSM(this)">
+        <span class="sm-indicator done"></span>
+        <span class="sm-name">Knowledge Graph</span>
+        <span class="sm-dur">12:41</span>
+        <span class="sm-chevron">&#8250;</span>
+      </div>
+      <div class="tree-line"></div>
+      <div class="submodule-card" data-sm="seed-lit" data-status="done" onclick="selectSM(this)">
+        <span class="sm-indicator done"></span>
+        <span class="sm-name">Literature Search</span>
+        <span class="sm-dur">8:22</span>
+        <span class="sm-chevron">&#8250;</span>
+      </div>
+      <div class="tree-line"></div>
+      <div class="submodule-card" data-sm="seed-gen" data-status="done" onclick="selectSM(this)">
+        <span class="sm-indicator done"></span>
+        <span class="sm-name">Generate Seeds</span>
+        <span class="sm-dur">3:15</span>
+        <span class="sm-chevron">&#8250;</span>
+      </div>
+      <div class="tree-line"></div>
+      <div class="submodule-card" data-sm="seed-rank" data-status="done" onclick="selectSM(this)">
+        <span class="sm-indicator done"></span>
+        <span class="sm-name">Rank &amp; Filter</span>
+        <span class="sm-dur">1:48</span>
+        <span class="sm-chevron">&#8250;</span>
+      </div>
+    </div>
+
+    <!-- HYPO sub-modules (collapsed — completed) -->
+    <div class="submodule-col collapsed" data-parent="hypo" id="colHypo">
+      <div class="collapse-toggle" onclick="toggleCol('colHypo')">
+        &#9662; 6 steps completed
+      </div>
+      <div class="submodule-card" data-sm="hypo-refine" data-status="done" onclick="selectSM(this)">
+        <span class="sm-indicator done"></span>
+        <span class="sm-name">Refine Hypothesis</span>
+        <span class="sm-dur">6:33</span>
+        <span class="sm-chevron">&#8250;</span>
+      </div>
+      <div class="tree-line"></div>
+      <div class="submodule-card" data-sm="hypo-review" data-status="done" onclick="selectSM(this)">
+        <span class="sm-indicator done"></span>
+        <span class="sm-name">Review Hypothesis</span>
+        <span class="sm-dur">4:17</span>
+        <span class="sm-chevron">&#8250;</span>
+      </div>
+      <div class="tree-line"></div>
+      <div class="submodule-card" data-sm="hypo-strat" data-status="done" onclick="selectSM(this)">
+        <span class="sm-indicator done"></span>
+        <span class="sm-name">Strategy Gen</span>
+        <span class="sm-dur">5:44</span>
+        <span class="sm-chevron">&#8250;</span>
+      </div>
+      <div class="tree-line"></div>
+      <div class="submodule-card" data-sm="hypo-crit" data-status="done" onclick="selectSM(this)">
+        <span class="sm-indicator done"></span>
+        <span class="sm-name">Critique Loop</span>
+        <span class="sm-dur">7:02</span>
+        <span class="sm-chevron">&#8250;</span>
+      </div>
+      <div class="tree-line"></div>
+      <div class="submodule-card" data-sm="hypo-merge" data-status="done" onclick="selectSM(this)">
+        <span class="sm-indicator done"></span>
+        <span class="sm-name">Merge Results</span>
+        <span class="sm-dur">2:11</span>
+        <span class="sm-chevron">&#8250;</span>
+      </div>
+      <div class="tree-line"></div>
+      <div class="submodule-card" data-sm="hypo-final" data-status="done" onclick="selectSM(this)">
+        <span class="sm-indicator done"></span>
+        <span class="sm-name">Finalize Output</span>
+        <span class="sm-dur">1:30</span>
+        <span class="sm-chevron">&#8250;</span>
+      </div>
+    </div>
+
+    <!-- INVENTION sub-modules (active — expanded, 2 running simultaneously) -->
+    <div class="submodule-col" data-parent="invent" id="colInvent">
+      <div class="collapse-toggle" onclick="toggleCol('colInvent')">
+        &#9662; Expand steps
+      </div>
+      <div class="submodule-card" data-sm="inv-plan" data-status="done" onclick="selectSM(this)">
+        <span class="sm-indicator done"></span>
+        <span class="sm-name">Generate Plan</span>
+        <span class="sm-dur">8:45</span>
+        <span class="sm-chevron">&#8250;</span>
+      </div>
+      <div class="tree-line"></div>
+      <div class="submodule-card" data-sm="inv-impl" data-status="done" onclick="selectSM(this)">
+        <span class="sm-indicator done"></span>
+        <span class="sm-name">Implementation</span>
+        <span class="sm-dur">14:22</span>
+        <span class="sm-chevron">&#8250;</span>
+      </div>
+      <div class="tree-line"></div>
+      <div class="submodule-card" data-sm="inv-artifacts" data-status="running" onclick="selectSM(this)">
+        <span class="sm-indicator running"></span>
+        <span class="sm-name">Artifacts</span>
+        <span class="sm-dur" id="artifactTimer">6:18</span>
+        <span class="sm-chevron">&#8250;</span>
+      </div>
+      <div class="tree-line"></div>
+      <div class="submodule-card" data-sm="inv-draft" data-status="running" onclick="selectSM(this)">
+        <span class="sm-indicator running"></span>
+        <span class="sm-name">Paper Draft</span>
+        <span class="sm-dur" id="draftTimer">3:42</span>
+        <span class="sm-chevron">&#8250;</span>
+      </div>
+      <div class="tree-line"></div>
+      <div class="submodule-card pending-state" data-sm="inv-review" data-status="pending" onclick="selectSM(this)">
+        <span class="sm-indicator pending"></span>
+        <span class="sm-name">Review Paper</span>
+        <span class="sm-dur"></span>
+        <span class="sm-chevron">&#8250;</span>
+      </div>
+    </div>
+
+    <!-- PAPER sub-modules (pending — collapsed but different style) -->
+    <div class="submodule-col" data-parent="paper" id="colPaper">
+      <div class="collapse-toggle" onclick="toggleCol('colPaper')">
+        &#9662; 5 steps pending
+      </div>
+      <div class="submodule-card pending-state" data-sm="pap-struct" data-status="pending" onclick="selectSM(this)">
+        <span class="sm-indicator pending"></span>
+        <span class="sm-name">Paper Structure</span>
+        <span class="sm-dur"></span>
+        <span class="sm-chevron">&#8250;</span>
+      </div>
+      <div class="tree-line"></div>
+      <div class="submodule-card pending-state" data-sm="pap-artifact" data-status="pending" onclick="selectSM(this)">
+        <span class="sm-indicator pending"></span>
+        <span class="sm-name">Artifact Demos</span>
+        <span class="sm-dur"></span>
+        <span class="sm-chevron">&#8250;</span>
+      </div>
+      <div class="tree-line"></div>
+      <div class="submodule-card pending-state" data-sm="pap-viz" data-status="pending" onclick="selectSM(this)">
+        <span class="sm-indicator pending"></span>
+        <span class="sm-name">Visualizations</span>
+        <span class="sm-dur"></span>
+        <span class="sm-chevron">&#8250;</span>
+      </div>
+      <div class="tree-line"></div>
+      <div class="submodule-card pending-state" data-sm="pap-full" data-status="pending" onclick="selectSM(this)">
+        <span class="sm-indicator pending"></span>
+        <span class="sm-name">Full Paper</span>
+        <span class="sm-dur"></span>
+        <span class="sm-chevron">&#8250;</span>
+      </div>
+      <div class="tree-line"></div>
+      <div class="submodule-card pending-state" data-sm="pap-repo" data-status="pending" onclick="selectSM(this)">
+        <span class="sm-indicator pending"></span>
+        <span class="sm-name">Repository</span>
+        <span class="sm-dur"></span>
+        <span class="sm-chevron">&#8250;</span>
+      </div>
+    </div>
+
+  </section>
+
+</main>
+
+<!-- ============================================================
+     DASHBOARD PANEL (hidden by default)
+     ============================================================ -->
+<div id="dashboard">
+  <div class="dash-close" onclick="closeDashboard()" title="Close (Esc)">&#10005;</div>
+  <div class="dash-inner">
+
+    <!-- LEFT: Description -->
+    <div class="dash-section" id="dashDesc">
+      <div class="dash-sm-header">
+        <div class="dsm-indicator" id="dashIndicator"></div>
+        <div class="dsm-name" id="dashName">--</div>
+        <div class="dsm-module" id="dashModule">--</div>
+      </div>
+      <div class="dash-section-title">Description</div>
+      <div class="dash-desc" id="dashDescription">--</div>
+    </div>
+
+    <!-- CENTER: Stats -->
+    <div class="dash-section" id="dashStatsSection">
+      <div class="dash-section-title">Statistics</div>
+      <div class="dash-stats" id="dashStats">
+        <div class="dash-stat-card">
+          <div class="ds-label">Duration</div>
+          <div class="ds-value" id="dsDuration">--</div>
+        </div>
+        <div class="dash-stat-card">
+          <div class="ds-label">Tokens</div>
+          <div class="ds-value" id="dsTokens">--</div>
+        </div>
+        <div class="dash-stat-card">
+          <div class="ds-label">Cost</div>
+          <div class="ds-value" id="dsCost">--</div>
+        </div>
+        <div class="dash-stat-card">
+          <div class="ds-label">LLM Calls</div>
+          <div class="ds-value" id="dsCalls">--</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: Feed -->
+    <div class="dash-section">
+      <div class="dash-section-title">Activity Feed</div>
+      <div class="dash-feed" id="dashFeed"></div>
+    </div>
+
+  </div>
+</div>
+
+
+<!-- ============================================================
+     JAVASCRIPT
+     ============================================================ -->
+<script>
+// ============================================================
+// MOCK DATA
+// ============================================================
+const SUBMODULE_DATA = {
+  'seed-kg': {
+    name: 'Knowledge Graph', module: 'Seed Hypotheses', status: 'done',
+    duration: '12:41', tokens: '142K', cost: '$0.38', calls: 14,
+    desc: 'Constructed a <span class="highlight">domain knowledge graph</span> from 847 seed papers across materials science and computational chemistry. Identified 23 primary clusters with cross-domain bridges suitable for novel hypothesis generation.',
+    feed: [
+      { time: '09:12', msg: 'Loaded <strong>847 papers</strong> from Semantic Scholar API' },
+      { time: '09:15', msg: 'Entity extraction: 2,341 concepts identified' },
+      { time: '09:19', msg: 'Graph construction: 23 clusters, 156 bridge edges' },
+      { time: '09:24', msg: 'Completed KG with 0.89 modularity score' },
+    ]
+  },
+  'seed-lit': {
+    name: 'Literature Search', module: 'Seed Hypotheses', status: 'done',
+    duration: '8:22', tokens: '98K', cost: '$0.26', calls: 8,
+    desc: 'Deep literature search targeting <span class="highlight">gap analysis</span> across identified cluster bridges. Found 34 under-explored intersections between polymer self-assembly and neural architecture search.',
+    feed: [
+      { time: '09:25', msg: 'Query expansion from KG bridge edges' },
+      { time: '09:28', msg: 'Retrieved <strong>1,204 candidate papers</strong>' },
+      { time: '09:31', msg: 'Relevance filtering: 312 papers retained' },
+      { time: '09:33', msg: 'Gap analysis: 34 under-explored intersections' },
+    ]
+  },
+  'seed-gen': {
+    name: 'Generate Seeds', module: 'Seed Hypotheses', status: 'done',
+    duration: '3:15', tokens: '67K', cost: '$0.18', calls: 6,
+    desc: 'Generated <span class="highlight">12 seed hypotheses</span> from the top-scored gap intersections. Each hypothesis includes a novelty rationale and preliminary feasibility assessment.',
+    feed: [
+      { time: '09:34', msg: 'Generating from top 8 gap intersections' },
+      { time: '09:36', msg: '<strong>12 seed hypotheses</strong> generated' },
+      { time: '09:37', msg: 'Novelty check: all 12 pass threshold (>0.7)' },
+    ]
+  },
+  'seed-rank': {
+    name: 'Rank & Filter', module: 'Seed Hypotheses', status: 'done',
+    duration: '1:48', tokens: '31K', cost: '$0.08', calls: 3,
+    desc: 'Ranked all 12 seeds using multi-criteria scoring (novelty, feasibility, impact). <span class="highlight">Top 4 advanced</span> to the hypothesis refinement loop.',
+    feed: [
+      { time: '09:38', msg: 'Multi-criteria ranking initiated' },
+      { time: '09:39', msg: 'Scores: 0.92, 0.88, 0.85, 0.81, ... (top 4 selected)' },
+      { time: '09:40', msg: 'Passed <strong>4 seeds</strong> to Hypo Loop' },
+    ]
+  },
+  'hypo-refine': {
+    name: 'Refine Hypothesis', module: 'Hypo Loop', status: 'done',
+    duration: '6:33', tokens: '156K', cost: '$0.42', calls: 12,
+    desc: 'Iteratively refined the top 4 seed hypotheses through <span class="highlight">3 refinement rounds</span>. Each round sharpened the core claim, narrowed scope, and strengthened the theoretical grounding.',
+    feed: [
+      { time: '09:41', msg: 'Round 1: Scope narrowing for 4 hypotheses' },
+      { time: '09:44', msg: 'Round 2: Theoretical grounding strengthened' },
+      { time: '09:47', msg: 'Round 3: Final claim sharpening complete' },
+    ]
+  },
+  'hypo-review': {
+    name: 'Review Hypothesis', module: 'Hypo Loop', status: 'done',
+    duration: '4:17', tokens: '112K', cost: '$0.30', calls: 8,
+    desc: 'Multi-perspective review of refined hypotheses. <span class="highlight">3 of 4 passed</span> the review panel with scores above threshold. One hypothesis was flagged for insufficient novelty.',
+    feed: [
+      { time: '09:48', msg: 'Review panel: 3 independent assessments per hypo' },
+      { time: '09:51', msg: 'Hypothesis #3 flagged: novelty score 0.52 (below 0.6)' },
+      { time: '09:52', msg: '<strong>3 hypotheses</strong> passed review' },
+    ]
+  },
+  'hypo-strat': {
+    name: 'Strategy Gen', module: 'Hypo Loop', status: 'done',
+    duration: '5:44', tokens: '134K', cost: '$0.36', calls: 10,
+    desc: 'Generated <span class="highlight">research strategies</span> for each surviving hypothesis. Strategies include experimental design, expected outcomes, and potential failure modes.',
+    feed: [
+      { time: '09:53', msg: 'Strategy generation for 3 hypotheses' },
+      { time: '09:56', msg: 'Experimental designs drafted' },
+      { time: '09:58', msg: 'Failure mode analysis complete' },
+    ]
+  },
+  'hypo-crit': {
+    name: 'Critique Loop', module: 'Hypo Loop', status: 'done',
+    duration: '7:02', tokens: '178K', cost: '$0.48', calls: 16,
+    desc: 'Adversarial critique loop with <span class="highlight">2 full iterations</span>. Each hypothesis was challenged on methodology, assumptions, and novelty claims. All 3 survived with revisions.',
+    feed: [
+      { time: '09:59', msg: 'Critique round 1: Methodology challenges' },
+      { time: '10:03', msg: 'Revisions applied, round 2 initiated' },
+      { time: '10:06', msg: 'All <strong>3 hypotheses</strong> survived critique' },
+    ]
+  },
+  'hypo-merge': {
+    name: 'Merge Results', module: 'Hypo Loop', status: 'done',
+    duration: '2:11', tokens: '45K', cost: '$0.12', calls: 4,
+    desc: 'Merged and deduplicated outputs from all hypo loop stages. <span class="highlight">Consolidated package</span> prepared for the invention loop.',
+    feed: [
+      { time: '10:07', msg: 'Merging outputs from 6 stages' },
+      { time: '10:08', msg: 'Deduplication: 0 conflicts found' },
+      { time: '10:09', msg: 'Package ready for Invention Loop' },
+    ]
+  },
+  'hypo-final': {
+    name: 'Finalize Output', module: 'Hypo Loop', status: 'done',
+    duration: '1:30', tokens: '28K', cost: '$0.07', calls: 2,
+    desc: 'Final packaging of hypothesis loop outputs. Generated structured JSON with <span class="highlight">3 complete hypothesis packages</span> including metadata, evidence links, and strategy outlines.',
+    feed: [
+      { time: '10:10', msg: 'Structured output generation' },
+      { time: '10:11', msg: '<strong>3 packages</strong> written to pipeline state' },
+    ]
+  },
+  'inv-plan': {
+    name: 'Generate Plan', module: 'Invention Loop', status: 'done',
+    duration: '8:45', tokens: '198K', cost: '$0.53', calls: 14,
+    desc: 'Generated detailed <span class="highlight">invention plans</span> for the top-ranked hypothesis. Plan includes step-by-step methodology, resource requirements, and milestone definitions.',
+    feed: [
+      { time: '10:12', msg: 'Plan generation initiated for top hypothesis' },
+      { time: '10:16', msg: 'Methodology: 7-step experimental pipeline' },
+      { time: '10:19', msg: 'Milestones defined, resource estimate: 3 GPU-hours' },
+      { time: '10:20', msg: 'Plan <strong>approved</strong> by validation check' },
+    ]
+  },
+  'inv-impl': {
+    name: 'Implementation', module: 'Invention Loop', status: 'done',
+    duration: '14:22', tokens: '312K', cost: '$0.84', calls: 22,
+    desc: 'Core implementation phase. Generated <span class="highlight">research code</span>, ran simulations, and collected initial results. 4 of 7 milestone checks passed on first attempt.',
+    feed: [
+      { time: '10:21', msg: 'Code generation: 1,847 lines across 6 modules' },
+      { time: '10:28', msg: 'Simulation batch 1: 4/7 milestones passed' },
+      { time: '10:32', msg: 'Debug iteration for milestones 3, 5, 7' },
+      { time: '10:35', msg: 'All <strong>7 milestones</strong> passed' },
+    ]
+  },
+  'inv-artifacts': {
+    name: 'Artifacts', module: 'Invention Loop', status: 'running',
+    duration: '6:18', tokens: '87K', cost: '$0.23', calls: 6,
+    desc: 'Generating demonstration artifacts including <span class="highlight">interactive notebooks</span> and standalone scripts. Currently processing visualization components.',
+    feed: [
+      { time: '10:36', msg: 'Artifact generation started (parallel)' },
+      { time: '10:38', msg: 'Notebook 1/3 complete: data preprocessing' },
+      { time: '10:40', msg: 'Notebook 2/3 complete: model training' },
+      { time: '10:42', msg: 'Working on <strong>visualization components</strong>...' },
+    ]
+  },
+  'inv-draft': {
+    name: 'Paper Draft', module: 'Invention Loop', status: 'running',
+    duration: '3:42', tokens: '64K', cost: '$0.17', calls: 4,
+    desc: 'Drafting the <span class="highlight">paper text</span> sections in parallel. Abstract and introduction complete. Currently generating the methodology and results sections.',
+    feed: [
+      { time: '10:38', msg: 'Draft generation started (parallel with Artifacts)' },
+      { time: '10:39', msg: 'Abstract drafted: 247 words' },
+      { time: '10:40', msg: 'Introduction section complete' },
+      { time: '10:41', msg: 'Writing <strong>methodology section</strong>...' },
+    ]
+  },
+  'inv-review': {
+    name: 'Review Paper', module: 'Invention Loop', status: 'pending',
+    duration: '--', tokens: '--', cost: '--', calls: '--',
+    desc: 'Will perform a <span class="highlight">multi-perspective review</span> of the generated paper draft. Checks coherence, citation accuracy, claim-evidence alignment, and overall quality.',
+    feed: [
+      { time: '--', msg: 'Waiting for Artifacts and Paper Draft to complete' },
+    ]
+  },
+  'pap-struct': {
+    name: 'Paper Structure', module: 'Paper Repo', status: 'pending',
+    duration: '--', tokens: '--', cost: '--', calls: '--',
+    desc: 'Will generate the <span class="highlight">LaTeX structure</span> and section templates for the final paper. Includes bibliography setup and figure placeholders.',
+    feed: [{ time: '--', msg: 'Awaiting Invention Loop completion' }]
+  },
+  'pap-artifact': {
+    name: 'Artifact Demos', module: 'Paper Repo', status: 'pending',
+    duration: '--', tokens: '--', cost: '--', calls: '--',
+    desc: 'Will generate <span class="highlight">reproducible demos</span> packaged as standalone scripts and notebooks for the paper repository.',
+    feed: [{ time: '--', msg: 'Awaiting Invention Loop completion' }]
+  },
+  'pap-viz': {
+    name: 'Visualizations', module: 'Paper Repo', status: 'pending',
+    duration: '--', tokens: '--', cost: '--', calls: '--',
+    desc: 'Will generate <span class="highlight">publication-quality figures</span> including architecture diagrams, result plots, and comparison tables.',
+    feed: [{ time: '--', msg: 'Awaiting Invention Loop completion' }]
+  },
+  'pap-full': {
+    name: 'Full Paper', module: 'Paper Repo', status: 'pending',
+    duration: '--', tokens: '--', cost: '--', calls: '--',
+    desc: 'Will assemble the <span class="highlight">complete paper</span> from all generated sections, figures, and references. Includes final formatting and consistency checks.',
+    feed: [{ time: '--', msg: 'Awaiting earlier steps' }]
+  },
+  'pap-repo': {
+    name: 'Repository', module: 'Paper Repo', status: 'pending',
+    duration: '--', tokens: '--', cost: '--', calls: '--',
+    desc: 'Will create the final <span class="highlight">GitHub repository</span> with paper source, data, code, and CI configuration for reproducibility.',
+    feed: [{ time: '--', msg: 'Awaiting earlier steps' }]
+  },
+};
+
+// ============================================================
+// STATE
+// ============================================================
+let selectedSM = null;
+let dashboardOpen = false;
+let elapsedSeconds = 2 * 3600 + 14 * 60 + 37;
+let costCents = 482;
+let artifactSec = 6 * 60 + 18;
+let draftSec = 3 * 60 + 42;
+
+// ============================================================
+// DASHBOARD LOGIC
+// ============================================================
+function selectSM(el) {
+  const smKey = el.dataset.sm;
+  const data = SUBMODULE_DATA[smKey];
+  if (!data) return;
+
+  // Deselect previous
+  document.querySelectorAll('.submodule-card.selected').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedSM = smKey;
+
+  // Populate dashboard
+  const indicator = document.getElementById('dashIndicator');
+  indicator.className = 'dsm-indicator ' + data.status;
+  if (data.status === 'done') { indicator.style.background = '#66bb6a'; indicator.style.boxShadow = '0 0 8px rgba(102,187,106,0.5)'; }
+  else if (data.status === 'running') { indicator.style.background = '#64b5f6'; indicator.style.boxShadow = '0 0 8px rgba(100,181,246,0.6)'; }
+  else { indicator.style.background = '#5c6678'; indicator.style.boxShadow = 'none'; }
+
+  document.getElementById('dashName').textContent = data.name;
+  document.getElementById('dashModule').textContent = data.module;
+  document.getElementById('dashDescription').innerHTML = data.desc;
+  document.getElementById('dsDuration').textContent = data.duration;
+  document.getElementById('dsTokens').textContent = data.tokens;
+  document.getElementById('dsCost').textContent = data.cost;
+  document.getElementById('dsCalls').textContent = data.calls;
+
+  // Feed
+  const feedEl = document.getElementById('dashFeed');
+  feedEl.innerHTML = '';
+  data.feed.forEach((f, i) => {
+    const item = document.createElement('div');
+    item.className = 'feed-item';
+    item.style.animationDelay = (i * 0.06) + 's';
+    item.innerHTML = `<span class="fi-time">${f.time}</span><span class="fi-msg">${f.msg}</span>`;
+    feedEl.appendChild(item);
+  });
+
+  // Breadcrumb
+  document.getElementById('breadcrumbTarget').textContent = data.name;
+
+  // Open dashboard
+  openDashboard();
+}
+
+function openDashboard() {
+  document.getElementById('dashboard').classList.add('open');
+  dashboardOpen = true;
+}
+
+function closeDashboard() {
+  document.getElementById('dashboard').classList.remove('open');
+  dashboardOpen = false;
+  document.querySelectorAll('.submodule-card.selected').forEach(c => c.classList.remove('selected'));
+  selectedSM = null;
+  document.getElementById('breadcrumbTarget').textContent = 'Overview';
+}
+
+// Close on Escape
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && dashboardOpen) closeDashboard();
+});
+
+// Close on click outside submodule cards and dashboard
+document.addEventListener('click', (e) => {
+  if (!dashboardOpen) return;
+  const inSM = e.target.closest('.submodule-card');
+  const inDash = e.target.closest('#dashboard');
+  if (!inSM && !inDash) closeDashboard();
+});
+
+// ============================================================
+// COLLAPSE / EXPAND COLUMNS
+// ============================================================
+function toggleCol(colId) {
+  const col = document.getElementById(colId);
+  col.classList.toggle('collapsed');
+}
+
+// ============================================================
+// TIMER
+// ============================================================
+function fmtTime(s) {
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0') + ':' + String(sec).padStart(2, '0');
+}
+function fmtShort(s) {
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return m + ':' + String(sec).padStart(2, '0');
+}
+
+setInterval(() => {
+  elapsedSeconds++;
+  artifactSec++;
+  draftSec++;
+  costCents += Math.random() < 0.3 ? 1 : 0;
+
+  document.getElementById('timerDisplay').textContent = fmtTime(elapsedSeconds);
+  document.getElementById('costDisplay').textContent = '$' + (costCents / 100).toFixed(2);
+  document.getElementById('artifactTimer').textContent = fmtShort(artifactSec);
+  document.getElementById('draftTimer').textContent = fmtShort(draftSec);
+
+  // Update token count slowly
+  const baseTokens = 1.24 + (elapsedSeconds - 8077) * 0.00008;
+  document.getElementById('tokenDisplay').textContent = baseTokens.toFixed(2) + 'M';
+}, 1000);
+
+// ============================================================
+// AMBIENT PARTICLE SYSTEM
+// ============================================================
+(function initAmbient() {
+  const canvas = document.getElementById('ambientCanvas');
+  const ctx = canvas.getContext('2d');
+  let w, h;
+  const particles = [];
+  const PARTICLE_COUNT = 60;
+
+  function resize() {
+    w = canvas.width = window.innerWidth;
+    h = canvas.height = window.innerHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  class AmbientParticle {
+    constructor() { this.reset(); }
+    reset() {
+      this.x = Math.random() * w;
+      this.y = Math.random() * h;
+      this.vx = (Math.random() - 0.5) * 0.3;
+      this.vy = (Math.random() - 0.5) * 0.2;
+      this.r = Math.random() * 1.5 + 0.3;
+      this.alpha = Math.random() * 0.15 + 0.03;
+      this.hue = [160, 210, 270, 32][Math.floor(Math.random() * 4)];
+      this.life = Math.random() * 500 + 200;
+      this.maxLife = this.life;
+    }
+    update() {
+      this.x += this.vx;
+      this.y += this.vy;
+      this.life--;
+      if (this.life <= 0 || this.x < -10 || this.x > w + 10 || this.y < -10 || this.y > h + 10) {
+        this.reset();
+      }
+    }
+    draw() {
+      const fade = Math.min(1, this.life / (this.maxLife * 0.2), (this.maxLife - this.life) / (this.maxLife * 0.1) + 0.2);
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+      ctx.fillStyle = `hsla(${this.hue}, 40%, 55%, ${this.alpha * fade})`;
+      ctx.fill();
+    }
+  }
+
+  for (let i = 0; i < PARTICLE_COUNT; i++) particles.push(new AmbientParticle());
+
+  function animateAmbient() {
+    ctx.clearRect(0, 0, w, h);
+    particles.forEach(p => { p.update(); p.draw(); });
+
+    // Connection lines
+    for (let i = 0; i < particles.length; i++) {
+      for (let j = i + 1; j < particles.length; j++) {
+        const dx = particles[i].x - particles[j].x;
+        const dy = particles[i].y - particles[j].y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 120) {
+          ctx.beginPath();
+          ctx.moveTo(particles[i].x, particles[i].y);
+          ctx.lineTo(particles[j].x, particles[j].y);
+          ctx.strokeStyle = `rgba(100, 120, 150, ${0.03 * (1 - dist / 120)})`;
+          ctx.lineWidth = 0.5;
+          ctx.stroke();
+        }
+      }
+    }
+    requestAnimationFrame(animateAmbient);
+  }
+  animateAmbient();
+})();
+
+// ============================================================
+// MULTI-TARGET DOT ANIMATION SYSTEM
+// ============================================================
+(function initDotAnimation() {
+  const canvas = document.getElementById('dotCanvas');
+  const ctx = canvas.getContext('2d');
+  let w, h;
+  const dots = [];
+
+  function resize() {
+    const rect = canvas.getBoundingClientRect();
+    w = canvas.width = rect.width;
+    h = canvas.height = rect.height;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  // Get positions of running sub-modules relative to the dot canvas
+  function getRunningTargets() {
+    const targets = [];
+    const canvasRect = canvas.getBoundingClientRect();
+    document.querySelectorAll('.submodule-card[data-status="running"]').forEach(el => {
+      const rect = el.getBoundingClientRect();
+      targets.push({
+        x: rect.left - canvasRect.left + rect.width * 0.05,
+        y: rect.top - canvasRect.top + rect.height / 2,
+        hue: el.closest('[data-parent]')?.dataset.parent === 'invent' ? 270 : 210
+      });
+    });
+    return targets;
+  }
+
+  // Get source positions (from completed modules' right edge)
+  function getSourcePosition() {
+    const canvasRect = canvas.getBoundingClientRect();
+    const hypoCol = document.querySelector('[data-parent="hypo"]');
+    if (!hypoCol) return { x: 0, y: 100 };
+    const rect = hypoCol.getBoundingClientRect();
+    return {
+      x: rect.right - canvasRect.left,
+      y: rect.top - canvasRect.top + 40
+    };
+  }
+
+  // Get dependency arrow positions (between module cards)
+  function getModuleCardPositions() {
+    const canvasRect = canvas.getBoundingClientRect();
+    const cards = document.querySelectorAll('.module-card');
+    const positions = [];
+    cards.forEach(card => {
+      const rect = card.getBoundingClientRect();
+      positions.push({
+        left: rect.left - canvasRect.left,
+        right: rect.right - canvasRect.left,
+        centerY: rect.top - canvasRect.top + rect.height / 2,
+        centerX: rect.left - canvasRect.left + rect.width / 2,
+      });
+    });
+    return positions;
+  }
+
+  class FlowDot {
+    constructor(sx, sy, tx, ty, hue) {
+      this.sx = sx; this.sy = sy;
+      this.tx = tx; this.ty = ty;
+      this.hue = hue;
+      this.progress = 0;
+      this.speed = 0.005 + Math.random() * 0.006;
+      this.r = 2 + Math.random() * 1.5;
+      this.offset = (Math.random() - 0.5) * 30;
+      this.trail = [];
+    }
+    update() {
+      this.progress += this.speed;
+      if (this.progress >= 1) return true;
+
+      const t = this.progress;
+      const midX = (this.sx + this.tx) / 2;
+      const midY = (this.sy + this.ty) / 2 + this.offset;
+      // Quadratic bezier
+      const x = (1-t)*(1-t)*this.sx + 2*(1-t)*t*midX + t*t*this.tx;
+      const y = (1-t)*(1-t)*this.sy + 2*(1-t)*t*midY + t*t*this.ty;
+
+      this.trail.unshift({ x, y, alpha: 1 });
+      if (this.trail.length > 12) this.trail.pop();
+      this.trail.forEach((p, i) => p.alpha = 1 - i / this.trail.length);
+
+      this.x = x;
+      this.y = y;
+      return false;
+    }
+    draw() {
+      // Trail
+      this.trail.forEach((p, i) => {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, this.r * (1 - i / this.trail.length * 0.6), 0, Math.PI * 2);
+        ctx.fillStyle = `hsla(${this.hue}, 55%, 62%, ${p.alpha * 0.4})`;
+        ctx.fill();
+      });
+      // Head
+      if (this.x !== undefined) {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+        ctx.fillStyle = `hsla(${this.hue}, 60%, 70%, 0.8)`;
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.r + 3, 0, Math.PI * 2);
+        ctx.fillStyle = `hsla(${this.hue}, 60%, 60%, 0.15)`;
+        ctx.fill();
+      }
+    }
+  }
+
+  // Dependency flow dots (between module cards)
+  class DepDot {
+    constructor(sx, sy, tx, ty, hue) {
+      this.sx = sx; this.sy = sy;
+      this.tx = tx; this.ty = ty;
+      this.hue = hue;
+      this.progress = 0;
+      this.speed = 0.008 + Math.random() * 0.004;
+      this.r = 1.5;
+    }
+    update() {
+      this.progress += this.speed;
+      if (this.progress >= 1) return true;
+      const t = this.progress;
+      this.x = this.sx + (this.tx - this.sx) * t;
+      this.y = this.sy + Math.sin(t * Math.PI) * 3;
+      return false;
+    }
+    draw() {
+      if (this.x === undefined) return;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+      const alpha = Math.sin(this.progress * Math.PI) * 0.6;
+      ctx.fillStyle = `hsla(${this.hue}, 45%, 60%, ${alpha})`;
+      ctx.fill();
+    }
+  }
+
+  let depDots = [];
+  let spawnTimer = 0;
+  let depSpawnTimer = 0;
+
+  function animate() {
+    ctx.clearRect(0, 0, w, h);
+
+    const targets = getRunningTargets();
+    const source = getSourcePosition();
+    const modPositions = getModuleCardPositions();
+
+    // Spawn flow dots toward running sub-modules
+    spawnTimer++;
+    if (spawnTimer > 28 && targets.length > 0) {
+      spawnTimer = 0;
+      // Pick a random target
+      const t = targets[Math.floor(Math.random() * targets.length)];
+      dots.push(new FlowDot(
+        source.x + Math.random() * 20,
+        source.y + (Math.random() - 0.5) * 40,
+        t.x, t.y, t.hue
+      ));
+    }
+
+    // Spawn dependency dots between module cards
+    depSpawnTimer++;
+    if (depSpawnTimer > 50 && modPositions.length >= 3) {
+      depSpawnTimer = 0;
+      // Seed -> Hypo (done->done, dim)
+      const hues = [160, 210, 270];
+      for (let i = 0; i < 2; i++) {
+        if (modPositions[i] && modPositions[i+1]) {
+          depDots.push(new DepDot(
+            modPositions[i].right + 2,
+            modPositions[i].centerY,
+            modPositions[i+1].left - 2,
+            modPositions[i+1].centerY,
+            hues[i]
+          ));
+        }
+      }
+    }
+
+    // Update and draw flow dots
+    for (let i = dots.length - 1; i >= 0; i--) {
+      if (dots[i].update()) { dots.splice(i, 1); continue; }
+      dots[i].draw();
+    }
+
+    // Update and draw dep dots
+    for (let i = depDots.length - 1; i >= 0; i--) {
+      if (depDots[i].update()) { depDots.splice(i, 1); continue; }
+      depDots[i].draw();
+    }
+
+    // Draw faint flow lines between module cards
+    if (modPositions.length >= 2) {
+      for (let i = 0; i < modPositions.length - 1; i++) {
+        const from = modPositions[i];
+        const to = modPositions[i + 1];
+        ctx.beginPath();
+        ctx.moveTo(from.right + 2, from.centerY);
+        ctx.lineTo(to.left - 2, to.centerY);
+        ctx.strokeStyle = 'rgba(100, 120, 150, 0.08)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 4]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    }
+
+    requestAnimationFrame(animate);
+  }
+  animate();
+})();
+
+// ============================================================
+// INITIALIZATION — auto-collapse completed, expand active
+// ============================================================
+(function init() {
+  // Seed and Hypo start collapsed
+  // Invent and Paper start expanded (default)
+  // Already set in HTML via class="collapsed"
+
+  // Ensure sidebar hover works smoothly
+  const sidebar = document.getElementById('sidebar');
+  sidebar.addEventListener('mouseenter', () => sidebar.classList.add('expanded'));
+  sidebar.addEventListener('mouseleave', () => sidebar.classList.remove('expanded'));
+})();
+</script>
+
+</body>
+</html>
