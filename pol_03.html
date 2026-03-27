@@ -1,0 +1,1810 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Pipeline Dashboard</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --slate-950: #0a0c10;
+    --slate-900: #0f1117;
+    --slate-850: #131620;
+    --slate-800: #181b27;
+    --slate-700: #242838;
+    --slate-600: #343a50;
+    --slate-500: #4a5068;
+    --slate-400: #6b7280;
+    --slate-300: #9ca3af;
+    --slate-200: #c8cad0;
+    --slate-100: #e2e4e9;
+    --green: #4ade80;
+    --green-dim: rgba(74,222,128,0.15);
+    --purple: #a855f7;
+    --purple-dim: rgba(168,85,247,0.15);
+    --blue: #60a5fa;
+    --blue-bright: #93bbfd;
+    --blue-dim: rgba(96,165,250,0.15);
+    --orange: #fb923c;
+    --orange-dim: rgba(251,146,60,0.12);
+    --red: #ef4444;
+    --sidebar-w: 52px;
+  }
+
+  body {
+    background: var(--slate-950);
+    color: var(--slate-200);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+    display: flex;
+  }
+
+  /* ── Particles Canvas ── */
+  #particles {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── Collapsed Sidebar ── */
+  .sidebar {
+    width: var(--sidebar-w);
+    min-height: 100vh;
+    background: var(--slate-900);
+    border-right: 1px solid rgba(255,255,255,0.04);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px 0;
+    gap: 6px;
+    position: fixed;
+    top: 0; left: 0;
+    z-index: 100;
+  }
+
+  .sidebar-logo {
+    width: 28px; height: 28px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, var(--blue) 0%, var(--purple) 100%);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700; color: #fff;
+    margin-bottom: 16px;
+    flex-shrink: 0;
+  }
+
+  .sidebar-item {
+    width: 36px; height: 36px;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    position: relative;
+    transition: background 0.2s ease;
+    flex-shrink: 0;
+  }
+
+  .sidebar-item:hover { background: rgba(255,255,255,0.05); }
+  .sidebar-item.active { background: rgba(96,165,250,0.1); }
+
+  .sidebar-item .sb-icon {
+    font-size: 16px;
+    color: var(--slate-400);
+    transition: color 0.2s ease;
+  }
+
+  .sidebar-item.active .sb-icon { color: var(--blue); }
+  .sidebar-item:hover .sb-icon { color: var(--slate-300); }
+
+  .sidebar-item .dep-dot {
+    position: absolute;
+    top: 5px; right: 5px;
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--slate-600);
+  }
+
+  .sidebar-item .dep-dot.done { background: var(--green); }
+  .sidebar-item .dep-dot.active { background: var(--blue); animation: depPulse 2s ease-in-out infinite; }
+  .sidebar-item .dep-dot.pending { background: var(--slate-600); }
+
+  @keyframes depPulse {
+    0%, 100% { opacity: 0.6; box-shadow: none; }
+    50% { opacity: 1; box-shadow: 0 0 4px var(--blue); }
+  }
+
+  .sidebar-item .sb-tooltip { position: absolute; left: calc(100% + 10px); top: 50%; transform: translateY(-50%); background: var(--slate-800); border: 1px solid rgba(255,255,255,0.08); color: var(--slate-100); font-size: 12px; font-weight: 500; padding: 5px 10px; border-radius: 6px; white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity 0.15s ease; z-index: 200; }
+  .sidebar-item .sb-tooltip::before { content: ''; position: absolute; right: 100%; top: 50%; transform: translateY(-50%); border: 5px solid transparent; border-right-color: var(--slate-800); }
+  .sidebar-item:hover .sb-tooltip { opacity: 1; }
+
+  .sidebar-divider {
+    width: 24px;
+    height: 1px;
+    background: rgba(255,255,255,0.06);
+    margin: 8px 0;
+    flex-shrink: 0;
+  }
+
+  /* ── Main Content ── */
+  .main {
+    margin-left: var(--sidebar-w);
+    flex: 1;
+    position: relative;
+    z-index: 1;
+    min-height: 100vh;
+  }
+
+  /* ── Progress Strip (horizontal dots) ── */
+  .progress-strip {
+    background: linear-gradient(180deg, var(--slate-900) 0%, var(--slate-950) 100%);
+    padding: 28px 0 18px;
+    position: relative;
+    user-select: none;
+  }
+
+  .progress-strip::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06) 20%, rgba(255,255,255,0.06) 80%, transparent);
+  }
+
+  .dots-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    padding: 0 40px;
+    position: relative;
+  }
+
+  .module-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    position: relative;
+    padding: 0 16px;
+    cursor: pointer;
+  }
+
+  .module-group:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    right: 0; top: 50%;
+    width: 12px; height: 1px;
+    background: rgba(255,255,255,0.06);
+    transform: translateX(50%);
+  }
+
+  .module-group.on-path:not(:last-child)::after,
+  .module-group.selected:not(:last-child)::after {
+    height: 2px;
+    background: var(--blue);
+    box-shadow: 0 0 14px rgba(96,165,250,0.6);
+    transform: translateX(50%) translateY(-0.5px);
+  }
+
+  .module-group .line-bg {
+    position: absolute;
+    top: 50%;
+    left: 22px; right: 22px;
+    height: 1px;
+    transform: translateY(-0.5px);
+    pointer-events: none;
+    z-index: 0;
+    background: rgba(255,255,255,0.04);
+  }
+
+  .module-group.on-path .line-bg,
+  .module-group.selected .line-bg {
+    height: 2px;
+    box-shadow: 0 0 14px rgba(96,165,250,0.5);
+  }
+
+  .module-group[data-module="seed"].on-path .line-bg {
+    background: rgba(74,222,128,0.5);
+    box-shadow: 0 0 14px rgba(74,222,128,0.4);
+  }
+  .module-group[data-module="hypothesis"].on-path .line-bg {
+    background: rgba(168,85,247,0.5);
+    box-shadow: 0 0 14px rgba(168,85,247,0.4);
+  }
+  .module-group[data-module="invention"].on-path .line-bg,
+  .module-group[data-module="invention"].selected .line-bg {
+    background: rgba(96,165,250,0.5);
+    box-shadow: 0 0 14px rgba(96,165,250,0.5);
+  }
+
+  .module-group:not(.on-path):not(.selected) .line-bg {
+    height: 1px;
+    background: rgba(255,255,255,0.04);
+    box-shadow: none;
+  }
+
+  /* Dots */
+  .dot {
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    position: relative;
+    z-index: 1;
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+    flex-shrink: 0;
+  }
+
+  .dot.hollow { background: transparent !important; }
+  .dot.active-pulse { animation: dotPulse 2s ease-in-out infinite; }
+
+  .module-group[data-module="seed"] .dot.filled { background: var(--green); box-shadow: 0 0 6px rgba(74,222,128,0.5), 0 0 14px rgba(74,222,128,0.2); }
+  .module-group[data-module="seed"] .dot.hollow { border: 1.5px solid rgba(74,222,128,0.25); }
+  .module-group[data-module="seed"].on-path .dot.filled { box-shadow: 0 0 6px rgba(74,222,128,0.7), 0 0 14px rgba(74,222,128,0.45); }
+  .module-group[data-module="hypothesis"] .dot.filled { background: var(--purple); box-shadow: 0 0 6px rgba(168,85,247,0.5), 0 0 14px rgba(168,85,247,0.2); }
+  .module-group[data-module="hypothesis"] .dot.hollow { border: 1.5px solid rgba(168,85,247,0.25); }
+  .module-group[data-module="hypothesis"].on-path .dot.filled { box-shadow: 0 0 6px rgba(168,85,247,0.7), 0 0 14px rgba(168,85,247,0.45); }
+  .module-group[data-module="invention"] .dot.filled { background: var(--blue); box-shadow: 0 0 6px rgba(96,165,250,0.5), 0 0 14px rgba(96,165,250,0.2); }
+  .module-group[data-module="invention"] .dot.hollow { border: 1.5px solid rgba(96,165,250,0.25); }
+  .module-group[data-module="invention"] .dot.active-pulse { background: var(--blue-bright); box-shadow: 0 0 10px rgba(96,165,250,0.8), 0 0 24px rgba(96,165,250,0.45), 0 0 48px rgba(96,165,250,0.15); }
+  .module-group[data-module="invention"].on-path .dot.filled,
+  .module-group[data-module="invention"].selected .dot.filled { box-shadow: 0 0 6px rgba(96,165,250,0.7), 0 0 14px rgba(96,165,250,0.5); }
+  .module-group[data-module="paper"] .dot.filled { background: var(--orange); box-shadow: 0 0 6px rgba(251,146,60,0.5), 0 0 14px rgba(251,146,60,0.2); }
+  .module-group[data-module="paper"] .dot.hollow { border: 1.5px solid rgba(251,146,60,0.18); }
+  .module-group:not(.on-path):not(.selected) .dot.filled { opacity: 0.5; box-shadow: none; }
+
+  .module-group .hover-label { position: absolute; top: -26px; left: 50%; transform: translateX(-50%); font-size: 11px; font-weight: 500; letter-spacing: 0.04em; color: rgba(255,255,255,0.55); opacity: 0; transition: opacity 0.2s ease; white-space: nowrap; pointer-events: none; }
+  .module-group:hover .hover-label, .module-group.selected .hover-label { opacity: 1; }
+  .module-group[data-module="seed"] .hover-label { color: rgba(74,222,128,0.7); }
+  .module-group[data-module="hypothesis"] .hover-label { color: rgba(168,85,247,0.7); }
+  .module-group[data-module="invention"] .hover-label { color: rgba(96,165,250,0.7); }
+  .module-group[data-module="paper"] .hover-label { color: rgba(251,146,60,0.7); }
+  .module-group.selected .dot.filled { transform: scale(1.12); }
+
+  @keyframes dotPulse {
+    0%, 100% {
+      box-shadow: 0 0 10px rgba(96,165,250,0.8), 0 0 24px rgba(96,165,250,0.45), 0 0 48px rgba(96,165,250,0.15);
+      transform: scale(1);
+    }
+    50% {
+      box-shadow: 0 0 14px rgba(96,165,250,1), 0 0 32px rgba(96,165,250,0.6), 0 0 60px rgba(96,165,250,0.25);
+      transform: scale(1.25);
+    }
+  }
+
+  /* ── Module Tabs ── */
+  .module-tabs {
+    display: flex;
+    justify-content: center;
+    gap: 32px;
+    padding: 16px 0 0;
+  }
+
+  .tab {
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    color: rgba(255,255,255,0.35);
+    cursor: pointer;
+    padding: 4px 2px 8px;
+    position: relative;
+    transition: color 0.25s ease;
+    user-select: none;
+  }
+
+  .tab:hover { color: rgba(255,255,255,0.6); }
+  .tab.active { color: rgba(255,255,255,0.88); }
+
+  .tab::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 2px;
+    border-radius: 1px;
+    background: transparent;
+    transition: background 0.25s ease;
+  }
+
+  .tab[data-module="seed"].active::after { background: var(--green); }
+  .tab[data-module="hypothesis"].active::after { background: var(--purple); }
+  .tab[data-module="invention"].active::after { background: var(--blue); }
+  .tab[data-module="paper"].active::after { background: var(--orange); }
+
+  /* ── Horizontal Module Cards Row ── */
+  .module-cards {
+    display: flex;
+    gap: 12px;
+    padding: 20px 28px;
+    position: relative;
+  }
+
+  .module-card {
+    flex: 1;
+    min-width: 0;
+    height: 80px;
+    background: rgba(19,22,32,0.65);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 10px;
+    padding: 12px 14px 0;
+    position: relative;
+    overflow: hidden;
+    cursor: pointer;
+    transition: border-color 0.3s, box-shadow 0.3s, transform 0.15s;
+  }
+
+  .module-card:hover { transform: translateY(-1px); }
+
+  .module-card::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    border-radius: 10px 0 0 10px;
+  }
+
+  .module-card[data-color="green"]::before { background: var(--green); }
+  .module-card[data-color="purple"]::before { background: var(--purple); }
+  .module-card[data-color="blue"]::before { background: var(--blue); }
+  .module-card[data-color="orange"]::before { background: var(--orange); }
+
+  .module-card .shimmer {
+    position: absolute; inset: 0;
+    background: linear-gradient(
+      110deg, transparent 30%, rgba(255,255,255,0.04) 45%,
+      rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.04) 55%, transparent 70%
+    );
+    background-size: 250% 100%;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .module-card.active .shimmer {
+    opacity: 1;
+    animation: shimmerSweep 4s ease-in-out infinite;
+  }
+
+  @keyframes shimmerSweep {
+    0% { background-position: 150% 0; }
+    100% { background-position: -50% 0; }
+  }
+
+  .module-card.active {
+    border-color: rgba(96,165,250,0.4);
+    animation: cardGlow 2.5s ease-in-out infinite;
+  }
+
+  @keyframes cardGlow {
+    0%, 100% { box-shadow: 0 0 8px rgba(96,165,250,0.15), inset 0 0 8px rgba(96,165,250,0.03); }
+    50% { box-shadow: 0 0 20px rgba(96,165,250,0.3), inset 0 0 12px rgba(96,165,250,0.06); }
+  }
+
+  .module-card.selected { border-color: rgba(255,255,255,0.12); }
+  .module-card.active.selected { border-color: rgba(96,165,250,0.4); }
+
+  .card-body { display: flex; align-items: flex-start; gap: 10px; }
+
+  .mini-ring { width: 28px; height: 28px; flex-shrink: 0; position: relative; }
+  .mini-ring svg { width: 28px; height: 28px; }
+  .mini-ring .mr-track { fill: none; stroke: var(--slate-700); stroke-width: 3; }
+  .mini-ring .mr-fill {
+    fill: none; stroke-width: 3; stroke-linecap: round;
+    transition: stroke-dashoffset 0.6s;
+  }
+  .mini-ring .mr-pct {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 7px; font-weight: 700;
+  }
+
+  .card-info { flex: 1; min-width: 0; }
+  .card-name {
+    font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.5px; color: var(--slate-300); margin-bottom: 2px;
+  }
+  .card-metric {
+    font-size: 16px; font-weight: 700; line-height: 1.2;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .card-badge {
+    display: inline-block; font-size: 9px; font-weight: 600;
+    padding: 1px 6px; border-radius: 6px; margin-top: 3px;
+    text-transform: uppercase; letter-spacing: 0.3px;
+  }
+  .badge-done { background: var(--green-dim); color: var(--green); }
+  .badge-active { background: var(--blue-dim); color: var(--blue); }
+  .badge-pending { background: var(--orange-dim); color: var(--orange); }
+
+  .card-progress {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    height: 3px; background: rgba(255,255,255,0.04);
+  }
+  .card-progress-fill {
+    height: 100%; border-radius: 0 2px 0 0; transition: width 0.6s ease;
+  }
+
+  /* ── TWO-COLUMN DASHBOARD ── */
+  .dashboard {
+    display: flex;
+    gap: 20px;
+    padding: 0 28px 40px;
+    min-height: 520px;
+  }
+
+  /* Left column: 60% - summary + item list with vertical subs */
+  .col-left {
+    flex: 0 0 60%;
+    min-width: 0;
+  }
+
+  /* Right column: 40% - stat cards + live feed */
+  .col-right {
+    flex: 0 0 calc(40% - 20px);
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  /* ── Glass Panel (shared) ── */
+  .glass-panel {
+    background: rgba(19,22,32,0.55);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px;
+    padding: 20px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .glass-panel::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08) 30%, rgba(255,255,255,0.08) 70%, transparent);
+  }
+
+  /* ── Summary Section ── */
+  .summary-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 6px;
+  }
+
+  .summary-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--slate-100);
+  }
+
+  .summary-subtitle {
+    font-size: 14px;
+    font-weight: 400;
+    margin-bottom: 12px;
+  }
+
+  .summary-text {
+    font-size: 13px;
+    line-height: 1.65;
+    color: rgba(200,202,208,0.7);
+    margin-bottom: 20px;
+    font-style: italic;
+  }
+
+  /* ── Vertical Sub-stages ── */
+  .sub-stages {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .sub-row {
+    border-radius: 8px;
+    overflow: hidden;
+    transition: background 0.2s ease;
+  }
+
+  .sub-row-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: background 0.2s ease;
+    user-select: none;
+  }
+
+  .sub-row-header:hover { background: rgba(255,255,255,0.03); }
+  .sub-row.expanded > .sub-row-header { background: rgba(255,255,255,0.03); }
+
+  .sub-row.active-path > .sub-row-header {
+    background: rgba(96,165,250,0.04);
+    border-left: 2px solid var(--blue);
+    box-shadow: inset 4px 0 14px rgba(96,165,250,0.06);
+  }
+
+  .sub-row-icon {
+    font-size: 14px;
+    width: 20px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+
+  .icon-done { color: var(--green); }
+  .icon-active { color: var(--blue); }
+  .icon-pending { color: rgba(255,255,255,0.2); }
+
+  .icon-spinner {
+    display: inline-block;
+    width: 14px; height: 14px;
+    border: 2px solid rgba(96,165,250,0.2);
+    border-top-color: var(--blue);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .sub-row-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--slate-100);
+    flex-shrink: 0;
+  }
+
+  .sub-row-label.pending-label { color: rgba(255,255,255,0.3); }
+
+  .sub-row-sep {
+    color: rgba(255,255,255,0.15);
+    font-size: 13px;
+    flex-shrink: 0;
+  }
+
+  .sub-row-detail {
+    font-size: 13px;
+    color: rgba(200,202,208,0.6);
+  }
+
+  .sub-row-detail.active-detail {
+    color: var(--blue);
+    font-weight: 500;
+  }
+
+  .sub-row-chevron {
+    margin-left: auto;
+    font-size: 11px;
+    color: rgba(255,255,255,0.2);
+    transition: transform 0.25s ease;
+    flex-shrink: 0;
+  }
+
+  .sub-row.expanded > .sub-row-header .sub-row-chevron { transform: rotate(90deg); }
+
+  .sub-row-body {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease, padding 0.3s ease;
+    padding: 0 14px 0 44px;
+  }
+
+  .sub-row.expanded > .sub-row-body {
+    max-height: 600px;
+    padding: 4px 14px 14px 44px;
+  }
+
+  .sub-row-body .sub-row .sub-row-body {
+    padding: 0 14px 0 24px;
+  }
+
+  .sub-row-body .sub-row.expanded > .sub-row-body {
+    max-height: 400px;
+    padding: 4px 14px 10px 24px;
+  }
+
+  .artifact-item { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 13px; color: rgba(200,202,208,0.6); }
+  .artifact-item .art-icon { font-size: 12px; width: 16px; text-align: center; flex-shrink: 0; }
+  .artifact-item .art-icon.done { color: var(--green); }
+  .artifact-item .art-icon.running { color: var(--blue); }
+  .artifact-item .art-icon.pending { color: rgba(255,255,255,0.15); }
+  .artifact-item .art-label { color: rgba(200,202,208,0.7); }
+  .artifact-item .art-label.running-label { color: var(--blue-bright); font-weight: 500; }
+  .artifact-item .art-status { margin-left: auto; font-size: 12px; color: rgba(255,255,255,0.25); }
+  .artifact-item .art-status.done-status { color: rgba(74,222,128,0.5); }
+  .artifact-item .art-status.running-status { color: var(--blue); animation: textPulse 2s ease-in-out infinite; }
+  @keyframes textPulse { 0%, 100% { opacity: 0.7; } 50% { opacity: 1; } }
+
+  .detail-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 12px; color: rgba(200,202,208,0.5); }
+  .detail-row .detail-dot { width: 4px; height: 4px; border-radius: 50%; background: rgba(255,255,255,0.15); flex-shrink: 0; }
+  .detail-row .detail-dot.done { background: var(--green); }
+  .detail-row .detail-dot.active { background: var(--blue); }
+  .seed-step { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 13px; color: rgba(200,202,208,0.6); }
+  .seed-step .step-icon { color: var(--green); width: 16px; text-align: center; }
+  .hypo-iter { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 13px; }
+  .hypo-iter .iter-num { font-weight: 600; width: 20px; color: rgba(168,85,247,0.6); }
+  .hypo-iter .iter-score { color: rgba(200,202,208,0.7); }
+  .hypo-iter .iter-badge { margin-left: auto; font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 500; }
+  .hypo-iter .iter-badge.best { background: rgba(168,85,247,0.15); color: var(--purple); }
+
+  .dep-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; margin-left: 8px; }
+  .dep-badge.blocked { background: rgba(239,68,68,0.12); color: rgba(239,68,68,0.7); }
+  .dep-badge.ready { background: rgba(74,222,128,0.1); color: rgba(74,222,128,0.6); }
+  .dep-badge .dep-badge-dot { width: 4px; height: 4px; border-radius: 50%; }
+  .dep-badge.blocked .dep-badge-dot { background: rgba(239,68,68,0.7); }
+  .dep-badge.ready .dep-badge-dot { background: rgba(74,222,128,0.6); }
+
+  /* Module footer */
+  .module-footer {
+    display: flex;
+    gap: 16px;
+    margin-top: 20px;
+    padding-top: 14px;
+    border-top: 1px solid rgba(255,255,255,0.05);
+    font-size: 13px;
+    color: rgba(255,255,255,0.3);
+  }
+
+  .footer-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .footer-icon { font-size: 12px; }
+
+  /* ── RIGHT COLUMN: Stat Cards ── */
+  .stat-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .stat-card {
+    background: rgba(19,22,32,0.55);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 10px;
+    padding: 14px 16px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent);
+  }
+
+  .stat-label {
+    font-size: 10px; text-transform: uppercase;
+    letter-spacing: 0.5px; color: var(--slate-400); margin-bottom: 8px;
+  }
+
+  .stat-value {
+    font-size: 22px; font-weight: 700; margin-bottom: 8px;
+    color: var(--slate-100);
+  }
+
+  .stat-bar {
+    height: 4px; background: rgba(255,255,255,0.06);
+    border-radius: 2px; overflow: hidden;
+  }
+
+  .stat-bar-fill {
+    height: 100%; border-radius: 2px; width: 0;
+    transition: width 0.8s ease;
+  }
+
+  .stat-bar-stacked {
+    height: 4px; background: rgba(255,255,255,0.06);
+    border-radius: 2px; overflow: hidden; display: flex;
+  }
+  .stat-bar-stacked .seg { height: 100%; transition: width 0.8s ease; }
+
+  .stat-delta {
+    font-size: 10px;
+    margin-top: 6px;
+    color: var(--slate-400);
+  }
+
+  .stat-delta.up { color: var(--green); }
+  .stat-delta.down { color: var(--red); }
+
+  /* ── RIGHT COLUMN: Progress Ring (large) ── */
+  .ring-card {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .big-ring {
+    width: 68px; height: 68px;
+    flex-shrink: 0;
+    position: relative;
+  }
+
+  .big-ring svg { width: 68px; height: 68px; }
+  .big-ring .br-track { fill: none; stroke: var(--slate-700); stroke-width: 5; }
+  .big-ring .br-fill {
+    fill: none; stroke-width: 5; stroke-linecap: round;
+    transition: stroke-dashoffset 1s ease;
+  }
+  .big-ring .br-dash {
+    fill: none; stroke: var(--blue); stroke-width: 2;
+    stroke-dasharray: 5 8; opacity: 0.3;
+    animation: ringRotate 10s linear infinite;
+    transform-origin: 34px 34px;
+  }
+  @keyframes ringRotate { to { transform: rotate(360deg); } }
+
+  .big-ring .br-pct {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; font-weight: 700; color: var(--blue);
+  }
+
+  .big-ring .br-glow {
+    position: absolute; inset: -4px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(96,165,250,0.12) 0%, transparent 70%);
+    animation: glowPulse 2.5s ease-in-out infinite;
+  }
+
+  @keyframes glowPulse {
+    0%, 100% { opacity: 0.5; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.06); }
+  }
+
+  .ring-info { flex: 1; min-width: 0; }
+  .ring-label { font-size: 12px; color: var(--slate-400); margin-bottom: 4px; }
+  .ring-title { font-size: 15px; font-weight: 600; color: var(--slate-100); margin-bottom: 2px; }
+  .ring-sub { font-size: 12px; color: var(--slate-300); }
+
+  /* ── RIGHT COLUMN: Live Activity Feed ── */
+  .feed-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .feed-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+
+  .feed-title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--slate-400);
+  }
+
+  .feed-live-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: livePulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes livePulse {
+    0%, 100% { opacity: 0.5; box-shadow: 0 0 3px rgba(74,222,128,0.3); }
+    50% { opacity: 1; box-shadow: 0 0 8px rgba(74,222,128,0.6); }
+  }
+
+  .feed-entries {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 340px;
+  }
+
+  .feed-entries::-webkit-scrollbar { width: 4px; }
+  .feed-entries::-webkit-scrollbar-track { background: transparent; }
+  .feed-entries::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+
+  .feed-entry {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    animation: feedSlideIn 0.35s ease;
+    transition: background 0.15s;
+  }
+
+  .feed-entry:hover { background: rgba(255,255,255,0.02); }
+
+  @keyframes feedSlideIn {
+    from { opacity: 0; transform: translateY(-6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .feed-time {
+    font-size: 10px;
+    color: var(--slate-500);
+    font-family: 'Inter', monospace;
+    min-width: 42px;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  .feed-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-top: 4px;
+  }
+
+  .feed-text {
+    flex: 1;
+    color: var(--slate-300);
+    line-height: 1.45;
+  }
+
+  .feed-text .highlight {
+    color: var(--blue);
+    font-weight: 500;
+  }
+
+  .feed-text .success {
+    color: var(--green);
+    font-weight: 500;
+  }
+
+  .feed-text .warn {
+    color: var(--orange);
+    font-weight: 500;
+  }
+
+  /* Tooltip for dots in progress strip */
+  .has-tooltip {
+    position: relative;
+  }
+
+  .has-tooltip .tooltip {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--slate-800);
+    border: 1px solid rgba(255,255,255,0.08);
+    color: var(--slate-100);
+    font-size: 12px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    z-index: 50;
+  }
+
+  .has-tooltip .tooltip::after {
+    content: '';
+    position: absolute;
+    top: 100%; left: 50%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-top-color: var(--slate-800);
+  }
+
+  .has-tooltip:hover .tooltip { opacity: 1; }
+
+  /* ── Keyboard Hint ── */
+  .key-hint {
+    position: fixed;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: rgba(255,255,255,0.18);
+    user-select: none;
+    z-index: 10;
+  }
+
+  .key-hint kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px; height: 20px;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 4px;
+    font-family: 'Inter', sans-serif;
+    font-size: 11px;
+    color: rgba(255,255,255,0.3);
+    background: rgba(255,255,255,0.03);
+  }
+
+  /* ── Content transition ── */
+  .content-fade {
+    animation: contentFadeIn 0.35s ease;
+  }
+
+  @keyframes contentFadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+</style>
+</head>
+<body>
+
+<!-- Particles -->
+<canvas id="particles"></canvas>
+
+<!-- Collapsed Sidebar -->
+<nav class="sidebar">
+  <div class="sidebar-logo">AI</div>
+
+  <div class="sidebar-item" data-module="seed">
+    <span class="sb-icon">&#9733;</span>
+    <div class="dep-dot done"></div>
+    <div class="sb-tooltip">Seed Hypotheses</div>
+  </div>
+
+  <div class="sidebar-item" data-module="hypothesis">
+    <span class="sb-icon">&#9883;</span>
+    <div class="dep-dot done"></div>
+    <div class="sb-tooltip">Hypothesis Loop</div>
+  </div>
+
+  <div class="sidebar-item active" data-module="invention">
+    <span class="sb-icon">&#9881;</span>
+    <div class="dep-dot active"></div>
+    <div class="sb-tooltip">Invention Loop</div>
+  </div>
+
+  <div class="sidebar-item" data-module="paper">
+    <span class="sb-icon">&#9998;</span>
+    <div class="dep-dot pending"></div>
+    <div class="sb-tooltip">Paper Generation</div>
+  </div>
+
+  <div class="sidebar-divider"></div>
+
+  <div class="sidebar-item">
+    <span class="sb-icon">&#9776;</span>
+    <div class="sb-tooltip">Run History</div>
+  </div>
+
+  <div class="sidebar-item">
+    <span class="sb-icon">&#9881;</span>
+    <div class="sb-tooltip">Settings</div>
+  </div>
+</nav>
+
+<!-- Main -->
+<div class="main">
+
+  <!-- Progress Strip -->
+  <div class="progress-strip">
+    <div class="dots-row">
+      <!-- Seed: 4 green filled -->
+      <div class="module-group on-path" data-module="seed">
+        <div class="line-bg"></div>
+        <span class="hover-label">Seed</span>
+        <div class="dot filled has-tooltip"><div class="tooltip">Paper Collection</div></div>
+        <div class="dot filled has-tooltip"><div class="tooltip">Knowledge Graph</div></div>
+        <div class="dot filled has-tooltip"><div class="tooltip">Gap Ranking</div></div>
+        <div class="dot filled has-tooltip"><div class="tooltip">Seed Generation</div></div>
+      </div>
+
+      <!-- Hypothesis: 6 purple filled -->
+      <div class="module-group on-path" data-module="hypothesis">
+        <div class="line-bg"></div>
+        <span class="hover-label">Hypothesis</span>
+        <div class="dot filled has-tooltip"><div class="tooltip">Iter 1 &#8212; Generate</div></div>
+        <div class="dot filled has-tooltip"><div class="tooltip">Iter 1 &#8212; Review</div></div>
+        <div class="dot filled has-tooltip"><div class="tooltip">Iter 2 &#8212; Generate</div></div>
+        <div class="dot filled has-tooltip"><div class="tooltip">Iter 2 &#8212; Review</div></div>
+        <div class="dot filled has-tooltip"><div class="tooltip">Iter 3 &#8212; Generate</div></div>
+        <div class="dot filled has-tooltip"><div class="tooltip">Iter 3 &#8212; Review</div></div>
+      </div>
+
+      <!-- Invention: mixed filled/hollow/active -->
+      <div class="module-group selected on-path" data-module="invention">
+        <div class="line-bg"></div>
+        <span class="hover-label">Invention</span>
+        <div class="dot filled has-tooltip"><div class="tooltip">Strategy</div></div>
+        <div class="dot filled has-tooltip"><div class="tooltip">Plan</div></div>
+        <div class="dot filled has-tooltip"><div class="tooltip">Baseline</div></div>
+        <div class="dot filled has-tooltip"><div class="tooltip">Main Experiment</div></div>
+        <div class="dot filled has-tooltip"><div class="tooltip">Visualization</div></div>
+        <div class="dot filled has-tooltip"><div class="tooltip">Artifact 1</div></div>
+        <div class="dot filled has-tooltip"><div class="tooltip">Artifact 2</div></div>
+        <div class="dot filled active-pulse has-tooltip"><div class="tooltip">Ablation &#8212; running</div></div>
+        <div class="dot hollow has-tooltip"><div class="tooltip">Supplementary</div></div>
+        <div class="dot hollow has-tooltip"><div class="tooltip">Paper Draft</div></div>
+        <div class="dot hollow has-tooltip"><div class="tooltip">Review</div></div>
+        <div class="dot hollow has-tooltip"><div class="tooltip">Update Hypo</div></div>
+      </div>
+
+      <!-- Paper: 5 orange hollow -->
+      <div class="module-group" data-module="paper">
+        <div class="line-bg"></div>
+        <span class="hover-label">Paper</span>
+        <div class="dot hollow has-tooltip"><div class="tooltip">Artifact Demos</div></div>
+        <div class="dot hollow has-tooltip"><div class="tooltip">Visualizations</div></div>
+        <div class="dot hollow has-tooltip"><div class="tooltip">Full Paper</div></div>
+        <div class="dot hollow has-tooltip"><div class="tooltip">Repository</div></div>
+        <div class="dot hollow has-tooltip"><div class="tooltip">Final PDF</div></div>
+      </div>
+    </div>
+
+    <!-- Module Tabs -->
+    <div class="module-tabs">
+      <div class="tab" data-tab="seed" data-module="seed">Seed</div>
+      <div class="tab" data-tab="hypothesis" data-module="hypothesis">Hypothesis</div>
+      <div class="tab active" data-tab="invention" data-module="invention">Invention</div>
+      <div class="tab" data-tab="paper" data-module="paper">Paper</div>
+    </div>
+  </div>
+
+  <!-- Horizontal Module Cards -->
+  <div class="module-cards" id="moduleCards">
+    <div class="module-card selected" data-color="green" data-idx="0">
+      <div class="shimmer"></div>
+      <div class="card-body">
+        <div class="mini-ring">
+          <svg viewBox="0 0 28 28">
+            <circle class="mr-track" cx="14" cy="14" r="11"/>
+            <circle class="mr-fill" cx="14" cy="14" r="11"
+              stroke="var(--green)" stroke-dasharray="69.1" stroke-dashoffset="0"
+              transform="rotate(-90 14 14)"/>
+          </svg>
+          <div class="mr-pct" style="color:var(--green)">100</div>
+        </div>
+        <div class="card-info">
+          <div class="card-name">Seed</div>
+          <div class="card-metric">4 / 4</div>
+          <span class="card-badge badge-done">Done</span>
+        </div>
+      </div>
+      <div class="card-progress">
+        <div class="card-progress-fill" style="width:100%;background:var(--green)"></div>
+      </div>
+    </div>
+
+    <div class="module-card" data-color="purple" data-idx="1">
+      <div class="shimmer"></div>
+      <div class="card-body">
+        <div class="mini-ring">
+          <svg viewBox="0 0 28 28">
+            <circle class="mr-track" cx="14" cy="14" r="11"/>
+            <circle class="mr-fill" cx="14" cy="14" r="11"
+              stroke="var(--purple)" stroke-dasharray="69.1" stroke-dashoffset="0"
+              transform="rotate(-90 14 14)"/>
+          </svg>
+          <div class="mr-pct" style="color:var(--purple)">100</div>
+        </div>
+        <div class="card-info">
+          <div class="card-name">Hypothesis</div>
+          <div class="card-metric">8.4 / 10</div>
+          <span class="card-badge badge-done">Done</span>
+        </div>
+      </div>
+      <div class="card-progress">
+        <div class="card-progress-fill" style="width:100%;background:var(--purple)"></div>
+      </div>
+    </div>
+
+    <div class="module-card active" data-color="blue" data-idx="2">
+      <div class="shimmer"></div>
+      <div class="card-body">
+        <div class="mini-ring">
+          <svg viewBox="0 0 28 28">
+            <circle class="mr-track" cx="14" cy="14" r="11"/>
+            <circle class="mr-fill" cx="14" cy="14" r="11"
+              stroke="var(--blue)" stroke-dasharray="69.1" stroke-dashoffset="27.6"
+              transform="rotate(-90 14 14)"/>
+          </svg>
+          <div class="mr-pct" style="color:var(--blue)">60</div>
+        </div>
+        <div class="card-info">
+          <div class="card-name">Invention</div>
+          <div class="card-metric">3 / 5</div>
+          <span class="card-badge badge-active">Active</span>
+        </div>
+      </div>
+      <div class="card-progress">
+        <div class="card-progress-fill" style="width:60%;background:var(--blue)"></div>
+      </div>
+    </div>
+
+    <div class="module-card" data-color="orange" data-idx="3">
+      <div class="shimmer"></div>
+      <div class="card-body">
+        <div class="mini-ring">
+          <svg viewBox="0 0 28 28">
+            <circle class="mr-track" cx="14" cy="14" r="11"/>
+            <circle class="mr-fill" cx="14" cy="14" r="11"
+              stroke="var(--orange)" stroke-dasharray="69.1" stroke-dashoffset="69.1"
+              transform="rotate(-90 14 14)"/>
+          </svg>
+          <div class="mr-pct" style="color:var(--orange)">0</div>
+        </div>
+        <div class="card-info">
+          <div class="card-name">Paper</div>
+          <div class="card-metric">5 pending</div>
+          <span class="card-badge badge-pending">Pending</span>
+        </div>
+      </div>
+      <div class="card-progress">
+        <div class="card-progress-fill" style="width:0%;background:var(--orange)"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TWO-COLUMN DASHBOARD -->
+  <div class="dashboard" id="dashboard">
+
+    <!-- LEFT COLUMN (60%): Summary + Vertical Sub-stages -->
+    <div class="col-left" id="colLeft">
+      <div class="glass-panel content-fade" id="leftPanel">
+        <!-- Content rendered by JS -->
+      </div>
+    </div>
+
+    <!-- RIGHT COLUMN (40%): Stat Cards + Live Feed -->
+    <div class="col-right" id="colRight">
+
+      <!-- Progress Ring -->
+      <div class="glass-panel ring-card" id="ringCard">
+        <div class="big-ring">
+          <div class="br-glow"></div>
+          <svg viewBox="0 0 68 68">
+            <circle class="br-track" cx="34" cy="34" r="28"/>
+            <circle class="br-dash" cx="34" cy="34" r="28"/>
+            <circle class="br-fill" cx="34" cy="34" r="28"
+              stroke="var(--blue)"
+              stroke-dasharray="175.9" stroke-dashoffset="70.4"
+              transform="rotate(-90 34 34)" id="bigRingFill"/>
+          </svg>
+          <div class="br-pct" id="bigRingPct">60%</div>
+        </div>
+        <div class="ring-info">
+          <div class="ring-label">Overall Progress</div>
+          <div class="ring-title" id="ringTitle">quantum-optics-042</div>
+          <div class="ring-sub" id="ringSub">Invention Loop &mdash; Iteration 2</div>
+        </div>
+      </div>
+
+      <!-- Stat Grid -->
+      <div class="stat-grid" id="statGrid">
+        <div class="stat-card">
+          <div class="stat-label">Duration</div>
+          <div class="stat-value" id="statDuration">42m</div>
+          <div class="stat-bar"><div class="stat-bar-fill" id="barDuration" style="background:var(--blue)"></div></div>
+          <div class="stat-delta">Total elapsed</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Cost</div>
+          <div class="stat-value" id="statCost">$12.47</div>
+          <div class="stat-bar"><div class="stat-bar-fill" id="barCost" style="background:var(--purple)"></div></div>
+          <div class="stat-delta">API spend</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Messages</div>
+          <div class="stat-value" id="statMsgs">284</div>
+          <div class="stat-bar-stacked" id="barMsgs">
+            <div class="seg" style="width:35%;background:var(--green)"></div>
+            <div class="seg" style="width:30%;background:var(--purple)"></div>
+            <div class="seg" style="width:25%;background:var(--blue)"></div>
+            <div class="seg" style="width:10%;background:var(--slate-600)"></div>
+          </div>
+          <div class="stat-delta">Across all modules</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Artifacts</div>
+          <div class="stat-value" id="statArtifacts">7 / 12</div>
+          <div class="stat-bar"><div class="stat-bar-fill" id="barArtifacts" style="background:var(--green)"></div></div>
+          <div class="stat-delta up">+2 this iteration</div>
+        </div>
+      </div>
+
+      <!-- Live Feed -->
+      <div class="glass-panel feed-panel" id="feedPanel">
+        <div class="feed-header">
+          <div class="feed-live-dot"></div>
+          <div class="feed-title">Live Activity</div>
+        </div>
+        <div class="feed-entries" id="feedEntries">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<!-- Keyboard hint -->
+<div class="key-hint">
+  <kbd>&#8592;</kbd><kbd>&#8594;</kbd> modules
+  <kbd>&#8593;</kbd><kbd>&#8595;</kbd> sub-stages
+</div>
+
+<script>
+/* ================================================================
+   DATA
+   ================================================================ */
+const MODULES = [
+  {
+    name: 'Seed', key: 'seed', color: '--green', colorHex: '#4ade80',
+    subtitle: '847 papers -> 12 research gaps',
+    summary: 'Scanned literature across three domains to identify under-explored intersections. Knowledge graph built from 847 source papers, producing 12 distinct research gaps ranked by novelty and tractability.',
+    duration: '8m', cost: '$1.24', msgs: 64, artifacts: '4 / 4',
+    durationPct: 19, costPct: 10, artifactsPct: 100,
+    subs: [
+      { label: 'Paper Collection', detail: '847 papers ingested', status: 'done',
+        children: [
+          { label: 'API Crawl', detail: 'Semantic Scholar', status: 'done',
+            leaves: ['Query expansion (3 domains)', 'Rate-limited fetch (1,240 hits)', 'Metadata extraction'] },
+          { label: 'PDF extraction and chunking', status: 'done' },
+          { label: 'De-duplication (847 unique)', status: 'done' }
+        ]},
+      { label: 'Knowledge Graph', detail: '2,341 entities, 5,890 edges', status: 'done',
+        children: [
+          { label: 'Entity Extraction', detail: 'methods, datasets, metrics', status: 'done',
+            leaves: ['NER pass over 847 abstracts', 'Coreference resolution', '2,341 unique entities'] },
+          { label: 'Relation linking', status: 'done' },
+          { label: 'Gap detection via structural holes', status: 'done' }
+        ]},
+      { label: 'Gap Ranking', detail: '12 gaps prioritized', status: 'done',
+        children: [
+          { label: 'Novelty scoring', status: 'done' },
+          { label: 'Tractability estimation', status: 'done' },
+          { label: 'Top 12 selected', status: 'done' }
+        ]},
+      { label: 'Seed Generation', detail: '12 hypotheses seeded', status: 'done',
+        children: [
+          { label: 'Template instantiation', status: 'done' },
+          { label: 'Cross-domain recombination', status: 'done' }
+        ]}
+    ]
+  },
+  {
+    name: 'Hypothesis', key: 'hypothesis', color: '--purple', colorHex: '#a855f7',
+    subtitle: '3 iterations -> Score 8.4/10',
+    summary: 'Iteratively refined the top hypothesis through three review-refine cycles. Each round tightened experimental predictions, improved grounding, and narrowed scope until the 8.4 threshold was met.',
+    duration: '18m', cost: '$4.80', msgs: 112, artifacts: '3 / 3',
+    durationPct: 43, costPct: 38, artifactsPct: 100,
+    subs: [
+      { label: 'Iteration 1', detail: 'Score 6.2', status: 'done',
+        children: [
+          { label: 'Generate', detail: '12 candidates', status: 'done' },
+          { label: 'Review', detail: '6.2/10 avg', status: 'done',
+            leaves: ['Weak grounding in 4 candidates', 'Scope too broad for 3 others'] }
+        ]},
+      { label: 'Iteration 2', detail: 'Score 7.8', status: 'done',
+        children: [
+          { label: 'Refine', detail: 'narrowed to top 6', status: 'done' },
+          { label: 'Review', detail: '7.8/10 avg', status: 'done',
+            leaves: ['Tighter bounds needed', 'Photon-pair fidelity: 99.2%'] }
+        ]},
+      { label: 'Iteration 3', detail: 'Score 8.4 &#8212; accepted', status: 'done',
+        children: [
+          { label: 'Final refinement', detail: 'precision pass', status: 'done' },
+          { label: 'Review', detail: '8.4/10 &#10003;', status: 'done',
+            leaves: ['Strong novelty', 'Well-grounded predictions', 'Clear experimental path'] }
+        ]}
+    ]
+  },
+  {
+    name: 'Invention', key: 'invention', color: '--blue', colorHex: '#60a5fa',
+    subtitle: 'Generating Artifacts &#8212; 3 of 5 complete',
+    summary: 'Building research artifacts to validate the hypothesis. Baseline shows 17.5% accuracy improvement over prior art. Ablation study currently running to isolate contribution of each component.',
+    duration: '42m', cost: '$12.47', msgs: 284, artifacts: '3 / 5',
+    durationPct: 64, costPct: 62, artifactsPct: 58,
+    subs: [
+      { label: 'Strategy', detail: 'Contrastive alignment', status: 'done',
+        children: [
+          { label: 'Approach Selection', detail: 'contrastive learning', status: 'done',
+            leaves: ['Evaluated 4 candidate approaches', 'Selected contrastive alignment', 'Defined alignment loss function'] }
+        ]},
+      { label: 'Plan', detail: '5 artifacts planned', status: 'done',
+        children: [
+          { label: 'Artifact Breakdown', detail: '5 items', status: 'done',
+            leaves: ['Baseline benchmark', 'Main experiment', 'Ablation study', 'Visualization suite', 'Supplementary analysis'] }
+        ]},
+      { label: 'Artifacts', detail: '3/5, ablation running', status: 'active',
+        isActive: true,
+        artifacts: [
+          { name: 'Baseline benchmark', status: 'done', statusText: 'complete' },
+          { name: 'Main experiment', status: 'done', statusText: '+17.5% acc' },
+          { name: 'Visualization suite', status: 'done', statusText: '4 figures' },
+          { name: 'Ablation study', status: 'running', statusText: 'running...' },
+          { name: 'Supplementary analysis', status: 'pending', statusText: 'pending' }
+        ]},
+      { label: 'Paper Draft', detail: '', status: 'pending', blocked: true },
+      { label: 'Review', detail: '', status: 'pending', blocked: true },
+      { label: 'Update Hypo', detail: '', status: 'pending', blocked: true }
+    ]
+  },
+  {
+    name: 'Paper', key: 'paper', color: '--orange', colorHex: '#fb923c',
+    subtitle: 'Pending &#8212; waiting for invention loop',
+    summary: 'Full paper generation will begin once the invention loop completes. This stage compiles all artifacts, generates LaTeX, produces visualizations, and assembles the final PDF and repository.',
+    duration: '&#8212;', cost: '&#8212;', msgs: 0, artifacts: '0 / 5',
+    durationPct: 0, costPct: 0, artifactsPct: 0,
+    subs: [
+      { label: 'Artifact Demos', detail: '', status: 'pending', blocked: true,
+        children: [
+          { label: 'Python Demos', detail: '', status: 'pending' },
+          { label: 'Notebook Demos', detail: '', status: 'pending' }
+        ]},
+      { label: 'Visualizations', detail: '', status: 'pending', blocked: true,
+        children: [
+          { label: 'Figure Generation', detail: '', status: 'pending' },
+          { label: 'Table Compilation', detail: '', status: 'pending' }
+        ]},
+      { label: 'Full Paper', detail: '', status: 'pending', blocked: true,
+        children: [
+          { label: 'LaTeX Assembly', detail: '', status: 'pending' },
+          { label: 'Bibliography', detail: '', status: 'pending' }
+        ]},
+      { label: 'Repository', detail: '', status: 'pending', blocked: true },
+      { label: 'Final PDF', detail: '', status: 'pending', blocked: true }
+    ]
+  }
+];
+
+const FEED_MESSAGES = [
+  { time: '14:31', dot: 'var(--blue)', text: 'Started <span class="highlight">ablation study</span> generation' },
+  { time: '14:30', dot: 'var(--green)', text: '<span class="success">Benchmark table</span>: verified 12 comparison rows' },
+  { time: '14:28', dot: 'var(--green)', text: '<span class="success">Simulation code</span>: all 8 test cases passing' },
+  { time: '14:25', dot: 'var(--green)', text: '<span class="success">Visualization suite</span>: 4 figures rendered' },
+  { time: '14:22', dot: 'var(--blue)', text: 'Main experiment: <span class="highlight">+17.5% accuracy</span> over baseline' },
+  { time: '14:18', dot: 'var(--green)', text: '<span class="success">Baseline benchmark</span> complete: 42.3% accuracy' },
+  { time: '14:15', dot: 'var(--blue)', text: 'Artifact plan finalized: <span class="highlight">5 items</span>' },
+  { time: '14:12', dot: 'var(--purple)', text: 'Strategy selected: <span class="highlight">contrastive alignment</span>' },
+  { time: '14:08', dot: 'var(--purple)', text: 'Hypothesis accepted: score <span class="highlight">8.4/10</span>' },
+  { time: '14:05', dot: 'var(--green)', text: 'Review round 3 complete' },
+  { time: '14:01', dot: 'var(--purple)', text: 'Refined predictions: fidelity 99.2% +/- 0.3%' },
+  { time: '13:58', dot: 'var(--purple)', text: 'Review round 2: score improved to <span class="highlight">7.8/10</span>' },
+  { time: '13:54', dot: 'var(--orange)', text: '<span class="warn">Scope too broad</span> in 3 candidates' },
+  { time: '13:50', dot: 'var(--purple)', text: 'Review round 1: avg score 6.2/10' },
+  { time: '13:46', dot: 'var(--purple)', text: 'Generated 12 candidate hypotheses' },
+  { time: '13:42', dot: 'var(--green)', text: '12 research gaps identified and ranked' },
+  { time: '13:38', dot: 'var(--green)', text: 'Knowledge graph: 2,341 entities, 5,890 edges' },
+  { time: '13:32', dot: 'var(--green)', text: 'Paper collection: 847 unique papers ingested' }
+];
+
+const ROTATING_FEED = [
+  { time: '14:32', dot: 'var(--blue)', text: 'Ablation: testing <span class="highlight">component A</span> in isolation' },
+  { time: '14:33', dot: 'var(--blue)', text: 'Ablation: <span class="highlight">component A</span> contributes +8.2% accuracy' },
+  { time: '14:34', dot: 'var(--blue)', text: 'Ablation: testing <span class="highlight">component B</span> in isolation' },
+  { time: '14:35', dot: 'var(--blue)', text: 'Ablation: <span class="highlight">component B</span> contributes +5.1% accuracy' },
+  { time: '14:36', dot: 'var(--blue)', text: 'Ablation: testing <span class="highlight">interaction effects</span>' },
+  { time: '14:37', dot: 'var(--green)', text: '<span class="success">Ablation study</span>: 3/5 components analyzed' }
+];
+
+/* ================================================================
+   STATE
+   ================================================================ */
+let activeModule = 2; // invention
+let feedRotateInterval = null;
+let rotateIdx = 0;
+
+/* ================================================================
+   RENDER LEFT PANEL (summary + vertical sub-stages)
+   ================================================================ */
+function renderLeftPanel() {
+  const mod = MODULES[activeModule];
+  const panel = document.getElementById('leftPanel');
+
+  let html = '<div class="content-fade">';
+  html += '<div class="summary-header">';
+  html += '<span class="summary-title">' + mod.name + '</span>';
+  html += '<span class="card-badge ' + getBadgeClass(mod) + '">' + getBadgeText(mod) + '</span>';
+  html += '</div>';
+  html += '<div class="summary-subtitle" style="color:var(' + mod.color + ')">' + mod.subtitle + '</div>';
+  html += '<div class="summary-text">"' + mod.summary + '"</div>';
+
+  // Sub-stages
+  html += '<div class="sub-stages">';
+  mod.subs.forEach(function(sub, si) {
+    html += renderSubRow(sub, si, mod);
+  });
+  html += '</div>';
+
+  // Footer
+  html += '<div class="module-footer">';
+  html += '<div class="footer-item"><span class="footer-icon">&#9202;</span> ' + mod.duration + '</div>';
+  html += '<div class="footer-item"><span class="footer-icon">&#9830;</span> ' + mod.cost + '</div>';
+  html += '</div>';
+
+  html += '</div>';
+  panel.innerHTML = html;
+
+  // Wire up expand/collapse
+  panel.querySelectorAll('.sub-row-header').forEach(function(hdr) {
+    hdr.addEventListener('click', function() {
+      var row = hdr.parentElement;
+      row.classList.toggle('expanded');
+    });
+  });
+}
+
+function renderSubRow(sub, idx, mod) {
+  var icon = getStatusIcon(sub.status);
+  var labelCls = sub.status === 'pending' ? ' pending-label' : '';
+  var detailCls = sub.isActive ? ' active-detail' : '';
+  var rowCls = sub.isActive ? ' expanded active-path' : '';
+  var hasChildren = (sub.children && sub.children.length) || sub.artifacts;
+
+  var html = '<div class="sub-row' + rowCls + '">';
+  html += '<div class="sub-row-header">';
+  html += '<span class="sub-row-icon ' + getIconClass(sub.status) + '">' + icon + '</span>';
+  html += '<span class="sub-row-label' + labelCls + '">' + sub.label + '</span>';
+  if (sub.detail) {
+    html += '<span class="sub-row-sep">&mdash;</span>';
+    html += '<span class="sub-row-detail' + detailCls + '">' + sub.detail + '</span>';
+  }
+  if (sub.blocked) {
+    html += '<span class="dep-badge blocked"><span class="dep-badge-dot"></span> blocked</span>';
+  }
+  if (hasChildren) {
+    html += '<span class="sub-row-chevron">&#9654;</span>';
+  }
+  html += '</div>';
+
+  if (hasChildren) {
+    html += '<div class="sub-row-body">';
+    if (sub.artifacts) {
+      sub.artifacts.forEach(function(art) {
+        var artIconCls = art.status === 'done' ? 'done' : art.status === 'running' ? 'running' : 'pending';
+        var artIcon = art.status === 'done' ? '&#10003;' :
+          art.status === 'running' ? '<span class="icon-spinner" style="width:12px;height:12px;border-width:1.5px;"></span>' : '&#9675;';
+        var labelCls2 = art.status === 'running' ? ' running-label' : '';
+        var statusCls = art.status === 'done' ? ' done-status' : art.status === 'running' ? ' running-status' : '';
+        html += '<div class="artifact-item">';
+        html += '<span class="art-icon ' + artIconCls + '">' + artIcon + '</span>';
+        html += '<span class="art-label' + labelCls2 + '">' + art.name + '</span>';
+        html += '<span class="art-status' + statusCls + '">' + art.statusText + '</span>';
+        html += '</div>';
+      });
+    } else if (sub.children) {
+      sub.children.forEach(function(child) {
+        if (child.leaves || child.detail) {
+          // Nested sub-row
+          var cIcon = getStatusIcon(child.status);
+          html += '<div class="sub-row">';
+          html += '<div class="sub-row-header">';
+          html += '<span class="sub-row-icon ' + getIconClass(child.status) + '">' + cIcon + '</span>';
+          html += '<span class="sub-row-label' + (child.status === 'pending' ? ' pending-label' : '') + '">' + child.label + '</span>';
+          if (child.detail) {
+            html += '<span class="sub-row-sep">&mdash;</span>';
+            html += '<span class="sub-row-detail">' + child.detail + '</span>';
+          }
+          if (child.leaves) {
+            html += '<span class="sub-row-chevron">&#9654;</span>';
+          }
+          html += '</div>';
+          if (child.leaves) {
+            html += '<div class="sub-row-body">';
+            child.leaves.forEach(function(leaf) {
+              var dotCls = child.status === 'done' ? 'done' : child.status === 'active' ? 'active' : '';
+              html += '<div class="detail-row"><span class="detail-dot ' + dotCls + '"></span> ' + leaf + '</div>';
+            });
+            html += '</div>';
+          }
+          html += '</div>';
+        } else {
+          // Simple seed step
+          var stepIcon = child.status === 'done' ? '&#10003;' : '&#9675;';
+          var stepColor = child.status === 'done' ? 'var(--green)' : 'rgba(255,255,255,0.2)';
+          html += '<div class="seed-step"><span class="step-icon" style="color:' + stepColor + '">' + stepIcon + '</span> ' + child.label + '</div>';
+        }
+      });
+    }
+    html += '</div>';
+  }
+
+  html += '</div>';
+  return html;
+}
+
+function getStatusIcon(status) {
+  if (status === 'done') return '&#10003;';
+  if (status === 'active') return '<span class="icon-spinner"></span>';
+  return '&#9675;';
+}
+
+function getIconClass(status) {
+  if (status === 'done') return 'icon-done';
+  if (status === 'active') return 'icon-active';
+  return 'icon-pending';
+}
+
+function getBadgeClass(mod) {
+  if (mod.key === 'paper') return 'badge-pending';
+  if (mod.key === 'invention') return 'badge-active';
+  return 'badge-done';
+}
+
+function getBadgeText(mod) {
+  if (mod.key === 'paper') return 'Pending';
+  if (mod.key === 'invention') return 'Active';
+  return 'Done';
+}
+
+/* ================================================================
+   RENDER RIGHT PANEL (stat cards + feed)
+   ================================================================ */
+function renderRightPanel() {
+  var mod = MODULES[activeModule];
+
+  // Update stats
+  document.getElementById('statDuration').textContent = mod.duration;
+  document.getElementById('statCost').textContent = mod.cost;
+  document.getElementById('statMsgs').textContent = mod.msgs;
+  document.getElementById('statArtifacts').textContent = mod.artifacts;
+
+  // Animate bars
+  requestAnimationFrame(function() {
+    document.getElementById('barDuration').style.width = mod.durationPct + '%';
+    document.getElementById('barCost').style.width = mod.costPct + '%';
+    document.getElementById('barArtifacts').style.width = mod.artifactsPct + '%';
+  });
+
+  // Update ring
+  var totalSubs = 0, doneSubs = 0;
+  MODULES.forEach(function(m) {
+    m.subs.forEach(function(s) {
+      totalSubs++;
+      if (s.status === 'done') doneSubs++;
+    });
+  });
+  var pct = Math.round(doneSubs / totalSubs * 100);
+  var circumference = 175.9;
+  var offset = circumference - (circumference * pct / 100);
+  document.getElementById('bigRingFill').setAttribute('stroke-dashoffset', offset);
+  document.getElementById('bigRingPct').textContent = pct + '%';
+
+  // Ring info
+  document.getElementById('ringSub').innerHTML = mod.name + ' &mdash; ' + mod.subtitle;
+
+  // Render feed
+  renderFeed();
+}
+
+function renderFeed() {
+  var container = document.getElementById('feedEntries');
+  // Show subset based on current module
+  var mod = MODULES[activeModule];
+  var startIdx = 0;
+  if (mod.key === 'seed') startIdx = 14;
+  else if (mod.key === 'hypothesis') startIdx = 9;
+  else if (mod.key === 'invention') startIdx = 0;
+  else startIdx = 0;
+
+  var msgs = FEED_MESSAGES.slice(startIdx, startIdx + 8);
+  container.innerHTML = msgs.map(function(m) {
+    return '<div class="feed-entry">'
+      + '<span class="feed-time">' + m.time + '</span>'
+      + '<span class="feed-dot" style="background:' + m.dot + '"></span>'
+      + '<span class="feed-text">' + m.text + '</span>'
+      + '</div>';
+  }).join('');
+}
+
+/* ================================================================
+   FEED ROTATION (simulate live updates)
+   ================================================================ */
+function startFeedRotation() {
+  clearInterval(feedRotateInterval);
+  if (MODULES[activeModule].key !== 'invention') return;
+
+  feedRotateInterval = setInterval(function() {
+    var container = document.getElementById('feedEntries');
+    if (!container) return;
+
+    var msg = ROTATING_FEED[rotateIdx % ROTATING_FEED.length];
+    rotateIdx++;
+
+    var entry = document.createElement('div');
+    entry.className = 'feed-entry';
+    entry.innerHTML = '<span class="feed-time">' + msg.time + '</span>'
+      + '<span class="feed-dot" style="background:' + msg.dot + '"></span>'
+      + '<span class="feed-text">' + msg.text + '</span>';
+
+    container.insertBefore(entry, container.firstChild);
+
+    // Keep max 10 entries visible
+    while (container.children.length > 10) {
+      container.removeChild(container.lastChild);
+    }
+  }, 6000);
+}
+
+/* ================================================================
+   MODULE SWITCHING
+   ================================================================ */
+function switchModule(idx) {
+  if (idx === activeModule) return;
+  activeModule = idx;
+
+  // Update tabs
+  document.querySelectorAll('.tab').forEach(function(t, i) {
+    t.classList.toggle('active', i === idx);
+  });
+
+  // Update cards
+  document.querySelectorAll('.module-card').forEach(function(c, i) {
+    c.classList.toggle('selected', i === idx);
+  });
+
+  // Update sidebar
+  var keys = ['seed', 'hypothesis', 'invention', 'paper'];
+  document.querySelectorAll('.sidebar-item[data-module]').forEach(function(si) {
+    si.classList.toggle('active', si.dataset.module === keys[idx]);
+  });
+
+  // Update module-group selections
+  document.querySelectorAll('.module-group').forEach(function(g) {
+    g.classList.toggle('selected', g.dataset.module === keys[idx]);
+  });
+
+  renderLeftPanel();
+  renderRightPanel();
+  startFeedRotation();
+}
+
+/* ================================================================
+   EVENT LISTENERS
+   ================================================================ */
+
+// Tab clicks
+document.querySelectorAll('.tab').forEach(function(tab, i) {
+  tab.addEventListener('click', function() { switchModule(i); });
+});
+
+// Card clicks
+document.querySelectorAll('.module-card').forEach(function(card) {
+  card.addEventListener('click', function() {
+    switchModule(parseInt(card.dataset.idx));
+  });
+});
+
+// Sidebar clicks
+document.querySelectorAll('.sidebar-item[data-module]').forEach(function(item) {
+  item.addEventListener('click', function() {
+    var keys = ['seed', 'hypothesis', 'invention', 'paper'];
+    var idx = keys.indexOf(item.dataset.module);
+    if (idx >= 0) switchModule(idx);
+  });
+});
+
+// Module group clicks
+document.querySelectorAll('.module-group').forEach(function(group) {
+  group.addEventListener('click', function() {
+    var keys = ['seed', 'hypothesis', 'invention', 'paper'];
+    var idx = keys.indexOf(group.dataset.module);
+    if (idx >= 0) switchModule(idx);
+  });
+});
+
+// Keyboard navigation
+document.addEventListener('keydown', function(e) {
+  switch (e.key) {
+    case 'ArrowLeft':
+      e.preventDefault();
+      switchModule(Math.max(0, activeModule - 1));
+      break;
+    case 'ArrowRight':
+      e.preventDefault();
+      switchModule(Math.min(3, activeModule + 1));
+      break;
+  }
+});
+
+/* ================================================================
+   PARTICLE SYSTEM
+   ================================================================ */
+var canvas = document.getElementById('particles');
+var ctx = canvas.getContext('2d');
+var particles = [];
+var moduleColors = ['#4ade80', '#a855f7', '#60a5fa', '#fb923c'];
+
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+
+function initParticles() {
+  particles = [];
+  for (var i = 0; i < 60; i++) {
+    particles.push({
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height,
+      vx: (Math.random() - 0.5) * 0.3,
+      vy: (Math.random() - 0.5) * 0.3,
+      r: 1.2 + Math.random() * 1.5,
+      color: moduleColors[Math.floor(Math.random() * 4)],
+      alpha: 0.1 + Math.random() * 0.14
+    });
+  }
+}
+
+resizeCanvas();
+initParticles();
+
+function drawParticles() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  var w = canvas.width, h = canvas.height;
+  var maxD = 110;
+
+  for (var i = 0; i < particles.length; i++) {
+    var p = particles[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    if (p.x < 0) p.x = w;
+    if (p.x > w) p.x = 0;
+    if (p.y < 0) p.y = h;
+    if (p.y > h) p.y = 0;
+  }
+
+  // Connection lines
+  for (var i = 0; i < particles.length; i++) {
+    for (var j = i + 1; j < particles.length; j++) {
+      var a = particles[i], b = particles[j];
+      var dx = a.x - b.x, dy = a.y - b.y;
+      var d = Math.sqrt(dx * dx + dy * dy);
+      if (d < maxD) {
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.strokeStyle = 'rgba(148,163,184,' + ((1 - d / maxD) * 0.05) + ')';
+        ctx.lineWidth = 0.5;
+        ctx.stroke();
+      }
+    }
+  }
+
+  // Dots
+  for (var i = 0; i < particles.length; i++) {
+    var p = particles[i];
+    ctx.globalAlpha = p.alpha;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    ctx.fillStyle = p.color;
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  requestAnimationFrame(drawParticles);
+}
+
+drawParticles();
+
+window.addEventListener('resize', function() {
+  resizeCanvas();
+  initParticles();
+});
+
+/* ================================================================
+   INITIAL RENDER
+   ================================================================ */
+renderLeftPanel();
+renderRightPanel();
+startFeedRotation();
+})();
+</script>
+</body>
+</html>

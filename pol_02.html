@@ -1,0 +1,2060 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Pipeline Monitor (Wide Cards)</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+  /* ── Reset ──────────────────────────────────────────────── */
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    /* Slate palette */
+    --bg:             #0c0f17;
+    --bg-sidebar:     #0e1119;
+    --bg-surface:     #111521;
+    --bg-card:        rgba(17, 21, 33, 0.72);
+    --bg-card-hover:  rgba(24, 29, 46, 0.82);
+    --bg-inset:       rgba(0, 0, 0, 0.22);
+    --glass-border:   rgba(255, 255, 255, 0.07);
+    --glass-border-h: rgba(255, 255, 255, 0.12);
+    --glass-shine:    rgba(255, 255, 255, 0.04);
+
+    --text:           #c9cdd8;
+    --text-bright:    #e8eaf2;
+    --text-dim:       #5c6478;
+    --text-muted:     #3d4456;
+    --border:         #1a1f2e;
+    --border-light:   #242a3c;
+
+    /* Module colors */
+    --seed:           #34d399;
+    --seed-glow:      rgba(52, 211, 153, 0.40);
+    --seed-bg:        rgba(52, 211, 153, 0.08);
+
+    --hypo:           #a78bfa;
+    --hypo-glow:      rgba(167, 139, 250, 0.40);
+    --hypo-bg:        rgba(167, 139, 250, 0.08);
+
+    --inv:            #60a5fa;
+    --inv-glow:       rgba(96, 165, 250, 0.40);
+    --inv-bg:         rgba(96, 165, 250, 0.08);
+
+    --paper:          #fb923c;
+    --paper-glow:     rgba(251, 146, 60, 0.35);
+    --paper-bg:       rgba(251, 146, 60, 0.08);
+
+    /* Status */
+    --ok:             #34d399;
+    --running:        #60a5fa;
+    --pending:        #5c6478;
+    --err:            #f87171;
+
+    /* Geometry */
+    --sidebar-w:      52px;
+    --sidebar-w-exp:  220px;
+    --topbar-h:       50px;
+    --card-radius:    14px;
+    --feed-w:         280px;
+
+    /* Motion */
+    --ease:           cubic-bezier(0.4, 0, 0.2, 1);
+    --dur-fast:       0.18s;
+    --dur-med:        0.32s;
+    --dur-slow:       0.5s;
+
+    --sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    --mono: 'SF Mono', 'Cascadia Code', 'JetBrains Mono', Consolas, monospace;
+  }
+
+  html, body {
+    height: 100%;
+    font-family: var(--sans);
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg);
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+
+  /* ── Ambient Background ─────────────────────────────────── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 700px 500px at 15% 10%, rgba(52, 211, 153, 0.025) 0%, transparent 70%),
+      radial-gradient(ellipse 600px 400px at 55% 8%, rgba(167, 139, 250, 0.02) 0%, transparent 70%),
+      radial-gradient(ellipse 500px 350px at 85% 15%, rgba(96, 165, 250, 0.025) 0%, transparent 70%),
+      radial-gradient(ellipse 400px 300px at 50% 90%, rgba(251, 146, 60, 0.015) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── Shell Layout ───────────────────────────────────────── */
+  .shell {
+    display: grid;
+    grid-template-columns: var(--sidebar-w) 1fr var(--feed-w);
+    grid-template-rows: var(--topbar-h) 1fr;
+    height: 100%;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ── Collapsed Sidebar ──────────────────────────────────── */
+  .sidebar {
+    grid-column: 1;
+    grid-row: 1 / -1;
+    background: var(--bg-sidebar);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0;
+    z-index: 20;
+    width: var(--sidebar-w);
+    transition: width var(--dur-med) var(--ease);
+    overflow: hidden;
+    position: relative;
+  }
+
+  .sidebar:hover {
+    width: var(--sidebar-w-exp);
+  }
+
+  .sidebar-brand {
+    width: 100%;
+    height: var(--topbar-h);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0 14px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  .brand-icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    background: linear-gradient(135deg, var(--inv), var(--hypo));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 12px;
+    font-weight: 700;
+    color: #fff;
+  }
+
+  .brand-text {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-bright);
+    opacity: 0;
+    transition: opacity var(--dur-med) var(--ease);
+    letter-spacing: -0.3px;
+  }
+
+  .sidebar:hover .brand-text { opacity: 1; }
+
+  /* Sidebar nav items */
+  .sidebar-nav {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 12px 8px;
+    flex: 1;
+  }
+
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 6px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background var(--dur-fast) var(--ease);
+    white-space: nowrap;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .nav-item:hover { background: rgba(255, 255, 255, 0.04); }
+  .nav-item.active { background: rgba(96, 165, 250, 0.08); }
+
+  .nav-icon {
+    width: 36px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 15px;
+    opacity: 0.55;
+    transition: opacity var(--dur-fast) var(--ease);
+  }
+
+  .nav-item:hover .nav-icon,
+  .nav-item.active .nav-icon { opacity: 0.9; }
+
+  .nav-label {
+    font-size: 12.5px;
+    color: var(--text-dim);
+    opacity: 0;
+    transition: opacity var(--dur-med) var(--ease);
+  }
+
+  .sidebar:hover .nav-label { opacity: 1; }
+  .nav-item.active .nav-label { color: var(--inv); }
+
+  /* Active indicator pip */
+  .nav-item.active::before {
+    content: '';
+    position: absolute;
+    left: -8px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 3px;
+    height: 16px;
+    border-radius: 0 3px 3px 0;
+    background: var(--inv);
+  }
+
+  /* Sidebar bottom */
+  .sidebar-bottom {
+    width: 100%;
+    padding: 12px 8px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  /* ── Top Bar ────────────────────────────────────────────── */
+  .topbar {
+    grid-column: 2 / -1;
+    grid-row: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    height: var(--topbar-h);
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border);
+    z-index: 10;
+  }
+
+  .topbar-left {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .run-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-bright);
+    letter-spacing: -0.2px;
+  }
+
+  .run-meta {
+    font-size: 11px;
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .status-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px 4px 8px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+  }
+
+  .status-chip.running {
+    background: rgba(96, 165, 250, 0.12);
+    color: var(--inv);
+    border: 1px solid rgba(96, 165, 250, 0.18);
+  }
+
+  .status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.45; transform: scale(0.85); }
+  }
+
+  .topbar-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: 1px solid var(--glass-border);
+    background: transparent;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all var(--dur-fast) var(--ease);
+    font-size: 14px;
+  }
+
+  .topbar-btn:hover {
+    background: rgba(255, 255, 255, 0.04);
+    color: var(--text);
+    border-color: var(--glass-border-h);
+  }
+
+  /* ── Main Content ───────────────────────────────────────── */
+  .main {
+    grid-column: 2;
+    grid-row: 2;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  /* ── Module Cards Row (horizontal, wide, flex:1) ────────── */
+  .cards-row {
+    display: flex;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+
+  .module-card {
+    flex: 1;
+    min-width: 0;
+    background: var(--bg-card);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--card-radius);
+    padding: 16px;
+    cursor: pointer;
+    transition: all var(--dur-med) var(--ease);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .module-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--glass-shine), transparent);
+  }
+
+  .module-card:hover {
+    background: var(--bg-card-hover);
+    border-color: var(--glass-border-h);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  }
+
+  .module-card.active {
+    border-color: var(--module-color);
+    box-shadow:
+      0 0 0 1px var(--module-color),
+      0 4px 24px color-mix(in srgb, var(--module-color) 15%, transparent);
+  }
+
+  /* Top color accent line */
+  .module-card::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 16px;
+    right: 16px;
+    height: 2px;
+    background: var(--module-color);
+    opacity: 0;
+    border-radius: 0 0 2px 2px;
+    transition: opacity var(--dur-med) var(--ease);
+  }
+
+  .module-card:hover::after,
+  .module-card.active::after { opacity: 1; }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+  }
+
+  .card-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .card-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--module-color);
+    flex-shrink: 0;
+  }
+
+  .module-card.active .card-dot {
+    box-shadow: 0 0 8px var(--module-glow);
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  .card-name {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+    transition: color var(--dur-fast) var(--ease);
+  }
+
+  .module-card:hover .card-name,
+  .module-card.active .card-name { color: var(--text-bright); }
+
+  .card-status-icon {
+    font-size: 14px;
+    opacity: 0.5;
+  }
+
+  .module-card.active .card-status-icon { opacity: 1; }
+
+  /* Sub-modules (vertical list inside card) */
+  .sub-modules {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .sub-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 8px;
+    border-radius: 6px;
+    font-size: 11.5px;
+    transition: background var(--dur-fast) var(--ease);
+    position: relative;
+  }
+
+  .sub-item:hover { background: rgba(255, 255, 255, 0.03); }
+
+  .sub-item.active-sub {
+    background: color-mix(in srgb, var(--module-color) 8%, transparent);
+  }
+
+  .sub-marker {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    transition: all var(--dur-fast) var(--ease);
+  }
+
+  .sub-marker.done { background: var(--ok); }
+  .sub-marker.running {
+    background: var(--running);
+    box-shadow: 0 0 6px rgba(96, 165, 250, 0.5);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  .sub-marker.pending { background: var(--pending); opacity: 0.4; }
+  .sub-marker.error { background: var(--err); }
+
+  .sub-label {
+    color: var(--text-dim);
+    transition: color var(--dur-fast) var(--ease);
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sub-item:hover .sub-label,
+  .sub-item.active-sub .sub-label { color: var(--text); }
+
+  .sub-dur {
+    font-size: 10px;
+    font-family: var(--mono);
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+
+  /* Progress bar inside card */
+  .card-progress {
+    margin-top: 10px;
+    height: 3px;
+    background: var(--bg-inset);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .card-progress-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: var(--module-color);
+    transition: width 0.8s var(--ease);
+    position: relative;
+  }
+
+  .card-progress-fill::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: 0;
+    width: 20px;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3));
+    animation: shimmer 1.8s ease-in-out infinite;
+  }
+
+  @keyframes shimmer {
+    0%, 100% { opacity: 0; }
+    50% { opacity: 1; }
+  }
+
+  /* ── 3-Level Tree Panel ─────────────────────────────────── */
+  .tree-panel {
+    flex: 1;
+    background: var(--bg-card);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--card-radius);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .tree-panel::before {
+    content: '';
+    display: block;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--glass-shine), transparent);
+  }
+
+  .tree-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .tree-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .tree-filter-pills {
+    display: flex;
+    gap: 4px;
+  }
+
+  .filter-pill {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 500;
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: all var(--dur-fast) var(--ease);
+    border: 1px solid transparent;
+  }
+
+  .filter-pill:hover { color: var(--text-dim); background: rgba(255, 255, 255, 0.03); }
+  .filter-pill.active {
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.06);
+    border-color: var(--glass-border-h);
+  }
+
+  .tree-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 0;
+  }
+
+  /* L1 — Module level */
+  .tree-l1 {
+    user-select: none;
+  }
+
+  .tree-l1-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 16px;
+    cursor: pointer;
+    transition: background var(--dur-fast) var(--ease);
+  }
+
+  .tree-l1-header:hover { background: rgba(255, 255, 255, 0.02); }
+
+  .tree-chevron {
+    width: 14px;
+    height: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    color: var(--text-muted);
+    transition: transform var(--dur-fast) var(--ease);
+    flex-shrink: 0;
+  }
+
+  .tree-l1.open > .tree-l1-header .tree-chevron { transform: rotate(90deg); }
+
+  .tree-l1-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .tree-l1-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    flex: 1;
+  }
+
+  .tree-l1-badge {
+    font-size: 10px;
+    font-family: var(--mono);
+    color: var(--text-muted);
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: var(--bg-inset);
+  }
+
+  /* L1 children container */
+  .tree-l1-children {
+    overflow: hidden;
+    max-height: 0;
+    opacity: 0;
+    transition: max-height var(--dur-med) var(--ease), opacity var(--dur-fast) var(--ease);
+  }
+
+  .tree-l1.open > .tree-l1-children {
+    max-height: 1200px;
+    opacity: 1;
+  }
+
+  /* L2 — Step level */
+  .tree-l2 {
+    user-select: none;
+  }
+
+  .tree-l2-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 16px 5px 38px;
+    cursor: pointer;
+    transition: background var(--dur-fast) var(--ease);
+    position: relative;
+  }
+
+  .tree-l2-header:hover { background: rgba(255, 255, 255, 0.02); }
+
+  /* Vertical connecting line */
+  .tree-l2-header::before {
+    content: '';
+    position: absolute;
+    left: 23px;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--border);
+  }
+
+  .tree-l2-marker {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    z-index: 1;
+  }
+
+  .tree-l2-name {
+    font-size: 11.5px;
+    color: var(--text-dim);
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .tree-l2-header:hover .tree-l2-name { color: var(--text); }
+
+  .tree-l2-status {
+    font-size: 10px;
+    font-family: var(--mono);
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+
+  /* L2 children */
+  .tree-l2-children {
+    overflow: hidden;
+    max-height: 0;
+    opacity: 0;
+    transition: max-height var(--dur-med) var(--ease), opacity var(--dur-fast) var(--ease);
+  }
+
+  .tree-l2.open > .tree-l2-children {
+    max-height: 800px;
+    opacity: 1;
+  }
+
+  .tree-l2.open > .tree-l2-header .tree-chevron { transform: rotate(90deg); }
+
+  /* L3 — Detail / task level */
+  .tree-l3 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 16px 4px 58px;
+    position: relative;
+    transition: background var(--dur-fast) var(--ease);
+    cursor: default;
+  }
+
+  .tree-l3:hover { background: rgba(255, 255, 255, 0.015); }
+
+  .tree-l3::before {
+    content: '';
+    position: absolute;
+    left: 23px;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--border);
+  }
+
+  .tree-l3::after {
+    content: '';
+    position: absolute;
+    left: 42px;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--border);
+    opacity: 0.5;
+  }
+
+  .tree-l3-pip {
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .tree-l3-text {
+    font-size: 11px;
+    color: var(--text-muted);
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .tree-l3:hover .tree-l3-text { color: var(--text-dim); }
+
+  .tree-l3-dur {
+    font-size: 10px;
+    font-family: var(--mono);
+    color: var(--text-muted);
+    opacity: 0.6;
+  }
+
+  /* Active step highlight */
+  .tree-l2.active-step > .tree-l2-header {
+    background: rgba(96, 165, 250, 0.05);
+  }
+
+  .tree-l2.active-step > .tree-l2-header .tree-l2-name {
+    color: var(--text-bright);
+  }
+
+  .tree-l3.active-task {
+    background: rgba(96, 165, 250, 0.04);
+  }
+
+  .tree-l3.active-task .tree-l3-text {
+    color: var(--text);
+  }
+
+  /* ── Live Feed Panel (right) ────────────────────────────── */
+  .feed-panel {
+    grid-column: 3;
+    grid-row: 2;
+    background: var(--bg-surface);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .feed-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .feed-title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+  }
+
+  .feed-count {
+    font-size: 10px;
+    font-family: var(--mono);
+    color: var(--text-muted);
+    padding: 1px 6px;
+    background: var(--bg-inset);
+    border-radius: 4px;
+  }
+
+  .feed-body {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .feed-item {
+    display: flex;
+    gap: 10px;
+    padding: 10px 16px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.025);
+    transition: background var(--dur-fast) var(--ease);
+    animation: feedIn 0.35s var(--ease) both;
+  }
+
+  .feed-item:hover { background: rgba(255, 255, 255, 0.02); }
+
+  @keyframes feedIn {
+    from { opacity: 0; transform: translateY(-8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .feed-time {
+    font-size: 10px;
+    font-family: var(--mono);
+    color: var(--text-muted);
+    flex-shrink: 0;
+    padding-top: 1px;
+    min-width: 44px;
+  }
+
+  .feed-content {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .feed-badge {
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 1px 5px;
+    border-radius: 3px;
+    margin-bottom: 3px;
+  }
+
+  .feed-badge.seed   { background: var(--seed-bg); color: var(--seed); }
+  .feed-badge.hypo   { background: var(--hypo-bg); color: var(--hypo); }
+  .feed-badge.inv    { background: var(--inv-bg);  color: var(--inv); }
+  .feed-badge.paper  { background: var(--paper-bg); color: var(--paper); }
+  .feed-badge.system { background: rgba(255,255,255,0.04); color: var(--text-dim); }
+
+  .feed-msg {
+    font-size: 11.5px;
+    color: var(--text);
+    line-height: 1.45;
+    word-break: break-word;
+  }
+
+  .feed-detail {
+    font-size: 10.5px;
+    color: var(--text-muted);
+    margin-top: 2px;
+    line-height: 1.35;
+  }
+
+  /* New item flash */
+  .feed-item.new {
+    background: rgba(96, 165, 250, 0.04);
+  }
+
+  .feed-item.new::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: var(--inv);
+    border-radius: 0 2px 2px 0;
+  }
+
+  .feed-item {
+    position: relative;
+  }
+
+  /* Feed bottom gradient */
+  .feed-bottom {
+    flex-shrink: 0;
+    height: 40px;
+    background: linear-gradient(0deg, var(--bg-surface) 0%, transparent 100%);
+    pointer-events: none;
+    margin-top: -40px;
+    position: relative;
+    z-index: 2;
+  }
+
+  /* ── Token counter / stats row ──────────────────────────── */
+  .stats-row {
+    display: flex;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+
+  .stat-card {
+    flex: 1;
+    background: var(--bg-card);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--glass-shine), transparent);
+  }
+
+  .stat-icon {
+    font-size: 16px;
+    opacity: 0.45;
+  }
+
+  .stat-info {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .stat-value {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-bright);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.3px;
+  }
+
+  .stat-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  /* ── Connector dots animation ───────────────────────────── */
+  .connector-dots {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    flex-shrink: 0;
+    padding: 0 2px;
+    align-self: center;
+  }
+
+  .conn-dot {
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: var(--border-light);
+    animation: connFlow 1.8s ease-in-out infinite;
+  }
+
+  .conn-dot:nth-child(2) { animation-delay: 0.3s; }
+  .conn-dot:nth-child(3) { animation-delay: 0.6s; }
+
+  @keyframes connFlow {
+    0%, 100% { opacity: 0.2; }
+    50% { opacity: 0.7; background: var(--inv); }
+  }
+
+  /* ── Utility ────────────────────────────────────────────── */
+  .color-seed   { --module-color: var(--seed);  --module-glow: var(--seed-glow); }
+  .color-hypo   { --module-color: var(--hypo);  --module-glow: var(--hypo-glow); }
+  .color-inv    { --module-color: var(--inv);   --module-glow: var(--inv-glow); }
+  .color-paper  { --module-color: var(--paper); --module-glow: var(--paper-glow); }
+
+  .text-ok      { color: var(--ok); }
+  .text-running { color: var(--running); }
+  .text-pending { color: var(--pending); }
+  .text-err     { color: var(--err); }
+
+  /* ── Responsive: collapse feed on narrow ────────────────── */
+  @media (max-width: 1100px) {
+    .shell { grid-template-columns: var(--sidebar-w) 1fr; }
+    .feed-panel { display: none; }
+  }
+
+  @media (max-width: 700px) {
+    .shell { grid-template-columns: 1fr; }
+    .sidebar { display: none; }
+    .cards-row { flex-direction: column; }
+    .module-card { flex: none; }
+  }
+
+  /* ── Elapsed timer ──────────────────────────────────────── */
+  .elapsed {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+  }
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <!-- ════════════════════ Collapsed Sidebar ════════════════════ -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <div class="brand-icon">AI</div>
+      <span class="brand-text">AI Inventor</span>
+    </div>
+
+    <nav class="sidebar-nav">
+      <div class="nav-item active">
+        <span class="nav-icon">&#9679;</span>
+        <span class="nav-label">Pipeline Monitor</span>
+      </div>
+      <div class="nav-item">
+        <span class="nav-icon">&#9733;</span>
+        <span class="nav-label">Hypotheses</span>
+      </div>
+      <div class="nav-item">
+        <span class="nav-icon">&#9881;</span>
+        <span class="nav-label">Inventions</span>
+      </div>
+      <div class="nav-item">
+        <span class="nav-icon">&#9998;</span>
+        <span class="nav-label">Papers</span>
+      </div>
+      <div class="nav-item">
+        <span class="nav-icon">&#128202;</span>
+        <span class="nav-label">Analytics</span>
+      </div>
+    </nav>
+
+    <div class="sidebar-bottom">
+      <div class="nav-item">
+        <span class="nav-icon">&#9881;</span>
+        <span class="nav-label">Settings</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ════════════════════ Top Bar ══════════════════════════════ -->
+  <header class="topbar">
+    <div class="topbar-left">
+      <span class="run-title">ssl-low-resource-v3</span>
+      <span class="run-meta">Run #47 &middot; started 2h 14m ago</span>
+    </div>
+    <div class="topbar-right">
+      <span class="status-chip running">
+        <span class="status-dot"></span>
+        Running
+      </span>
+      <span class="elapsed" id="elapsed">02:14:33</span>
+      <button class="topbar-btn" title="Pause">&#10074;&#10074;</button>
+      <button class="topbar-btn" title="Settings">&#9881;</button>
+    </div>
+  </header>
+
+  <!-- ════════════════════ Main Content ════════════════════════ -->
+  <main class="main" id="main">
+
+    <!-- ── Wide Module Cards (flex:1, ~25% each) ── -->
+    <div class="cards-row">
+
+      <!-- Seed Hypotheses -->
+      <div class="module-card color-seed" data-module="seed">
+        <div class="card-header">
+          <div class="card-label">
+            <span class="card-dot"></span>
+            <span class="card-name">Seed</span>
+          </div>
+          <span class="card-status-icon text-ok">&#10003;</span>
+        </div>
+        <div class="sub-modules">
+          <div class="sub-item">
+            <span class="sub-marker done"></span>
+            <span class="sub-label">Knowledge Graph</span>
+            <span class="sub-dur">4m 12s</span>
+          </div>
+          <div class="sub-item">
+            <span class="sub-marker done"></span>
+            <span class="sub-label">Sampling</span>
+            <span class="sub-dur">1m 38s</span>
+          </div>
+          <div class="sub-item">
+            <span class="sub-marker done"></span>
+            <span class="sub-label">Seed Hypotheses</span>
+            <span class="sub-dur">6m 02s</span>
+          </div>
+        </div>
+        <div class="card-progress">
+          <div class="card-progress-fill" style="width: 100%; background: var(--seed);"></div>
+        </div>
+      </div>
+
+      <!-- connector -->
+      <div class="connector-dots">
+        <span class="conn-dot"></span>
+        <span class="conn-dot"></span>
+        <span class="conn-dot"></span>
+      </div>
+
+      <!-- Hypothesis Loop -->
+      <div class="module-card color-hypo" data-module="hypo">
+        <div class="card-header">
+          <div class="card-label">
+            <span class="card-dot"></span>
+            <span class="card-name">Hypothesis</span>
+          </div>
+          <span class="card-status-icon text-ok">&#10003;</span>
+        </div>
+        <div class="sub-modules">
+          <div class="sub-item">
+            <span class="sub-marker done"></span>
+            <span class="sub-label">Generate Hypo</span>
+            <span class="sub-dur">8m 44s</span>
+          </div>
+          <div class="sub-item">
+            <span class="sub-marker done"></span>
+            <span class="sub-label">Review Hypo</span>
+            <span class="sub-dur">5m 21s</span>
+          </div>
+        </div>
+        <div class="card-progress">
+          <div class="card-progress-fill" style="width: 100%; background: var(--hypo);"></div>
+        </div>
+      </div>
+
+      <!-- connector -->
+      <div class="connector-dots">
+        <span class="conn-dot"></span>
+        <span class="conn-dot"></span>
+        <span class="conn-dot"></span>
+      </div>
+
+      <!-- Invention Loop -->
+      <div class="module-card color-inv active" data-module="invention">
+        <div class="card-header">
+          <div class="card-label">
+            <span class="card-dot"></span>
+            <span class="card-name">Invention</span>
+          </div>
+          <span class="card-status-icon text-running">&#9881;</span>
+        </div>
+        <div class="sub-modules">
+          <div class="sub-item">
+            <span class="sub-marker done"></span>
+            <span class="sub-label">Gen Strategy</span>
+            <span class="sub-dur">3m 18s</span>
+          </div>
+          <div class="sub-item">
+            <span class="sub-marker done"></span>
+            <span class="sub-label">Gen Plan</span>
+            <span class="sub-dur">7m 55s</span>
+          </div>
+          <div class="sub-item">
+            <span class="sub-marker done"></span>
+            <span class="sub-label">Gen Artifacts</span>
+            <span class="sub-dur">12m 09s</span>
+          </div>
+          <div class="sub-item active-sub">
+            <span class="sub-marker running"></span>
+            <span class="sub-label">Gen Paper Text</span>
+            <span class="sub-dur">4m 31s</span>
+          </div>
+          <div class="sub-item">
+            <span class="sub-marker pending"></span>
+            <span class="sub-label">Review Paper</span>
+            <span class="sub-dur">&mdash;</span>
+          </div>
+          <div class="sub-item">
+            <span class="sub-marker pending"></span>
+            <span class="sub-label">Update Hypo</span>
+            <span class="sub-dur">&mdash;</span>
+          </div>
+        </div>
+        <div class="card-progress">
+          <div class="card-progress-fill" style="width: 62%; background: var(--inv);"></div>
+        </div>
+      </div>
+
+      <!-- connector -->
+      <div class="connector-dots">
+        <span class="conn-dot" style="opacity: 0.15;"></span>
+        <span class="conn-dot" style="opacity: 0.15;"></span>
+        <span class="conn-dot" style="opacity: 0.15;"></span>
+      </div>
+
+      <!-- Paper Repo -->
+      <div class="module-card color-paper" data-module="paper">
+        <div class="card-header">
+          <div class="card-label">
+            <span class="card-dot"></span>
+            <span class="card-name">Paper</span>
+          </div>
+          <span class="card-status-icon text-pending">&#8987;</span>
+        </div>
+        <div class="sub-modules">
+          <div class="sub-item">
+            <span class="sub-marker pending"></span>
+            <span class="sub-label">Gen Repo</span>
+            <span class="sub-dur">&mdash;</span>
+          </div>
+          <div class="sub-item">
+            <span class="sub-marker pending"></span>
+            <span class="sub-label">Artifact Demos</span>
+            <span class="sub-dur">&mdash;</span>
+          </div>
+          <div class="sub-item">
+            <span class="sub-marker pending"></span>
+            <span class="sub-label">Visualizations</span>
+            <span class="sub-dur">&mdash;</span>
+          </div>
+          <div class="sub-item">
+            <span class="sub-marker pending"></span>
+            <span class="sub-label">Full Paper</span>
+            <span class="sub-dur">&mdash;</span>
+          </div>
+          <div class="sub-item">
+            <span class="sub-marker pending"></span>
+            <span class="sub-label">Deploy</span>
+            <span class="sub-dur">&mdash;</span>
+          </div>
+        </div>
+        <div class="card-progress">
+          <div class="card-progress-fill" style="width: 0%;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Stats Row ── -->
+    <div class="stats-row">
+      <div class="stat-card">
+        <span class="stat-icon">&#9889;</span>
+        <div class="stat-info">
+          <span class="stat-value" id="tokenCount">1.24M</span>
+          <span class="stat-label">Tokens Used</span>
+        </div>
+      </div>
+      <div class="stat-card">
+        <span class="stat-icon">&#128176;</span>
+        <div class="stat-info">
+          <span class="stat-value">$4.82</span>
+          <span class="stat-label">Est. Cost</span>
+        </div>
+      </div>
+      <div class="stat-card">
+        <span class="stat-icon">&#9881;</span>
+        <div class="stat-info">
+          <span class="stat-value">Iter 2/3</span>
+          <span class="stat-label">Invention Loop</span>
+        </div>
+      </div>
+      <div class="stat-card">
+        <span class="stat-icon">&#128200;</span>
+        <div class="stat-info">
+          <span class="stat-value">7.4</span>
+          <span class="stat-label">Hypo Score</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 3-Level Tree ── -->
+    <div class="tree-panel">
+      <div class="tree-header">
+        <span class="tree-title">Execution Tree</span>
+        <div class="tree-filter-pills">
+          <span class="filter-pill active" data-filter="all">All</span>
+          <span class="filter-pill" data-filter="active">Active</span>
+          <span class="filter-pill" data-filter="errors">Errors</span>
+        </div>
+      </div>
+
+      <div class="tree-body" id="treeBody">
+
+        <!-- L1: Seed Hypotheses -->
+        <div class="tree-l1 open" data-module="seed">
+          <div class="tree-l1-header" onclick="toggleL1(this)">
+            <span class="tree-chevron">&#9654;</span>
+            <span class="tree-l1-dot" style="background: var(--seed);"></span>
+            <span class="tree-l1-name">Seed Hypotheses</span>
+            <span class="tree-l1-badge">3/3</span>
+          </div>
+          <div class="tree-l1-children">
+
+            <div class="tree-l2 open" data-step="kg">
+              <div class="tree-l2-header" onclick="toggleL2(this)">
+                <span class="tree-chevron">&#9654;</span>
+                <span class="tree-l2-marker done"></span>
+                <span class="tree-l2-name">Knowledge Graph Construction</span>
+                <span class="tree-l2-status">4m 12s</span>
+              </div>
+              <div class="tree-l2-children">
+                <div class="tree-l3">
+                  <span class="tree-l3-pip done"></span>
+                  <span class="tree-l3-text">Fetch ArXiv papers (n=128)</span>
+                  <span class="tree-l3-dur">1m 44s</span>
+                </div>
+                <div class="tree-l3">
+                  <span class="tree-l3-pip done"></span>
+                  <span class="tree-l3-text">Extract entities + relations</span>
+                  <span class="tree-l3-dur">1m 52s</span>
+                </div>
+                <div class="tree-l3">
+                  <span class="tree-l3-pip done"></span>
+                  <span class="tree-l3-text">Build neo4j subgraph</span>
+                  <span class="tree-l3-dur">0m 36s</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="tree-l2">
+              <div class="tree-l2-header" onclick="toggleL2(this)">
+                <span class="tree-chevron">&#9654;</span>
+                <span class="tree-l2-marker done"></span>
+                <span class="tree-l2-name">Sampling</span>
+                <span class="tree-l2-status">1m 38s</span>
+              </div>
+              <div class="tree-l2-children">
+                <div class="tree-l3">
+                  <span class="tree-l3-pip done"></span>
+                  <span class="tree-l3-text">Select seed topics (k=5)</span>
+                  <span class="tree-l3-dur">0m 22s</span>
+                </div>
+                <div class="tree-l3">
+                  <span class="tree-l3-pip done"></span>
+                  <span class="tree-l3-text">Cross-domain pairing</span>
+                  <span class="tree-l3-dur">1m 16s</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="tree-l2">
+              <div class="tree-l2-header" onclick="toggleL2(this)">
+                <span class="tree-chevron">&#9654;</span>
+                <span class="tree-l2-marker done"></span>
+                <span class="tree-l2-name">Seed Hypothesis Generation</span>
+                <span class="tree-l2-status">6m 02s</span>
+              </div>
+              <div class="tree-l2-children">
+                <div class="tree-l3">
+                  <span class="tree-l3-pip done"></span>
+                  <span class="tree-l3-text">Generate initial hypotheses (n=12)</span>
+                  <span class="tree-l3-dur">4m 18s</span>
+                </div>
+                <div class="tree-l3">
+                  <span class="tree-l3-pip done"></span>
+                  <span class="tree-l3-text">Deduplicate + cluster</span>
+                  <span class="tree-l3-dur">1m 44s</span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- L1: Hypothesis Loop -->
+        <div class="tree-l1 open" data-module="hypo">
+          <div class="tree-l1-header" onclick="toggleL1(this)">
+            <span class="tree-chevron">&#9654;</span>
+            <span class="tree-l1-dot" style="background: var(--hypo);"></span>
+            <span class="tree-l1-name">Hypothesis Loop</span>
+            <span class="tree-l1-badge">2/2</span>
+          </div>
+          <div class="tree-l1-children">
+
+            <div class="tree-l2">
+              <div class="tree-l2-header" onclick="toggleL2(this)">
+                <span class="tree-chevron">&#9654;</span>
+                <span class="tree-l2-marker done"></span>
+                <span class="tree-l2-name">Generate Hypothesis</span>
+                <span class="tree-l2-status">8m 44s</span>
+              </div>
+              <div class="tree-l2-children">
+                <div class="tree-l3">
+                  <span class="tree-l3-pip done"></span>
+                  <span class="tree-l3-text">Refine hypothesis from seeds</span>
+                  <span class="tree-l3-dur">5m 12s</span>
+                </div>
+                <div class="tree-l3">
+                  <span class="tree-l3-pip done"></span>
+                  <span class="tree-l3-text">Literature grounding check</span>
+                  <span class="tree-l3-dur">3m 32s</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="tree-l2">
+              <div class="tree-l2-header" onclick="toggleL2(this)">
+                <span class="tree-chevron">&#9654;</span>
+                <span class="tree-l2-marker done"></span>
+                <span class="tree-l2-name">Review Hypothesis</span>
+                <span class="tree-l2-status">5m 21s</span>
+              </div>
+              <div class="tree-l2-children">
+                <div class="tree-l3">
+                  <span class="tree-l3-pip done"></span>
+                  <span class="tree-l3-text">Novelty assessment</span>
+                  <span class="tree-l3-dur">2m 08s</span>
+                </div>
+                <div class="tree-l3">
+                  <span class="tree-l3-pip done"></span>
+                  <span class="tree-l3-text">Feasibility scoring</span>
+                  <span class="tree-l3-dur">1m 55s</span>
+                </div>
+                <div class="tree-l3">
+                  <span class="tree-l3-pip done"></span>
+                  <span class="tree-l3-text">Final verdict: ACCEPT (7.4/10)</span>
+                  <span class="tree-l3-dur">1m 18s</span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- L1: Invention Loop -->
+        <div class="tree-l1 open" data-module="invention">
+          <div class="tree-l1-header" onclick="toggleL1(this)">
+            <span class="tree-chevron">&#9654;</span>
+            <span class="tree-l1-dot" style="background: var(--inv);"></span>
+            <span class="tree-l1-name">Invention Loop</span>
+            <span class="tree-l1-badge">3/6</span>
+          </div>
+          <div class="tree-l1-children">
+
+            <div class="tree-l2">
+              <div class="tree-l2-header" onclick="toggleL2(this)">
+                <span class="tree-chevron">&#9654;</span>
+                <span class="tree-l2-marker done"></span>
+                <span class="tree-l2-name">Generate Strategy</span>
+                <span class="tree-l2-status">3m 18s</span>
+              </div>
+              <div class="tree-l2-children">
+                <div class="tree-l3">
+                  <span class="tree-l3-pip done"></span>
+                  <span class="tree-l3-text">Approach enumeration</span>
+                  <span class="tree-l3-dur">1m 42s</span>
+                </div>
+                <div class="tree-l3">
+                  <span class="tree-l3-pip done"></span>
+                  <span class="tree-l3-text">Strategy selection</span>
+                  <span class="tree-l3-dur">1m 36s</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="tree-l2">
+              <div class="tree-l2-header" onclick="toggleL2(this)">
+                <span class="tree-chevron">&#9654;</span>
+                <span class="tree-l2-marker done"></span>
+                <span class="tree-l2-name">Generate Plan</span>
+                <span class="tree-l2-status">7m 55s</span>
+              </div>
+              <div class="tree-l2-children">
+                <div class="tree-l3">
+                  <span class="tree-l3-pip done"></span>
+                  <span class="tree-l3-text">Outline experiment design</span>
+                  <span class="tree-l3-dur">3m 22s</span>
+                </div>
+                <div class="tree-l3">
+                  <span class="tree-l3-pip done"></span>
+                  <span class="tree-l3-text">Define evaluation metrics</span>
+                  <span class="tree-l3-dur">2m 18s</span>
+                </div>
+                <div class="tree-l3">
+                  <span class="tree-l3-pip done"></span>
+                  <span class="tree-l3-text">Section-level plan</span>
+                  <span class="tree-l3-dur">2m 15s</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="tree-l2">
+              <div class="tree-l2-header" onclick="toggleL2(this)">
+                <span class="tree-chevron">&#9654;</span>
+                <span class="tree-l2-marker done"></span>
+                <span class="tree-l2-name">Generate Artifacts</span>
+                <span class="tree-l2-status">12m 09s</span>
+              </div>
+              <div class="tree-l2-children">
+                <div class="tree-l3">
+                  <span class="tree-l3-pip done"></span>
+                  <span class="tree-l3-text">Code artifact: ssl_trainer.py</span>
+                  <span class="tree-l3-dur">6m 44s</span>
+                </div>
+                <div class="tree-l3">
+                  <span class="tree-l3-pip done"></span>
+                  <span class="tree-l3-text">Code artifact: eval_suite.py</span>
+                  <span class="tree-l3-dur">3m 18s</span>
+                </div>
+                <div class="tree-l3">
+                  <span class="tree-l3-pip done"></span>
+                  <span class="tree-l3-text">Pseudocode + algorithm blocks</span>
+                  <span class="tree-l3-dur">2m 07s</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="tree-l2 active-step open" data-step="gen-paper-text">
+              <div class="tree-l2-header" onclick="toggleL2(this)">
+                <span class="tree-chevron">&#9654;</span>
+                <span class="tree-l2-marker running"></span>
+                <span class="tree-l2-name">Generate Paper Text</span>
+                <span class="tree-l2-status text-running" id="activeStepTimer">4m 31s</span>
+              </div>
+              <div class="tree-l2-children">
+                <div class="tree-l3">
+                  <span class="tree-l3-pip done"></span>
+                  <span class="tree-l3-text">Abstract + Introduction</span>
+                  <span class="tree-l3-dur">1m 52s</span>
+                </div>
+                <div class="tree-l3">
+                  <span class="tree-l3-pip done"></span>
+                  <span class="tree-l3-text">Related Work section</span>
+                  <span class="tree-l3-dur">1m 24s</span>
+                </div>
+                <div class="tree-l3 active-task">
+                  <span class="tree-l3-pip running" style="background: var(--running); box-shadow: 0 0 6px rgba(96,165,250,0.5); animation: pulse 2s ease-in-out infinite;"></span>
+                  <span class="tree-l3-text">Methodology section</span>
+                  <span class="tree-l3-dur" id="taskTimer">1m 15s</span>
+                </div>
+                <div class="tree-l3">
+                  <span class="tree-l3-pip pending" style="background: var(--pending); opacity: 0.4;"></span>
+                  <span class="tree-l3-text">Experiments + Results</span>
+                  <span class="tree-l3-dur">&mdash;</span>
+                </div>
+                <div class="tree-l3">
+                  <span class="tree-l3-pip pending" style="background: var(--pending); opacity: 0.4;"></span>
+                  <span class="tree-l3-text">Conclusion</span>
+                  <span class="tree-l3-dur">&mdash;</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="tree-l2" data-step="review-paper">
+              <div class="tree-l2-header" onclick="toggleL2(this)">
+                <span class="tree-chevron">&#9654;</span>
+                <span class="tree-l2-marker pending"></span>
+                <span class="tree-l2-name">Review Paper</span>
+                <span class="tree-l2-status">&mdash;</span>
+              </div>
+              <div class="tree-l2-children">
+                <div class="tree-l3">
+                  <span class="tree-l3-pip pending" style="background: var(--pending); opacity: 0.4;"></span>
+                  <span class="tree-l3-text">Consistency check</span>
+                  <span class="tree-l3-dur">&mdash;</span>
+                </div>
+                <div class="tree-l3">
+                  <span class="tree-l3-pip pending" style="background: var(--pending); opacity: 0.4;"></span>
+                  <span class="tree-l3-text">Quality scoring</span>
+                  <span class="tree-l3-dur">&mdash;</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="tree-l2" data-step="upd-hypo">
+              <div class="tree-l2-header" onclick="toggleL2(this)">
+                <span class="tree-chevron">&#9654;</span>
+                <span class="tree-l2-marker pending"></span>
+                <span class="tree-l2-name">Update Hypothesis</span>
+                <span class="tree-l2-status">&mdash;</span>
+              </div>
+              <div class="tree-l2-children">
+                <div class="tree-l3">
+                  <span class="tree-l3-pip pending" style="background: var(--pending); opacity: 0.4;"></span>
+                  <span class="tree-l3-text">Incorporate findings</span>
+                  <span class="tree-l3-dur">&mdash;</span>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- L1: Paper Repo -->
+        <div class="tree-l1" data-module="paper">
+          <div class="tree-l1-header" onclick="toggleL1(this)">
+            <span class="tree-chevron">&#9654;</span>
+            <span class="tree-l1-dot" style="background: var(--paper);"></span>
+            <span class="tree-l1-name">Paper Repository</span>
+            <span class="tree-l1-badge">0/3</span>
+          </div>
+          <div class="tree-l1-children">
+
+            <div class="tree-l2" data-step="gen-repo">
+              <div class="tree-l2-header" onclick="toggleL2(this)">
+                <span class="tree-chevron">&#9654;</span>
+                <span class="tree-l2-marker pending"></span>
+                <span class="tree-l2-name">Generate Repo Structure</span>
+                <span class="tree-l2-status">&mdash;</span>
+              </div>
+              <div class="tree-l2-children">
+                <div class="tree-l3"><span class="tree-l3-pip pending" style="background:var(--pending);opacity:0.4"></span><span class="tree-l3-text">Scaffold directories</span><span class="tree-l3-dur">&mdash;</span></div>
+              </div>
+            </div>
+
+            <div class="tree-l2" data-step="art-demos">
+              <div class="tree-l2-header" onclick="toggleL2(this)">
+                <span class="tree-chevron">&#9654;</span>
+                <span class="tree-l2-marker pending"></span>
+                <span class="tree-l2-name">Artifact Demos + Visualizations</span>
+                <span class="tree-l2-status">&mdash;</span>
+              </div>
+              <div class="tree-l2-children">
+                <div class="tree-l3"><span class="tree-l3-pip pending" style="background:var(--pending);opacity:0.4"></span><span class="tree-l3-text">Python demos + notebooks</span><span class="tree-l3-dur">&mdash;</span></div>
+                <div class="tree-l3"><span class="tree-l3-pip pending" style="background:var(--pending);opacity:0.4"></span><span class="tree-l3-text">Architecture diagram + result plots</span><span class="tree-l3-dur">&mdash;</span></div>
+              </div>
+            </div>
+
+            <div class="tree-l2" data-step="full-paper">
+              <div class="tree-l2-header" onclick="toggleL2(this)">
+                <span class="tree-chevron">&#9654;</span>
+                <span class="tree-l2-marker pending"></span>
+                <span class="tree-l2-name">Full Paper + Deploy</span>
+                <span class="tree-l2-status">&mdash;</span>
+              </div>
+              <div class="tree-l2-children">
+                <div class="tree-l3"><span class="tree-l3-pip pending" style="background:var(--pending);opacity:0.4"></span><span class="tree-l3-text">LaTeX compilation + PDF</span><span class="tree-l3-dur">&mdash;</span></div>
+                <div class="tree-l3"><span class="tree-l3-pip pending" style="background:var(--pending);opacity:0.4"></span><span class="tree-l3-text">Deploy to GitHub</span><span class="tree-l3-dur">&mdash;</span></div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ════════════════════ Live Feed Panel ══════════════════════ -->
+  <aside class="feed-panel">
+    <div class="feed-header">
+      <span class="feed-title">Live Feed</span>
+      <span class="feed-count" id="feedCount">14 events</span>
+    </div>
+
+    <div class="feed-body" id="feedBody">
+
+      <div class="feed-item new">
+        <span class="feed-time">14:33</span>
+        <div class="feed-content">
+          <div class="feed-badge inv">invention</div>
+          <div class="feed-msg">Writing Methodology section</div>
+          <div class="feed-detail">Describing the proposed SSL framework architecture with contrastive learning objective.</div>
+        </div>
+      </div>
+
+      <div class="feed-item">
+        <span class="feed-time">14:32</span>
+        <div class="feed-content">
+          <div class="feed-badge inv">invention</div>
+          <div class="feed-msg">Related Work section complete</div>
+          <div class="feed-detail">1,842 tokens &middot; 14 citations integrated</div>
+        </div>
+      </div>
+
+      <div class="feed-item">
+        <span class="feed-time">14:30</span>
+        <div class="feed-content">
+          <div class="feed-badge inv">invention</div>
+          <div class="feed-msg">Abstract + Introduction drafted</div>
+          <div class="feed-detail">1,206 tokens &middot; 3 key contributions outlined</div>
+        </div>
+      </div>
+
+      <div class="feed-item">
+        <span class="feed-time">14:28</span>
+        <div class="feed-content">
+          <div class="feed-badge system">system</div>
+          <div class="feed-msg">Starting paper text generation</div>
+          <div class="feed-detail">Step 4/6 in invention loop &middot; iteration 2</div>
+        </div>
+      </div>
+
+      <div class="feed-item">
+        <span class="feed-time">14:16</span>
+        <div class="feed-content">
+          <div class="feed-badge inv">invention</div>
+          <div class="feed-msg">Artifact generation complete</div>
+          <div class="feed-detail">2 code artifacts + 1 pseudocode block &middot; 12m 09s</div>
+        </div>
+      </div>
+
+      <div class="feed-item">
+        <span class="feed-time">14:00</span>
+        <div class="feed-content">
+          <div class="feed-badge inv">invention</div>
+          <div class="feed-msg">Generated ssl_trainer.py + eval_suite.py</div>
+          <div class="feed-detail">PyTorch training loop &middot; evaluation harness &middot; 12m 09s</div>
+        </div>
+      </div>
+
+      <div class="feed-item">
+        <span class="feed-time">13:49</span>
+        <div class="feed-content">
+          <div class="feed-badge inv">invention</div>
+          <div class="feed-msg">Strategy selected: contrastive-augmentation</div>
+          <div class="feed-detail">Ranked 3 approaches &middot; 5 sections planned &middot; 3 experiments</div>
+        </div>
+      </div>
+
+      <div class="feed-item">
+        <span class="feed-time">13:46</span>
+        <div class="feed-content">
+          <div class="feed-badge system">system</div>
+          <div class="feed-msg">Starting invention loop (iteration 2/3)</div>
+          <div class="feed-detail">Hypothesis score: 7.4/10 &middot; threshold met</div>
+        </div>
+      </div>
+
+      <div class="feed-item">
+        <span class="feed-time">13:44</span>
+        <div class="feed-content">
+          <div class="feed-badge hypo">hypothesis</div>
+          <div class="feed-msg">Review complete: ACCEPT (7.4/10)</div>
+          <div class="feed-detail">Novelty: 7.8 &middot; Feasibility: 7.1 &middot; grounded against 128 papers</div>
+        </div>
+      </div>
+
+      <div class="feed-item">
+        <span class="feed-time">13:32</span>
+        <div class="feed-content">
+          <div class="feed-badge hypo">hypothesis</div>
+          <div class="feed-msg">Hypothesis refined and grounded</div>
+          <div class="feed-detail">"Multi-view contrastive learning for low-resource SSL with adaptive augmentation"</div>
+        </div>
+      </div>
+
+      <div class="feed-item">
+        <span class="feed-time">13:17</span>
+        <div class="feed-content">
+          <div class="feed-badge seed">seed</div>
+          <div class="feed-msg">Seed hypotheses generated (n=12)</div>
+          <div class="feed-detail">Deduplicated to 5 &middot; cross-domain pairing from 128 ArXiv papers</div>
+        </div>
+      </div>
+
+      <div class="feed-item">
+        <span class="feed-time">13:05</span>
+        <div class="feed-content">
+          <div class="feed-badge seed">seed</div>
+          <div class="feed-msg">Knowledge graph constructed</div>
+          <div class="feed-detail">128 papers &middot; 342 entities &middot; 891 relations</div>
+        </div>
+      </div>
+
+      <div class="feed-item">
+        <span class="feed-time">12:59</span>
+        <div class="feed-content">
+          <div class="feed-badge system">system</div>
+          <div class="feed-msg">Pipeline initialized</div>
+          <div class="feed-detail">Config loaded &middot; backend: claude-agent &middot; model: opus-4</div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="feed-bottom"></div>
+  </aside>
+
+</div>
+
+<!-- ════════════════════ JavaScript ═══════════════════════════ -->
+<script>
+  /* ── Tree Toggle ─────────────────────────────────────────── */
+  function toggleL1(header) {
+    const l1 = header.parentElement;
+    l1.classList.toggle('open');
+  }
+
+  function toggleL2(header) {
+    const l2 = header.parentElement;
+    l2.classList.toggle('open');
+  }
+
+  /* ── Filter Pills ────────────────────────────────────────── */
+  document.querySelectorAll('.filter-pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+      document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+      pill.classList.add('active');
+
+      const filter = pill.dataset.filter;
+      const tree = document.getElementById('treeBody');
+
+      if (filter === 'all') {
+        tree.querySelectorAll('.tree-l1, .tree-l2, .tree-l3').forEach(el => {
+          el.style.display = '';
+        });
+      } else if (filter === 'active') {
+        tree.querySelectorAll('.tree-l2').forEach(l2 => {
+          const hasRunning = l2.querySelector('.running') !== null;
+          const isActive = l2.classList.contains('active-step');
+          l2.style.display = (hasRunning || isActive) ? '' : 'none';
+        });
+        tree.querySelectorAll('.tree-l1').forEach(l1 => {
+          const visibleChildren = l1.querySelectorAll('.tree-l2:not([style*="display: none"])');
+          l1.style.display = visibleChildren.length > 0 ? '' : 'none';
+        });
+      } else if (filter === 'errors') {
+        tree.querySelectorAll('.tree-l2').forEach(l2 => {
+          const hasError = l2.querySelector('.error') !== null;
+          l2.style.display = hasError ? '' : 'none';
+        });
+        tree.querySelectorAll('.tree-l1').forEach(l1 => {
+          const visibleChildren = l1.querySelectorAll('.tree-l2:not([style*="display: none"])');
+          l1.style.display = visibleChildren.length > 0 ? '' : 'none';
+        });
+      }
+    });
+  });
+
+  /* ── Module Card Click → scroll tree ─────────────────────── */
+  document.querySelectorAll('.module-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const mod = card.dataset.module;
+      const treeNode = document.querySelector(`.tree-l1[data-module="${mod}"]`);
+      if (treeNode) {
+        if (!treeNode.classList.contains('open')) {
+          treeNode.classList.add('open');
+        }
+        treeNode.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+
+      document.querySelectorAll('.module-card').forEach(c => c.classList.remove('active'));
+      card.classList.add('active');
+    });
+  });
+
+  /* ── Elapsed Timer ───────────────────────────────────────── */
+  let elapsedSec = 2 * 3600 + 14 * 60 + 33;
+  const elapsedEl = document.getElementById('elapsed');
+
+  function fmtTime(s) {
+    const h = String(Math.floor(s / 3600)).padStart(2, '0');
+    const m = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
+    const sec = String(s % 60).padStart(2, '0');
+    return `${h}:${m}:${sec}`;
+  }
+
+  setInterval(() => {
+    elapsedSec++;
+    elapsedEl.textContent = fmtTime(elapsedSec);
+  }, 1000);
+
+  /* ── Active Step Timer ───────────────────────────────────── */
+  let activeStepSec = 4 * 60 + 31;
+  const activeStepEl = document.getElementById('activeStepTimer');
+
+  function fmtShort(s) {
+    const m = Math.floor(s / 60);
+    const sec = String(s % 60).padStart(2, '0');
+    return `${m}m ${sec}s`;
+  }
+
+  setInterval(() => {
+    activeStepSec++;
+    activeStepEl.textContent = fmtShort(activeStepSec);
+  }, 1000);
+
+  /* ── Task Timer ──────────────────────────────────────────── */
+  let taskSec = 1 * 60 + 15;
+  const taskEl = document.getElementById('taskTimer');
+
+  setInterval(() => {
+    taskSec++;
+    taskEl.textContent = fmtShort(taskSec);
+  }, 1000);
+
+  /* ── Token Counter Animation ─────────────────────────────── */
+  let tokenK = 1240;
+  const tokenEl = document.getElementById('tokenCount');
+
+  setInterval(() => {
+    tokenK += Math.floor(Math.random() * 3) + 1;
+    const display = tokenK >= 1000
+      ? (tokenK / 1000).toFixed(2) + 'M'
+      : tokenK + 'K';
+    tokenEl.textContent = display;
+  }, 4000);
+
+  /* ── Live Feed Simulation ────────────────────────────────── */
+  const feedMessages = [
+    { badge: 'inv', msg: 'Expanding on contrastive loss formulation', detail: 'Describing InfoNCE variant with temperature scaling' },
+    { badge: 'inv', msg: 'Adding multi-view augmentation details', detail: 'Random crop, color jitter, Gaussian blur pipeline' },
+    { badge: 'system', msg: 'Token checkpoint: 1.26M used', detail: 'Rate: ~2.1K tokens/min average' },
+    { badge: 'inv', msg: 'Writing encoder architecture specification', detail: 'ResNet-50 backbone with projection head MLP' },
+    { badge: 'inv', msg: 'Defining low-resource adaptation strategy', detail: 'Progressive unfreezing with learning rate warmup' },
+    { badge: 'inv', msg: 'Adding theoretical justification', detail: 'Mutual information maximization bound derivation' },
+    { badge: 'system', msg: 'Memory usage: 2.4 GB', detail: 'Context window: 68% utilized' },
+    { badge: 'inv', msg: 'Cross-referencing with related work', detail: 'Connecting to SimCLR, BYOL, and MoCo frameworks' },
+    { badge: 'inv', msg: 'Formulating convergence analysis', detail: 'Proving convergence under weak augmentation assumption' },
+    { badge: 'inv', msg: 'Writing dataset description', detail: 'CIFAR-10 (1%), STL-10, and ImageNet-100 subsets' },
+  ];
+
+  let feedIdx = 0;
+  let feedCount = 14;
+  const feedBody = document.getElementById('feedBody');
+  const feedCountEl = document.getElementById('feedCount');
+
+  function getTimeStr() {
+    const now = new Date();
+    return String(now.getHours()).padStart(2, '0') + ':' +
+           String(now.getMinutes()).padStart(2, '0');
+  }
+
+  function addFeedItem() {
+    const data = feedMessages[feedIdx % feedMessages.length];
+    feedIdx++;
+    feedCount++;
+    feedCountEl.textContent = feedCount + ' events';
+
+    const item = document.createElement('div');
+    item.className = 'feed-item new';
+    item.innerHTML = `
+      <span class="feed-time">${getTimeStr()}</span>
+      <div class="feed-content">
+        <div class="feed-badge ${data.badge}">${data.badge === 'inv' ? 'invention' : data.badge}</div>
+        <div class="feed-msg">${data.msg}</div>
+        <div class="feed-detail">${data.detail}</div>
+      </div>
+    `;
+
+    feedBody.insertBefore(item, feedBody.firstChild);
+
+    // Remove "new" highlight from previous items
+    setTimeout(() => {
+      feedBody.querySelectorAll('.feed-item.new').forEach((el, i) => {
+        if (i > 0) el.classList.remove('new');
+      });
+    }, 300);
+
+    // Limit feed items
+    while (feedBody.children.length > 40) {
+      feedBody.removeChild(feedBody.lastChild);
+    }
+  }
+
+  // Add a new feed item every 8-15 seconds
+  function scheduleFeed() {
+    const delay = 8000 + Math.random() * 7000;
+    setTimeout(() => {
+      addFeedItem();
+      scheduleFeed();
+    }, delay);
+  }
+
+  scheduleFeed();
+
+  /* ── Progress bar shimmer for active card ────────────────── */
+  let invProgress = 62;
+  const invCard = document.querySelector('.module-card.color-inv .card-progress-fill');
+
+  setInterval(() => {
+    if (invProgress < 98) {
+      invProgress += 0.3 + Math.random() * 0.2;
+      invCard.style.width = Math.min(invProgress, 100).toFixed(1) + '%';
+    }
+  }, 6000);
+
+  /* ── Sidebar nav click ───────────────────────────────────── */
+  document.querySelectorAll('.nav-item').forEach(item => {
+    item.addEventListener('click', () => {
+      document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+      item.classList.add('active');
+    });
+  });
+
+  /* ── Initial scroll: ensure active step is visible ───────── */
+  requestAnimationFrame(() => {
+    const activeStep = document.querySelector('.tree-l2.active-step');
+    if (activeStep) {
+      activeStep.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  });
+</script>
+
+</body>
+</html>
