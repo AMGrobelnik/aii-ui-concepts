@@ -680,6 +680,15 @@ const MODULES = [
       { label: 'Update Hypo', status: 'pending', meta: '', children: [] }
     ],
     stats: { duration: '1h 28m', durationPct: 58, cost: '$2.14', costPct: 44, messages: '286 msgs (92 tool)' },
+    kgStats: null,
+    tokenBars: [
+      { label: 'Strat', inTok: 8400, outTok: 3200 },
+      { label: 'Plan', inTok: 12600, outTok: 5800 },
+      { label: 'Art 1', inTok: 9200, outTok: 4100 },
+      { label: 'Art 2', inTok: 11800, outTok: 5200 },
+      { label: 'Art 3', inTok: 14200, outTok: 3800 }
+    ],
+    iterHistory: null,
     items: [
       { name: 'config_schema.py', status: 'done', meta: '142 lines' },
       { name: 'search_cell.py', status: 'done', meta: '289 lines' },
@@ -704,6 +713,9 @@ const MODULES = [
       { label: 'Final Check', status: 'pending', meta: '', children: [] }
     ],
     stats: { duration: '\u2014', durationPct: 0, cost: '\u2014', costPct: 0, messages: '\u2014' },
+    kgStats: null,
+    tokenBars: null,
+    iterHistory: null,
     items: []
   }
 ];
@@ -1002,6 +1014,7 @@ function buildDashboard() {
   void dash.offsetWidth;
   dash.classList.add('dash-enter');
   const cv = `var(--${mod.color})`;
+  const rc = resolveColor(mod.color);
 
   // Artifact items section
   let itemsH = '';
@@ -1034,6 +1047,76 @@ function buildDashboard() {
     </div>`;
   }
 
+  // KG stats grid (for seed module)
+  let kgH = '';
+  if (mod.kgStats) {
+    const kg = mod.kgStats;
+    kgH = `<div class="dash-kg-section">
+      <div class="dash-items-title">Knowledge Graph</div>
+      <div class="dash-kg-grid">
+        <div class="dash-kg-card">
+          <div class="kg-value" style="color:${cv}">${kg.entities}</div>
+          <div class="kg-label">Entities</div>
+          <div class="kg-bar"><div class="kg-bar-fill" style="background:${cv}" data-pct="${(kg.entities/kg.entityCap)*100}"></div></div>
+        </div>
+        <div class="dash-kg-card">
+          <div class="kg-value" style="color:${cv}">${kg.relations}</div>
+          <div class="kg-label">Relations</div>
+          <div class="kg-bar"><div class="kg-bar-fill" style="background:${cv}" data-pct="${(kg.relations/kg.relationCap)*100}"></div></div>
+        </div>
+        <div class="dash-kg-card">
+          <div class="kg-value" style="color:${cv}">${kg.accuracy}%</div>
+          <div class="kg-label">Accuracy</div>
+          <div class="kg-bar"><div class="kg-bar-fill" style="background:${cv}" data-pct="${kg.accuracy}"></div></div>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  // Iteration history table (for hypo module)
+  let iterH = '';
+  if (mod.iterHistory) {
+    const rows = mod.iterHistory.map(r => {
+      const deltaStr = r.delta !== null
+        ? `<span class="iter-delta ${r.delta >= 0 ? 'positive' : 'negative'}">${r.delta >= 0 ? '+' : ''}${r.delta.toFixed(1)}</span>`
+        : '';
+      const sColor = r.score >= 8 ? 'var(--green)' : r.score >= 7 ? 'var(--amber)' : 'var(--purple)';
+      return `<tr>
+        <td>${r.iter}</td>
+        <td><span class="iter-score" style="color:${sColor}">${r.score}</span>${deltaStr}</td>
+        <td>${r.action}</td>
+      </tr>`;
+    }).join('');
+    iterH = `<div class="dash-iter-section">
+      <div class="dash-items-title">Iteration History</div>
+      <table class="dash-iter-table">
+        <thead><tr><th>Iteration</th><th>Score</th><th>Action</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  }
+
+  // Token usage bars
+  let tokH = '';
+  if (mod.tokenBars) {
+    const maxTok = Math.max(...mod.tokenBars.map(b => b.inTok + b.outTok));
+    const barGroups = mod.tokenBars.map(b => {
+      const inH = Math.round((b.inTok / maxTok) * 36);
+      const outH = Math.round((b.outTok / maxTok) * 36);
+      return `<div class="dash-token-bar-group">
+        <div class="dash-token-bar-wrap">
+          <div class="dash-token-bar" style="height:${inH}px;background:${rc};opacity:0.6" title="In: ${b.inTok.toLocaleString()}"></div>
+          <div class="dash-token-bar" style="height:${outH}px;background:${rc};opacity:0.3" title="Out: ${b.outTok.toLocaleString()}"></div>
+        </div>
+        <span class="dash-token-bar-label">${b.label}</span>
+      </div>`;
+    }).join('');
+    tokH = `<div class="dash-tokens-section">
+      <div class="dash-items-title">Token Usage <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:9px;color:var(--text-400)">(in/out per step)</span></div>
+      <div class="dash-tokens-row">${barGroups}</div>
+    </div>`;
+  }
+
   dash.innerHTML = `
     <div class="dash-header">
       <span class="dash-icon">${mod.icon}</span>
@@ -1044,6 +1127,8 @@ function buildDashboard() {
     </div>
     <div class="dash-summary">"${mod.summary}"</div>
     ${hypoH}
+    ${kgH}
+    ${iterH}
     <div class="dash-stats-row">
       <div class="dash-stat">
         <div class="dash-stat-label">Duration</div>
@@ -1064,6 +1149,7 @@ function buildDashboard() {
         <div class="dash-stat-value" style="color:${cv};font-size:14px;margin-top:4px">${mod.stats.messages}</div>
       </div>
     </div>
+    ${tokH}
     ${itemsH}`;
 
   requestAnimationFrame(() => {
@@ -1071,6 +1157,9 @@ function buildDashboard() {
       el.style.width = el.dataset.pct + '%';
     });
     dash.querySelectorAll('.dash-hypo-score-fill').forEach(el => {
+      el.style.width = el.dataset.pct + '%';
+    });
+    dash.querySelectorAll('.kg-bar-fill').forEach(el => {
       el.style.width = el.dataset.pct + '%';
     });
   });
