@@ -1,0 +1,1563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Pipeline Monitor v2</title>
+<style>
+/* ===================================================================
+   RESET & FOUNDATIONS
+   =================================================================== */
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+
+:root {
+  /* Surface palette */
+  --bg-deep:       #07090e;
+  --bg-surface:    #0c1018;
+  --bg-card:       rgba(14,18,30,0.72);
+  --bg-card-hover: rgba(20,26,44,0.82);
+  --border-subtle: rgba(255,255,255,0.06);
+  --border-active: rgba(255,255,255,0.12);
+
+  /* Text */
+  --text-primary:   #e8ecf4;
+  --text-secondary: #8892a6;
+  --text-muted:     #505a6e;
+
+  /* Module tints */
+  --tint-hypo:       #6c8cff;
+  --tint-hypo-dim:   rgba(108,140,255,0.10);
+  --tint-hypo-mid:   rgba(108,140,255,0.25);
+  --tint-hypo-glow:  rgba(108,140,255,0.40);
+
+  --tint-test:       #34d399;
+  --tint-test-dim:   rgba(52,211,153,0.10);
+  --tint-test-mid:   rgba(52,211,153,0.25);
+  --tint-test-glow:  rgba(52,211,153,0.40);
+
+  --tint-dissem:     #f59e0b;
+  --tint-dissem-dim: rgba(245,158,11,0.10);
+  --tint-dissem-mid: rgba(245,158,11,0.25);
+  --tint-dissem-glow:rgba(245,158,11,0.40);
+
+  /* Status */
+  --status-running:  #6c8cff;
+  --status-success:  #34d399;
+  --status-error:    #ef4444;
+  --status-pending:  #505a6e;
+
+  /* Sidebar */
+  --sidebar-w-collapsed: 56px;
+  --header-h: 52px;
+
+  /* Glass */
+  --glass-bg:     rgba(14,18,30,0.65);
+  --glass-border: rgba(255,255,255,0.08);
+  --glass-blur:   16px;
+}
+
+html { font-size: 15px; }
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+}
+
+/* ===================================================================
+   SIDEBAR — collapsed icon rail
+   =================================================================== */
+.sidebar {
+  position: fixed; top:0; left:0; bottom:0;
+  width: var(--sidebar-w-collapsed);
+  background: rgba(8,11,18,0.92);
+  backdrop-filter: blur(20px);
+  border-right: 1px solid var(--border-subtle);
+  display: flex; flex-direction: column; align-items: center;
+  padding: 14px 0 18px;
+  z-index: 100;
+  transition: width 0.25s cubic-bezier(0.22,1,0.36,1);
+}
+
+.sidebar-logo {
+  width: 32px; height: 32px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--tint-hypo), var(--tint-test));
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 14px; color: #fff;
+  margin-bottom: 28px;
+  flex-shrink: 0;
+}
+
+.sidebar-icons { display:flex; flex-direction:column; gap:6px; flex:1; }
+
+.sidebar-icon {
+  width: 36px; height: 36px;
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+}
+.sidebar-icon:hover { background: rgba(255,255,255,0.06); color: var(--text-secondary); }
+.sidebar-icon.active { color: var(--tint-hypo); background: var(--tint-hypo-dim); }
+.sidebar-icon.active::before {
+  content: '';
+  position: absolute; left: -8px; top: 50%; transform: translateY(-50%);
+  width: 3px; height: 18px; border-radius: 0 3px 3px 0;
+  background: var(--tint-hypo);
+}
+
+.sidebar-icon svg { width:18px; height:18px; }
+
+.sidebar-bottom {
+  display: flex; flex-direction: column; gap: 6px; align-items: center;
+  margin-top: auto;
+}
+
+/* ===================================================================
+   HEADER BAR
+   =================================================================== */
+.header {
+  position: fixed; top:0;
+  left: var(--sidebar-w-collapsed); right:0;
+  height: var(--header-h);
+  background: rgba(8,11,18,0.88);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex; align-items: center;
+  padding: 0 28px;
+  z-index: 90;
+  gap: 20px;
+}
+
+.header-title {
+  font-size: 14px; font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+.header-breadcrumb {
+  display:flex; align-items:center; gap:8px;
+  font-size: 12.5px; color: var(--text-muted);
+}
+.header-breadcrumb span { opacity:0.5; }
+
+.header-right {
+  margin-left: auto;
+  display:flex; align-items:center; gap:16px;
+}
+
+.header-status-pill {
+  display:flex; align-items:center; gap:7px;
+  padding: 5px 14px;
+  border-radius: 100px;
+  background: rgba(52,211,153,0.08);
+  border: 1px solid rgba(52,211,153,0.18);
+  font-size: 12px; font-weight: 500;
+  color: var(--tint-test);
+}
+.header-status-pill .dot {
+  width:7px; height:7px; border-radius:50%;
+  background: var(--tint-test);
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%,100% { opacity:1; box-shadow: 0 0 0 0 rgba(52,211,153,0.4); }
+  50% { opacity:0.7; box-shadow: 0 0 0 5px rgba(52,211,153,0); }
+}
+
+.header-clock {
+  font-size: 12px; color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  font-family: 'SF Mono', 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+.header-avatar {
+  width:30px; height:30px; border-radius:50%;
+  background: linear-gradient(135deg, #6c8cff 0%, #34d399 100%);
+  display:flex; align-items:center; justify-content:center;
+  font-size:11px; font-weight:700; color:#fff;
+  cursor:pointer;
+}
+
+/* ===================================================================
+   MAIN CONTENT AREA
+   =================================================================== */
+.main {
+  position: fixed;
+  top: var(--header-h);
+  left: var(--sidebar-w-collapsed);
+  right: 0; bottom: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 28px 32px 40px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.08) transparent;
+}
+
+/* ===================================================================
+   TOP STATS ROW
+   =================================================================== */
+.stats-row {
+  display: flex; gap: 16px;
+  margin-bottom: 28px;
+}
+
+.stat-chip {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 18px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
+  min-width: 150px;
+}
+.stat-chip-icon {
+  width: 34px; height: 34px;
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+}
+.stat-chip-icon svg { width:16px; height:16px; }
+.stat-chip-text { display:flex; flex-direction:column; }
+.stat-chip-value {
+  font-size: 17px; font-weight: 700; letter-spacing: -0.03em;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+.stat-chip-label {
+  font-size: 11px; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.05em;
+  margin-top: 1px;
+}
+
+/* ===================================================================
+   MODULE CARDS — WIDE 33% LAYOUT
+   =================================================================== */
+.modules-row {
+  display: flex;
+  gap: 18px;
+  margin-bottom: 28px;
+}
+
+.module-card {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-card);
+  backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  border-radius: 18px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.22,1,0.36,1);
+  position: relative;
+}
+.module-card::before {
+  content: '';
+  position: absolute; top:0; left:0; right:0;
+  height: 2px;
+  border-radius: 18px 18px 0 0;
+  opacity: 0.7;
+  transition: opacity 0.3s ease;
+}
+.module-card:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-active);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.35);
+}
+.module-card:hover::before { opacity: 1; }
+
+.module-card[data-tint="hypo"]::before  { background: linear-gradient(90deg, var(--tint-hypo), transparent); }
+.module-card[data-tint="test"]::before  { background: linear-gradient(90deg, var(--tint-test), transparent); }
+.module-card[data-tint="dissem"]::before { background: linear-gradient(90deg, var(--tint-dissem), transparent); }
+
+.module-card.active {
+  border-color: var(--border-active);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+}
+
+/* Card header zone */
+.mc-head {
+  padding: 20px 22px 0;
+  display: flex; align-items: flex-start; justify-content: space-between;
+}
+
+.mc-head-left { display:flex; align-items:center; gap:14px; min-width:0; }
+
+.mc-icon {
+  width: 42px; height: 42px;
+  border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.mc-icon svg { width:20px; height:20px; }
+
+.mc-titles { min-width:0; }
+
+.mc-label {
+  font-size: 11px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  margin-bottom: 3px;
+}
+
+.mc-name {
+  font-size: 17px; font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.mc-head-right { display:flex; align-items:center; gap:8px; flex-shrink:0; }
+
+.mc-status-badge {
+  display:flex; align-items:center; gap:5px;
+  padding: 4px 10px;
+  border-radius: 100px;
+  font-size: 11px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.04em;
+}
+.mc-status-badge .sdot {
+  width:6px; height:6px; border-radius:50%;
+}
+
+.mc-status-badge.running { background: rgba(108,140,255,0.12); color: var(--tint-hypo); }
+.mc-status-badge.running .sdot { background: var(--tint-hypo); animation: pulse-dot 2s ease-in-out infinite; }
+.mc-status-badge.success { background: rgba(52,211,153,0.12); color: var(--tint-test); }
+.mc-status-badge.success .sdot { background: var(--tint-test); }
+.mc-status-badge.pending { background: rgba(80,90,110,0.15); color: var(--text-muted); }
+.mc-status-badge.pending .sdot { background: var(--text-muted); }
+
+/* Description line (new in wide cards) */
+.mc-desc {
+  padding: 10px 22px 0;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ===================================================================
+   WIDE-CARD METRICS STRIP (timing + tokens + cost)
+   =================================================================== */
+.mc-metrics {
+  display: flex;
+  gap: 0;
+  padding: 14px 22px 0;
+}
+
+.mc-metric {
+  flex: 1;
+  display: flex; flex-direction: column;
+  padding: 10px 0;
+  position: relative;
+}
+.mc-metric + .mc-metric::before {
+  content: '';
+  position: absolute; left: 0; top: 14px; bottom: 14px;
+  width: 1px;
+  background: var(--border-subtle);
+}
+.mc-metric + .mc-metric { padding-left: 16px; }
+
+.mc-metric-val {
+  font-size: 19px; font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  font-family: 'SF Mono', 'JetBrains Mono', 'Fira Code', monospace;
+  line-height: 1;
+}
+.mc-metric-label {
+  font-size: 10.5px; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.06em;
+  margin-top: 5px;
+}
+
+/* ===================================================================
+   WIDE-CARD PROGRESS BAR (inline mini-pipeline)
+   =================================================================== */
+.mc-progress-wrap {
+  padding: 16px 22px 0;
+}
+
+.mc-progress-bar {
+  height: 4px;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.04);
+  overflow: hidden;
+  position: relative;
+}
+.mc-progress-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.6s cubic-bezier(0.22,1,0.36,1);
+  position: relative;
+}
+.mc-progress-fill.shimmer::after {
+  content: '';
+  position: absolute; top:0; left:-50%; bottom:0; width:50%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent);
+  animation: shimmer 1.8s ease-in-out infinite;
+}
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
+
+.mc-progress-labels {
+  display: flex; justify-content: space-between;
+  margin-top: 6px;
+  font-size: 11px; color: var(--text-muted);
+}
+
+/* ===================================================================
+   WIDE-CARD SUB-STEPS  — XL 44px rows
+   =================================================================== */
+.mc-subs {
+  padding: 14px 22px 18px;
+}
+
+.mc-sub {
+  display: flex; align-items: center;
+  height: 44px;
+  padding: 0 12px;
+  border-radius: 10px;
+  gap: 12px;
+  transition: background 0.15s ease;
+  cursor: default;
+}
+.mc-sub:hover { background: rgba(255,255,255,0.03); }
+
+/* Multi-target dot cluster */
+.mc-sub-dots {
+  display: flex; gap: 3px; flex-shrink:0;
+  width: 28px; justify-content: center;
+}
+
+.mc-sub-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  transition: all 0.3s ease;
+}
+.mc-sub-dot.done    { background: var(--status-success); }
+.mc-sub-dot.active  { background: var(--status-running); animation: pulse-dot 2s ease-in-out infinite; }
+.mc-sub-dot.pending { background: var(--status-pending); opacity: 0.4; }
+.mc-sub-dot.error   { background: var(--status-error); }
+
+.mc-sub-name {
+  font-size: 13px; font-weight: 500;
+  color: var(--text-primary);
+  flex: 1;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.mc-sub-name.muted { color: var(--text-muted); }
+
+.mc-sub-meta {
+  font-size: 11px; color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  font-family: 'SF Mono', 'JetBrains Mono', 'Fira Code', monospace;
+  white-space: nowrap;
+  display: flex; align-items: center; gap: 10px;
+}
+
+.mc-sub-tokens {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.04);
+  color: var(--text-muted);
+}
+
+.mc-sub-dur { min-width: 42px; text-align: right; }
+
+/* ===================================================================
+   BELOW-TREE DASHBOARD (appears on card click)
+   =================================================================== */
+.dashboard {
+  margin-top: 0;
+  overflow: hidden;
+  max-height: 0;
+  opacity: 0;
+  transition: max-height 0.5s cubic-bezier(0.22,1,0.36,1),
+              opacity 0.4s ease,
+              margin-top 0.3s ease;
+}
+.dashboard.open {
+  max-height: 900px;
+  opacity: 1;
+  margin-top: 28px;
+}
+
+.dash-inner {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  border-radius: 18px;
+  padding: 24px;
+}
+
+.dash-header {
+  display:flex; align-items:center; justify-content:space-between;
+  margin-bottom: 20px;
+}
+.dash-title {
+  font-size: 15px; font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.dash-close {
+  width:28px; height:28px; border-radius:8px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border-subtle);
+  display:flex; align-items:center; justify-content:center;
+  cursor:pointer; color: var(--text-muted);
+  transition: all 0.15s ease;
+}
+.dash-close:hover { background: rgba(255,255,255,0.08); color: var(--text-secondary); }
+.dash-close svg { width:14px; height:14px; }
+
+.dash-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.2fr;
+  gap: 18px;
+}
+
+/* Dashboard panels */
+.dash-panel {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  padding: 18px;
+}
+
+.dash-panel-title {
+  font-size: 11px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+}
+
+/* Token breakdown bars */
+.token-row {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 10px;
+}
+.token-row:last-child { margin-bottom: 0; }
+.token-label { font-size: 12px; color: var(--text-secondary); width: 56px; }
+.token-bar-bg {
+  flex: 1; height: 6px; border-radius: 4px;
+  background: rgba(255,255,255,0.04);
+  overflow: hidden;
+}
+.token-bar-fill {
+  height: 100%; border-radius: 4px;
+  transition: width 0.8s cubic-bezier(0.22,1,0.36,1);
+}
+.token-val {
+  font-size: 11px; font-weight: 600; color: var(--text-secondary);
+  min-width: 48px; text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Latency chart placeholder */
+.latency-chart {
+  display: flex; align-items: flex-end; gap: 4px;
+  height: 80px; padding-top: 4px;
+}
+.latency-bar {
+  flex: 1;
+  border-radius: 3px 3px 0 0;
+  min-height: 4px;
+  transition: height 0.4s ease;
+  position: relative;
+}
+.latency-bar::after {
+  content: attr(data-val);
+  position: absolute; top: -16px; left: 50%; transform: translateX(-50%);
+  font-size: 9px; color: var(--text-muted);
+  opacity: 0; transition: opacity 0.15s;
+  white-space: nowrap;
+}
+.latency-bar:hover::after { opacity: 1; }
+
+/* Log lines */
+.dash-log {
+  max-height: 160px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.08) transparent;
+}
+.dash-log-line {
+  display: flex; gap: 8px;
+  padding: 4px 0;
+  font-size: 11.5px;
+  font-family: 'SF Mono', 'JetBrains Mono', 'Fira Code', monospace;
+  line-height: 1.5;
+  border-bottom: 1px solid rgba(255,255,255,0.02);
+}
+.dash-log-ts { color: var(--text-muted); flex-shrink: 0; min-width: 62px; }
+.dash-log-msg { color: var(--text-secondary); word-break: break-all; }
+.dash-log-msg.err { color: var(--status-error); }
+.dash-log-msg.ok  { color: var(--status-success); }
+
+/* ===================================================================
+   LIVE FEED PANEL
+   =================================================================== */
+.live-feed {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  border-radius: 18px;
+  padding: 20px 22px;
+  margin-top: 28px;
+}
+
+.lf-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 16px;
+}
+.lf-title {
+  display:flex; align-items:center; gap:8px;
+  font-size: 14px; font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.lf-live-dot {
+  width:7px; height:7px; border-radius:50%;
+  background: var(--status-error);
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+.lf-filters {
+  display: flex; gap: 6px;
+}
+.lf-filter-btn {
+  padding: 4px 12px;
+  border-radius: 100px;
+  font-size: 11px; font-weight: 500;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.lf-filter-btn:hover { background: rgba(255,255,255,0.07); color: var(--text-secondary); }
+.lf-filter-btn.active {
+  background: var(--tint-hypo-dim);
+  border-color: rgba(108,140,255,0.25);
+  color: var(--tint-hypo);
+}
+
+.lf-entries {
+  max-height: 240px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.08) transparent;
+}
+
+.lf-entry {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  transition: background 0.15s ease;
+  animation: feed-in 0.35s cubic-bezier(0.22,1,0.36,1) both;
+}
+.lf-entry:hover { background: rgba(255,255,255,0.02); }
+
+@keyframes feed-in {
+  from { opacity:0; transform: translateY(-8px); }
+  to   { opacity:1; transform: translateY(0); }
+}
+
+.lf-entry-icon {
+  width: 28px; height: 28px;
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.lf-entry-icon svg { width:13px; height:13px; }
+
+.lf-entry-body { flex:1; min-width:0; }
+.lf-entry-text {
+  font-size: 12.5px;
+  color: var(--text-primary);
+  line-height: 1.45;
+}
+.lf-entry-text .hl-hypo  { color: var(--tint-hypo); font-weight: 600; }
+.lf-entry-text .hl-test  { color: var(--tint-test); font-weight: 600; }
+.lf-entry-text .hl-dissem{ color: var(--tint-dissem); font-weight: 600; }
+
+.lf-entry-sub {
+  font-size: 11px; color: var(--text-muted);
+  margin-top: 3px;
+  display: flex; gap: 14px;
+}
+
+.lf-entry-ts {
+  font-size: 11px; color: var(--text-muted);
+  flex-shrink: 0; min-width: 50px; text-align: right;
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+  font-family: 'SF Mono', 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+/* ===================================================================
+   TINT UTILITY CLASSES
+   =================================================================== */
+.tint-hypo  { color: var(--tint-hypo); }
+.tint-test  { color: var(--tint-test); }
+.tint-dissem{ color: var(--tint-dissem); }
+
+.bg-tint-hypo  { background: var(--tint-hypo-dim); }
+.bg-tint-test  { background: var(--tint-test-dim); }
+.bg-tint-dissem{ background: var(--tint-dissem-dim); }
+
+/* ===================================================================
+   SCROLLBAR FOR MAIN
+   =================================================================== */
+.main::-webkit-scrollbar { width: 6px; }
+.main::-webkit-scrollbar-track { background: transparent; }
+.main::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 4px; }
+.main::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.14); }
+
+/* ===================================================================
+   RESPONSIVE
+   =================================================================== */
+@media (max-width: 1100px) {
+  .modules-row { flex-direction: column; }
+  .dash-grid { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+
+<body>
+
+<!-- ================================================================
+     SIDEBAR
+     ================================================================ -->
+<nav class="sidebar">
+  <div class="sidebar-logo">Ai</div>
+  <div class="sidebar-icons">
+    <div class="sidebar-icon active" title="Pipeline">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+    </div>
+    <div class="sidebar-icon" title="Runs">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+    </div>
+    <div class="sidebar-icon" title="Papers">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+    </div>
+    <div class="sidebar-icon" title="Models">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+    </div>
+    <div class="sidebar-icon" title="Config">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </div>
+  </div>
+  <div class="sidebar-bottom">
+    <div class="sidebar-icon" title="Help">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    </div>
+  </div>
+</nav>
+
+<!-- ================================================================
+     HEADER
+     ================================================================ -->
+<header class="header">
+  <span class="header-title">Pipeline Monitor</span>
+  <div class="header-breadcrumb">
+    <span>RUN</span> #0047
+    <span>/</span>
+    Domain: quantum-materials
+  </div>
+  <div class="header-right">
+    <div class="header-status-pill"><div class="dot"></div> Running</div>
+    <div class="header-clock" id="hdrClock">00:00:00</div>
+    <div class="header-avatar">AG</div>
+  </div>
+</header>
+
+<!-- ================================================================
+     MAIN
+     ================================================================ -->
+<main class="main">
+
+  <!-- STATS ROW -->
+  <div class="stats-row">
+    <div class="stat-chip">
+      <div class="stat-chip-icon bg-tint-hypo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="var(--tint-hypo)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      </div>
+      <div class="stat-chip-text">
+        <span class="stat-chip-value" id="statTotalSteps">8 / 12</span>
+        <span class="stat-chip-label">Steps Done</span>
+      </div>
+    </div>
+    <div class="stat-chip">
+      <div class="stat-chip-icon bg-tint-test">
+        <svg viewBox="0 0 24 24" fill="none" stroke="var(--tint-test)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      </div>
+      <div class="stat-chip-text">
+        <span class="stat-chip-value" id="statElapsed">14m 32s</span>
+        <span class="stat-chip-label">Elapsed</span>
+      </div>
+    </div>
+    <div class="stat-chip">
+      <div class="stat-chip-icon bg-tint-dissem">
+        <svg viewBox="0 0 24 24" fill="none" stroke="var(--tint-dissem)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+      </div>
+      <div class="stat-chip-text">
+        <span class="stat-chip-value" id="statTokens">847.2K</span>
+        <span class="stat-chip-label">Tokens Used</span>
+      </div>
+    </div>
+    <div class="stat-chip">
+      <div class="stat-chip-icon" style="background:rgba(239,68,68,0.10);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+      </div>
+      <div class="stat-chip-text">
+        <span class="stat-chip-value" id="statCost">$2.14</span>
+        <span class="stat-chip-label">Est. Cost</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================
+       MODULE CARDS — 3 WIDE
+       ================================================================ -->
+  <div class="modules-row">
+
+    <!-- MODULE 1: Generate Hypothesis -->
+    <div class="module-card" data-tint="hypo" data-module="hypo" id="cardHypo">
+      <div class="mc-head">
+        <div class="mc-head-left">
+          <div class="mc-icon bg-tint-hypo">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--tint-hypo)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 1 1 7.072 0l-.548.547A3.374 3.374 0 0 0 12 18.469V19a3.374 3.374 0 0 0-.936-1.804l-.548-.547z"/></svg>
+          </div>
+          <div class="mc-titles">
+            <div class="mc-label tint-hypo">Module 1</div>
+            <div class="mc-name">Generate Hypothesis</div>
+          </div>
+        </div>
+        <div class="mc-head-right">
+          <div class="mc-status-badge success"><div class="sdot"></div>Complete</div>
+        </div>
+      </div>
+
+      <div class="mc-desc">
+        Seed domain knowledge graph, extract research gaps, and generate novel hypothesis candidates via multi-agent ideation with citation grounding.
+      </div>
+
+      <div class="mc-metrics">
+        <div class="mc-metric">
+          <span class="mc-metric-val">6m 18s</span>
+          <span class="mc-metric-label">Duration</span>
+        </div>
+        <div class="mc-metric">
+          <span class="mc-metric-val">312.4K</span>
+          <span class="mc-metric-label">Tokens</span>
+        </div>
+        <div class="mc-metric">
+          <span class="mc-metric-val">$0.78</span>
+          <span class="mc-metric-label">Cost</span>
+        </div>
+        <div class="mc-metric">
+          <span class="mc-metric-val">5</span>
+          <span class="mc-metric-label">Hypotheses</span>
+        </div>
+      </div>
+
+      <div class="mc-progress-wrap">
+        <div class="mc-progress-bar">
+          <div class="mc-progress-fill" style="width:100%; background: linear-gradient(90deg, var(--tint-hypo), var(--tint-test));"></div>
+        </div>
+        <div class="mc-progress-labels">
+          <span>4 / 4 steps</span>
+          <span class="tint-test">100%</span>
+        </div>
+      </div>
+
+      <div class="mc-subs">
+        <div class="mc-sub">
+          <div class="mc-sub-dots">
+            <div class="mc-sub-dot done"></div>
+            <div class="mc-sub-dot done"></div>
+          </div>
+          <span class="mc-sub-name">Seed Knowledge Graph</span>
+          <span class="mc-sub-meta">
+            <span class="mc-sub-tokens">82K tok</span>
+            <span class="mc-sub-dur">1m 42s</span>
+          </span>
+        </div>
+        <div class="mc-sub">
+          <div class="mc-sub-dots">
+            <div class="mc-sub-dot done"></div>
+          </div>
+          <span class="mc-sub-name">Extract Research Gaps</span>
+          <span class="mc-sub-meta">
+            <span class="mc-sub-tokens">64K tok</span>
+            <span class="mc-sub-dur">1m 11s</span>
+          </span>
+        </div>
+        <div class="mc-sub">
+          <div class="mc-sub-dots">
+            <div class="mc-sub-dot done"></div>
+            <div class="mc-sub-dot done"></div>
+            <div class="mc-sub-dot done"></div>
+          </div>
+          <span class="mc-sub-name">Generate Candidates</span>
+          <span class="mc-sub-meta">
+            <span class="mc-sub-tokens">124K tok</span>
+            <span class="mc-sub-dur">2m 33s</span>
+          </span>
+        </div>
+        <div class="mc-sub">
+          <div class="mc-sub-dots">
+            <div class="mc-sub-dot done"></div>
+          </div>
+          <span class="mc-sub-name">Rank & Select</span>
+          <span class="mc-sub-meta">
+            <span class="mc-sub-tokens">42K tok</span>
+            <span class="mc-sub-dur">0m 52s</span>
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODULE 2: Test Hypothesis -->
+    <div class="module-card" data-tint="test" data-module="test" id="cardTest">
+      <div class="mc-head">
+        <div class="mc-head-left">
+          <div class="mc-icon bg-tint-test">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--tint-test)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+          </div>
+          <div class="mc-titles">
+            <div class="mc-label tint-test">Module 2</div>
+            <div class="mc-name">Test Hypothesis</div>
+          </div>
+        </div>
+        <div class="mc-head-right">
+          <div class="mc-status-badge running"><div class="sdot"></div>Running</div>
+        </div>
+      </div>
+
+      <div class="mc-desc">
+        Design experimental plan, generate simulation code, execute computational tests, and iterate on results through the invention feedback loop.
+      </div>
+
+      <div class="mc-metrics">
+        <div class="mc-metric">
+          <span class="mc-metric-val" id="testDuration">7m 44s</span>
+          <span class="mc-metric-label">Duration</span>
+        </div>
+        <div class="mc-metric">
+          <span class="mc-metric-val" id="testTokens">498.1K</span>
+          <span class="mc-metric-label">Tokens</span>
+        </div>
+        <div class="mc-metric">
+          <span class="mc-metric-val">$1.24</span>
+          <span class="mc-metric-label">Cost</span>
+        </div>
+        <div class="mc-metric">
+          <span class="mc-metric-val">Iter 2</span>
+          <span class="mc-metric-label">Loop Cycle</span>
+        </div>
+      </div>
+
+      <div class="mc-progress-wrap">
+        <div class="mc-progress-bar">
+          <div class="mc-progress-fill shimmer" style="width:62%; background: linear-gradient(90deg, var(--tint-test), var(--tint-hypo));"></div>
+        </div>
+        <div class="mc-progress-labels">
+          <span>3 / 5 steps</span>
+          <span class="tint-test">62%</span>
+        </div>
+      </div>
+
+      <div class="mc-subs">
+        <div class="mc-sub">
+          <div class="mc-sub-dots">
+            <div class="mc-sub-dot done"></div>
+          </div>
+          <span class="mc-sub-name">Review Hypothesis</span>
+          <span class="mc-sub-meta">
+            <span class="mc-sub-tokens">56K tok</span>
+            <span class="mc-sub-dur">1m 08s</span>
+          </span>
+        </div>
+        <div class="mc-sub">
+          <div class="mc-sub-dots">
+            <div class="mc-sub-dot done"></div>
+            <div class="mc-sub-dot done"></div>
+          </div>
+          <span class="mc-sub-name">Generate Test Plan</span>
+          <span class="mc-sub-meta">
+            <span class="mc-sub-tokens">98K tok</span>
+            <span class="mc-sub-dur">2m 21s</span>
+          </span>
+        </div>
+        <div class="mc-sub">
+          <div class="mc-sub-dots">
+            <div class="mc-sub-dot active"></div>
+            <div class="mc-sub-dot active"></div>
+            <div class="mc-sub-dot pending"></div>
+          </div>
+          <span class="mc-sub-name">Generate Paper Text</span>
+          <span class="mc-sub-meta">
+            <span class="mc-sub-tokens">210K tok</span>
+            <span class="mc-sub-dur">3m 47s</span>
+          </span>
+        </div>
+        <div class="mc-sub">
+          <div class="mc-sub-dots">
+            <div class="mc-sub-dot pending"></div>
+          </div>
+          <span class="mc-sub-name muted">Review Paper</span>
+          <span class="mc-sub-meta">
+            <span class="mc-sub-tokens">--</span>
+            <span class="mc-sub-dur">--:--</span>
+          </span>
+        </div>
+        <div class="mc-sub">
+          <div class="mc-sub-dots">
+            <div class="mc-sub-dot pending"></div>
+          </div>
+          <span class="mc-sub-name muted">Refine & Iterate</span>
+          <span class="mc-sub-meta">
+            <span class="mc-sub-tokens">--</span>
+            <span class="mc-sub-dur">--:--</span>
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODULE 3: Disseminate Results -->
+    <div class="module-card" data-tint="dissem" data-module="dissem" id="cardDissem">
+      <div class="mc-head">
+        <div class="mc-head-left">
+          <div class="mc-icon bg-tint-dissem">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--tint-dissem)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          </div>
+          <div class="mc-titles">
+            <div class="mc-label tint-dissem">Module 3</div>
+            <div class="mc-name">Disseminate Results</div>
+          </div>
+        </div>
+        <div class="mc-head-right">
+          <div class="mc-status-badge pending"><div class="sdot"></div>Queued</div>
+        </div>
+      </div>
+
+      <div class="mc-desc">
+        Compile final paper with LaTeX typesetting, generate interactive visualizations, build artifact demos, and package the complete research repository.
+      </div>
+
+      <div class="mc-metrics">
+        <div class="mc-metric">
+          <span class="mc-metric-val" style="color:var(--text-muted);">--:--</span>
+          <span class="mc-metric-label">Duration</span>
+        </div>
+        <div class="mc-metric">
+          <span class="mc-metric-val" style="color:var(--text-muted);">--</span>
+          <span class="mc-metric-label">Tokens</span>
+        </div>
+        <div class="mc-metric">
+          <span class="mc-metric-val" style="color:var(--text-muted);">--</span>
+          <span class="mc-metric-label">Cost</span>
+        </div>
+        <div class="mc-metric">
+          <span class="mc-metric-val" style="color:var(--text-muted);">--</span>
+          <span class="mc-metric-label">Artifacts</span>
+        </div>
+      </div>
+
+      <div class="mc-progress-wrap">
+        <div class="mc-progress-bar">
+          <div class="mc-progress-fill" style="width:0%; background: var(--tint-dissem);"></div>
+        </div>
+        <div class="mc-progress-labels">
+          <span>0 / 4 steps</span>
+          <span style="color:var(--text-muted)">0%</span>
+        </div>
+      </div>
+
+      <div class="mc-subs">
+        <div class="mc-sub">
+          <div class="mc-sub-dots">
+            <div class="mc-sub-dot pending"></div>
+          </div>
+          <span class="mc-sub-name muted">Generate Artifact Demos</span>
+          <span class="mc-sub-meta">
+            <span class="mc-sub-tokens">--</span>
+            <span class="mc-sub-dur">--:--</span>
+          </span>
+        </div>
+        <div class="mc-sub">
+          <div class="mc-sub-dots">
+            <div class="mc-sub-dot pending"></div>
+            <div class="mc-sub-dot pending"></div>
+          </div>
+          <span class="mc-sub-name muted">Generate Visualizations</span>
+          <span class="mc-sub-meta">
+            <span class="mc-sub-tokens">--</span>
+            <span class="mc-sub-dur">--:--</span>
+          </span>
+        </div>
+        <div class="mc-sub">
+          <div class="mc-sub-dots">
+            <div class="mc-sub-dot pending"></div>
+            <div class="mc-sub-dot pending"></div>
+            <div class="mc-sub-dot pending"></div>
+          </div>
+          <span class="mc-sub-name muted">Compile Full Paper</span>
+          <span class="mc-sub-meta">
+            <span class="mc-sub-tokens">--</span>
+            <span class="mc-sub-dur">--:--</span>
+          </span>
+        </div>
+        <div class="mc-sub">
+          <div class="mc-sub-dots">
+            <div class="mc-sub-dot pending"></div>
+          </div>
+          <span class="mc-sub-name muted">Package Repository</span>
+          <span class="mc-sub-meta">
+            <span class="mc-sub-tokens">--</span>
+            <span class="mc-sub-dur">--:--</span>
+          </span>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- .modules-row -->
+
+  <!-- ================================================================
+       BELOW-TREE DASHBOARD (hidden until card click)
+       ================================================================ -->
+  <div class="dashboard" id="dashboard">
+    <div class="dash-inner">
+      <div class="dash-header">
+        <span class="dash-title" id="dashTitle">Module Detail</span>
+        <div class="dash-close" id="dashClose">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </div>
+      </div>
+      <div class="dash-grid">
+
+        <!-- Token Breakdown -->
+        <div class="dash-panel">
+          <div class="dash-panel-title">Token Breakdown</div>
+          <div id="dashTokens">
+            <div class="token-row">
+              <span class="token-label">Input</span>
+              <div class="token-bar-bg"><div class="token-bar-fill" id="tkIn" style="width:72%; background:var(--tint-hypo);"></div></div>
+              <span class="token-val" id="tkInVal">228.1K</span>
+            </div>
+            <div class="token-row">
+              <span class="token-label">Output</span>
+              <div class="token-bar-bg"><div class="token-bar-fill" id="tkOut" style="width:28%; background:var(--tint-test);"></div></div>
+              <span class="token-val" id="tkOutVal">84.3K</span>
+            </div>
+            <div class="token-row">
+              <span class="token-label">Cache</span>
+              <div class="token-bar-bg"><div class="token-bar-fill" id="tkCache" style="width:58%; background:var(--tint-dissem);"></div></div>
+              <span class="token-val" id="tkCacheVal">185.7K</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step Latency -->
+        <div class="dash-panel">
+          <div class="dash-panel-title">Step Latency (seconds)</div>
+          <div class="latency-chart" id="dashLatency">
+            <!-- Filled by JS -->
+          </div>
+        </div>
+
+        <!-- Recent Logs -->
+        <div class="dash-panel">
+          <div class="dash-panel-title">Step Logs</div>
+          <div class="dash-log" id="dashLog">
+            <!-- Filled by JS -->
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================
+       LIVE FEED
+       ================================================================ -->
+  <div class="live-feed">
+    <div class="lf-header">
+      <div class="lf-title">
+        <div class="lf-live-dot"></div>
+        Live Feed
+      </div>
+      <div class="lf-filters">
+        <button class="lf-filter-btn active" data-filter="all">All</button>
+        <button class="lf-filter-btn" data-filter="hypo">Hypothesis</button>
+        <button class="lf-filter-btn" data-filter="test">Testing</button>
+        <button class="lf-filter-btn" data-filter="dissem">Disseminate</button>
+        <button class="lf-filter-btn" data-filter="error">Errors</button>
+      </div>
+    </div>
+    <div class="lf-entries" id="feedEntries">
+      <!-- Filled by JS -->
+    </div>
+  </div>
+
+</main>
+
+<!-- ================================================================
+     JAVASCRIPT
+     ================================================================ -->
+<script>
+(function() {
+  'use strict';
+
+  // ----------------------------------------------------------------
+  // CLOCK
+  // ----------------------------------------------------------------
+  const clockEl = document.getElementById('hdrClock');
+  let elapsedSec = 872; // 14m 32s
+  function tickClock() {
+    elapsedSec++;
+    const h = String(Math.floor(elapsedSec / 3600)).padStart(2,'0');
+    const m = String(Math.floor((elapsedSec % 3600) / 60)).padStart(2,'0');
+    const s = String(elapsedSec % 60).padStart(2,'0');
+    clockEl.textContent = `${h}:${m}:${s}`;
+  }
+  setInterval(tickClock, 1000);
+  tickClock();
+
+  // ----------------------------------------------------------------
+  // MODULE CARD CLICK -> DASHBOARD
+  // ----------------------------------------------------------------
+  const cards     = document.querySelectorAll('.module-card');
+  const dashboard = document.getElementById('dashboard');
+  const dashTitle = document.getElementById('dashTitle');
+  const dashClose = document.getElementById('dashClose');
+  const dashLatency = document.getElementById('dashLatency');
+  const dashLog     = document.getElementById('dashLog');
+
+  // Data per module for the dashboard
+  const moduleData = {
+    hypo: {
+      title: 'Generate Hypothesis — Detail',
+      tint: 'var(--tint-hypo)',
+      tokens: { in: 72, out: 28, cache: 58, inVal:'228.1K', outVal:'84.3K', cacheVal:'185.7K' },
+      latencies: [102, 71, 153, 52],
+      latencyLabels: ['Seed KG','Gaps','GenCand','Rank'],
+      logs: [
+        { ts:'14:02:11', msg:'Knowledge graph seeded with 847 nodes', cls:'ok' },
+        { ts:'14:03:53', msg:'Identified 12 research gaps across 3 domains', cls:'' },
+        { ts:'14:04:18', msg:'Spawned 3 parallel candidate generators', cls:'' },
+        { ts:'14:05:40', msg:'Generated 15 raw hypotheses, dedup to 9', cls:'' },
+        { ts:'14:06:22', msg:'Swiss-BT ranking converged after 4 rounds', cls:'' },
+        { ts:'14:08:29', msg:'Top 5 hypotheses selected, novelty > 0.82', cls:'ok' },
+      ]
+    },
+    test: {
+      title: 'Test Hypothesis — Detail',
+      tint: 'var(--tint-test)',
+      tokens: { in: 65, out: 35, cache: 48, inVal:'323.8K', outVal:'174.3K', cacheVal:'239.2K' },
+      latencies: [68, 141, 227, 0, 0],
+      latencyLabels: ['Review','Plan','Paper','RevPaper','Refine'],
+      logs: [
+        { ts:'14:08:31', msg:'Received top hypothesis: QM-lattice-defect-H7', cls:'' },
+        { ts:'14:09:39', msg:'Hypothesis review passed with score 0.91', cls:'ok' },
+        { ts:'14:10:02', msg:'Generating experimental plan (2 parallel agents)', cls:'' },
+        { ts:'14:12:23', msg:'Plan complete: 4 computational experiments', cls:'ok' },
+        { ts:'14:12:30', msg:'Starting paper text generation, iteration 2', cls:'' },
+        { ts:'14:14:44', msg:'Section 3.2 generation — 2 of 3 agents active', cls:'' },
+        { ts:'14:16:15', msg:'Rate limit hit on claude-opus-4-20250514, retry in 8s', cls:'err' },
+        { ts:'14:16:24', msg:'Retry succeeded, resuming generation', cls:'ok' },
+      ]
+    },
+    dissem: {
+      title: 'Disseminate Results — Detail',
+      tint: 'var(--tint-dissem)',
+      tokens: { in: 0, out: 0, cache: 0, inVal:'--', outVal:'--', cacheVal:'--' },
+      latencies: [0, 0, 0, 0],
+      latencyLabels: ['Demos','Viz','Paper','Repo'],
+      logs: [
+        { ts:'--:--:--', msg:'Waiting for Test Hypothesis to complete...', cls:'' },
+      ]
+    }
+  };
+
+  let activeModule = null;
+
+  cards.forEach(card => {
+    card.addEventListener('click', () => {
+      const mod = card.dataset.module;
+
+      // Toggle off if already active
+      if (activeModule === mod) {
+        closeDashboard();
+        return;
+      }
+
+      // Remove active from all cards
+      cards.forEach(c => c.classList.remove('active'));
+      card.classList.add('active');
+      activeModule = mod;
+
+      // Populate dashboard
+      const d = moduleData[mod];
+      dashTitle.textContent = d.title;
+
+      // Token bars
+      document.getElementById('tkIn').style.width = d.tokens.in + '%';
+      document.getElementById('tkIn').style.background = d.tint;
+      document.getElementById('tkOut').style.width = d.tokens.out + '%';
+      document.getElementById('tkCache').style.width = d.tokens.cache + '%';
+      document.getElementById('tkInVal').textContent = d.tokens.inVal;
+      document.getElementById('tkOutVal').textContent = d.tokens.outVal;
+      document.getElementById('tkCacheVal').textContent = d.tokens.cacheVal;
+
+      // Latency bars
+      const maxLat = Math.max(...d.latencies, 1);
+      dashLatency.innerHTML = '';
+      d.latencies.forEach((val, i) => {
+        const bar = document.createElement('div');
+        bar.className = 'latency-bar';
+        const pct = val > 0 ? Math.max((val / maxLat) * 100, 6) : 4;
+        bar.style.height = pct + '%';
+        bar.style.background = val > 0 ? d.tint : 'rgba(255,255,255,0.04)';
+        bar.setAttribute('data-val', d.latencyLabels[i] + ': ' + (val > 0 ? val + 's' : '--'));
+        bar.title = d.latencyLabels[i];
+        dashLatency.appendChild(bar);
+      });
+
+      // Logs
+      dashLog.innerHTML = '';
+      d.logs.forEach(l => {
+        const line = document.createElement('div');
+        line.className = 'dash-log-line';
+        line.innerHTML = `<span class="dash-log-ts">${l.ts}</span><span class="dash-log-msg ${l.cls}">${l.msg}</span>`;
+        dashLog.appendChild(line);
+      });
+
+      // Open
+      dashboard.classList.add('open');
+    });
+  });
+
+  function closeDashboard() {
+    dashboard.classList.remove('open');
+    cards.forEach(c => c.classList.remove('active'));
+    activeModule = null;
+  }
+
+  dashClose.addEventListener('click', (e) => {
+    e.stopPropagation();
+    closeDashboard();
+  });
+
+  // ----------------------------------------------------------------
+  // LIVE FEED
+  // ----------------------------------------------------------------
+  const feedEntries = document.getElementById('feedEntries');
+
+  const feedData = [
+    {
+      mod:'test', icon:'running',
+      text:'<span class="hl-test">Generate Paper Text</span> section 3.2 — agent 2 of 3 producing results',
+      sub:'498.1K tokens | Iteration 2 | claude-opus-4-20250514',
+      ts:'0:23'
+    },
+    {
+      mod:'test', icon:'warn',
+      text:'Rate limit encountered on <span class="hl-test">claude-opus-4-20250514</span>, automatic retry queued',
+      sub:'429 Too Many Requests | Backoff: 8s',
+      ts:'1:49'
+    },
+    {
+      mod:'test', icon:'ok',
+      text:'Retry succeeded for <span class="hl-test">Generate Paper Text</span>, generation resumed',
+      sub:'Session restored | Cache hit: 94.2%',
+      ts:'1:57'
+    },
+    {
+      mod:'test', icon:'running',
+      text:'<span class="hl-test">Generate Test Plan</span> completed with 4 computational experiments',
+      sub:'98.4K tokens | 2m 21s elapsed',
+      ts:'4:09'
+    },
+    {
+      mod:'hypo', icon:'ok',
+      text:'<span class="hl-hypo">Rank & Select</span> completed — top 5 hypotheses with novelty score > 0.82',
+      sub:'Swiss-BT converged in 4 rounds | 42.3K tokens',
+      ts:'6:03'
+    },
+    {
+      mod:'hypo', icon:'ok',
+      text:'<span class="hl-hypo">Generate Hypothesis</span> module finished successfully',
+      sub:'312.4K tokens total | 6m 18s | 5 hypotheses produced',
+      ts:'6:14'
+    },
+    {
+      mod:'test', icon:'running',
+      text:'<span class="hl-test">Review Hypothesis</span> scored candidate QM-lattice-defect-H7 at 0.91',
+      sub:'Passed threshold (0.70) | 56.2K tokens',
+      ts:'6:23'
+    },
+    {
+      mod:'hypo', icon:'ok',
+      text:'<span class="hl-hypo">Generate Candidates</span> produced 15 raw hypotheses, deduplicated to 9',
+      sub:'3 parallel agents | 124.1K tokens | 2m 33s',
+      ts:'8:51'
+    },
+  ];
+
+  function renderFeed(filter) {
+    feedEntries.innerHTML = '';
+    const filtered = filter === 'all'
+      ? feedData
+      : filter === 'error'
+        ? feedData.filter(e => e.icon === 'warn' || e.icon === 'error')
+        : feedData.filter(e => e.mod === filter);
+
+    filtered.forEach((entry, i) => {
+      const el = document.createElement('div');
+      el.className = 'lf-entry';
+      el.style.animationDelay = (i * 0.06) + 's';
+
+      let iconBg, iconSvg;
+      if (entry.icon === 'ok') {
+        iconBg = 'var(--tint-test-dim)';
+        iconSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="var(--tint-test)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+      } else if (entry.icon === 'running') {
+        iconBg = 'var(--tint-hypo-dim)';
+        iconSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="var(--tint-hypo)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>`;
+      } else if (entry.icon === 'warn') {
+        iconBg = 'rgba(239,68,68,0.10)';
+        iconSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`;
+      } else {
+        iconBg = 'rgba(255,255,255,0.04)';
+        iconSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`;
+      }
+
+      el.innerHTML = `
+        <div class="lf-entry-icon" style="background:${iconBg}">${iconSvg}</div>
+        <div class="lf-entry-body">
+          <div class="lf-entry-text">${entry.text}</div>
+          <div class="lf-entry-sub">${entry.sub}</div>
+        </div>
+        <div class="lf-entry-ts">${entry.ts}</div>
+      `;
+      feedEntries.appendChild(el);
+    });
+  }
+
+  // Filter buttons
+  document.querySelectorAll('.lf-filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.lf-filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderFeed(btn.dataset.filter);
+    });
+  });
+
+  // Initial render
+  renderFeed('all');
+
+  // ----------------------------------------------------------------
+  // SIMULATED LIVE UPDATES
+  // ----------------------------------------------------------------
+  const liveMsgs = [
+    {
+      mod:'test', icon:'running',
+      text:'<span class="hl-test">Generate Paper Text</span> section 3.3 started — methodology description',
+      sub:'Agent 3 active | Est. 45s remaining',
+    },
+    {
+      mod:'test', icon:'ok',
+      text:'<span class="hl-test">Generate Paper Text</span> section 3.2 completed — results analysis',
+      sub:'32.4K output tokens | Cache: 96.1%',
+    },
+    {
+      mod:'test', icon:'running',
+      text:'Token budget checkpoint: <span class="hl-test">Test Hypothesis</span> at 62% of allocation',
+      sub:'498.1K / 800K budget | Pace: nominal',
+    },
+    {
+      mod:'test', icon:'ok',
+      text:'<span class="hl-test">Generate Paper Text</span> all sections complete, merging',
+      sub:'3 agents converged | 210.4K tokens total',
+    },
+    {
+      mod:'test', icon:'running',
+      text:'Starting <span class="hl-test">Review Paper</span> — automated quality assessment',
+      sub:'Novelty + coherence + rigor checks queued',
+    },
+    {
+      mod:'dissem', icon:'running',
+      text:'<span class="hl-dissem">Disseminate Results</span> module entering ready state',
+      sub:'Waiting for final paper approval',
+    },
+  ];
+
+  let liveIdx = 0;
+  function pushLiveEntry() {
+    if (liveIdx >= liveMsgs.length) return;
+    const msg = liveMsgs[liveIdx++];
+    const now = elapsedSec;
+    const mm = String(Math.floor((now % 3600) / 60));
+    const ss = String(now % 60).padStart(2,'0');
+
+    feedData.unshift({
+      ...msg,
+      ts: mm + ':' + ss,
+    });
+
+    // Re-render current filter
+    const activeFilter = document.querySelector('.lf-filter-btn.active');
+    renderFeed(activeFilter ? activeFilter.dataset.filter : 'all');
+
+    // Also animate the token count in Test module
+    const tkEl = document.getElementById('testTokens');
+    if (tkEl) {
+      const base = 498.1;
+      const add = liveIdx * 12.3;
+      tkEl.textContent = (base + add).toFixed(1) + 'K';
+    }
+  }
+
+  // Push a new live entry every 6-10 seconds
+  function scheduleLive() {
+    const delay = 6000 + Math.random() * 4000;
+    setTimeout(() => {
+      pushLiveEntry();
+      if (liveIdx < liveMsgs.length) scheduleLive();
+    }, delay);
+  }
+  scheduleLive();
+
+  // ----------------------------------------------------------------
+  // SIDEBAR ICON HOVER EFFECT
+  // ----------------------------------------------------------------
+  document.querySelectorAll('.sidebar-icon').forEach(icon => {
+    icon.addEventListener('click', function() {
+      document.querySelectorAll('.sidebar-icon').forEach(i => i.classList.remove('active'));
+      this.classList.add('active');
+    });
+  });
+
+})();
+</script>
+
+</body>
+</html>
