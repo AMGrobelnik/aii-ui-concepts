@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Pipeline Dashboard v2</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #0e1015;
+  --surface: rgba(22, 25, 32, 0.55);
+  --border: rgba(255, 255, 255, 0.06);
+  --border-hi: rgba(255, 255, 255, 0.12);
+  --text: #e8ecf2;
+  --text-dim: #8b95a5;
+  --text-muted: #5a6270;
+  --purple: #a78bfa;
+  --purple-dim: rgba(167, 139, 250, 0.12);
+  --purple-glow: rgba(167, 139, 250, 0.3);
+  --blue: #3b82f6;
+  --blue-dim: rgba(59, 130, 246, 0.12);
+  --blue-glow: rgba(59, 130, 246, 0.3);
+  --blue-tint: rgba(59, 130, 246, 0.025);
+  --orange: #f59e0b;
+  --orange-dim: rgba(245, 158, 11, 0.12);
+  --orange-glow: rgba(245, 158, 11, 0.3);
+  --green: #22c55e;
+  --green-dim: rgba(34, 197, 94, 0.12);
+  --glass-bg: rgba(18, 21, 28, 0.5);
+  --glass-blur: 18px;
+  --glass-shine: rgba(255, 255, 255, 0.08);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --radius: 14px;
+  --radius-sm: 10px;
+  --radius-xs: 6px;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+html { height: 100%; font-size: 14px; }
+body {
+  font-family: 'Inter', -apple-system, sans-serif;
+  background: var(--bg); color: var(--text);
+  height: 100vh; overflow: hidden; display: flex;
+  -webkit-font-smoothing: antialiased;
+}
+body::before {
+  content: ''; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background:
+    radial-gradient(ellipse 600px 400px at 20% 15%, rgba(167,139,250,0.04), transparent 70%),
+    radial-gradient(ellipse 500px 500px at 55% 50%, rgba(59,130,246,0.03), transparent 70%),
+    radial-gradient(ellipse 500px 400px at 80% 80%, rgba(245,158,11,0.03), transparent 70%);
+}
+#ambientCanvas { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+
+/* ================================================================
+   SIDEBAR
+   ================================================================ */
+.sidebar {
+  width: 48px; min-width: 48px; height: 100vh;
+  background: rgba(14, 16, 21, 0.92);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; align-items: center;
+  padding: 14px 0; gap: 2px;
+  transition: width 280ms var(--ease), min-width 280ms var(--ease);
+  overflow: hidden; position: relative; z-index: 100; flex-shrink: 0;
+}
+.sidebar:hover { width: 220px; min-width: 220px; }
+
+.sb-header { display: flex; align-items: center; width: 100%; padding: 0 9px; margin-bottom: 18px; justify-content: center; }
+.sidebar:hover .sb-header { justify-content: flex-start; padding: 0 14px; }
+.sb-logo {
+  width: 30px; height: 30px; border-radius: 8px;
+  background: linear-gradient(135deg, var(--purple), var(--blue));
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 800; color: #fff; flex-shrink: 0;
+  box-shadow: 0 2px 12px rgba(59,130,246,0.25); cursor: pointer;
+}
+.sb-title { font-size: 14px; font-weight: 700; white-space: nowrap; margin-left: 10px; opacity: 0; transition: opacity 200ms ease 80ms; }
+.sidebar:hover .sb-title { opacity: 1; }
+
+.sb-nav { display: flex; flex-direction: column; gap: 2px; width: 100%; padding: 0 6px; }
+.sb-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px; border-radius: 8px; cursor: pointer;
+  color: var(--text-muted); transition: background 150ms, color 150ms;
+  white-space: nowrap; overflow: hidden;
+}
+.sb-item:hover { background: rgba(255,255,255,0.04); color: var(--text-dim); }
+.sb-item.active { background: rgba(255,255,255,0.06); color: var(--text); }
+.sb-icon { width: 24px; height: 24px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.sb-dot { width: 8px; height: 8px; border-radius: 50%; }
+.sb-label { font-size: 13px; font-weight: 500; opacity: 0; transition: opacity 200ms ease 80ms; }
+.sidebar:hover .sb-label { opacity: 1; }
+
+.sb-divider { width: 24px; height: 1px; background: var(--border); margin: 8px 0; }
+.sidebar:hover .sb-divider { width: calc(100% - 28px); }
+.sb-section { width: 100%; padding: 0 6px; margin-top: 4px; }
+.sb-section-title { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); padding: 4px 8px; opacity: 0; transition: opacity 200ms ease 80ms; }
+.sidebar:hover .sb-section-title { opacity: 1; }
+.sb-link { padding: 5px 8px; font-size: 12px; color: var(--text-muted); border-radius: 6px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0; transition: opacity 200ms ease 80ms; }
+.sidebar:hover .sb-link { opacity: 1; }
+.sb-link:hover { color: var(--text-dim); background: rgba(255,255,255,0.03); }
+.sb-spacer { flex: 1; }
+
+/* ================================================================
+   MAIN
+   ================================================================ */
+.main {
+  flex: 1; height: 100vh; overflow-y: auto; overflow-x: hidden;
+  position: relative; z-index: 1; padding: 20px 28px 40px;
+}
+
+/* ================================================================
+   CARDS ROW (3-column grid)
+   ================================================================ */
+.cards-row {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 14px; margin-bottom: 0; position: relative; z-index: 2;
+}
+
+.card {
+  position: relative; border-radius: var(--radius);
+  padding: 14px 16px 12px; cursor: pointer;
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.3);
+  border: 1px solid var(--glass-border);
+  box-shadow: inset 0 1px 0 0 var(--glass-shine), 0 8px 32px rgba(0,0,0,0.3);
+  transition: transform 200ms ease, border-color 300ms, box-shadow 300ms;
+  overflow: hidden;
+}
+.card:hover { transform: translateY(-2px); }
+
+/* Glass shine overlay */
+.card .glass-shine {
+  position: absolute; inset: 0; border-radius: inherit;
+  background: linear-gradient(165deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 25%, transparent 50%);
+  pointer-events: none; z-index: 1;
+}
+/* Left color accent */
+.card::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  border-radius: var(--radius) 0 0 var(--radius); z-index: 2;
+}
+.card[data-color="purple"]::before { background: var(--purple); box-shadow: 0 0 10px var(--purple-glow); }
+.card[data-color="blue"]::before { background: var(--blue); box-shadow: 0 0 10px var(--blue-glow); }
+.card[data-color="orange"]::before { background: var(--orange); box-shadow: 0 0 10px var(--orange-glow); }
+
+/* Glow halo behind card */
+.card .glow-halo {
+  position: absolute; inset: -24px; border-radius: 28px;
+  opacity: 0; pointer-events: none; z-index: -1; filter: blur(32px);
+  transition: opacity 0.5s ease;
+}
+.card[data-color="purple"] .glow-halo { background: var(--purple); }
+.card[data-color="blue"] .glow-halo { background: var(--blue); }
+.card[data-color="orange"] .glow-halo { background: var(--orange); }
+
+/* Inner glow (box-shadow from elite_01) */
+.card::after {
+  content: ''; position: absolute; inset: -1px; border-radius: var(--radius);
+  opacity: 0; pointer-events: none; z-index: -1; transition: opacity 0.4s ease;
+}
+.card[data-color="purple"]::after { box-shadow: 0 0 36px 8px var(--purple-dim), inset 0 0 18px var(--purple-dim); }
+.card[data-color="blue"]::after { box-shadow: 0 0 36px 8px var(--blue-dim), inset 0 0 18px var(--blue-dim); }
+.card[data-color="orange"]::after { box-shadow: 0 0 36px 8px var(--orange-dim), inset 0 0 18px var(--orange-dim); }
+
+/* Active card: glow pulse + border (from elite_01) */
+.card.active { border-color: rgba(59,130,246,0.22); }
+.card.active .glow-halo { opacity: 0.12; animation: haloPulse 3s ease-in-out infinite; }
+.card.active::after { opacity: 1; animation: cardGlowPulse 2.5s ease-in-out infinite; }
+@keyframes haloPulse { 0%, 100% { opacity: 0.08; } 50% { opacity: 0.18; } }
+@keyframes cardGlowPulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
+
+/* Shimmer sweep on active (from elite_01) */
+.card .card-shimmer {
+  position: absolute; top: 0; left: -100%; width: 60%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent);
+  transform: skewX(-20deg); pointer-events: none; z-index: 2; opacity: 0;
+}
+.card.active .card-shimmer { opacity: 1; animation: shimmerSweep 3.5s ease-in-out infinite; }
+@keyframes shimmerSweep { 0% { left: -100%; } 50% { left: 160%; } 100% { left: 160%; } }
+
+/* Done card */
+.card.done .glow-halo { opacity: 0.04; }
+.card.done::after { opacity: 0.3; }
+
+/* Pending card */
+.card.pending { opacity: 0.45; }
+
+.card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; position: relative; z-index: 3; }
+.card-icon {
+  width: 32px; height: 32px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; flex-shrink: 0;
+}
+.card[data-color="purple"] .card-icon { background: var(--purple-dim); }
+.card[data-color="blue"] .card-icon { background: var(--blue-dim); }
+.card[data-color="orange"] .card-icon { background: var(--orange-dim); }
+.card-title { font-size: 13px; font-weight: 600; color: var(--text); letter-spacing: -0.2px; }
+.card-subtitle { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+
+.card-badge {
+  font-size: 9px; font-weight: 600; padding: 2px 7px; border-radius: 6px;
+  text-transform: uppercase; letter-spacing: 0.3px; flex-shrink: 0; margin-left: auto;
+}
+.card-badge.done { background: var(--green-dim); color: var(--green); }
+.card-badge.running { background: var(--blue-dim); color: var(--blue); animation: badgePulse 2s ease-in-out infinite; }
+.card-badge.waiting { background: rgba(74,81,104,0.15); color: var(--text-muted); }
+@keyframes badgePulse { 0%,100% { opacity: 0.8; } 50% { opacity: 1; background: rgba(59,130,246,0.2); } }
+
+.card-bar { height: 3px; background: rgba(255,255,255,0.04); border-radius: 2px; overflow: hidden; position: relative; z-index: 3; }
+.card-bar-fill { height: 100%; border-radius: 2px; transition: width 800ms var(--ease); }
+.card[data-color="purple"] .card-bar-fill { background: var(--purple); box-shadow: 0 0 6px var(--purple-glow); }
+.card[data-color="blue"] .card-bar-fill { background: var(--blue); box-shadow: 0 0 6px var(--blue-glow); }
+.card[data-color="orange"] .card-bar-fill { background: var(--orange); box-shadow: 0 0 6px var(--orange-glow); }
+
+/* ================================================================
+   TREE AREA — same 3-col grid as cards for alignment
+   ================================================================ */
+.tree-area {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 14px; position: relative; z-index: 2;
+}
+.tree-col { position: relative; overflow: visible; }
+
+/* Stem connector from card center down to tree */
+.tree-stem {
+  width: 2px; height: 10px; margin: 0 auto; border-radius: 1px;
+  background: rgba(59,130,246,0.18);
+}
+
+/* Tree trunk with left-side vertical line (from elite_01) */
+.tree-trunk {
+  position: relative; padding-left: 22px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.tree-trunk::before {
+  content: ''; position: absolute; left: 9px; top: 0;
+  width: 2px; border-radius: 1px;
+  height: calc(100% - 16px);
+  background: rgba(59,130,246,0.18);
+}
+/* Glow on active trunk */
+.tree-trunk.glow-trunk::before {
+  background: rgba(59,130,246,0.45);
+  box-shadow: 0 0 6px rgba(59,130,246,0.25);
+  animation: branchGlow 2.5s ease-in-out infinite;
+}
+@keyframes branchGlow { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }
+
+/* Round row (XL, 44px from elite_01) */
+.round-row {
+  height: 40px; display: flex; align-items: center; gap: 10px;
+  padding: 0 10px; position: relative; border-radius: var(--radius-xs);
+  cursor: pointer; transition: background 150ms;
+}
+.round-row:hover { background: rgba(255,255,255,0.025); }
+
+/* Horizontal branch connector from trunk */
+.round-row::before {
+  content: ''; position: absolute; left: -13px; top: 50%;
+  width: 13px; height: 2px; border-radius: 1px;
+  background: rgba(59,130,246,0.18);
+}
+/* Active round: glow connector */
+.round-row.active-round::before {
+  background: rgba(59,130,246,0.55);
+  box-shadow: 0 0 8px rgba(59,130,246,0.3);
+  animation: branchGlow 2.5s ease-in-out infinite;
+}
+
+/* Active round highlight */
+.round-row.active-round {
+  background: rgba(59,130,246,0.06);
+  border: 1px solid rgba(59,130,246,0.12);
+  border-radius: var(--radius-xs);
+}
+
+/* Round dot */
+.round-dot {
+  width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.round-dot.done { background: var(--blue); opacity: 0.6; }
+.round-dot.done::after { content: ''; width: 4px; height: 4px; background: var(--bg); border-radius: 50%; }
+.round-dot.active { background: var(--blue); animation: dotPulse 2s ease-in-out infinite; }
+.round-dot.active::after { content: ''; width: 4px; height: 4px; background: #fff; border-radius: 50%; }
+.round-dot.pending { border: 2px solid var(--text-muted); background: transparent; opacity: 0.4; }
+@keyframes dotPulse { 0%,100% { box-shadow: 0 0 0 0 var(--blue-glow); } 50% { box-shadow: 0 0 0 6px transparent; } }
+
+.round-label { font-size: 13px; font-weight: 500; color: var(--text-dim); flex: 1; }
+.round-row.active-round .round-label { color: var(--text); font-weight: 600; }
+.round-row.pending-round .round-label { color: var(--text-muted); }
+.round-row.pending-round { opacity: 0.4; }
+.round-meta { font-size: 11px; color: var(--text-muted); }
+
+/* Ghost chevron */
+.round-chevron {
+  font-size: 12px; color: var(--text-muted); margin-left: 4px;
+  opacity: 0; transition: opacity 200ms, transform 200ms;
+}
+.round-row:hover .round-chevron { opacity: 0.4; }
+.round-row.expanded .round-chevron { opacity: 0.7; transform: rotate(90deg); }
+
+/* ================================================================
+   SUBSTEPS (children of expanded round) — from elite_10
+   ================================================================ */
+.substeps-list {
+  position: relative; padding-left: 20px; margin-left: 5px;
+  max-height: 0; overflow: hidden; opacity: 0;
+  transition: max-height 300ms ease, opacity 200ms ease;
+}
+.round-row.expanded + .substeps-list,
+.expanded > .substeps-list { max-height: 500px; opacity: 1; }
+
+/* Nested vertical line */
+.substeps-list::before {
+  content: ''; position: absolute; left: 10px; top: 0; bottom: 16px;
+  width: 1.5px; border-radius: 1px;
+  background: rgba(59,130,246,0.12);
+}
+
+.substep-row {
+  height: 36px; display: flex; align-items: center; gap: 8px;
+  padding: 0 8px; border-radius: var(--radius-xs);
+  position: relative; cursor: pointer; transition: background 150ms;
+}
+.substep-row:hover { background: rgba(255,255,255,0.025); }
+
+/* Horizontal branch */
+.substep-row::before {
+  content: ''; position: absolute; left: -10px; top: 50%;
+  width: 10px; height: 1.5px; border-radius: 1px;
+  background: rgba(59,130,246,0.12);
+}
+/* Active child glow (from elite_10) */
+.substep-row.active-child {
+  background: rgba(59,130,246,0.04);
+}
+.substep-row.active-child::before {
+  background: rgba(59,130,246,0.45);
+  box-shadow: 0 0 6px rgba(59,130,246,0.3);
+  animation: branchGlow 2.5s ease-in-out infinite;
+}
+
+.child-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+.child-dot.done { background: var(--blue); opacity: 0.5; }
+.child-dot.running { background: var(--blue); animation: childPulse 2s ease-in-out infinite; }
+.child-dot.pending { background: transparent; border: 1.5px solid var(--text-muted); opacity: 0.35; }
+@keyframes childPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.35); } }
+
+.child-label { font-size: 12px; color: var(--text-muted); }
+.substep-row.active-child .child-label { color: var(--text-dim); font-weight: 500; }
+.substep-row.done-child .child-label { color: var(--text-muted); opacity: 0.7; }
+
+.child-dots-anim {
+  font-size: 12px; color: var(--blue); letter-spacing: 2px;
+  animation: dotTrail 1.5s ease-in-out infinite;
+}
+@keyframes dotTrail { 0%,100% { opacity: 0.3; } 50% { opacity: 0.8; } }
+
+.substep-row.ellipsis-row { opacity: 0.3; height: 24px; }
+
+/* Token bar */
+.token-bar { height: 2px; border-radius: 1px; background: rgba(255,255,255,0.03); margin-top: 8px; overflow: hidden; }
+.token-bar-fill { height: 100%; border-radius: 1px; background: var(--blue); opacity: 0.2; transition: width 2s ease; }
+
+/* ================================================================
+   DETAIL PANEL
+   ================================================================ */
+.detail-panel {
+  margin-top: 20px; display: none; gap: 16px; position: relative; z-index: 2;
+  animation: panelSlide 300ms var(--ease);
+}
+.detail-panel.visible { display: flex; }
+@keyframes panelSlide { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+.glass-panel {
+  border-radius: var(--radius);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(1.3);
+  border: 1px solid var(--glass-border);
+  box-shadow: inset 0 1px 0 0 var(--glass-shine), 0 4px 20px rgba(0,0,0,0.2);
+  padding: 16px 18px;
+}
+.detail-summary { flex: 3; }
+.detail-activity { flex: 2; }
+
+.dp-header { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.dp-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--blue); box-shadow: 0 0 6px var(--blue-glow); }
+.dp-title { font-size: 13px; font-weight: 700; color: var(--text); }
+.dp-tag { font-size: 10px; font-weight: 600; color: var(--text-muted); background: rgba(255,255,255,0.04); padding: 2px 6px; border-radius: 4px; }
+.dp-live { margin-left: auto; font-size: 11px; color: var(--green); display: flex; align-items: center; gap: 5px; }
+.live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); box-shadow: 0 0 6px var(--green); animation: livePulse 2s ease-in-out infinite; }
+@keyframes livePulse { 0%,100% { opacity: 0.5; } 50% { opacity: 1; } }
+
+.dp-body { display: flex; flex-direction: column; gap: 6px; }
+.dp-entry { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; color: var(--text-dim); line-height: 1.5; }
+.dp-marker { font-size: 14px; font-weight: 700; flex-shrink: 0; line-height: 1.3; }
+.dp-marker.green { color: var(--green); }
+.dp-marker.blue { color: var(--blue); }
+.dp-marker.gray { color: var(--text-muted); }
+.dp-entry.dim { opacity: 0.5; }
+.dp-footer { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text-muted); }
+
+.dp-feed-entry { display: flex; align-items: center; gap: 8px; font-size: 12px; padding: 3px 0; }
+.dp-feed-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+.dp-feed-tool { color: var(--text-dim); flex: 1; }
+.dp-feed-ts { font-size: 10px; color: var(--text-muted); }
+
+/* ================================================================
+   DOT ANIMATION LAYER
+   ================================================================ */
+#dotLayer { position: fixed; inset: 0; pointer-events: none; z-index: 200; }
+.fly-dot {
+  position: absolute; top: 0; left: 0;
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--blue);
+  box-shadow: 0 0 6px var(--blue), 0 0 14px rgba(59,130,246,0.3);
+  opacity: 0; will-change: transform, opacity;
+}
+</style>
+</head>
+<body>
+
+<canvas id="ambientCanvas"></canvas>
+
+<!-- ===== SIDEBAR ===== -->
+<aside class="sidebar">
+  <div class="sb-header">
+    <div class="sb-logo">AI</div>
+    <span class="sb-title">AI Inventor</span>
+  </div>
+  <nav class="sb-nav">
+    <div class="sb-item active">
+      <span class="sb-icon"><span class="sb-dot" style="background:var(--purple)"></span></span>
+      <span class="sb-label">Invent</span>
+    </div>
+    <div class="sb-item">
+      <span class="sb-icon"><span class="sb-dot" style="background:var(--blue)"></span></span>
+      <span class="sb-label">Elaboration</span>
+    </div>
+    <div class="sb-item">
+      <span class="sb-icon"><span class="sb-dot" style="background:var(--orange)"></span></span>
+      <span class="sb-label">Disseminate</span>
+    </div>
+  </nav>
+  <div class="sb-divider"></div>
+  <div class="sb-section">
+    <div class="sb-section-title">Starred</div>
+    <div class="sb-link">Neural Plasticity</div>
+    <div class="sb-link">Protein Folding</div>
+  </div>
+  <div class="sb-section">
+    <div class="sb-section-title">Recents</div>
+    <div class="sb-link">Graph Reasoning</div>
+    <div class="sb-link">Climate Models</div>
+    <div class="sb-link">Quantum Effects</div>
+  </div>
+  <div class="sb-spacer"></div>
+</aside>
+
+<!-- ===== MAIN ===== -->
+<main class="main" id="mainContent">
+
+  <!-- Cards Row -->
+  <div class="cards-row">
+    <div class="card done" data-color="purple">
+      <div class="glass-shine"></div>
+      <div class="glow-halo"></div>
+      <div class="card-header">
+        <div class="card-icon">💡</div>
+        <div><div class="card-title">Create Hypothesis</div><div class="card-subtitle">x/y steps · 100%</div></div>
+        <span class="card-badge done">Done</span>
+      </div>
+      <div class="card-bar"><div class="card-bar-fill" style="width:100%"></div></div>
+    </div>
+
+    <div class="card active" data-color="blue" id="activeCard">
+      <div class="glass-shine"></div>
+      <div class="card-shimmer"></div>
+      <div class="glow-halo"></div>
+      <div class="card-header">
+        <div class="card-icon">🔬</div>
+        <div><div class="card-title">Test Ideas</div><div class="card-subtitle">x/y steps · 60%</div></div>
+        <span class="card-badge running">Running</span>
+      </div>
+      <div class="card-bar"><div class="card-bar-fill" style="width:60%"></div></div>
+    </div>
+
+    <div class="card pending" data-color="orange">
+      <div class="glass-shine"></div>
+      <div class="glow-halo"></div>
+      <div class="card-header">
+        <div class="card-icon">📄</div>
+        <div><div class="card-title">Report Results</div><div class="card-subtitle">x/y steps · 0%</div></div>
+        <span class="card-badge waiting">Pending</span>
+      </div>
+      <div class="card-bar"><div class="card-bar-fill" style="width:0%"></div></div>
+    </div>
+  </div>
+
+  <!-- Tree Area — same 3-col grid as cards -->
+  <div class="tree-area">
+    <div class="tree-col"></div><!-- empty col 1 -->
+
+    <div class="tree-col">
+      <div class="tree-stem"></div>
+      <div class="tree-trunk glow-trunk" data-color="blue">
+
+        <!-- Round 5 (done) -->
+        <div class="round-row done-round">
+          <span class="round-dot done"></span>
+          <span class="round-label">Round 5</span>
+          <span class="round-chevron">›</span>
+        </div>
+
+        <!-- Round 6 (done) -->
+        <div class="round-row done-round">
+          <span class="round-dot done"></span>
+          <span class="round-label">Round 6</span>
+          <span class="round-meta">7</span>
+          <span class="round-chevron">›</span>
+        </div>
+
+        <!-- Round 7 (active, expanded) -->
+        <div class="round-row active-round expanded" id="activeRound">
+          <span class="round-dot active"></span>
+          <span class="round-label">Round 7</span>
+          <span class="round-meta">3/5</span>
+          <span class="round-chevron">›</span>
+        </div>
+        <div class="substeps-list" id="activeSubsteps">
+          <div class="substep-row done-child" data-step="plan-approach">
+            <span class="child-dot done"></span>
+            <span class="child-label">Plan Approach</span>
+          </div>
+          <div class="substep-row done-child" data-step="plan-artifacts">
+            <span class="child-dot done"></span>
+            <span class="child-label">Plan Artifacts</span>
+          </div>
+          <div class="substep-row active-child" data-step="create-artifacts" id="activeSubstep">
+            <span class="child-dot running"></span>
+            <span class="child-label">Create Artifacts</span>
+            <span class="child-dots-anim">····</span>
+          </div>
+          <div class="substep-row" data-step="write-paper">
+            <span class="child-dot pending"></span>
+            <span class="child-label">Write Paper</span>
+          </div>
+          <div class="substep-row ellipsis-row">
+            <span class="child-label" style="color:var(--text-muted)">···</span>
+          </div>
+        </div>
+
+        <!-- Round 8 (pending) -->
+        <div class="round-row pending-round">
+          <span class="round-dot pending"></span>
+          <span class="round-label">Round 8</span>
+        </div>
+
+      </div>
+      <div class="token-bar"><div class="token-bar-fill" style="width:35%"></div></div>
+    </div>
+
+    <div class="tree-col"></div><!-- empty col 3 -->
+  </div>
+
+  <!-- Detail Panel -->
+  <div class="detail-panel" id="detailPanel">
+    <div class="detail-summary glass-panel">
+      <div class="dp-header">
+        <span class="dp-dot"></span>
+        <span class="dp-title" id="dpTitle">Create Artifacts</span>
+        <span class="dp-tag">xth.gn</span>
+      </div>
+      <div class="dp-body">
+        <div class="dp-entry"><span class="dp-marker green">›</span> Evaluated 3 candidate architectures, selected transformer-based approach</div>
+        <div class="dp-entry"><span class="dp-marker blue">›</span> Currently training baseline model with proposed modifications (epoch 4/10)</div>
+        <div class="dp-entry dim"><span class="dp-marker gray">›</span> Next: run ablation study on attention mechanisms</div>
+      </div>
+      <div class="dp-footer">12m 08s · $5.41</div>
+    </div>
+    <div class="detail-activity glass-panel">
+      <div class="dp-header">
+        <span class="dp-title">Activity Feed</span>
+        <span class="dp-live"><span class="live-dot"></span> online</span>
+      </div>
+      <div class="dp-body" id="activityFeed">
+        <div class="dp-feed-entry"><span class="dp-feed-dot" style="background:var(--green)"></span><span class="dp-feed-tool">› write_file</span><span class="dp-feed-ts">2m ago</span></div>
+        <div class="dp-feed-entry"><span class="dp-feed-dot" style="background:var(--blue)"></span><span class="dp-feed-tool">› run_experiment</span><span class="dp-feed-ts">5m ago</span></div>
+        <div class="dp-feed-entry"><span class="dp-feed-dot" style="background:var(--green)"></span><span class="dp-feed-tool">› analyze_results</span><span class="dp-feed-ts">8m ago</span></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div id="dotLayer"></div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+
+  /* ================================================================
+     SUBSTEP CLICK → DETAIL PANEL
+     ================================================================ */
+  var detailPanel = document.getElementById('detailPanel');
+  var dpTitle = document.getElementById('dpTitle');
+  var activeDetailStep = null;
+
+  document.querySelectorAll('.substep-row:not(.ellipsis-row)').forEach(function(step) {
+    step.addEventListener('click', function() {
+      if (activeDetailStep === step) {
+        detailPanel.classList.remove('visible');
+        activeDetailStep = null;
+      } else {
+        dpTitle.textContent = step.querySelector('.child-label').textContent;
+        detailPanel.classList.remove('visible');
+        void detailPanel.offsetWidth;
+        detailPanel.classList.add('visible');
+        activeDetailStep = step;
+        detailPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    });
+  });
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && detailPanel.classList.contains('visible')) {
+      detailPanel.classList.remove('visible');
+      activeDetailStep = null;
+    }
+  });
+
+  /* ================================================================
+     ROUND EXPAND / COLLAPSE
+     ================================================================ */
+  document.querySelectorAll('.round-row').forEach(function(row) {
+    row.addEventListener('click', function(e) {
+      var sibling = row.nextElementSibling;
+      if (sibling && sibling.classList.contains('substeps-list')) {
+        row.classList.toggle('expanded');
+        e.stopPropagation();
+      }
+    });
+  });
+
+  // Initialize: expand the active round's substeps
+  var activeSubsteps = document.getElementById('activeSubsteps');
+  if (activeSubsteps) {
+    activeSubsteps.style.maxHeight = activeSubsteps.scrollHeight + 'px';
+    activeSubsteps.style.opacity = '1';
+  }
+
+  /* ================================================================
+     L-SHAPED DOT ANIMATION
+     Dots: card bottom-center → DOWN the trunk → RIGHT to active substep
+     Fixed overlay + getBoundingClientRect = viewport coords
+     ================================================================ */
+  var dotLayer = document.getElementById('dotLayer');
+  var DOT_SPEED = 120;
+  var MAX_DOTS = 8;
+  var activeDots = [];
+
+  function computePath() {
+    var card = document.getElementById('activeCard');
+    var target = document.getElementById('activeSubstep');
+    if (!card || !target) return null;
+
+    var cr = card.getBoundingClientRect();
+    var tr = target.getBoundingClientRect();
+    if (cr.height === 0 || tr.height === 0) return null;
+
+    // Start: bottom center of active card
+    var startX = cr.left + cr.width / 2;
+    var startY = cr.bottom;
+
+    // End: left center of active substep
+    var endX = tr.left + 8;
+    var endY = tr.top + tr.height / 2;
+
+    // L-bend: go DOWN to target Y, then RIGHT to target X
+    var cornerX = startX;
+    var cornerY = endY;
+
+    var leg1 = Math.abs(cornerY - startY);
+    var leg2 = Math.abs(endX - cornerX);
+
+    return {
+      startX: startX, startY: startY,
+      cornerX: cornerX, cornerY: cornerY,
+      endX: endX, endY: endY,
+      leg1: leg1, leg2: leg2,
+      totalDist: leg1 + leg2
+    };
+  }
+
+  function posOnPath(path, progress) {
+    var dist = progress * path.totalDist;
+    if (dist <= path.leg1) {
+      var t = path.leg1 > 0 ? dist / path.leg1 : 0;
+      return { x: path.startX, y: path.startY + (path.cornerY - path.startY) * t };
+    } else {
+      var t = path.leg2 > 0 ? (dist - path.leg1) / path.leg2 : 0;
+      return { x: path.cornerX + (path.endX - path.cornerX) * t, y: path.cornerY };
+    }
+  }
+
+  function easeInOutQuad(t) {
+    return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+  }
+
+  function spawnDot() {
+    if (activeDots.length >= MAX_DOTS) return;
+    var dot = document.createElement('div');
+    dot.className = 'fly-dot';
+    dotLayer.appendChild(dot);
+    activeDots.push({ el: dot, startTime: performance.now() });
+  }
+
+  function animateDots(now) {
+    var path = computePath();
+    if (path && path.totalDist > 20) {
+      var duration = (path.totalDist / DOT_SPEED) * 1000;
+      for (var i = activeDots.length - 1; i >= 0; i--) {
+        var d = activeDots[i];
+        var elapsed = now - d.startTime;
+        var raw = Math.min(elapsed / duration, 1);
+        var progress = easeInOutQuad(raw);
+        var pos = posOnPath(path, progress);
+
+        var opacity = 1;
+        if (raw < 0.08) opacity = raw / 0.08;
+        if (raw > 0.88) opacity = Math.max(0, 1 - (raw - 0.88) / 0.12);
+
+        d.el.style.transform = 'translate(' + (pos.x - 3) + 'px,' + (pos.y - 3) + 'px)';
+        d.el.style.opacity = opacity;
+
+        if (raw >= 1) { d.el.remove(); activeDots.splice(i, 1); }
+      }
+    }
+    requestAnimationFrame(animateDots);
+  }
+
+  function spawnWave() {
+    for (var i = 0; i < 3; i++) {
+      (function(delay) { setTimeout(spawnDot, delay); })(i * 300);
+    }
+  }
+  setInterval(spawnWave, 2500);
+  spawnWave();
+  requestAnimationFrame(animateDots);
+
+  /* ================================================================
+     AMBIENT PARTICLES
+     ================================================================ */
+  (function() {
+    var canvas = document.getElementById('ambientCanvas');
+    if (!canvas) return;
+    var ctx = canvas.getContext('2d');
+    var W, H, particles = [], COUNT = 30;
+    function resize() { W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; }
+    resize(); window.addEventListener('resize', resize);
+
+    var colors = ['167,139,250','59,130,246','245,158,11','34,197,94'];
+    for (var i = 0; i < COUNT; i++) {
+      particles.push({
+        x: Math.random()*(W||1920), y: Math.random()*(H||1080),
+        vx: (Math.random()-0.5)*0.12, vy: (Math.random()-0.5)*0.1,
+        r: Math.random()*1.2+0.4, alpha: Math.random()*0.08+0.02,
+        color: colors[Math.floor(Math.random()*4)]
+      });
+    }
+    function draw() {
+      ctx.clearRect(0,0,W,H);
+      for (var i=0;i<particles.length;i++) {
+        var p=particles[i]; p.x+=p.vx; p.y+=p.vy;
+        if(p.x<-10)p.x=W+10; if(p.x>W+10)p.x=-10;
+        if(p.y<-10)p.y=H+10; if(p.y>H+10)p.y=-10;
+        p.alpha+=(Math.random()-0.5)*0.003;
+        p.alpha=Math.max(0.01,Math.min(0.1,p.alpha));
+        ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+        ctx.fillStyle='rgba('+p.color+','+p.alpha+')'; ctx.fill();
+      }
+      for(var i=0;i<particles.length;i++){
+        for(var j=i+1;j<particles.length;j++){
+          var dx=particles[i].x-particles[j].x,dy=particles[i].y-particles[j].y;
+          var dist=Math.sqrt(dx*dx+dy*dy);
+          if(dist<120){
+            ctx.beginPath(); ctx.moveTo(particles[i].x,particles[i].y);
+            ctx.lineTo(particles[j].x,particles[j].y);
+            ctx.strokeStyle='rgba(148,163,184,'+(0.03*(1-dist/120))+')';
+            ctx.lineWidth=0.5; ctx.stroke();
+          }
+        }
+      }
+      requestAnimationFrame(draw);
+    }
+    draw();
+  })();
+
+});
+</script>
+</body>
+</html>
