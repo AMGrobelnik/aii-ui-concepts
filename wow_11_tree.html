@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Tree of Knowledge</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a0e14;
+    font-family: 'Inter', sans-serif;
+    overflow: hidden;
+    width: 100vw; height: 100vh;
+    color: #e0e0e0;
+  }
+  canvas { position: fixed; top: 0; left: 0; z-index: 1; }
+
+  /* God rays overlay */
+  .god-rays {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    z-index: 2; pointer-events: none; opacity: 0.12;
+    background:
+      linear-gradient(125deg, transparent 30%, rgba(180,220,140,0.15) 35%, transparent 40%),
+      linear-gradient(118deg, transparent 45%, rgba(140,200,180,0.1) 50%, transparent 55%),
+      linear-gradient(132deg, transparent 55%, rgba(200,180,120,0.08) 60%, transparent 65%),
+      linear-gradient(122deg, transparent 20%, rgba(160,210,160,0.06) 25%, transparent 30%);
+    animation: rayShift 12s ease-in-out infinite alternate;
+  }
+  @keyframes rayShift {
+    0% { opacity: 0.08; transform: translateX(-2%); }
+    100% { opacity: 0.15; transform: translateX(2%); }
+  }
+
+  /* Tooltip */
+  #tooltip {
+    position: fixed; z-index: 100; pointer-events: none;
+    background: rgba(10,14,20,0.92); border: 1px solid rgba(120,180,100,0.3);
+    border-radius: 8px; padding: 8px 14px; font-size: 12px;
+    font-weight: 300; letter-spacing: 0.3px; color: #c8dcc0;
+    backdrop-filter: blur(8px); opacity: 0; transition: opacity 0.2s;
+    max-width: 220px;
+  }
+  #tooltip.visible { opacity: 1; }
+  #tooltip .tip-title { font-weight: 500; color: #a8e6a0; margin-bottom: 3px; font-size: 13px; }
+  #tooltip .tip-status { font-size: 11px; opacity: 0.7; }
+
+  /* Info panel */
+  .info-panel {
+    position: fixed; top: 24px; right: 28px; z-index: 50;
+    font-size: 12px; font-weight: 300; letter-spacing: 0.4px;
+    text-align: right; line-height: 1.7; color: rgba(200,220,190,0.6);
+  }
+  .info-panel .run-name { font-weight: 400; color: rgba(168,230,160,0.8); font-size: 14px; }
+  .info-panel .dim { opacity: 0.5; }
+
+  /* Title */
+  .title-area {
+    position: fixed; top: 24px; left: 28px; z-index: 50;
+  }
+  .title-area h1 {
+    font-size: 18px; font-weight: 300; letter-spacing: 1.2px;
+    color: rgba(168,230,160,0.7);
+  }
+  .title-area .sub {
+    font-size: 11px; font-weight: 200; letter-spacing: 0.6px;
+    color: rgba(168,230,160,0.35); margin-top: 3px;
+  }
+</style>
+</head>
+<body>
+
+<canvas id="treeCanvas"></canvas>
+<div class="god-rays"></div>
+
+<div class="title-area">
+  <h1>AI Inventor</h1>
+  <div class="sub">Autonomous Scientific Discovery</div>
+</div>
+
+<div class="info-panel">
+  <div class="run-name">run_2026_03_26_nanofiber</div>
+  <div class="dim">elapsed 14m 38s</div>
+  <div class="dim">$2.47 spent</div>
+</div>
+
+<div id="tooltip">
+  <div class="tip-title"></div>
+  <div class="tip-status"></div>
+</div>
+
+<script>
+// ============================================================
+//  CANVAS SETUP
+// ============================================================
+const canvas = document.getElementById('treeCanvas');
+const ctx = canvas.getContext('2d');
+let W, H, cx, groundY;
+const DPR = window.devicePixelRatio || 1;
+
+function resize() {
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = W * DPR; canvas.height = H * DPR;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  cx = W / 2;
+  groundY = H * 0.88;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ============================================================
+//  UTILITY
+// ============================================================
+const TAU = Math.PI * 2;
+const lerp = (a, b, t) => a + (b - a) * t;
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const rand = (lo, hi) => lo + Math.random() * (hi - lo);
+
+function bezierPoint(t, p0, p1, p2, p3) {
+  const u = 1 - t, uu = u * u, uuu = uu * u, tt = t * t, ttt = tt * t;
+  return {
+    x: uuu * p0.x + 3 * uu * t * p1.x + 3 * u * tt * p2.x + ttt * p3.x,
+    y: uuu * p0.y + 3 * uu * t * p1.y + 3 * u * tt * p2.y + ttt * p3.y
+  };
+}
+
+// ============================================================
+//  TREE DATA — L-system-inspired branch structure
+// ============================================================
+// Each branch: { start, cp1, cp2, end, width, color, growth (0-1), children, leaves, label }
+// growth < 1 means actively growing
+
+const palette = {
+  trunk:    { r: 92, g: 72, b: 48 },
+  trunkHi:  { r: 120, g: 100, b: 65 },
+  branch1:  { r: 80, g: 110, b: 60 },
+  branch2:  { r: 65, g: 100, b: 75 },
+  leafDone: { r: 110, g: 190, b: 90 },
+  leafBud:  { r: 160, g: 200, b: 100 },
+  purple:   { r: 160, g: 120, b: 200 },
+  flower:   { r: 220, g: 180, b: 100 },
+  bare:     { r: 90, g: 85, b: 75 },
+};
+
+function col(c, a = 1) { return `rgba(${c.r},${c.g},${c.b},${a})`; }
+
+// Build the tree procedurally
+function buildTree() {
+  const tree = { branches: [], leaves: [], labels: [], fruits: [] };
+  const baseY = groundY;
+  const trunkH = H * 0.42;
+
+  // --- TRUNK ---
+  const trunkTop = { x: cx, y: baseY - trunkH };
+  tree.branches.push({
+    p0: { x: cx, y: baseY },
+    p1: { x: cx - 8, y: baseY - trunkH * 0.35 },
+    p2: { x: cx + 10, y: baseY - trunkH * 0.7 },
+    p3: trunkTop,
+    w0: 22, w1: 10, color: palette.trunk, colorHi: palette.trunkHi,
+    growth: 1.0, swayAmp: 0.3, swayPhase: 0,
+    depth: 0,
+  });
+  tree.labels.push({ x: cx + 36, y: baseY - trunkH * 0.18, text: 'Seed Hypothesis', alpha: 0.55, size: 11 });
+
+  // --- HYPOTHESIS LOOP — 3 branches going left ---
+  const hypoBase = { x: cx - 4, y: baseY - trunkH * 0.72 };
+  const hypoAngles = [-2.0, -2.35, -1.65]; // radians, roughly left
+  const hypoLens = [H * 0.13, H * 0.16, H * 0.11];
+
+  for (let i = 0; i < 3; i++) {
+    const a = hypoAngles[i];
+    const l = hypoLens[i];
+    const end = { x: hypoBase.x + Math.cos(a) * l, y: hypoBase.y + Math.sin(a) * l };
+    const mid1 = { x: lerp(hypoBase.x, end.x, 0.33) + rand(-12, 12), y: lerp(hypoBase.y, end.y, 0.33) + rand(-8, 8) };
+    const mid2 = { x: lerp(hypoBase.x, end.x, 0.66) + rand(-12, 12), y: lerp(hypoBase.y, end.y, 0.66) + rand(-8, 8) };
+    tree.branches.push({
+      p0: hypoBase, p1: mid1, p2: mid2, p3: end,
+      w0: 7, w1: 3, color: palette.branch2, colorHi: palette.branch1,
+      growth: 1.0, swayAmp: 1.2 + i * 0.3, swayPhase: i * 1.1,
+      depth: 1,
+    });
+    // 2 leaves per branch (gen + review)
+    for (let j = 0; j < 2; j++) {
+      const lt = 0.6 + j * 0.25;
+      const pt = bezierPoint(lt, hypoBase, mid1, mid2, end);
+      const offX = (j === 0 ? -1 : 1) * rand(10, 18);
+      const offY = rand(-14, -6);
+      tree.leaves.push({
+        x: pt.x + offX, y: pt.y + offY,
+        rx: rand(7, 10), ry: rand(9, 13),
+        color1: palette.leafDone, color2: palette.purple,
+        growth: 1.0, swayAmp: 2.0, swayPhase: rand(0, TAU),
+        angle: rand(-0.4, 0.4),
+        label: j === 0 ? 'gen_hypo' : 'review_hypo',
+        status: 'complete',
+      });
+    }
+  }
+  tree.labels.push({ x: hypoBase.x - H * 0.17, y: hypoBase.y - 10, text: 'Hypothesis Loop', alpha: 0.55, size: 11 });
+
+  // --- INVENTION LOOP — main canopy, spreading wide right & center ---
+  const invBase = { x: cx + 6, y: baseY - trunkH * 0.88 };
+  const subSteps = ['gen_strat', 'gen_plan', 'gen_narrative', 'gen_paper_text', 'review_paper', 'revise'];
+
+  // Iteration 1: fully grown, 6 leaves
+  const iter1Angles = [-1.1, -0.7, -0.3, 0.15, 0.55, 0.9];
+  for (let i = 0; i < 6; i++) {
+    const a = iter1Angles[i] - Math.PI / 2;
+    const l = H * rand(0.1, 0.15);
+    const end = { x: invBase.x + Math.cos(a) * l, y: invBase.y + Math.sin(a) * l };
+    const mid1 = { x: lerp(invBase.x, end.x, 0.4) + rand(-10, 10), y: lerp(invBase.y, end.y, 0.4) + rand(-6, 6) };
+    const mid2 = { x: lerp(invBase.x, end.x, 0.7) + rand(-10, 10), y: lerp(invBase.y, end.y, 0.7) + rand(-6, 6) };
+    tree.branches.push({
+      p0: invBase, p1: mid1, p2: mid2, p3: end,
+      w0: 6, w1: 2.5, color: palette.branch1, colorHi: palette.branch2,
+      growth: 1.0, swayAmp: 1.5 + i * 0.2, swayPhase: i * 0.8 + 2,
+      depth: 2,
+    });
+    // Full leaf
+    tree.leaves.push({
+      x: end.x + rand(-6, 6), y: end.y + rand(-10, -3),
+      rx: rand(8, 11), ry: rand(10, 14),
+      color1: palette.leafDone, color2: palette.branch1,
+      growth: 1.0, swayAmp: 2.5, swayPhase: rand(0, TAU),
+      angle: rand(-0.5, 0.5),
+      label: subSteps[i], status: 'complete',
+    });
+    // Some fruits on iteration 1
+    if (i % 2 === 0) {
+      tree.fruits.push({
+        x: end.x + rand(-4, 4), y: end.y + rand(2, 10),
+        r: rand(4, 6), growth: 1.0, swayPhase: rand(0, TAU),
+      });
+    }
+  }
+  tree.labels.push({ x: invBase.x - 60, y: invBase.y + 22, text: 'Invention Loop', alpha: 0.5, size: 12 });
+  tree.labels.push({ x: invBase.x + H * 0.12, y: invBase.y - H * 0.04, text: 'iter 1', alpha: 0.3, size: 10 });
+
+  // Iteration 2: partially grown — 3 full, 1 budding, 2 growing branches
+  const iter2Base = { x: invBase.x + 20, y: invBase.y - H * 0.08 };
+  const iter2Angles = [-0.9, -0.4, 0.1, 0.5, 0.85, 1.2];
+  const iter2Growth = [1.0, 1.0, 1.0, 0.7, 0.45, 0.3]; // growth stages
+  const iter2LeafGrowth = [1.0, 1.0, 1.0, 0.4, 0, 0]; // 0 = no leaf yet
+
+  for (let i = 0; i < 6; i++) {
+    const a = iter2Angles[i] - Math.PI / 2;
+    const l = H * rand(0.08, 0.12);
+    const end = { x: iter2Base.x + Math.cos(a) * l, y: iter2Base.y + Math.sin(a) * l };
+    const mid1 = { x: lerp(iter2Base.x, end.x, 0.4) + rand(-8, 8), y: lerp(iter2Base.y, end.y, 0.4) + rand(-5, 5) };
+    const mid2 = { x: lerp(iter2Base.x, end.x, 0.7) + rand(-8, 8), y: lerp(iter2Base.y, end.y, 0.7) + rand(-5, 5) };
+    tree.branches.push({
+      p0: iter2Base, p1: mid1, p2: mid2, p3: end,
+      w0: 5, w1: 2, color: palette.branch1, colorHi: palette.branch2,
+      growth: iter2Growth[i],
+      growRate: iter2Growth[i] < 1 ? rand(0.008, 0.015) : 0,
+      swayAmp: 1.0 + i * 0.15, swayPhase: i * 0.9 + 5,
+      depth: 3,
+    });
+    if (iter2LeafGrowth[i] > 0) {
+      const pt = bezierPoint(0.9, iter2Base, mid1, mid2, end);
+      tree.leaves.push({
+        x: pt.x + rand(-5, 5), y: pt.y + rand(-8, -2),
+        rx: rand(7, 10), ry: rand(9, 12),
+        color1: iter2LeafGrowth[i] >= 1 ? palette.leafDone : palette.leafBud,
+        color2: palette.branch1,
+        growth: iter2LeafGrowth[i],
+        growRate: iter2LeafGrowth[i] < 1 ? rand(0.006, 0.012) : 0,
+        swayAmp: 1.8, swayPhase: rand(0, TAU),
+        angle: rand(-0.4, 0.4),
+        label: subSteps[i], status: iter2LeafGrowth[i] >= 1 ? 'complete' : 'budding',
+      });
+    }
+  }
+  tree.labels.push({ x: iter2Base.x + H * 0.09, y: iter2Base.y - H * 0.02, text: 'iter 2 (active)', alpha: 0.45, size: 10 });
+
+  // Iteration 3: just tiny buds
+  const iter3Base = { x: iter2Base.x + 15, y: iter2Base.y - H * 0.06 };
+  for (let i = 0; i < 3; i++) {
+    const a = (-0.5 + i * 0.5) - Math.PI / 2;
+    const l = H * 0.04;
+    const end = { x: iter3Base.x + Math.cos(a) * l, y: iter3Base.y + Math.sin(a) * l };
+    tree.branches.push({
+      p0: iter3Base,
+      p1: { x: lerp(iter3Base.x, end.x, 0.5), y: lerp(iter3Base.y, end.y, 0.5) },
+      p2: { x: lerp(iter3Base.x, end.x, 0.7), y: lerp(iter3Base.y, end.y, 0.7) },
+      p3: end,
+      w0: 3, w1: 1.5, color: palette.branch2, colorHi: palette.bare,
+      growth: 0.2,
+      growRate: rand(0.003, 0.006),
+      swayAmp: 0.5, swayPhase: i * 2,
+      depth: 4,
+    });
+    // Tiny bud
+    tree.leaves.push({
+      x: end.x, y: end.y - 4,
+      rx: 3, ry: 4,
+      color1: palette.leafBud, color2: palette.branch2,
+      growth: 0.15,
+      growRate: rand(0.002, 0.005),
+      swayAmp: 0.8, swayPhase: rand(0, TAU),
+      angle: 0, label: 'pending', status: 'bud',
+    });
+  }
+  tree.labels.push({ x: iter3Base.x + 30, y: iter3Base.y + 5, text: 'iter 3', alpha: 0.25, size: 10 });
+
+  // --- PAPER & REPO — bare branches at the top ---
+  const paperBase = { x: cx + 10, y: baseY - trunkH * 1.02 };
+  for (let i = 0; i < 4; i++) {
+    const a = (-0.8 + i * 0.5) - Math.PI / 2;
+    const l = H * rand(0.06, 0.09);
+    const end = { x: paperBase.x + Math.cos(a) * l, y: paperBase.y + Math.sin(a) * l };
+    tree.branches.push({
+      p0: paperBase,
+      p1: { x: lerp(paperBase.x, end.x, 0.4) + rand(-5, 5), y: lerp(paperBase.y, end.y, 0.4) },
+      p2: { x: lerp(paperBase.x, end.x, 0.7) + rand(-5, 5), y: lerp(paperBase.y, end.y, 0.7) },
+      p3: end,
+      w0: 3.5, w1: 1, color: palette.bare, colorHi: palette.bare,
+      growth: 1.0, swayAmp: 1.8, swayPhase: i * 1.5 + 3,
+      depth: 5,
+    });
+  }
+  tree.labels.push({ x: paperBase.x - 40, y: paperBase.y - H * 0.07, text: 'Paper & Repo', alpha: 0.3, size: 11 });
+
+  return tree;
+}
+
+const tree = buildTree();
+
+// ============================================================
+//  PARTICLES — floating pollen / fireflies
+// ============================================================
+const particles = [];
+const MAX_PARTICLES = 60;
+
+function spawnParticle() {
+  const fromTree = Math.random() > 0.3;
+  return {
+    x: fromTree ? cx + rand(-80, 80) : rand(0, W),
+    y: fromTree ? rand(groundY - H * 0.5, groundY - H * 0.15) : rand(H * 0.2, groundY),
+    vx: rand(-0.3, 0.3),
+    vy: rand(-0.6, -0.15),
+    r: rand(1, 2.5),
+    alpha: rand(0.2, 0.6),
+    life: rand(120, 400),
+    maxLife: 0,
+    phase: rand(0, TAU),
+    glow: Math.random() > 0.6,
+  };
+}
+for (let i = 0; i < MAX_PARTICLES; i++) {
+  const p = spawnParticle();
+  p.maxLife = p.life;
+  p.life = rand(0, p.maxLife); // stagger
+  particles.push(p);
+}
+
+// ============================================================
+//  DRAWING HELPERS
+// ============================================================
+
+function drawSwayedBranch(b, t) {
+  const sway = Math.sin(t * 0.8 + b.swayPhase) * b.swayAmp;
+  const sway2 = Math.sin(t * 0.6 + b.swayPhase + 1) * b.swayAmp * 0.6;
+  const g = clamp(b.growth, 0, 1);
+
+  // Compute swayed control points
+  const sp1 = { x: b.p1.x + sway * 0.3, y: b.p1.y };
+  const sp2 = { x: b.p2.x + sway * 0.7, y: b.p2.y };
+  const sp3 = { x: b.p3.x + sway + sway2, y: b.p3.y };
+
+  // If not fully grown, interpolate end point
+  const endPt = g < 1 ? {
+    x: lerp(b.p0.x, sp3.x, g),
+    y: lerp(b.p0.y, sp3.y, g),
+  } : sp3;
+  const w1 = lerp(b.w0, b.w1, g);
+
+  // Organic branch stroke — draw as tapered path
+  const steps = 20;
+  ctx.lineCap = 'round';
+  for (let i = 0; i < steps; i++) {
+    const t0 = i / steps * g;
+    const t1 = (i + 1) / steps * g;
+    const pt0 = bezierPoint(t0, b.p0, sp1, sp2, endPt);
+    const pt1 = bezierPoint(t1, b.p0, sp1, sp2, endPt);
+    const w = lerp(b.w0, w1, i / steps);
+
+    // Color gradient along branch
+    const mix = i / steps;
+    const cr = lerp(b.color.r, b.colorHi.r, mix);
+    const cg = lerp(b.color.g, b.colorHi.g, mix);
+    const cb = lerp(b.color.b, b.colorHi.b, mix);
+
+    ctx.beginPath();
+    ctx.moveTo(pt0.x, pt0.y);
+    ctx.lineTo(pt1.x, pt1.y);
+    ctx.strokeStyle = `rgba(${cr|0},${cg|0},${cb|0},${0.7 + mix * 0.3})`;
+    ctx.lineWidth = w;
+    ctx.stroke();
+  }
+
+  // Return tip position for leaf attachment
+  return bezierPoint(g, b.p0, sp1, sp2, endPt);
+}
+
+function drawLeaf(leaf, t) {
+  const g = clamp(leaf.growth, 0, 1);
+  if (g < 0.02) return;
+
+  const sway = Math.sin(t * 1.2 + leaf.swayPhase) * leaf.swayAmp;
+  const x = leaf.x + sway;
+  const y = leaf.y;
+  const rx = leaf.rx * g;
+  const ry = leaf.ry * g;
+
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(leaf.angle + Math.sin(t * 0.9 + leaf.swayPhase) * 0.08);
+
+  // Leaf gradient
+  const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, Math.max(rx, ry));
+  const c1 = leaf.color1, c2 = leaf.color2;
+  const pulseAlpha = leaf.status === 'budding'
+    ? 0.5 + 0.3 * Math.sin(t * 3 + leaf.swayPhase)
+    : 0.85;
+  grad.addColorStop(0, `rgba(${c1.r},${c1.g},${c1.b},${pulseAlpha})`);
+  grad.addColorStop(1, `rgba(${c2.r},${c2.g},${c2.b},${pulseAlpha * 0.4})`);
+
+  ctx.beginPath();
+  ctx.ellipse(0, 0, rx, ry, 0, 0, TAU);
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Subtle vein line
+  if (g > 0.5) {
+    ctx.beginPath();
+    ctx.moveTo(0, -ry * 0.7);
+    ctx.lineTo(0, ry * 0.7);
+    ctx.strokeStyle = `rgba(255,255,255,${0.08 * g})`;
+    ctx.lineWidth = 0.5;
+    ctx.stroke();
+  }
+
+  // Glow for budding leaves
+  if (leaf.status === 'budding') {
+    const glowR = Math.max(rx, ry) * 2.5;
+    const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, glowR);
+    glow.addColorStop(0, `rgba(${c1.r},${c1.g},${c1.b},${0.15 * Math.sin(t * 2.5) * 0.5 + 0.15})`);
+    glow.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.beginPath();
+    ctx.ellipse(0, 0, glowR, glowR, 0, 0, TAU);
+    ctx.fillStyle = glow;
+    ctx.fill();
+  }
+
+  ctx.restore();
+
+  // Store screen position for hover detection
+  leaf._sx = x; leaf._sy = y; leaf._sr = Math.max(rx, ry) + 4;
+}
+
+function drawFruit(fruit, t) {
+  const g = clamp(fruit.growth, 0, 1);
+  if (g < 0.05) return;
+  const sway = Math.sin(t * 0.7 + fruit.swayPhase) * 1.5;
+  const x = fruit.x + sway;
+  const y = fruit.y;
+  const r = fruit.r * g;
+
+  // Warm glow
+  const glow = ctx.createRadialGradient(x, y, 0, x, y, r * 4);
+  glow.addColorStop(0, `rgba(220,180,80,${0.15 * g})`);
+  glow.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.beginPath();
+  ctx.arc(x, y, r * 4, 0, TAU);
+  ctx.fillStyle = glow;
+  ctx.fill();
+
+  // Fruit body
+  const grad = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, 0, x, y, r);
+  grad.addColorStop(0, `rgba(255,220,120,${0.9 * g})`);
+  grad.addColorStop(1, `rgba(200,140,50,${0.7 * g})`);
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, TAU);
+  ctx.fillStyle = grad;
+  ctx.fill();
+}
+
+function drawGround(t) {
+  // Subtle ground gradient
+  const groundGrad = ctx.createLinearGradient(0, groundY - 20, 0, H);
+  groundGrad.addColorStop(0, 'rgba(20,35,15,0)');
+  groundGrad.addColorStop(0.15, 'rgba(20,35,15,0.4)');
+  groundGrad.addColorStop(1, 'rgba(10,18,8,0.7)');
+  ctx.fillStyle = groundGrad;
+  ctx.fillRect(0, groundY - 20, W, H - groundY + 20);
+
+  // Grass tufts
+  const grassCount = Math.floor(W / 8);
+  for (let i = 0; i < grassCount; i++) {
+    const gx = (i / grassCount) * W + rand(-3, 3);
+    const gh = rand(4, 14);
+    const sway = Math.sin(t * 1.5 + i * 0.3) * 2;
+    const alpha = 0.15 + 0.1 * Math.sin(i * 0.7);
+
+    ctx.beginPath();
+    ctx.moveTo(gx, groundY);
+    ctx.quadraticCurveTo(gx + sway, groundY - gh * 0.6, gx + sway * 1.3, groundY - gh);
+    ctx.strokeStyle = `rgba(60,100,40,${alpha})`;
+    ctx.lineWidth = rand(0.8, 1.5);
+    ctx.stroke();
+  }
+
+  // Ground line
+  ctx.beginPath();
+  ctx.moveTo(0, groundY);
+  ctx.lineTo(W, groundY);
+  ctx.strokeStyle = 'rgba(60,100,40,0.2)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+}
+
+function drawParticles(t, dt) {
+  for (const p of particles) {
+    p.x += p.vx + Math.sin(t * 0.5 + p.phase) * 0.2;
+    p.y += p.vy;
+    p.life -= dt;
+
+    if (p.life <= 0) {
+      Object.assign(p, spawnParticle());
+      p.maxLife = p.life;
+      return;
+    }
+
+    const fadeIn = clamp(1 - p.life / p.maxLife, 0, 1) * 3;
+    const fadeOut = clamp(p.life / 60, 0, 1);
+    const a = p.alpha * Math.min(fadeIn, fadeOut);
+
+    if (p.glow) {
+      const gr = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * 4);
+      gr.addColorStop(0, `rgba(180,220,100,${a * 0.5})`);
+      gr.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r * 4, 0, TAU);
+      ctx.fillStyle = gr;
+      ctx.fill();
+    }
+
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r * (p.glow ? 1.2 : 1), 0, TAU);
+    ctx.fillStyle = p.glow
+      ? `rgba(200,240,140,${a})`
+      : `rgba(180,200,160,${a * 0.6})`;
+    ctx.fill();
+  }
+}
+
+function drawLabels(t) {
+  for (const lb of tree.labels) {
+    const sway = Math.sin(t * 0.4 + lb.x * 0.01) * 1.5;
+    ctx.font = `${lb.size || 11}px Inter`;
+    ctx.fillStyle = `rgba(220,240,210,${lb.alpha})`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(lb.text, lb.x + sway, lb.y);
+  }
+}
+
+// ============================================================
+//  TOOLTIP
+// ============================================================
+const tooltip = document.getElementById('tooltip');
+const tipTitle = tooltip.querySelector('.tip-title');
+const tipStatus = tooltip.querySelector('.tip-status');
+let mouseX = 0, mouseY = 0;
+
+canvas.addEventListener('mousemove', (e) => {
+  mouseX = e.clientX; mouseY = e.clientY;
+});
+
+function updateTooltip() {
+  let hit = null;
+  for (const leaf of tree.leaves) {
+    if (leaf._sx === undefined) continue;
+    const dx = mouseX - leaf._sx, dy = mouseY - leaf._sy;
+    if (dx * dx + dy * dy < leaf._sr * leaf._sr * 4) {
+      hit = leaf; break;
+    }
+  }
+  if (hit) {
+    tipTitle.textContent = hit.label;
+    const statusMap = { complete: 'Complete', budding: 'Growing...', bud: 'Pending' };
+    tipStatus.textContent = statusMap[hit.status] || hit.status;
+    tooltip.classList.add('visible');
+    tooltip.style.left = (mouseX + 16) + 'px';
+    tooltip.style.top = (mouseY - 10) + 'px';
+  } else {
+    tooltip.classList.remove('visible');
+  }
+}
+
+// ============================================================
+//  ROOT GLOW — subtle radiance at trunk base
+// ============================================================
+function drawRootGlow(t) {
+  const pulse = 0.6 + 0.2 * Math.sin(t * 0.5);
+  const glow = ctx.createRadialGradient(cx, groundY, 0, cx, groundY, 80);
+  glow.addColorStop(0, `rgba(100,160,60,${0.08 * pulse})`);
+  glow.addColorStop(0.5, `rgba(60,100,40,${0.04 * pulse})`);
+  glow.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.beginPath();
+  ctx.arc(cx, groundY, 80, 0, TAU);
+  ctx.fillStyle = glow;
+  ctx.fill();
+
+  // Small roots
+  for (let i = 0; i < 5; i++) {
+    const angle = Math.PI * (0.1 + i * 0.2);
+    const len = 25 + i * 8;
+    const rx = cx + Math.cos(angle) * len;
+    const ry = groundY + Math.sin(angle) * len * 0.3;
+    ctx.beginPath();
+    ctx.moveTo(cx, groundY);
+    ctx.quadraticCurveTo(
+      cx + Math.cos(angle) * len * 0.5,
+      groundY + 8,
+      rx, ry
+    );
+    ctx.strokeStyle = `rgba(80,60,40,${0.25 - i * 0.03})`;
+    ctx.lineWidth = 3 - i * 0.4;
+    ctx.stroke();
+  }
+}
+
+// ============================================================
+//  CANOPY AMBIENT GLOW
+// ============================================================
+function drawCanopyGlow(t) {
+  const pulse = 0.5 + 0.15 * Math.sin(t * 0.3);
+  const glow = ctx.createRadialGradient(cx + 20, groundY - H * 0.4, 20, cx + 20, groundY - H * 0.4, H * 0.28);
+  glow.addColorStop(0, `rgba(80,140,60,${0.06 * pulse})`);
+  glow.addColorStop(0.6, `rgba(60,110,50,${0.03 * pulse})`);
+  glow.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.beginPath();
+  ctx.arc(cx + 20, groundY - H * 0.4, H * 0.28, 0, TAU);
+  ctx.fillStyle = glow;
+  ctx.fill();
+}
+
+// ============================================================
+//  MAIN LOOP
+// ============================================================
+let lastTime = 0;
+const grassSeedX = Array.from({ length: Math.ceil(2000 / 8) }, () => rand(-3, 3));
+const grassSeedH = Array.from({ length: Math.ceil(2000 / 8) }, () => rand(4, 14));
+
+function frame(now) {
+  const t = now * 0.001;
+  const dt = lastTime ? (now - lastTime) / 16.67 : 1;
+  lastTime = now;
+
+  ctx.clearRect(0, 0, W, H);
+
+  // Background gradient — deep dark with hint of night sky
+  const bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, '#060a10');
+  bg.addColorStop(0.4, '#0a0e14');
+  bg.addColorStop(0.85, '#0d1218');
+  bg.addColorStop(1, '#0f1a12');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, W, H);
+
+  // Distant stars
+  if (!frame._stars) {
+    frame._stars = Array.from({ length: 40 }, () => ({
+      x: rand(0, 2000), y: rand(0, 500),
+      r: rand(0.3, 1.2), phase: rand(0, TAU),
+    }));
+  }
+  for (const s of frame._stars) {
+    const a = 0.15 + 0.1 * Math.sin(t * 0.8 + s.phase);
+    ctx.beginPath();
+    ctx.arc(s.x / 2000 * W, s.y / 500 * H * 0.4, s.r, 0, TAU);
+    ctx.fillStyle = `rgba(200,220,240,${a})`;
+    ctx.fill();
+  }
+
+  drawCanopyGlow(t);
+  drawGround(t);
+  drawRootGlow(t);
+
+  // Update growing elements
+  for (const b of tree.branches) {
+    if (b.growRate && b.growth < 1) {
+      b.growth = Math.min(1, b.growth + b.growRate * dt * 0.5);
+    }
+  }
+  for (const leaf of tree.leaves) {
+    if (leaf.growRate && leaf.growth < 1) {
+      leaf.growth = Math.min(1, leaf.growth + leaf.growRate * dt * 0.5);
+    }
+  }
+
+  // Draw branches sorted by depth (back to front)
+  const sorted = [...tree.branches].sort((a, b) => a.depth - b.depth);
+  for (const b of sorted) drawSwayedBranch(b, t);
+
+  // Fruits behind leaves
+  for (const f of tree.fruits) drawFruit(f, t);
+
+  // Leaves
+  for (const leaf of tree.leaves) drawLeaf(leaf, t);
+
+  // Particles
+  drawParticles(t, dt);
+
+  // Labels
+  drawLabels(t);
+
+  // Tooltip
+  updateTooltip();
+
+  requestAnimationFrame(frame);
+}
+
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

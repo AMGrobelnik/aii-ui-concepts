@@ -1,0 +1,1534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Tree v16 (Hover Preview)</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    /* Slate palette */
+    --bg: #0c0f14;
+    --bg-deep: #080a0e;
+    --surface: #111521;
+    --surface-2: #161b28;
+    --surface-3: #1c2233;
+    --surface-h: #1f2740;
+    --border: #1e2538;
+    --border-subtle: #283046;
+    --border-hover: #384060;
+    --green: #22c55e;
+    --green-dim: rgba(34,197,94,0.10);
+    --green-glow: rgba(34,197,94,0.25);
+    --green-soft: rgba(34,197,94,0.5);
+    --purple: #8b5cf6;
+    --purple-dim: rgba(139,92,246,0.10);
+    --purple-glow: rgba(139,92,246,0.25);
+    --purple-soft: rgba(139,92,246,0.5);
+    --blue: #3b82f6;
+    --blue-dim: rgba(59,130,246,0.10);
+    --blue-glow: rgba(59,130,246,0.25);
+    --blue-soft: rgba(59,130,246,0.5);
+    --orange: #f59e0b;
+    --orange-dim: rgba(245,158,11,0.08);
+    --orange-glow: rgba(245,158,11,0.20);
+    --orange-soft: rgba(245,158,11,0.5);
+    --text: #e0e4ee;
+    --text-dim: #8892a8;
+    --text-muted: #556078;
+    --text-faint: #384058;
+    --glass-bg: rgba(14,18,28,0.72);
+    --glass-bg-solid: rgba(16,21,33,0.88);
+    --glass-border: rgba(255,255,255,0.06);
+    --glass-border-hover: rgba(255,255,255,0.10);
+    --tooltip-bg: rgba(12,15,21,0.80);
+    --tooltip-border: rgba(255,255,255,0.08);
+  }
+
+  html, body {
+    height: 100%; width: 100%;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  #app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+
+  /* ── Top Bar ── */
+  .topbar { display: flex; align-items: center; justify-content: space-between; padding: 0 24px; height: 46px; min-height: 46px; background: var(--surface); border-bottom: 1px solid var(--border); z-index: 200; flex-shrink: 0; }
+  .topbar-left { display: flex; align-items: center; gap: 14px; }
+  .brand { font-weight: 700; font-size: 13px; letter-spacing: 0.04em; color: var(--text-dim); text-transform: uppercase; }
+  .brand-accent { color: var(--blue); }
+  .sep { width: 1px; height: 18px; background: var(--border); flex-shrink: 0; }
+  .run-badge { display: flex; align-items: center; gap: 8px; padding: 4px 12px; border-radius: 100px; background: var(--blue-dim); border: 1px solid rgba(59,130,246,0.15); font-size: 12px; font-weight: 500; color: var(--blue); }
+  .live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--blue); animation: livePulse 1.8s ease-in-out infinite; }
+  @keyframes livePulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.7); } }
+  .topbar-center { display: flex; align-items: center; gap: 16px; font-size: 12px; color: var(--text-dim); }
+  .topbar-center .val { font-variant-numeric: tabular-nums; font-weight: 500; color: var(--text); }
+  .topbar-right { display: flex; align-items: center; gap: 16px; font-size: 12px; color: var(--text-dim); }
+  .cost-val { font-weight: 600; color: var(--green); font-variant-numeric: tabular-nums; }
+
+  /* ── Body Layout ── */
+  .body-layout { flex: 1; display: flex; overflow: hidden; position: relative; }
+  /* ── Tree Viewport ── */
+  .tree-viewport { flex: 1; position: relative; overflow: hidden; cursor: grab; }
+  .tree-viewport:active { cursor: grabbing; }
+  .tree-viewport.has-dashboard { flex: 0 0 55%; border-right: 1px solid var(--border); }
+  .tree-canvas { position: absolute; top: 0; left: 0; width: 5000px; height: 4000px; transform-origin: 0 0; }
+  /* ── SVG Branches ── */
+  .branch-svg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+  .branch-svg path { fill: none; stroke-width: 2; transition: opacity 0.4s; }
+  .branch-svg path.glow { stroke-width: 6; opacity: 0.12; filter: blur(4px); }
+  .branch-done { stroke-dasharray: none; opacity: 0.7; }
+  .branch-active { stroke-dasharray: 8 4; animation: dashFlow 1.2s linear infinite; }
+  .branch-pending { stroke-dasharray: 3 6; opacity: 0.22; }
+  @keyframes dashFlow { to { stroke-dashoffset: -24; } }
+  /* ── Particle Canvas ── */
+  #particleCanvas { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+
+  /* ── Tree Node Base ── */
+  .tree-node {
+    position: absolute;
+    z-index: 10;
+    transition: opacity 0.4s ease, transform 0.4s ease;
+    user-select: none;
+  }
+  .tree-node.entering {
+    opacity: 0;
+    transform: translateX(-16px) scale(0.94);
+  }
+
+  /* ── Root Node ── */
+  .root-node {
+    width: 60px; height: 60px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, var(--surface-3), var(--surface));
+    border: 2px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 30px rgba(59,130,246,0.06), 0 0 60px rgba(139,92,246,0.03);
+    animation: rootBreathe 5s ease-in-out infinite;
+    position: relative;
+    cursor: pointer;
+  }
+  .root-node::after {
+    content: '';
+    position: absolute;
+    inset: -8px;
+    border-radius: 50%;
+    border: 1px solid rgba(59,130,246,0.06);
+    animation: rootRing 5s ease-in-out infinite;
+  }
+  @keyframes rootBreathe {
+    0%, 100% { box-shadow: 0 0 30px rgba(59,130,246,0.06), 0 0 60px rgba(139,92,246,0.03); }
+    50% { box-shadow: 0 0 44px rgba(59,130,246,0.12), 0 0 80px rgba(139,92,246,0.05); }
+  }
+  @keyframes rootRing {
+    0%, 100% { transform: scale(1); opacity: 0.5; }
+    50% { transform: scale(1.12); opacity: 0.2; }
+  }
+  .root-icon { font-size: 22px; filter: grayscale(0.2); }
+  .root-label {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 10px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    text-align: center;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+  }
+
+  /* ── Module Node ── */
+  .module-node {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    border-radius: 12px;
+    background: var(--glass-bg);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--glass-border);
+    min-width: 148px;
+    transition: all 0.3s ease;
+    animation: nodeFloat 7s ease-in-out infinite;
+    position: relative;
+    cursor: pointer;
+  }
+  .module-node::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; bottom: 0;
+    width: 3px;
+    border-radius: 12px 0 0 12px;
+  }
+  .module-node:hover {
+    border-color: var(--glass-border-hover);
+    transform: translateX(3px);
+    background: var(--glass-bg-solid);
+  }
+  .module-node.expanded {
+    border-color: rgba(255,255,255,0.10);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+  }
+  @keyframes nodeFloat {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-2px); }
+  }
+  .module-node:hover { animation-play-state: paused; }
+  .module-status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .module-info { display: flex; flex-direction: column; gap: 2px; }
+  .module-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+  }
+  .module-meta {
+    font-size: 10px;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+  .module-expand-icon {
+    margin-left: auto;
+    font-size: 10px;
+    color: var(--text-muted);
+    transition: transform 0.3s;
+  }
+  .module-node.expanded .module-expand-icon {
+    transform: rotate(90deg);
+    color: var(--text-dim);
+  }
+
+  /* Module color variants */
+  .module-green::before { background: var(--green); }
+  .module-green .module-status-dot { background: var(--green); box-shadow: 0 0 8px var(--green-glow); }
+  .module-purple::before { background: var(--purple); }
+  .module-purple .module-status-dot { background: var(--purple); box-shadow: 0 0 8px var(--purple-glow); }
+  .module-blue::before { background: var(--blue); }
+  .module-blue .module-status-dot { background: var(--blue); box-shadow: 0 0 8px var(--blue-glow); animation: dotPulse 1.8s ease-in-out infinite; }
+  .module-orange::before { background: var(--orange); opacity: 0.4; }
+  .module-orange .module-status-dot { background: var(--orange); opacity: 0.35; }
+  .module-orange .module-name { color: var(--text-muted); }
+
+  /* Active module glow */
+  .module-node.is-active {
+    box-shadow: 0 0 30px var(--blue-glow), 0 0 60px rgba(59,130,246,0.06);
+    border-color: rgba(59,130,246,0.18);
+  }
+  .module-node.is-active::after {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: 16px;
+    border: 1.5px solid rgba(59,130,246,0.10);
+    animation: activeRing 3s ease-in-out infinite;
+  }
+  @keyframes activeRing {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 0.15; }
+  }
+  @keyframes dotPulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.8); }
+  }
+
+  /* ── Iteration Node ── */
+  .iter-node {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 12px;
+    border-radius: 8px;
+    background: var(--glass-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    transition: all 0.3s;
+    cursor: pointer;
+    animation: nodeFloat 7s ease-in-out infinite;
+    white-space: nowrap;
+  }
+  .iter-node:hover {
+    border-color: var(--glass-border-hover);
+    transform: translateX(2px);
+  }
+  .iter-label {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text);
+  }
+  .iter-badge {
+    font-size: 9px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 4px;
+  }
+  .iter-badge-done { background: var(--green-dim); color: var(--green); }
+  .iter-badge-active { background: var(--blue-dim); color: var(--blue); }
+  .iter-badge-pending { background: rgba(85,96,120,0.12); color: var(--text-muted); }
+
+  /* ── Sub-module Node (36px height) ── */
+  .sub-node {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 0 10px;
+    height: 36px;
+    border-radius: 8px;
+    background: var(--glass-bg);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--glass-border);
+    transition: all 0.25s ease;
+    cursor: pointer;
+    white-space: nowrap;
+    animation: nodeFloat 8s ease-in-out infinite;
+    position: relative;
+  }
+  .sub-node:hover {
+    border-color: var(--border-hover);
+    background: var(--glass-bg-solid);
+    transform: scale(1.03);
+    z-index: 30;
+  }
+  .sub-node.is-done:hover {
+    box-shadow: 0 0 14px var(--green-glow);
+    border-color: rgba(34,197,94,0.2);
+  }
+  .sub-node.is-active:hover {
+    box-shadow: 0 0 14px var(--blue-glow);
+    border-color: rgba(59,130,246,0.25);
+  }
+  .sub-icon {
+    font-size: 10px;
+    width: 18px; height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 5px;
+    flex-shrink: 0;
+    font-weight: 600;
+  }
+  .sub-icon-done { background: var(--green-dim); color: var(--green); }
+  .sub-icon-active { background: var(--blue-dim); color: var(--blue); animation: dotPulse 1.8s ease-in-out infinite; }
+  .sub-icon-pending { background: rgba(85,96,120,0.08); color: var(--text-muted); }
+  .sub-name {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-dim);
+  }
+  .sub-node.is-done .sub-name { color: var(--text); }
+  .sub-node.is-active .sub-name { color: var(--blue); font-weight: 600; }
+  .sub-node.is-active {
+    border-color: rgba(59,130,246,0.18);
+    box-shadow: 0 0 12px rgba(59,130,246,0.10);
+  }
+
+  /* ── Hover Tooltip (280px, glassmorphism) ── */
+  .hover-tooltip {
+    position: fixed;
+    z-index: 500;
+    width: 280px;
+    background: var(--tooltip-bg);
+    backdrop-filter: blur(24px) saturate(1.3);
+    -webkit-backdrop-filter: blur(24px) saturate(1.3);
+    border: 1px solid var(--tooltip-border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    box-shadow:
+      0 8px 32px rgba(0,0,0,0.45),
+      0 0 1px rgba(255,255,255,0.06),
+      inset 0 1px 0 rgba(255,255,255,0.04);
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(4px) scale(0.97);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+  }
+  .hover-tooltip.visible {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  .hover-tooltip::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    border-radius: 12px 12px 0 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent);
+  }
+  .hover-tooltip::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 12px;
+    background: linear-gradient(135deg, rgba(255,255,255,0.02) 0%, transparent 50%);
+    pointer-events: none;
+  }
+  .tt-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    padding-bottom: 9px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    position: relative;
+    z-index: 1;
+  }
+  .tt-status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .tt-status-dot.done { background: var(--green); box-shadow: 0 0 6px var(--green-glow); }
+  .tt-status-dot.active { background: var(--blue); box-shadow: 0 0 6px var(--blue-glow); animation: dotPulse 1.8s ease-in-out infinite; }
+  .tt-status-dot.pending { background: var(--text-muted); opacity: 0.5; }
+  .tt-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    flex: 1;
+  }
+  .tt-status-badge {
+    font-size: 9px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .tt-status-badge.done { background: var(--green-dim); color: var(--green); }
+  .tt-status-badge.active { background: var(--blue-dim); color: var(--blue); }
+  .tt-status-badge.pending { background: rgba(85,96,120,0.10); color: var(--text-muted); }
+  .tt-summary {
+    font-size: 11px;
+    line-height: 1.55;
+    color: var(--text-dim);
+    margin-bottom: 10px;
+    position: relative;
+    z-index: 1;
+  }
+  .tt-footer {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding-top: 9px;
+    border-top: 1px solid rgba(255,255,255,0.04);
+    font-size: 10px;
+    color: var(--text-muted);
+    position: relative;
+    z-index: 1;
+  }
+  .tt-footer-item { display: flex; align-items: center; gap: 5px; }
+  .tt-footer-item .tt-icon { font-size: 10px; opacity: 0.6; }
+  .tt-footer-val { font-weight: 600; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+  .tt-click-hint { margin-left: auto; font-size: 9px; color: var(--text-faint); font-style: italic; }
+
+  /* ── Dashboard Panel ── */
+  .dashboard-panel {
+    flex: 0 0 45%;
+    background: var(--bg-deep);
+    overflow-y: auto;
+    display: none;
+    flex-direction: column;
+    animation: panelSlideIn 0.35s ease;
+  }
+  .dashboard-panel.visible { display: flex; }
+  @keyframes panelSlideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+  .dashboard-panel::-webkit-scrollbar { width: 5px; }
+  .dashboard-panel::-webkit-scrollbar-track { background: transparent; }
+  .dashboard-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  .dash-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .dash-header-left { display: flex; align-items: center; gap: 10px; }
+  .dash-title { font-size: 14px; font-weight: 600; color: var(--text); }
+  .dash-close { width: 28px; height: 28px; border-radius: 6px; background: var(--surface); border: 1px solid var(--border); color: var(--text-dim); font-size: 14px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; }
+  .dash-close:hover { background: var(--surface-2); color: var(--text); border-color: var(--border-subtle); }
+  .dash-body { padding: 16px 20px; display: flex; flex-direction: column; gap: 16px; }
+  .dash-status-banner { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--glass-border); }
+  .dash-status-banner.done { background: rgba(34,197,94,0.04); border-color: rgba(34,197,94,0.12); }
+  .dash-status-banner.active { background: rgba(59,130,246,0.04); border-color: rgba(59,130,246,0.12); }
+  .dash-status-banner.pending { background: rgba(85,96,120,0.03); border-color: rgba(85,96,120,0.08); }
+  .dash-status-icon { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .dash-status-banner.done .dash-status-icon { background: var(--green); box-shadow: 0 0 6px var(--green-glow); }
+  .dash-status-banner.active .dash-status-icon { background: var(--blue); box-shadow: 0 0 6px var(--blue-glow); animation: dotPulse 1.8s ease-in-out infinite; }
+  .dash-status-banner.pending .dash-status-icon { background: var(--text-muted); opacity: 0.5; }
+  .dash-status-text { font-size: 12px; font-weight: 500; color: var(--text); }
+  .dash-stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .dash-stat-card { padding: 10px 12px; border-radius: 8px; background: var(--surface); border: 1px solid var(--border); }
+  .dash-stat-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 4px; }
+  .dash-stat-value { font-size: 16px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+  .dash-section-title { font-size: 11px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+  .dash-summary-text { font-size: 12px; line-height: 1.65; color: var(--text-dim); padding: 12px 14px; background: var(--surface); border-radius: 8px; border: 1px solid var(--border); border-left: 3px solid var(--border-subtle); }
+  .dash-summary-text.color-green { border-left-color: var(--green-soft); }
+  .dash-summary-text.color-purple { border-left-color: var(--purple-soft); }
+  .dash-summary-text.color-blue { border-left-color: var(--blue-soft); }
+  .dash-summary-text.color-orange { border-left-color: var(--orange-soft); }
+  .dash-activity-list { display: flex; flex-direction: column; gap: 6px; }
+  .dash-activity-item { display: flex; align-items: flex-start; gap: 10px; padding: 8px 10px; border-radius: 6px; background: var(--surface); border: 1px solid var(--border); font-size: 11px; color: var(--text-dim); line-height: 1.5; }
+  .dai-icon { width: 16px; height: 16px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 9px; flex-shrink: 0; margin-top: 1px; }
+  .dai-done { background: var(--green-dim); color: var(--green); }
+  .dai-active { background: var(--blue-dim); color: var(--blue); }
+  .dai-pending { background: rgba(85,96,120,0.08); color: var(--text-muted); }
+
+  /* ── Bottom Bar ── */
+  .bottom-bar { display: flex; align-items: center; justify-content: space-between; padding: 0 24px; height: 34px; min-height: 34px; background: var(--surface); border-top: 1px solid var(--border); font-size: 11px; color: var(--text-muted); z-index: 200; flex-shrink: 0; }
+  .bottom-bar .stats { display: flex; gap: 20px; }
+  .stat-val { color: var(--text-dim); font-weight: 500; font-variant-numeric: tabular-nums; }
+  .bottom-bar .hint { color: var(--text-faint); font-size: 10px; }
+  .hint kbd { background: var(--surface-3); padding: 1px 5px; border-radius: 3px; font-family: inherit; font-size: 10px; border: 1px solid var(--border); color: var(--text-muted); }
+  /* ── Zoom Controls ── */
+  .zoom-controls { position: absolute; bottom: 12px; right: 14px; display: flex; flex-direction: column; gap: 4px; z-index: 90; }
+  .zoom-btn { width: 30px; height: 30px; border-radius: 7px; background: var(--surface); border: 1px solid var(--border); color: var(--text-dim); font-size: 14px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; }
+  .zoom-btn:hover { background: var(--surface-2); color: var(--text); border-color: var(--border-subtle); }
+  /* ── Utility ── */
+  .fade-stagger { animation: fadeInRight 0.35s ease forwards; }
+  @keyframes fadeInRight { from { opacity: 0; transform: translateX(-14px); } to { opacity: 1; transform: translateX(0); } }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <!-- Top Bar -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <span class="brand">AI <span class="brand-accent">Inventor</span></span>
+      <span class="sep"></span>
+      <div class="run-badge">
+        <span class="live-dot"></span>
+        <span>contrastive-ssl-v4</span>
+      </div>
+    </div>
+    <div class="topbar-center">
+      <span>Elapsed <span class="val" id="elapsed">1h 34m 22s</span></span>
+      <span class="sep"></span>
+      <span>Iteration <span class="val">2 / 3</span></span>
+    </div>
+    <div class="topbar-right">
+      <span>Tokens <span class="cost-val">2.1M</span></span>
+      <span class="sep"></span>
+      <span>Cost <span class="cost-val">$16.84</span></span>
+    </div>
+  </div>
+
+  <!-- Body: Tree + Dashboard -->
+  <div class="body-layout">
+    <!-- Tree Viewport -->
+    <div class="tree-viewport" id="viewport">
+      <div class="tree-canvas" id="canvas">
+        <svg class="branch-svg" id="branchSvg"></svg>
+      </div>
+      <canvas id="particleCanvas"></canvas>
+      <div class="zoom-controls">
+        <button class="zoom-btn" id="zoomIn" title="Zoom in">+</button>
+        <button class="zoom-btn" id="zoomOut" title="Zoom out">&minus;</button>
+        <button class="zoom-btn" id="zoomReset" title="Re-center">&#8982;</button>
+      </div>
+    </div>
+
+    <!-- Dashboard Panel -->
+    <div class="dashboard-panel" id="dashboardPanel">
+      <div class="dash-header">
+        <div class="dash-header-left">
+          <span class="tt-status-dot done" id="dashDot"></span>
+          <span class="dash-title" id="dashTitle">Sub-module</span>
+        </div>
+        <button class="dash-close" id="dashClose">&times;</button>
+      </div>
+      <div class="dash-body" id="dashBody">
+        <!-- Populated by JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Hover Tooltip -->
+  <div class="hover-tooltip" id="hoverTooltip">
+    <div class="tt-header">
+      <span class="tt-status-dot" id="ttDot"></span>
+      <span class="tt-name" id="ttName"></span>
+      <span class="tt-status-badge" id="ttBadge"></span>
+    </div>
+    <div class="tt-summary" id="ttSummary"></div>
+    <div class="tt-footer">
+      <div class="tt-footer-item">
+        <span class="tt-icon">&#9202;</span>
+        <span class="tt-footer-val" id="ttDuration"></span>
+      </div>
+      <div class="tt-footer-item">
+        <span class="tt-icon">&#9878;</span>
+        <span class="tt-footer-val" id="ttCost"></span>
+      </div>
+      <span class="tt-click-hint">click for full view</span>
+    </div>
+  </div>
+
+  <!-- Bottom Bar -->
+  <div class="bottom-bar">
+    <div class="stats">
+      <span>Hypotheses <span class="stat-val">12</span></span>
+      <span>Inventions <span class="stat-val">4</span></span>
+      <span>Papers <span class="stat-val">1</span></span>
+      <span>Artifacts <span class="stat-val">9 / 16</span></span>
+      <span>LLM Calls <span class="stat-val">382</span></span>
+    </div>
+    <div class="hint">
+      <kbd>Scroll</kbd> zoom &middot; <kbd>Drag</kbd> pan &middot; <kbd>Hover</kbd> preview &middot; <kbd>Click</kbd> dashboard
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  // ===================================================================
+  //  PIPELINE DATA MODEL
+  // ===================================================================
+  const TREE = {
+    root: { id: 'root', label: 'contrastive-ssl-v4', icon: '\u{1F9E0}' },
+    modules: [
+      {
+        id: 'seed',
+        name: 'Seed Hypothesis',
+        color: 'green',
+        status: 'done',
+        meta: '12 hypotheses',
+        iterations: [
+          {
+            id: 'seed-gen', label: 'Seed Generation', status: 'done',
+            children: [
+              {
+                id: 'seed-kg', name: 'Build KG', status: 'done',
+                summary: 'I constructed a knowledge graph from 847 papers spanning contrastive learning and self-supervised representation literature, linking key concepts across 1,240 edges.',
+                duration: '3m 12s', cost: '$0.52',
+                activities: [{ text: 'Parsed 847 paper abstracts from Semantic Scholar', status: 'done' }, { text: 'Extracted 1,240 concept-relation edges', status: 'done' }, { text: 'Built hierarchical topic clusters (14 topics)', status: 'done' }]
+              },
+              {
+                id: 'seed-gen-h', name: 'Generate', status: 'done',
+                summary: 'I generated 18 raw hypothesis candidates by traversing high-novelty paths through the knowledge graph, focusing on underexplored cross-domain connections.',
+                duration: '3m 48s', cost: '$0.61',
+                activities: [{ text: '18 candidate hypotheses generated', status: 'done' }, { text: 'Novelty scoring applied (mean: 0.74)', status: 'done' }, { text: 'Cross-domain linkages: 6 identified', status: 'done' }]
+              },
+              {
+                id: 'seed-dedup', name: 'Dedup', status: 'done',
+                summary: 'I deduplicated the hypothesis set using semantic similarity, reducing 18 candidates to 12 unique hypotheses with distinct research trajectories.',
+                duration: '1m 32s', cost: '$0.29',
+                activities: [{ text: 'Pairwise semantic similarity computed', status: 'done' }, { text: 'Merged 6 near-duplicate pairs', status: 'done' }, { text: '12 unique hypotheses retained', status: 'done' }]
+              },
+            ]
+          }
+        ]
+      },
+      {
+        id: 'hypo',
+        name: 'Hypothesis Loop',
+        color: 'purple',
+        status: 'done',
+        meta: '3 iterations',
+        iterations: [
+          {
+            id: 'hypo-i1', label: 'Iter 1', status: 'done',
+            children: [
+              {
+                id: 'hypo-i1-gen', name: 'gen_hypo', status: 'done',
+                summary: 'I elaborated each of the 12 seed hypotheses into structured research proposals with explicit claims, expected outcomes, and methodology sketches.',
+                duration: '4m 06s', cost: '$1.32',
+                activities: [{ text: 'Structured 12 proposals with claims + methods', status: 'done' }, { text: 'Added expected outcome metrics for each', status: 'done' }]
+              },
+              {
+                id: 'hypo-i1-rev', name: 'review_hypo', status: 'done',
+                summary: 'I reviewed all 12 proposals against feasibility and novelty criteria, accepting 8 and flagging 4 for significant gaps in experimental grounding.',
+                duration: '2m 08s', cost: '$0.78',
+                activities: [{ text: '8 hypotheses accepted (score > 0.70)', status: 'done' }, { text: '4 hypotheses flagged for revision', status: 'done' }]
+              },
+            ]
+          },
+          {
+            id: 'hypo-i2', label: 'Iter 2', status: 'done',
+            children: [
+              {
+                id: 'hypo-i2-gen', name: 'gen_hypo', status: 'done',
+                summary: 'I revised the 4 flagged hypotheses incorporating reviewer feedback, strengthening the experimental design and narrowing scope to testable claims.',
+                duration: '3m 24s', cost: '$1.08',
+                activities: [{ text: 'Revised 4 flagged hypotheses', status: 'done' }, { text: 'Narrowed scope to testable sub-claims', status: 'done' }]
+              },
+              {
+                id: 'hypo-i2-rev', name: 'review_hypo', status: 'done',
+                summary: 'I re-reviewed all 12 hypotheses in the updated pool, confirming 11 met the quality threshold and retiring 1 as fundamentally infeasible.',
+                duration: '1m 52s', cost: '$0.65',
+                activities: [{ text: '11 hypotheses passed review', status: 'done' }, { text: '1 hypothesis retired (infeasible)', status: 'done' }]
+              },
+            ]
+          },
+          {
+            id: 'hypo-i3', label: 'Iter 3', status: 'done',
+            children: [
+              {
+                id: 'hypo-i3-gen', name: 'gen_hypo', status: 'done',
+                summary: 'I performed a final refinement pass, tightening claims and aligning terminology across all remaining hypotheses for consistency.',
+                duration: '2m 48s', cost: '$0.94',
+                activities: [{ text: 'Terminology alignment across 11 hypotheses', status: 'done' }, { text: 'Final claim tightening complete', status: 'done' }]
+              },
+              {
+                id: 'hypo-i3-rev', name: 'review_hypo', status: 'done',
+                summary: 'I finalized 3 top-ranked hypotheses for the invention loop, selecting those with the highest combined novelty and feasibility scores.',
+                duration: '1m 34s', cost: '$0.55',
+                activities: [{ text: '3 hypotheses selected for invention', status: 'done' }, { text: 'Final ranking: novelty x feasibility', status: 'done' }]
+              },
+            ]
+          }
+        ]
+      },
+      {
+        id: 'inv',
+        name: 'Invention Loop',
+        color: 'blue',
+        status: 'active',
+        meta: 'Iter 2 / 3',
+        iterations: [
+          {
+            id: 'inv-i1', label: 'Iter 1', status: 'done',
+            children: [
+              {
+                id: 'inv-i1-s1', name: 'gen_strat', status: 'done',
+                summary: 'I devised a contrastive learning strategy that pairs augmented views of low-resource text with cross-lingual anchors to learn robust representations.',
+                duration: '3m 44s', cost: '$1.18',
+                activities: [{ text: 'Contrastive framework with cross-lingual anchors', status: 'done' }, { text: 'Augmentation taxonomy defined (6 types)', status: 'done' }]
+              },
+              {
+                id: 'inv-i1-s2', name: 'gen_plan', status: 'done',
+                summary: 'I outlined 4 experiments: baseline comparison, augmentation ablation, cross-lingual transfer, and low-resource scaling analysis.',
+                duration: '2m 58s', cost: '$0.86',
+                activities: [{ text: '4 experiments outlined with metrics', status: 'done' }, { text: 'Baseline: SimCLR + BERT-base', status: 'done' }]
+              },
+              {
+                id: 'inv-i1-s3', name: 'gen_text', status: 'done',
+                summary: 'I drafted the initial paper text covering introduction, related work, and methodology sections totaling 3,200 words with inline citations.',
+                duration: '6m 22s', cost: '$1.47',
+                activities: [{ text: 'Intro + related work + methodology (3,200 words)', status: 'done' }]
+              },
+              {
+                id: 'inv-i1-s4', name: 'gen_art', status: 'done',
+                summary: 'I created 5 demonstration artifacts including a contrastive training loop, augmentation pipeline, evaluation harness, and two visualization scripts.',
+                duration: '5m 10s', cost: '$1.02',
+                activities: [{ text: 'Contrastive training loop (PyTorch)', status: 'done' }, { text: 'Augmentation pipeline + eval harness', status: 'done' }, { text: '2 visualization scripts (t-SNE, loss curves)', status: 'done' }]
+              },
+              {
+                id: 'inv-i1-s5', name: 'review', status: 'done',
+                summary: 'I identified major revisions needed: the cross-lingual transfer section lacked ablation detail and the methodology underspecified the anchor selection process.',
+                duration: '2m 46s', cost: '$0.82',
+                activities: [{ text: 'Major revision: anchor selection underspecified', status: 'done' }, { text: 'Minor: add ablation detail to transfer section', status: 'done' }]
+              },
+              {
+                id: 'inv-i1-s6', name: 'refine', status: 'done',
+                summary: 'I applied all requested revisions, strengthening the anchor selection algorithm and adding a detailed ablation subsection to the cross-lingual section.',
+                duration: '3m 22s', cost: '$0.95',
+                activities: [{ text: 'Anchor selection algorithm formalized', status: 'done' }, { text: 'Ablation subsection added (420 words)', status: 'done' }]
+              },
+            ]
+          },
+          {
+            id: 'inv-i2', label: 'Iter 2', status: 'active',
+            children: [
+              {
+                id: 'inv-i2-s1', name: 'gen_strat', status: 'done',
+                summary: 'I refined the strategy to incorporate momentum-based contrastive updates and a curriculum schedule that gradually increases augmentation difficulty.',
+                duration: '3m 16s', cost: '$1.04',
+                activities: [{ text: 'Added momentum contrastive update rule', status: 'done' }, { text: 'Curriculum schedule: 3 difficulty phases', status: 'done' }]
+              },
+              {
+                id: 'inv-i2-s2', name: 'gen_plan', status: 'done',
+                summary: 'I extended the experiment plan with a momentum ablation study and a curriculum vs. random augmentation comparison across 3 language pairs.',
+                duration: '2m 42s', cost: '$0.78',
+                activities: [{ text: 'Momentum ablation study added', status: 'done' }, { text: 'Curriculum vs random comparison (3 lang pairs)', status: 'done' }]
+              },
+              {
+                id: 'inv-i2-s3', name: 'gen_text', status: 'done',
+                summary: 'I expanded the paper to 4,800 words, adding the results section with synthetic performance tables and a discussion of the curriculum approach.',
+                duration: '7m 14s', cost: '$1.63',
+                activities: [{ text: 'Results section drafted (1,200 words)', status: 'done' }, { text: 'Performance tables: 3 baselines x 4 metrics', status: 'done' }]
+              },
+              {
+                id: 'inv-i2-s4', name: 'gen_art', status: 'active',
+                summary: 'I am currently generating the ablation study artifacts, with the contrastive baseline complete and the multilingual pair generator running.',
+                duration: '4m 38s', cost: '$1.22',
+                activities: [{ text: 'Contrastive baseline (acc: 0.847)', status: 'done' }, { text: 'Multilingual pairs (2,400 examples)', status: 'done' }, { text: 'Convergence proof (verified)', status: 'done' }, { text: 'Ablation study artifacts (running)', status: 'active' }, { text: 'Cross-lingual eval harness', status: 'pending' }]
+              },
+              {
+                id: 'inv-i2-s5', name: 'review', status: 'pending',
+                summary: 'Pending review of iteration 2 outputs.',
+                duration: '--', cost: '--',
+                activities: [{ text: 'Awaiting gen_art completion', status: 'pending' }]
+              },
+              {
+                id: 'inv-i2-s6', name: 'refine', status: 'pending',
+                summary: 'Refinement will be applied after review feedback.',
+                duration: '--', cost: '--',
+                activities: [{ text: 'Awaiting review feedback', status: 'pending' }]
+              },
+            ]
+          },
+          {
+            id: 'inv-i3', label: 'Iter 3', status: 'pending',
+            children: [
+              { id: 'inv-i3-s1', name: 'gen_strat', status: 'pending', summary: 'Final strategy iteration pending.', duration: '--', cost: '--', activities: [] },
+              { id: 'inv-i3-s2', name: 'gen_plan', status: 'pending', summary: 'Final plan iteration pending.', duration: '--', cost: '--', activities: [] },
+              { id: 'inv-i3-s3', name: 'gen_text', status: 'pending', summary: 'Final text iteration pending.', duration: '--', cost: '--', activities: [] },
+              { id: 'inv-i3-s4', name: 'gen_art', status: 'pending', summary: 'Final artifacts iteration pending.', duration: '--', cost: '--', activities: [] },
+              { id: 'inv-i3-s5', name: 'review', status: 'pending', summary: 'Final review pending.', duration: '--', cost: '--', activities: [] },
+              { id: 'inv-i3-s6', name: 'refine', status: 'pending', summary: 'Final refinement pending.', duration: '--', cost: '--', activities: [] },
+            ]
+          }
+        ]
+      },
+      {
+        id: 'paper',
+        name: 'Paper & Repo',
+        color: 'orange',
+        status: 'pending',
+        meta: 'Pending',
+        iterations: [
+          {
+            id: 'paper-gen', label: 'Generation', status: 'pending',
+            children: [
+              { id: 'paper-s1', name: 'gen_demos', status: 'pending', summary: 'Demo generation awaiting invention loop completion.', duration: '--', cost: '--', activities: [] },
+              { id: 'paper-s2', name: 'gen_viz', status: 'pending', summary: 'Visualization generation pending.', duration: '--', cost: '--', activities: [] },
+              { id: 'paper-s3', name: 'gen_paper', status: 'pending', summary: 'Full paper compilation pending.', duration: '--', cost: '--', activities: [] },
+              { id: 'paper-s4', name: 'compile', status: 'pending', summary: 'LaTeX compilation and repo packaging pending.', duration: '--', cost: '--', activities: [] },
+            ]
+          }
+        ]
+      }
+    ]
+  };
+
+  // ===================================================================
+  //  STATE
+  // ===================================================================
+  const state = {
+    expandedModules: new Set(['inv']),
+    expandedIters: new Set(['inv-i2']),
+    selectedSub: null,       // sub-module id for dashboard
+    hoveredSub: null,        // sub-module id for tooltip
+    pan: { x: 0, y: 0 },
+    zoom: 1,
+    dragging: false,
+    dragStart: { x: 0, y: 0 },
+    panStart: { x: 0, y: 0 },
+    nodePositions: {},       // id -> { x, y, w, h }
+    elapsedSec: 5662,
+    particles: [],
+  };
+
+  // ===================================================================
+  //  DOM REFS
+  // ===================================================================
+  const canvasEl = document.getElementById('canvas');
+  const viewport = document.getElementById('viewport');
+  const branchSvg = document.getElementById('branchSvg');
+  const particleCanvas = document.getElementById('particleCanvas');
+  const pCtx = particleCanvas.getContext('2d');
+  const tooltip = document.getElementById('hoverTooltip');
+  const dashPanel = document.getElementById('dashboardPanel');
+  const dashTitle = document.getElementById('dashTitle');
+  const dashDot = document.getElementById('dashDot');
+  const dashBody = document.getElementById('dashBody');
+  const dashClose = document.getElementById('dashClose');
+
+  // ===================================================================
+  //  LAYOUT CONSTANTS
+  // ===================================================================
+  const COL_ROOT = 80;
+  const COL_MODULE = 280;
+  const COL_ITER = 500;
+  const COL_STEP_START = 690;
+  const STEP_GAP = 116;
+  const MODULE_VGAP = 96;
+  const ITER_VGAP = 60;
+  const STEP_VGAP = 48;
+  const BASE_Y = 200;
+
+  // ===================================================================
+  //  HELPERS
+  // ===================================================================
+  function colorVar(color) {
+    return { green: '#22c55e', purple: '#8b5cf6', blue: '#3b82f6', orange: '#f59e0b' }[color] || '#3b82f6';
+  }
+  function colorGlow(color) {
+    return {
+      green: 'rgba(34,197,94,0.25)',
+      purple: 'rgba(139,92,246,0.25)',
+      blue: 'rgba(59,130,246,0.25)',
+      orange: 'rgba(245,158,11,0.20)',
+    }[color] || 'rgba(59,130,246,0.25)';
+  }
+  function statusIcon(s) {
+    if (s === 'done') return '\u2713';
+    if (s === 'active') return '\u25B6';
+    return '\u25CB';
+  }
+  function statusClass(s) {
+    if (s === 'done') return 'done';
+    if (s === 'active') return 'active';
+    return 'pending';
+  }
+  function formatTime(sec) {
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = sec % 60;
+    return `${h}h ${String(m).padStart(2,'0')}m ${String(s).padStart(2,'0')}s`;
+  }
+  function firstSentence(text) {
+    if (!text) return '';
+    const match = text.match(/^[^.!?]*[.!?]/);
+    return match ? match[0] : text;
+  }
+
+  // Find sub-module data by id
+  function findSubModule(id) {
+    for (const mod of TREE.modules) {
+      for (const iter of mod.iterations) {
+        if (!iter.children) continue;
+        for (const child of iter.children) {
+          if (child.id === id) return { sub: child, mod, iter };
+        }
+      }
+    }
+    return null;
+  }
+
+  // ===================================================================
+  //  SVG PATH BUILDER
+  // ===================================================================
+  function svgPath(x1, y1, x2, y2, color, status, isGlow) {
+    const mx = x1 + (x2 - x1) * 0.5;
+    const d = `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`;
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', d);
+    path.setAttribute('stroke', color);
+    path.classList.add('branch-' + statusClass(status));
+    if (isGlow) path.classList.add('glow');
+    return path;
+  }
+
+  // ===================================================================
+  //  CALCULATE NODE POSITIONS
+  // ===================================================================
+  function calcPositions() {
+    const pos = {};
+    const modules = TREE.modules;
+
+    let totalHeight = 0;
+    modules.forEach(mod => {
+      const expanded = state.expandedModules.has(mod.id);
+      if (expanded && mod.iterations) {
+        let iterH = 0;
+        mod.iterations.forEach(iter => {
+          const iterExpanded = state.expandedIters.has(iter.id);
+          if (iterExpanded && iter.children) {
+            iterH += Math.max(iter.children.length * STEP_VGAP, ITER_VGAP);
+          } else {
+            iterH += ITER_VGAP;
+          }
+        });
+        totalHeight += Math.max(iterH, MODULE_VGAP);
+      } else {
+        totalHeight += MODULE_VGAP;
+      }
+    });
+
+    const startY = Math.max(BASE_Y, (1500 - totalHeight) / 2);
+    pos['root'] = { x: COL_ROOT, y: startY + totalHeight / 2, w: 60, h: 60 };
+
+    let curY = startY;
+    modules.forEach(mod => {
+      const expanded = state.expandedModules.has(mod.id);
+      let modBlockH = MODULE_VGAP;
+
+      if (expanded && mod.iterations) {
+        let iterH = 0;
+        mod.iterations.forEach(iter => {
+          const ie = state.expandedIters.has(iter.id);
+          if (ie && iter.children) {
+            iterH += Math.max(iter.children.length * STEP_VGAP, ITER_VGAP);
+          } else {
+            iterH += ITER_VGAP;
+          }
+        });
+        modBlockH = Math.max(iterH, MODULE_VGAP);
+      }
+
+      pos[mod.id] = { x: COL_MODULE, y: curY + modBlockH / 2, w: 148, h: 44 };
+
+      if (expanded && mod.iterations) {
+        let iterY = curY;
+        mod.iterations.forEach(iter => {
+          const ie = state.expandedIters.has(iter.id);
+          let iterBlockH = ITER_VGAP;
+
+          if (ie && iter.children) {
+            iterBlockH = Math.max(iter.children.length * STEP_VGAP, ITER_VGAP);
+          }
+
+          pos[iter.id] = { x: COL_ITER, y: iterY + iterBlockH / 2, w: 110, h: 34 };
+
+          if (ie && iter.children) {
+            let stepY = iterY;
+            iter.children.forEach((child, ci) => {
+              pos[child.id] = {
+                x: COL_STEP_START,
+                y: stepY + STEP_VGAP / 2,
+                w: 110,
+                h: 36
+              };
+              stepY += STEP_VGAP;
+            });
+          }
+
+          iterY += iterBlockH;
+        });
+      }
+
+      curY += modBlockH;
+    });
+
+    return pos;
+  }
+
+  // ===================================================================
+  //  RENDER TREE
+  // ===================================================================
+  function render() {
+    const pos = calcPositions();
+    state.nodePositions = pos;
+
+    // Clear canvas
+    while (canvasEl.firstChild) {
+      if (canvasEl.firstChild === branchSvg) {
+        canvasEl.firstChild.remove();
+        break;
+      }
+      canvasEl.firstChild.remove();
+    }
+    // Re-add SVG
+    while (canvasEl.firstChild) canvasEl.firstChild.remove();
+    canvasEl.appendChild(branchSvg);
+
+    // Clear SVG
+    while (branchSvg.firstChild) branchSvg.firstChild.remove();
+
+    // ── Root Node ──
+    const rp = pos['root'];
+    const rootEl = document.createElement('div');
+    rootEl.className = 'tree-node';
+    rootEl.style.left = rp.x - 30 + 'px';
+    rootEl.style.top = rp.y - 30 + 'px';
+    rootEl.innerHTML = `
+      <div class="root-node">
+        <span class="root-icon">${TREE.root.icon}</span>
+        <span class="root-label">${TREE.root.label}</span>
+      </div>
+    `;
+    canvasEl.appendChild(rootEl);
+
+    // ── Modules ──
+    TREE.modules.forEach((mod, mi) => {
+      const mp = pos[mod.id];
+      if (!mp) return;
+      const isExpanded = state.expandedModules.has(mod.id);
+      const isActive = mod.status === 'active';
+
+      // Branch: root -> module
+      const rc = colorVar(mod.color);
+      branchSvg.appendChild(svgPath(rp.x + 30, rp.y, mp.x, mp.y, rc, mod.status, true));
+      branchSvg.appendChild(svgPath(rp.x + 30, rp.y, mp.x, mp.y, rc, mod.status, false));
+
+      // Module node
+      const modEl = document.createElement('div');
+      modEl.className = 'tree-node fade-stagger';
+      modEl.style.left = mp.x + 'px';
+      modEl.style.top = (mp.y - 22) + 'px';
+      modEl.style.animationDelay = (mi * 60) + 'ms';
+      modEl.innerHTML = `
+        <div class="module-node module-${mod.color} ${isExpanded ? 'expanded' : ''} ${isActive ? 'is-active' : ''}">
+          <span class="module-status-dot"></span>
+          <div class="module-info">
+            <span class="module-name">${mod.name}</span>
+            <span class="module-meta">${mod.meta}</span>
+          </div>
+          <span class="module-expand-icon">\u25B8</span>
+        </div>
+      `;
+      modEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (state.expandedModules.has(mod.id)) {
+          state.expandedModules.delete(mod.id);
+          // Also collapse iters
+          mod.iterations.forEach(it => state.expandedIters.delete(it.id));
+        } else {
+          state.expandedModules.add(mod.id);
+        }
+        render();
+      });
+      canvasEl.appendChild(modEl);
+
+      // ── Iterations ──
+      if (isExpanded && mod.iterations) {
+        mod.iterations.forEach((iter, ii) => {
+          const ip = pos[iter.id];
+          if (!ip) return;
+          const iterExpanded = state.expandedIters.has(iter.id);
+
+          // Branch: module -> iter
+          branchSvg.appendChild(svgPath(mp.x + mp.w, mp.y, ip.x, ip.y, rc, iter.status, true));
+          branchSvg.appendChild(svgPath(mp.x + mp.w, mp.y, ip.x, ip.y, rc, iter.status, false));
+
+          const iterEl = document.createElement('div');
+          iterEl.className = 'tree-node fade-stagger';
+          iterEl.style.left = ip.x + 'px';
+          iterEl.style.top = (ip.y - 17) + 'px';
+          iterEl.style.animationDelay = (mi * 60 + ii * 40 + 80) + 'ms';
+          iterEl.innerHTML = `
+            <div class="iter-node ${iterExpanded ? 'expanded' : ''}">
+              <span class="iter-label">${iter.label}</span>
+              <span class="iter-badge iter-badge-${statusClass(iter.status)}">${iter.status}</span>
+            </div>
+          `;
+          iterEl.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (state.expandedIters.has(iter.id)) {
+              state.expandedIters.delete(iter.id);
+            } else {
+              state.expandedIters.add(iter.id);
+            }
+            render();
+          });
+          canvasEl.appendChild(iterEl);
+
+          // ── Sub-modules (36px) ──
+          if (iterExpanded && iter.children) {
+            iter.children.forEach((child, ci) => {
+              const cp = pos[child.id];
+              if (!cp) return;
+
+              // Branch: iter -> step
+              branchSvg.appendChild(svgPath(ip.x + ip.w, ip.y, cp.x, cp.y, rc, child.status, true));
+              branchSvg.appendChild(svgPath(ip.x + ip.w, ip.y, cp.x, cp.y, rc, child.status, false));
+
+              const stepEl = document.createElement('div');
+              stepEl.className = 'tree-node fade-stagger';
+              stepEl.style.left = cp.x + 'px';
+              stepEl.style.top = (cp.y - 18) + 'px';
+              stepEl.style.animationDelay = (mi * 60 + ii * 40 + ci * 30 + 140) + 'ms';
+
+              const sc = statusClass(child.status);
+              stepEl.innerHTML = `
+                <div class="sub-node is-${sc}" data-sub-id="${child.id}">
+                  <span class="sub-icon sub-icon-${sc}">${statusIcon(child.status)}</span>
+                  <span class="sub-name">${child.name}</span>
+                </div>
+              `;
+
+              // Hover -> tooltip
+              const subDiv = stepEl.querySelector('.sub-node');
+              subDiv.addEventListener('mouseenter', (e) => {
+                state.hoveredSub = child.id;
+                showTooltip(child, e);
+              });
+              subDiv.addEventListener('mousemove', (e) => {
+                positionTooltip(e);
+              });
+              subDiv.addEventListener('mouseleave', () => {
+                state.hoveredSub = null;
+                hideTooltip();
+              });
+
+              // Click -> dashboard
+              subDiv.addEventListener('click', (e) => {
+                e.stopPropagation();
+                state.selectedSub = child.id;
+                hideTooltip();
+                openDashboard(child, mod);
+              });
+
+              canvasEl.appendChild(stepEl);
+            });
+          }
+        });
+      }
+    });
+
+    // Apply current transform
+    applyTransform();
+  }
+
+  // ===================================================================
+  //  TOOLTIP
+  // ===================================================================
+  function showTooltip(sub, e) {
+    const ttDot = document.getElementById('ttDot');
+    const ttName = document.getElementById('ttName');
+    const ttBadge = document.getElementById('ttBadge');
+    const ttSummary = document.getElementById('ttSummary');
+    const ttDuration = document.getElementById('ttDuration');
+    const ttCost = document.getElementById('ttCost');
+
+    ttDot.className = 'tt-status-dot ' + statusClass(sub.status);
+    ttName.textContent = sub.name;
+    ttBadge.className = 'tt-status-badge ' + statusClass(sub.status);
+    ttBadge.textContent = sub.status;
+    ttSummary.textContent = firstSentence(sub.summary);
+    ttDuration.textContent = sub.duration || '--';
+    ttCost.textContent = sub.cost || '--';
+
+    positionTooltip(e);
+    tooltip.classList.add('visible');
+  }
+
+  function positionTooltip(e) {
+    const ttW = 280;
+    const ttH = tooltip.offsetHeight || 140;
+    let tx = e.clientX + 16;
+    let ty = e.clientY - 10;
+
+    // Keep in viewport
+    if (tx + ttW > window.innerWidth - 12) {
+      tx = e.clientX - ttW - 16;
+    }
+    if (ty + ttH > window.innerHeight - 48) {
+      ty = window.innerHeight - ttH - 48;
+    }
+    if (ty < 50) ty = 50;
+
+    tooltip.style.left = tx + 'px';
+    tooltip.style.top = ty + 'px';
+  }
+
+  function hideTooltip() {
+    tooltip.classList.remove('visible');
+  }
+
+  // ===================================================================
+  //  DASHBOARD
+  // ===================================================================
+  function openDashboard(sub, mod) {
+    viewport.classList.add('has-dashboard');
+    dashPanel.classList.add('visible');
+
+    dashDot.className = 'tt-status-dot ' + statusClass(sub.status);
+    dashTitle.textContent = sub.name;
+
+    let html = '';
+
+    // Status Banner
+    const sc = statusClass(sub.status);
+    const statusLabel = sub.status === 'done' ? 'Completed' : sub.status === 'active' ? 'In Progress' : 'Queued';
+    html += `
+      <div class="dash-status-banner ${sc}">
+        <span class="dash-status-icon"></span>
+        <span class="dash-status-text">${statusLabel} &mdash; ${sub.name}</span>
+      </div>
+    `;
+
+    // Stats row
+    html += `
+      <div class="dash-stats-row">
+        <div class="dash-stat-card">
+          <div class="dash-stat-label">Duration</div>
+          <div class="dash-stat-value">${sub.duration || '--'}</div>
+        </div>
+        <div class="dash-stat-card">
+          <div class="dash-stat-label">Cost</div>
+          <div class="dash-stat-value">${sub.cost || '--'}</div>
+        </div>
+        <div class="dash-stat-card">
+          <div class="dash-stat-label">Module</div>
+          <div class="dash-stat-value" style="font-size:12px; color: ${colorVar(mod.color)}">${mod.name}</div>
+        </div>
+      </div>
+    `;
+
+    // Summary
+    html += `
+      <div>
+        <div class="dash-section-title">First-Person Summary</div>
+        <div class="dash-summary-text color-${mod.color}">${sub.summary || 'No summary available.'}</div>
+      </div>
+    `;
+
+    // Activity log
+    if (sub.activities && sub.activities.length > 0) {
+      html += `<div><div class="dash-section-title">Activity Log</div><div class="dash-activity-list">`;
+      sub.activities.forEach(a => {
+        const asc = statusClass(a.status);
+        html += `
+          <div class="dash-activity-item">
+            <span class="dai-icon dai-${asc}">${statusIcon(a.status)}</span>
+            <span>${a.text}</span>
+          </div>
+        `;
+      });
+      html += `</div></div>`;
+    }
+
+    dashBody.innerHTML = html;
+    render(); // Re-render to adjust layout
+  }
+
+  function closeDashboard() {
+    state.selectedSub = null;
+    viewport.classList.remove('has-dashboard');
+    dashPanel.classList.remove('visible');
+    render();
+  }
+
+  dashClose.addEventListener('click', closeDashboard);
+
+  // ===================================================================
+  //  PAN & ZOOM
+  // ===================================================================
+  function applyTransform() {
+    canvasEl.style.transform = `translate(${state.pan.x}px, ${state.pan.y}px) scale(${state.zoom})`;
+  }
+
+  viewport.addEventListener('mousedown', (e) => {
+    if (e.target.closest('.sub-node') || e.target.closest('.module-node') || e.target.closest('.iter-node') || e.target.closest('.root-node')) return;
+    state.dragging = true;
+    state.dragStart = { x: e.clientX, y: e.clientY };
+    state.panStart = { ...state.pan };
+  });
+
+  window.addEventListener('mousemove', (e) => {
+    if (!state.dragging) return;
+    state.pan.x = state.panStart.x + (e.clientX - state.dragStart.x);
+    state.pan.y = state.panStart.y + (e.clientY - state.dragStart.y);
+    applyTransform();
+  });
+
+  window.addEventListener('mouseup', () => {
+    state.dragging = false;
+  });
+
+  viewport.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.06 : 0.06;
+    state.zoom = Math.max(0.3, Math.min(2.5, state.zoom + delta));
+    applyTransform();
+  }, { passive: false });
+
+  document.getElementById('zoomIn').addEventListener('click', () => {
+    state.zoom = Math.min(2.5, state.zoom + 0.15);
+    applyTransform();
+  });
+  document.getElementById('zoomOut').addEventListener('click', () => {
+    state.zoom = Math.max(0.3, state.zoom - 0.15);
+    applyTransform();
+  });
+  document.getElementById('zoomReset').addEventListener('click', () => {
+    state.zoom = 1;
+    state.pan = { x: 0, y: 0 };
+    applyTransform();
+  });
+
+  // ===================================================================
+  //  PARTICLE SYSTEM (tree-path particles)
+  // ===================================================================
+  const DPR = window.devicePixelRatio || 1;
+
+  function resizeParticleCanvas() {
+    const rect = viewport.getBoundingClientRect();
+    particleCanvas.width = rect.width * DPR;
+    particleCanvas.height = rect.height * DPR;
+    particleCanvas.style.width = rect.width + 'px';
+    particleCanvas.style.height = rect.height + 'px';
+    pCtx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+  resizeParticleCanvas();
+  window.addEventListener('resize', resizeParticleCanvas);
+
+  // Get all branch paths for particle spawning
+  function getBranchEndpoints() {
+    const endpoints = [];
+    const pos = state.nodePositions;
+    const rp = pos['root'];
+    if (!rp) return endpoints;
+
+    TREE.modules.forEach(mod => {
+      const mp = pos[mod.id];
+      if (!mp) return;
+      endpoints.push({ x1: rp.x + 30, y1: rp.y, x2: mp.x, y2: mp.y, color: colorVar(mod.color), status: mod.status });
+
+      if (state.expandedModules.has(mod.id) && mod.iterations) {
+        mod.iterations.forEach(iter => {
+          const ip = pos[iter.id];
+          if (!ip) return;
+          endpoints.push({ x1: mp.x + mp.w, y1: mp.y, x2: ip.x, y2: ip.y, color: colorVar(mod.color), status: iter.status });
+
+          if (state.expandedIters.has(iter.id) && iter.children) {
+            iter.children.forEach(child => {
+              const cp = pos[child.id];
+              if (!cp) return;
+              endpoints.push({ x1: ip.x + ip.w, y1: ip.y, x2: cp.x, y2: cp.y, color: colorVar(mod.color), status: child.status });
+            });
+          }
+        });
+      }
+    });
+    return endpoints;
+  }
+
+  const MAX_PARTICLES = 70;
+
+  function spawnParticle() {
+    const branches = getBranchEndpoints();
+    if (branches.length === 0) return null;
+    const b = branches[Math.floor(Math.random() * branches.length)];
+    // Only spawn on active or done branches
+    if (b.status === 'pending' && Math.random() > 0.15) return null;
+
+    const t = Math.random();
+    const mx = b.x1 + (b.x2 - b.x1) * 0.5;
+    // Approximate bezier position
+    const u = 1 - t;
+    const px = u * u * b.x1 + 2 * u * t * mx + t * t * b.x2;
+    const py = u * u * b.y1 + 2 * u * t * ((b.y1 + b.y2) / 2) + t * t * b.y2;
+
+    return {
+      x: px + (Math.random() - 0.5) * 20,
+      y: py + (Math.random() - 0.5) * 15,
+      vx: (Math.random() - 0.5) * 0.4,
+      vy: (Math.random() - 0.5) * 0.3 - 0.15,
+      r: 1 + Math.random() * 2,
+      alpha: 0.15 + Math.random() * 0.4,
+      life: 100 + Math.random() * 250,
+      maxLife: 0,
+      phase: Math.random() * Math.PI * 2,
+      color: b.color,
+      glow: Math.random() > 0.55,
+    };
+  }
+
+  // Initialize particles
+  for (let i = 0; i < MAX_PARTICLES; i++) {
+    const p = spawnParticle();
+    if (p) {
+      p.maxLife = p.life;
+      p.life = Math.random() * p.maxLife;
+      state.particles.push(p);
+    }
+  }
+
+  function updateParticles() {
+    const rect = viewport.getBoundingClientRect();
+    const W = rect.width;
+    const H = rect.height;
+
+    pCtx.clearRect(0, 0, W, H);
+
+    for (let i = state.particles.length - 1; i >= 0; i--) {
+      const p = state.particles[i];
+      p.life--;
+
+      if (p.life <= 0) {
+        const np = spawnParticle();
+        if (np) {
+          np.maxLife = np.life;
+          state.particles[i] = np;
+        } else {
+          state.particles.splice(i, 1);
+        }
+        continue;
+      }
+
+      p.x += p.vx + Math.sin(Date.now() * 0.001 + p.phase) * 0.15;
+      p.y += p.vy;
+
+      // Convert tree-canvas coords to viewport coords
+      const sx = (p.x * state.zoom + state.pan.x);
+      const sy = (p.y * state.zoom + state.pan.y);
+
+      if (sx < -20 || sx > W + 20 || sy < -20 || sy > H + 20) continue;
+
+      const lifeRatio = p.life / p.maxLife;
+      const fadeIn = Math.min(1, (p.maxLife - p.life) / 30);
+      const fadeOut = Math.min(1, p.life / 30);
+      const a = p.alpha * fadeIn * fadeOut;
+
+      if (p.glow) {
+        pCtx.beginPath();
+        const grd = pCtx.createRadialGradient(sx, sy, 0, sx, sy, p.r * 4);
+        grd.addColorStop(0, p.color.replace(')', `,${a * 0.3})`).replace('rgb', 'rgba'));
+        grd.addColorStop(1, 'rgba(0,0,0,0)');
+        pCtx.fillStyle = grd;
+        pCtx.arc(sx, sy, p.r * 4, 0, Math.PI * 2);
+        pCtx.fill();
+      }
+
+      pCtx.beginPath();
+      pCtx.arc(sx, sy, p.r * state.zoom, 0, Math.PI * 2);
+      // Parse hex to rgba
+      const hex = p.color;
+      const rr = parseInt(hex.slice(1,3), 16);
+      const gg = parseInt(hex.slice(3,5), 16);
+      const bb = parseInt(hex.slice(5,7), 16);
+      pCtx.fillStyle = `rgba(${rr},${gg},${bb},${a})`;
+      pCtx.fill();
+    }
+
+    // Replenish
+    while (state.particles.length < MAX_PARTICLES) {
+      const np = spawnParticle();
+      if (np) {
+        np.maxLife = np.life;
+        state.particles.push(np);
+      } else {
+        break;
+      }
+    }
+  }
+
+  // ===================================================================
+  //  ELAPSED TIMER
+  // ===================================================================
+  const elapsedEl = document.getElementById('elapsed');
+  setInterval(() => {
+    state.elapsedSec++;
+    elapsedEl.textContent = formatTime(state.elapsedSec);
+  }, 1000);
+
+  // ===================================================================
+  //  ANIMATION LOOP
+  // ===================================================================
+  function animate() {
+    updateParticles();
+    requestAnimationFrame(animate);
+  }
+
+  // ===================================================================
+  //  INIT
+  // ===================================================================
+  render();
+  // Auto center on the active module area
+  state.pan = { x: -120, y: -220 };
+  applyTransform();
+  animate();
+
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Nested Zoom Grid</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: rgba(255,255,255,0.04);
+    --surface-hover: rgba(255,255,255,0.07);
+    --border: rgba(255,255,255,0.08);
+    --text: #e2e8f0;
+    --text-dim: #64748b;
+    --green: #10b981;
+    --purple: #8b5cf6;
+    --blue: #3b82f6;
+    --orange: #f59e0b;
+    --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Top Bar ── */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 28px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(10,10,15,0.95);
+    backdrop-filter: blur(12px);
+    z-index: 100;
+    flex-shrink: 0;
+  }
+  .topbar-left { display: flex; align-items: center; gap: 16px; }
+  .topbar-logo {
+    font-weight: 700;
+    font-size: 15px;
+    letter-spacing: -0.3px;
+    background: linear-gradient(135deg, var(--blue), var(--purple));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .topbar-run {
+    font-size: 13px;
+    color: var(--text-dim);
+    padding-left: 16px;
+    border-left: 1px solid var(--border);
+  }
+
+  /* ── Breadcrumb ── */
+  .breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+  }
+  .breadcrumb-item {
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: color 0.2s;
+    background: none;
+    border: none;
+    font: inherit;
+    padding: 4px 8px;
+    border-radius: 4px;
+  }
+  .breadcrumb-item:hover { color: var(--text); background: var(--surface-hover); }
+  .breadcrumb-item.active { color: var(--text); cursor: default; }
+  .breadcrumb-item.active:hover { background: none; }
+  .breadcrumb-sep { color: var(--text-dim); opacity: 0.4; font-size: 11px; }
+
+  /* ── Main Area ── */
+  .main {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* ── Zoom Layers ── */
+  .zoom-layer {
+    position: absolute;
+    inset: 0;
+    padding: 24px 28px;
+    display: flex;
+    flex-direction: column;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.35s var(--ease);
+  }
+  .zoom-layer.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* ── Level 1: Module Grid ── */
+  .module-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 20px;
+    flex: 1;
+  }
+  .module-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.25s var(--ease), border-color 0.25s var(--ease),
+                background 0.25s var(--ease);
+  }
+  .module-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    border-radius: 16px 16px 0 0;
+  }
+  .module-card:hover {
+    transform: translateY(-2px);
+    border-color: rgba(255,255,255,0.14);
+    background: var(--surface-hover);
+  }
+  .module-card[data-color="green"]::before { background: var(--green); }
+  .module-card[data-color="purple"]::before { background: var(--purple); }
+  .module-card[data-color="blue"]::before { background: var(--blue); }
+  .module-card[data-color="orange"]::before { background: var(--orange); }
+
+  .mc-top { display: flex; flex-direction: column; gap: 14px; }
+  .mc-icon {
+    font-size: 32px;
+    width: 56px;
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 14px;
+    background: rgba(255,255,255,0.04);
+  }
+  .mc-name { font-size: 20px; font-weight: 600; letter-spacing: -0.3px; }
+  .mc-summary { font-size: 13px; color: var(--text-dim); line-height: 1.5; margin-top: 4px; }
+
+  .mc-bottom { display: flex; align-items: center; justify-content: space-between; }
+  .mc-status {
+    font-size: 12px;
+    font-weight: 500;
+    padding: 4px 10px;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .mc-status.complete { background: rgba(16,185,129,0.12); color: var(--green); }
+  .mc-status.active { background: rgba(59,130,246,0.12); color: var(--blue); }
+  .mc-status.pending { background: rgba(100,116,139,0.12); color: var(--text-dim); }
+
+  .mc-progress {
+    width: 80px;
+    height: 4px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .mc-progress-fill { height: 100%; border-radius: 2px; transition: width 0.6s var(--ease); }
+
+  .mc-explore {
+    font-size: 12px;
+    color: var(--text-dim);
+    opacity: 0;
+    transition: opacity 0.25s var(--ease);
+    margin-top: 8px;
+    text-align: right;
+  }
+  .module-card:hover .mc-explore { opacity: 1; }
+
+  /* ── Back Button ── */
+  .back-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-dim);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 16px;
+    cursor: pointer;
+    transition: all 0.2s var(--ease);
+    margin-bottom: 20px;
+    align-self: flex-start;
+    font-family: inherit;
+  }
+  .back-btn:hover { color: var(--text); background: var(--surface-hover); border-color: rgba(255,255,255,0.14); }
+
+  /* ── Level 2: Sub-module Grids ── */
+  .l2-header {
+    font-size: 22px;
+    font-weight: 600;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .l2-header-icon { font-size: 24px; }
+  .l2-content { flex: 1; overflow-y: auto; padding-bottom: 12px; }
+  .l2-content::-webkit-scrollbar { width: 4px; }
+  .l2-content::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+
+  .iter-row {
+    display: flex;
+    align-items: stretch;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  .iter-label {
+    writing-mode: vertical-lr;
+    transform: rotate(180deg);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    flex-shrink: 0;
+    padding: 8px 0;
+  }
+  .iter-cards { display: flex; gap: 12px; flex: 1; flex-wrap: wrap; }
+
+  .sub-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+    flex: 1;
+    min-width: 180px;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.2s var(--ease), border-color 0.2s var(--ease),
+                background 0.2s var(--ease);
+  }
+  .sub-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+  }
+  .sub-card:hover {
+    transform: translateY(-1px);
+    border-color: rgba(255,255,255,0.14);
+    background: var(--surface-hover);
+  }
+  .sub-card.pending-card {
+    opacity: 0.4;
+    cursor: default;
+  }
+  .sub-card.pending-card:hover { transform: none; border-color: var(--border); background: var(--surface); }
+
+  .sc-name { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  .sc-status { font-size: 11px; margin-bottom: 8px; display: flex; align-items: center; gap: 4px; }
+  .sc-status.complete { color: var(--green); }
+  .sc-status.active { color: var(--blue); }
+  .sc-status.pending { color: var(--text-dim); }
+  .sc-summary { font-size: 11px; color: var(--text-dim); line-height: 1.45; }
+  .sc-timing { font-size: 11px; color: var(--text-dim); margin-top: 6px; opacity: 0.7; }
+
+  #layer-seed .sub-card::before { background: var(--green); }
+  #layer-hypo .sub-card::before { background: var(--purple); }
+  #layer-inv .sub-card::before,
+  #layer-inv .flow-card::before { background: var(--blue); }
+  #layer-paper .sub-card::before { background: var(--orange); }
+
+  @keyframes pulse-glow {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(59,130,246,0.15); }
+    50% { box-shadow: 0 0 20px 4px rgba(59,130,246,0.15); }
+  }
+  .sub-card.active-pulse {
+    animation: pulse-glow 2.5s ease-in-out infinite;
+    border-color: rgba(59,130,246,0.3);
+  }
+
+  /* ── Invention Loop flow cards ── */
+  .flow-cards {
+    display: flex;
+    gap: 8px;
+    flex: 1;
+    align-items: stretch;
+  }
+  .flow-arrow {
+    display: flex;
+    align-items: center;
+    color: var(--text-dim);
+    opacity: 0.3;
+    font-size: 10px;
+    flex-shrink: 0;
+  }
+  .flow-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 12px;
+    flex: 1;
+    min-width: 0;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.2s var(--ease), border-color 0.2s var(--ease),
+                background 0.2s var(--ease);
+  }
+  .flow-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: var(--blue);
+  }
+  .flow-card:hover {
+    transform: translateY(-1px);
+    border-color: rgba(255,255,255,0.14);
+    background: var(--surface-hover);
+  }
+  .flow-card.pending-card { opacity: 0.35; cursor: default; }
+  .flow-card.pending-card:hover { transform: none; border-color: var(--border); background: var(--surface); }
+  .flow-card.active-pulse {
+    animation: pulse-glow 2.5s ease-in-out infinite;
+    border-color: rgba(59,130,246,0.3);
+  }
+
+  .fc-name { font-size: 11px; font-weight: 600; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .fc-status { font-size: 10px; display: flex; align-items: center; gap: 3px; }
+  .fc-status.complete { color: var(--green); }
+  .fc-status.active { color: var(--blue); }
+  .fc-status.pending { color: var(--text-dim); }
+
+  /* ── Level 3: Detail View ── */
+  .l3-detail {
+    flex: 1;
+    overflow-y: auto;
+    padding-bottom: 12px;
+  }
+  .l3-detail::-webkit-scrollbar { width: 4px; }
+  .l3-detail::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+
+  .detail-hero {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 20px;
+  }
+  .detail-hero::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--blue);
+  }
+  .dh-title { font-size: 20px; font-weight: 600; margin-bottom: 6px; }
+  .dh-meta { display: flex; gap: 16px; font-size: 12px; color: var(--text-dim); margin-bottom: 20px; flex-wrap: wrap; }
+  .dh-meta-item { display: flex; align-items: center; gap: 5px; }
+
+  .artifact-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 12px;
+    margin-top: 16px;
+  }
+  .artifact-card {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+    transition: border-color 0.2s;
+  }
+  .artifact-card:hover { border-color: rgba(255,255,255,0.14); }
+  .ac-name { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  .ac-row { display: flex; align-items: center; justify-content: space-between; font-size: 12px; }
+  .ac-detail { color: var(--text-dim); }
+  .ac-cost { color: var(--text-dim); font-variant-numeric: tabular-nums; }
+
+  .detail-totals {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 28px;
+    display: flex;
+    gap: 32px;
+    font-size: 13px;
+    flex-wrap: wrap;
+  }
+  .dt-item { display: flex; flex-direction: column; gap: 4px; }
+  .dt-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+  .dt-value { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  /* ── Bottom Stats Bar ── */
+  .bottombar {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    padding: 10px 28px;
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--text-dim);
+    background: rgba(10,10,15,0.95);
+    backdrop-filter: blur(12px);
+    flex-shrink: 0;
+  }
+  .bb-item { display: flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
+  .bb-dot { width: 6px; height: 6px; border-radius: 50%; }
+
+  /* ── Zoom overlay transition ── */
+  .zoom-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    opacity: 0;
+    pointer-events: none;
+    z-index: 50;
+    transition: opacity 0.35s var(--ease);
+  }
+  .zoom-overlay.visible { opacity: 1; }
+</style>
+</head>
+<body>
+
+<!-- Zoom overlay (dims background during transition) -->
+<div class="zoom-overlay" id="zoomOverlay"></div>
+
+<!-- Top Bar -->
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="topbar-logo">AI Inventor</div>
+    <div class="topbar-run">ssl-low-resource-v3</div>
+  </div>
+  <nav class="breadcrumb" id="breadcrumb">
+    <button class="breadcrumb-item active" data-level="0">Overview</button>
+  </nav>
+</div>
+
+<!-- Main Content Area -->
+<div class="main" id="mainArea">
+
+  <!-- Level 1: Module Grid -->
+  <div class="zoom-layer visible" id="layer0">
+    <div class="module-grid">
+      <div class="module-card" data-color="green" data-module="seed" onclick="zoomToModule('seed')">
+        <div class="mc-top">
+          <div class="mc-icon">&#x1F331;</div>
+          <div>
+            <div class="mc-name">Seed Hypothesis</div>
+            <div class="mc-summary">847 papers mined, 12 research gaps identified across 4 domains</div>
+          </div>
+        </div>
+        <div>
+          <div class="mc-bottom">
+            <span class="mc-status complete">&#10003; Complete</span>
+            <div class="mc-progress"><div class="mc-progress-fill" style="width:100%; background:var(--green)"></div></div>
+          </div>
+          <div class="mc-explore">click to explore &rarr;</div>
+        </div>
+      </div>
+
+      <div class="module-card" data-color="purple" data-module="hypo" onclick="zoomToModule('hypo')">
+        <div class="mc-top">
+          <div class="mc-icon">&#x1F504;</div>
+          <div>
+            <div class="mc-name">Hypothesis Loop</div>
+            <div class="mc-summary">3 iterations, novelty score 6.2 &rarr; 8.4</div>
+          </div>
+        </div>
+        <div>
+          <div class="mc-bottom">
+            <span class="mc-status complete">&#10003; Complete</span>
+            <div class="mc-progress"><div class="mc-progress-fill" style="width:100%; background:var(--purple)"></div></div>
+          </div>
+          <div class="mc-explore">click to explore &rarr;</div>
+        </div>
+      </div>
+
+      <div class="module-card" data-color="blue" data-module="inv" onclick="zoomToModule('inv')">
+        <div class="mc-top">
+          <div class="mc-icon">&#x2699;&#xFE0F;</div>
+          <div>
+            <div class="mc-name">Invention Loop</div>
+            <div class="mc-summary">Iteration 2 of 3 in progress, 8 artifacts generated</div>
+          </div>
+        </div>
+        <div>
+          <div class="mc-bottom">
+            <span class="mc-status active">&#9654; Active</span>
+            <div class="mc-progress"><div class="mc-progress-fill" style="width:55%; background:var(--blue)"></div></div>
+          </div>
+          <div class="mc-explore">click to explore &rarr;</div>
+        </div>
+      </div>
+
+      <div class="module-card" data-color="orange" data-module="paper" onclick="zoomToModule('paper')">
+        <div class="mc-top">
+          <div class="mc-icon">&#x1F4C4;</div>
+          <div>
+            <div class="mc-name">Paper &amp; Repository</div>
+            <div class="mc-summary">Awaiting invention loop completion</div>
+          </div>
+        </div>
+        <div>
+          <div class="mc-bottom">
+            <span class="mc-status pending">&#9675; Pending</span>
+            <div class="mc-progress"><div class="mc-progress-fill" style="width:0%; background:var(--orange)"></div></div>
+          </div>
+          <div class="mc-explore">click to explore &rarr;</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Level 2: Seed Hypothesis -->
+  <div class="zoom-layer" id="layer-seed">
+    <button class="back-btn" onclick="zoomBack(0)">&larr; Back to Overview</button>
+    <div class="l2-header"><span class="l2-header-icon">&#x1F331;</span> Seed Hypothesis</div>
+    <div class="l2-content">
+      <div class="iter-row">
+        <div class="iter-label">Phase</div>
+        <div class="iter-cards">
+          <div class="sub-card" onclick="zoomToDetail('seed','kg')">
+            <div class="sc-name">Build Knowledge Graph</div>
+            <div class="sc-status complete">&#10003; Complete</div>
+            <div class="sc-summary">847 papers processed, 3,291 concept nodes, 8,417 edges</div>
+            <div class="sc-timing">4m 22s &middot; $3.81</div>
+          </div>
+          <div class="sub-card" onclick="zoomToDetail('seed','gaps')">
+            <div class="sc-name">Identify Research Gaps</div>
+            <div class="sc-status complete">&#10003; Complete</div>
+            <div class="sc-summary">12 gaps found across 4 domains, top gap score 0.94</div>
+            <div class="sc-timing">1m 48s &middot; $1.22</div>
+          </div>
+          <div class="sub-card" onclick="zoomToDetail('seed','init')">
+            <div class="sc-name">Generate Initial Hypotheses</div>
+            <div class="sc-status complete">&#10003; Complete</div>
+            <div class="sc-summary">24 candidate hypotheses seeded from top 6 gaps</div>
+            <div class="sc-timing">2m 05s &middot; $1.97</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Level 2: Hypothesis Loop -->
+  <div class="zoom-layer" id="layer-hypo">
+    <button class="back-btn" onclick="zoomBack(0)">&larr; Back to Overview</button>
+    <div class="l2-header"><span class="l2-header-icon">&#x1F504;</span> Hypothesis Loop</div>
+    <div class="l2-content">
+      <div class="iter-row">
+        <div class="iter-label">Iter 1</div>
+        <div class="iter-cards">
+          <div class="sub-card" style="--accent:var(--purple)" onclick="zoomToDetail('hypo','gen1')">
+            <div class="sc-name">Generate Hypothesis</div>
+            <div class="sc-status complete">&#10003; Complete</div>
+            <div class="sc-summary">8 hypotheses generated, best novelty 6.2</div>
+            <div class="sc-timing">3m 12s &middot; $2.44</div>
+          </div>
+          <div class="sub-card" onclick="zoomToDetail('hypo','rev1')">
+            <div class="sc-name">Review Hypothesis</div>
+            <div class="sc-status complete">&#10003; Complete</div>
+            <div class="sc-summary">4 passed, 4 rejected, feedback integrated</div>
+            <div class="sc-timing">2m 45s &middot; $1.89</div>
+          </div>
+        </div>
+      </div>
+      <div class="iter-row">
+        <div class="iter-label">Iter 2</div>
+        <div class="iter-cards">
+          <div class="sub-card" onclick="zoomToDetail('hypo','gen2')">
+            <div class="sc-name">Generate Hypothesis</div>
+            <div class="sc-status complete">&#10003; Complete</div>
+            <div class="sc-summary">6 refined hypotheses, best novelty 7.8</div>
+            <div class="sc-timing">2m 58s &middot; $2.31</div>
+          </div>
+          <div class="sub-card" onclick="zoomToDetail('hypo','rev2')">
+            <div class="sc-name">Review Hypothesis</div>
+            <div class="sc-status complete">&#10003; Complete</div>
+            <div class="sc-summary">5 passed, 1 rejected, minor revisions</div>
+            <div class="sc-timing">2m 18s &middot; $1.62</div>
+          </div>
+        </div>
+      </div>
+      <div class="iter-row">
+        <div class="iter-label">Iter 3</div>
+        <div class="iter-cards">
+          <div class="sub-card" onclick="zoomToDetail('hypo','gen3')">
+            <div class="sc-name">Generate Hypothesis</div>
+            <div class="sc-status complete">&#10003; Complete</div>
+            <div class="sc-summary">5 final hypotheses, best novelty 8.4</div>
+            <div class="sc-timing">2m 41s &middot; $2.18</div>
+          </div>
+          <div class="sub-card" onclick="zoomToDetail('hypo','rev3')">
+            <div class="sc-name">Review Hypothesis</div>
+            <div class="sc-status complete">&#10003; Complete</div>
+            <div class="sc-summary">All 5 accepted, final score 8.4</div>
+            <div class="sc-timing">1m 55s &middot; $1.41</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Level 2: Invention Loop -->
+  <div class="zoom-layer" id="layer-inv">
+    <button class="back-btn" onclick="zoomBack(0)">&larr; Back to Overview</button>
+    <div class="l2-header"><span class="l2-header-icon">&#x2699;&#xFE0F;</span> Invention Loop</div>
+    <div class="l2-content">
+      <div class="iter-row">
+        <div class="iter-label">Iter 1</div>
+        <div class="flow-cards">
+          <div class="flow-card" onclick="zoomToDetail('inv','strat1')">
+            <div class="fc-name">Gen Strategy</div>
+            <div class="fc-status complete">&#10003; Done</div>
+          </div>
+          <div class="flow-arrow">&rarr;</div>
+          <div class="flow-card" onclick="zoomToDetail('inv','plan1')">
+            <div class="fc-name">Gen Plan</div>
+            <div class="fc-status complete">&#10003; Done</div>
+          </div>
+          <div class="flow-arrow">&rarr;</div>
+          <div class="flow-card" onclick="zoomToDetail('inv','art1')">
+            <div class="fc-name">Gen Artifacts</div>
+            <div class="fc-status complete">&#10003; Done</div>
+          </div>
+          <div class="flow-arrow">&rarr;</div>
+          <div class="flow-card" onclick="zoomToDetail('inv','paper1')">
+            <div class="fc-name">Gen Paper</div>
+            <div class="fc-status complete">&#10003; Done</div>
+          </div>
+          <div class="flow-arrow">&rarr;</div>
+          <div class="flow-card" onclick="zoomToDetail('inv','review1')">
+            <div class="fc-name">Review</div>
+            <div class="fc-status complete">&#10003; Done</div>
+          </div>
+          <div class="flow-arrow">&rarr;</div>
+          <div class="flow-card" onclick="zoomToDetail('inv','upd1')">
+            <div class="fc-name">Upd Hypothesis</div>
+            <div class="fc-status complete">&#10003; Done</div>
+          </div>
+        </div>
+      </div>
+      <div class="iter-row">
+        <div class="iter-label">Iter 2</div>
+        <div class="flow-cards">
+          <div class="flow-card" onclick="zoomToDetail('inv','strat2')">
+            <div class="fc-name">Gen Strategy</div>
+            <div class="fc-status complete">&#10003; Done</div>
+          </div>
+          <div class="flow-arrow">&rarr;</div>
+          <div class="flow-card" onclick="zoomToDetail('inv','plan2')">
+            <div class="fc-name">Gen Plan</div>
+            <div class="fc-status complete">&#10003; Done</div>
+          </div>
+          <div class="flow-arrow">&rarr;</div>
+          <div class="flow-card active-pulse" onclick="zoomToDetail('inv','art2')">
+            <div class="fc-name">Gen Artifacts</div>
+            <div class="fc-status active">&#9654; Active</div>
+          </div>
+          <div class="flow-arrow">&rarr;</div>
+          <div class="flow-card pending-card">
+            <div class="fc-name">Gen Paper</div>
+            <div class="fc-status pending">&#9675; Pending</div>
+          </div>
+          <div class="flow-arrow">&rarr;</div>
+          <div class="flow-card pending-card">
+            <div class="fc-name">Review</div>
+            <div class="fc-status pending">&#9675; Pending</div>
+          </div>
+          <div class="flow-arrow">&rarr;</div>
+          <div class="flow-card pending-card">
+            <div class="fc-name">Upd Hypothesis</div>
+            <div class="fc-status pending">&#9675; Pending</div>
+          </div>
+        </div>
+      </div>
+      <div class="iter-row" style="opacity: 0.3;">
+        <div class="iter-label">Iter 3</div>
+        <div class="flow-cards">
+          <div class="flow-card pending-card">
+            <div class="fc-name">Gen Strategy</div>
+            <div class="fc-status pending">&#9675; Pending</div>
+          </div>
+          <div class="flow-arrow">&rarr;</div>
+          <div class="flow-card pending-card">
+            <div class="fc-name">Gen Plan</div>
+            <div class="fc-status pending">&#9675; Pending</div>
+          </div>
+          <div class="flow-arrow">&rarr;</div>
+          <div class="flow-card pending-card">
+            <div class="fc-name">Gen Artifacts</div>
+            <div class="fc-status pending">&#9675; Pending</div>
+          </div>
+          <div class="flow-arrow">&rarr;</div>
+          <div class="flow-card pending-card">
+            <div class="fc-name">Gen Paper</div>
+            <div class="fc-status pending">&#9675; Pending</div>
+          </div>
+          <div class="flow-arrow">&rarr;</div>
+          <div class="flow-card pending-card">
+            <div class="fc-name">Review</div>
+            <div class="fc-status pending">&#9675; Pending</div>
+          </div>
+          <div class="flow-arrow">&rarr;</div>
+          <div class="flow-card pending-card">
+            <div class="fc-name">Upd Hypothesis</div>
+            <div class="fc-status pending">&#9675; Pending</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Level 2: Paper & Repository -->
+  <div class="zoom-layer" id="layer-paper">
+    <button class="back-btn" onclick="zoomBack(0)">&larr; Back to Overview</button>
+    <div class="l2-header"><span class="l2-header-icon">&#x1F4C4;</span> Paper &amp; Repository</div>
+    <div class="l2-content">
+      <div class="iter-row">
+        <div class="iter-label">Steps</div>
+        <div class="iter-cards">
+          <div class="sub-card pending-card">
+            <div class="sc-name">Generate Visualizations</div>
+            <div class="sc-status pending">&#9675; Pending</div>
+            <div class="sc-summary">Awaiting invention loop</div>
+          </div>
+          <div class="sub-card pending-card">
+            <div class="sc-name">Generate Artifact Demos</div>
+            <div class="sc-status pending">&#9675; Pending</div>
+            <div class="sc-summary">Awaiting invention loop</div>
+          </div>
+          <div class="sub-card pending-card">
+            <div class="sc-name">Generate Full Paper</div>
+            <div class="sc-status pending">&#9675; Pending</div>
+            <div class="sc-summary">Awaiting invention loop</div>
+          </div>
+          <div class="sub-card pending-card">
+            <div class="sc-name">Build Repository</div>
+            <div class="sc-status pending">&#9675; Pending</div>
+            <div class="sc-summary">Awaiting invention loop</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Level 3: Detail (dynamically populated) -->
+  <div class="zoom-layer" id="layer3">
+    <button class="back-btn" id="l3BackBtn">&larr; Back</button>
+    <div class="l3-detail" id="l3Content"></div>
+  </div>
+
+</div>
+
+<!-- Bottom Stats Bar -->
+<div class="bottombar">
+  <div class="bb-item"><div class="bb-dot" style="background:var(--blue)"></div> Running</div>
+  <div class="bb-item">Elapsed: 42m 18s</div>
+  <div class="bb-item">Cost: $24.67</div>
+  <div class="bb-item">Tokens: 1.84M in / 312K out</div>
+  <div class="bb-item">Steps: 14/22</div>
+</div>
+
+<script>
+(function() {
+  // ── State ──
+  let currentLevel = 0;
+  let currentModule = null;
+  let currentDetail = null;
+  const history = []; // stack of {level, module, detail}
+
+  // ── Module metadata ──
+  const modules = {
+    seed:  { name: 'Seed Hypothesis', icon: '\u{1F331}', color: 'green' },
+    hypo:  { name: 'Hypothesis Loop', icon: '\u{1F504}', color: 'purple' },
+    inv:   { name: 'Invention Loop',  icon: '\u2699\uFE0F', color: 'blue' },
+    paper: { name: 'Paper & Repository', icon: '\u{1F4C4}', color: 'orange' }
+  };
+
+  // ── Detail data ──
+  const details = {
+    'seed-kg': {
+      title: 'Build Knowledge Graph',
+      status: 'complete', statusText: '\u2713 Complete',
+      timing: '4m 22s', cost: '$3.81',
+      description: 'Processed 847 papers from Semantic Scholar and ArXiv. Built a knowledge graph with 3,291 concept nodes and 8,417 directed edges representing citation, methodology, and result relationships.',
+      items: [
+        { name: 'Paper Ingestion', detail: '847 papers parsed', cost: '$1.24', status: 'complete' },
+        { name: 'Entity Extraction', detail: '3,291 concepts identified', cost: '$1.42', status: 'complete' },
+        { name: 'Edge Construction', detail: '8,417 relationships mapped', cost: '$0.89', status: 'complete' },
+        { name: 'Graph Validation', detail: '99.2% consistency score', cost: '$0.26', status: 'complete' }
+      ],
+      totals: { completed: '4/4', cost: '$3.81', time: '4m 22s' }
+    },
+    'seed-gaps': {
+      title: 'Identify Research Gaps',
+      status: 'complete', statusText: '\u2713 Complete',
+      timing: '1m 48s', cost: '$1.22',
+      description: 'Analyzed knowledge graph topology to identify under-explored regions. Found 12 significant gaps across 4 research domains.',
+      items: [
+        { name: 'Topology Analysis', detail: 'Graph centrality + clustering', cost: '$0.44', status: 'complete' },
+        { name: 'Gap Scoring', detail: '12 gaps, top score 0.94', cost: '$0.38', status: 'complete' },
+        { name: 'Domain Classification', detail: '4 domains identified', cost: '$0.40', status: 'complete' }
+      ],
+      totals: { completed: '3/3', cost: '$1.22', time: '1m 48s' }
+    },
+    'seed-init': {
+      title: 'Generate Initial Hypotheses',
+      status: 'complete', statusText: '\u2713 Complete',
+      timing: '2m 05s', cost: '$1.97',
+      description: 'Seeded 24 candidate hypotheses from the top 6 research gaps, using contrastive generation against existing literature.',
+      items: [
+        { name: 'Gap Prioritization', detail: 'Top 6 selected from 12', cost: '$0.32', status: 'complete' },
+        { name: 'Hypothesis Generation', detail: '24 candidates seeded', cost: '$1.18', status: 'complete' },
+        { name: 'Novelty Pre-screen', detail: 'All 24 pass threshold', cost: '$0.47', status: 'complete' }
+      ],
+      totals: { completed: '3/3', cost: '$1.97', time: '2m 05s' }
+    },
+    'hypo-gen1': {
+      title: 'Generate Hypothesis \u2014 Iteration 1',
+      status: 'complete', statusText: '\u2713 Complete',
+      timing: '3m 12s', cost: '$2.44',
+      description: 'First-pass hypothesis generation from seeded candidates. Produced 8 structured hypotheses with novelty scoring.',
+      items: [
+        { name: 'Candidate Expansion', detail: '24 seeds \u2192 8 structured hypotheses', cost: '$1.12', status: 'complete' },
+        { name: 'Literature Cross-check', detail: 'No exact matches found', cost: '$0.74', status: 'complete' },
+        { name: 'Novelty Scoring', detail: 'Best score: 6.2/10', cost: '$0.58', status: 'complete' }
+      ],
+      totals: { completed: '3/3', cost: '$2.44', time: '3m 12s' }
+    },
+    'hypo-rev1': {
+      title: 'Review Hypothesis \u2014 Iteration 1',
+      status: 'complete', statusText: '\u2713 Complete',
+      timing: '2m 45s', cost: '$1.89',
+      description: 'Peer-review simulation. 4 hypotheses passed feasibility and novelty checks, 4 rejected with detailed feedback.',
+      items: [
+        { name: 'Feasibility Check', detail: '6/8 feasible', cost: '$0.68', status: 'complete' },
+        { name: 'Novelty Validation', detail: '4/6 sufficiently novel', cost: '$0.72', status: 'complete' },
+        { name: 'Feedback Synthesis', detail: 'Revision notes for iter 2', cost: '$0.49', status: 'complete' }
+      ],
+      totals: { completed: '3/3', cost: '$1.89', time: '2m 45s' }
+    },
+    'hypo-gen2': {
+      title: 'Generate Hypothesis \u2014 Iteration 2',
+      status: 'complete', statusText: '\u2713 Complete',
+      timing: '2m 58s', cost: '$2.31',
+      description: 'Refined hypotheses incorporating review feedback. 6 stronger candidates with improved novelty.',
+      items: [
+        { name: 'Feedback Integration', detail: '4 revised + 2 new', cost: '$0.88', status: 'complete' },
+        { name: 'Novelty Re-scoring', detail: 'Best score: 7.8/10', cost: '$0.62', status: 'complete' },
+        { name: 'Consistency Check', detail: 'All internally consistent', cost: '$0.81', status: 'complete' }
+      ],
+      totals: { completed: '3/3', cost: '$2.31', time: '2m 58s' }
+    },
+    'hypo-rev2': {
+      title: 'Review Hypothesis \u2014 Iteration 2',
+      status: 'complete', statusText: '\u2713 Complete',
+      timing: '2m 18s', cost: '$1.62',
+      description: '5 of 6 hypotheses accepted. One rejected for insufficient differentiation from prior work.',
+      items: [
+        { name: 'Feasibility Check', detail: '6/6 feasible', cost: '$0.54', status: 'complete' },
+        { name: 'Novelty Validation', detail: '5/6 pass', cost: '$0.61', status: 'complete' },
+        { name: 'Final Annotations', detail: 'Minor revision notes', cost: '$0.47', status: 'complete' }
+      ],
+      totals: { completed: '3/3', cost: '$1.62', time: '2m 18s' }
+    },
+    'hypo-gen3': {
+      title: 'Generate Hypothesis \u2014 Iteration 3',
+      status: 'complete', statusText: '\u2713 Complete',
+      timing: '2m 41s', cost: '$2.18',
+      description: 'Final refinement pass. 5 polished hypotheses ready for invention loop.',
+      items: [
+        { name: 'Final Refinement', detail: '5 candidates finalized', cost: '$0.92', status: 'complete' },
+        { name: 'Novelty Scoring', detail: 'Best score: 8.4/10', cost: '$0.58', status: 'complete' },
+        { name: 'Ranking', detail: 'Top hypothesis selected', cost: '$0.68', status: 'complete' }
+      ],
+      totals: { completed: '3/3', cost: '$2.18', time: '2m 41s' }
+    },
+    'hypo-rev3': {
+      title: 'Review Hypothesis \u2014 Iteration 3',
+      status: 'complete', statusText: '\u2713 Complete',
+      timing: '1m 55s', cost: '$1.41',
+      description: 'All 5 hypotheses accepted. Final novelty score: 8.4/10. Ready for invention.',
+      items: [
+        { name: 'Final Review', detail: 'All 5 accepted', cost: '$0.82', status: 'complete' },
+        { name: 'Score Confirmation', detail: 'Final: 8.4/10', cost: '$0.59', status: 'complete' }
+      ],
+      totals: { completed: '2/2', cost: '$1.41', time: '1m 55s' }
+    },
+    'inv-strat1': {
+      title: 'Generate Strategy \u2014 Iteration 1',
+      status: 'complete', statusText: '\u2713 Complete',
+      timing: '1m 33s', cost: '$1.12',
+      description: 'Devised experimental strategy: contrastive learning with multilingual alignment for low-resource SSL.',
+      items: [
+        { name: 'Strategy Formulation', detail: 'Contrastive + alignment approach', cost: '$0.72', status: 'complete' },
+        { name: 'Resource Estimation', detail: '5 artifacts planned', cost: '$0.40', status: 'complete' }
+      ],
+      totals: { completed: '2/2', cost: '$1.12', time: '1m 33s' }
+    },
+    'inv-plan1': {
+      title: 'Generate Plan \u2014 Iteration 1',
+      status: 'complete', statusText: '\u2713 Complete',
+      timing: '2m 08s', cost: '$1.54',
+      description: 'Detailed experimental plan with 5 artifacts, dependency graph, and success criteria.',
+      items: [
+        { name: 'Artifact Specification', detail: '5 artifacts defined', cost: '$0.88', status: 'complete' },
+        { name: 'Dependency Graph', detail: 'Execution order planned', cost: '$0.66', status: 'complete' }
+      ],
+      totals: { completed: '2/2', cost: '$1.54', time: '2m 08s' }
+    },
+    'inv-art1': {
+      title: 'Generate Artifacts \u2014 Iteration 1',
+      status: 'complete', statusText: '\u2713 Complete',
+      timing: '8m 44s', cost: '$4.21',
+      description: 'All 5 planned artifacts generated and validated.',
+      items: [
+        { name: 'Baseline Experiment', detail: 'acc: 0.812', cost: '$1.48', status: 'complete' },
+        { name: 'Training Dataset', detail: '1,800 examples', cost: '$0.76', status: 'complete' },
+        { name: 'Convergence Analysis', detail: 'Verified stable', cost: '$0.62', status: 'complete' },
+        { name: 'Ablation Study', detail: '4 ablations run', cost: '$0.91', status: 'complete' },
+        { name: 'Evaluation Script', detail: '3 metrics computed', cost: '$0.44', status: 'complete' }
+      ],
+      totals: { completed: '5/5', cost: '$4.21', time: '8m 44s' }
+    },
+    'inv-paper1': {
+      title: 'Generate Paper Text \u2014 Iteration 1',
+      status: 'complete', statusText: '\u2713 Complete',
+      timing: '3m 19s', cost: '$2.08',
+      description: 'First draft of paper text covering methodology, results, and analysis.',
+      items: [
+        { name: 'Methodology Section', detail: '1,200 words', cost: '$0.74', status: 'complete' },
+        { name: 'Results Section', detail: '800 words + 3 tables', cost: '$0.68', status: 'complete' },
+        { name: 'Analysis Section', detail: '600 words', cost: '$0.66', status: 'complete' }
+      ],
+      totals: { completed: '3/3', cost: '$2.08', time: '3m 19s' }
+    },
+    'inv-review1': {
+      title: 'Review Paper \u2014 Iteration 1',
+      status: 'complete', statusText: '\u2713 Complete',
+      timing: '2m 02s', cost: '$1.44',
+      description: 'Review identified 3 major and 5 minor issues. Score: 5.8/10.',
+      items: [
+        { name: 'Technical Review', detail: '3 major issues', cost: '$0.82', status: 'complete' },
+        { name: 'Writing Review', detail: '5 minor issues', cost: '$0.62', status: 'complete' }
+      ],
+      totals: { completed: '2/2', cost: '$1.44', time: '2m 02s' }
+    },
+    'inv-upd1': {
+      title: 'Update Hypothesis \u2014 Iteration 1',
+      status: 'complete', statusText: '\u2713 Complete',
+      timing: '1m 14s', cost: '$0.88',
+      description: 'Hypothesis refined based on experimental findings. Narrowed scope to cross-lingual contrastive pairs.',
+      items: [
+        { name: 'Hypothesis Revision', detail: 'Scope narrowed', cost: '$0.52', status: 'complete' },
+        { name: 'Score Update', detail: '6.2 \u2192 7.1', cost: '$0.36', status: 'complete' }
+      ],
+      totals: { completed: '2/2', cost: '$0.88', time: '1m 14s' }
+    },
+    'inv-strat2': {
+      title: 'Generate Strategy \u2014 Iteration 2',
+      status: 'complete', statusText: '\u2713 Complete',
+      timing: '1m 28s', cost: '$1.06',
+      description: 'Refined strategy: stronger contrastive baselines + multilingual pair dataset expansion.',
+      items: [
+        { name: 'Strategy Refinement', detail: 'Expanded scope', cost: '$0.64', status: 'complete' },
+        { name: 'New Artifact Planning', detail: '5 artifacts revised', cost: '$0.42', status: 'complete' }
+      ],
+      totals: { completed: '2/2', cost: '$1.06', time: '1m 28s' }
+    },
+    'inv-plan2': {
+      title: 'Generate Plan \u2014 Iteration 2',
+      status: 'complete', statusText: '\u2713 Complete',
+      timing: '1m 52s', cost: '$1.38',
+      description: 'Updated experimental plan with stronger baselines and expanded evaluation.',
+      items: [
+        { name: 'Plan Revision', detail: '5 artifacts re-specified', cost: '$0.82', status: 'complete' },
+        { name: 'Dependency Update', detail: 'New execution order', cost: '$0.56', status: 'complete' }
+      ],
+      totals: { completed: '2/2', cost: '$1.38', time: '1m 52s' }
+    },
+    'inv-art2': {
+      title: 'Generate Artifacts \u2014 Iteration 2',
+      status: 'active', statusText: '\u25B6 Active',
+      timing: '12m 08s', cost: '$5.41',
+      description: 'Generating refined artifacts with stronger baselines. 3 of 5 complete, 1 running, 1 pending.',
+      items: [
+        { name: 'Contrastive Baseline Experiment', detail: 'acc: 0.847', cost: '$2.14', status: 'complete' },
+        { name: 'Multilingual Pairs Dataset', detail: '2,400 examples', cost: '$1.02', status: 'complete' },
+        { name: 'Convergence Proof', detail: 'Verified in Lean 4', cost: '$0.89', status: 'complete' },
+        { name: 'Ablation Study', detail: 'Running...', cost: '$1.36', status: 'active' },
+        { name: 'Cross-lingual Evaluation', detail: 'Pending', cost: '\u2014', status: 'pending' }
+      ],
+      totals: { completed: '3/5', cost: '$5.41', time: '12m 08s' }
+    }
+  };
+
+  // ── Breadcrumb ──
+  function updateBreadcrumb() {
+    const bc = document.getElementById('breadcrumb');
+    let html = '<button class="breadcrumb-item' + (currentLevel === 0 ? ' active' : '') + '" onclick="window._zoom.goTo(0)">Overview</button>';
+    if (currentLevel >= 1 && currentModule) {
+      html += '<span class="breadcrumb-sep">/</span>';
+      html += '<button class="breadcrumb-item' + (currentLevel === 1 ? ' active' : '') + '" onclick="window._zoom.goTo(1)">' + modules[currentModule].name + '</button>';
+    }
+    if (currentLevel >= 2 && currentDetail) {
+      const d = details[currentModule + '-' + currentDetail];
+      if (d) {
+        html += '<span class="breadcrumb-sep">/</span>';
+        html += '<button class="breadcrumb-item active">' + d.title + '</button>';
+      }
+    }
+    bc.innerHTML = html;
+  }
+
+  // ── Layer switching with zoom animation ──
+  function showLayer(id, direction) {
+    const overlay = document.getElementById('zoomOverlay');
+    const allLayers = document.querySelectorAll('.zoom-layer');
+
+    // Flash overlay for zoom feel
+    overlay.classList.add('visible');
+
+    setTimeout(function() {
+      allLayers.forEach(function(l) { l.classList.remove('visible'); });
+      const target = document.getElementById(id);
+      if (target) {
+        target.classList.add('visible');
+        // Subtle scale entrance
+        target.style.transform = direction === 'in' ? 'scale(0.92)' : 'scale(1.06)';
+        target.style.opacity = '0';
+        target.style.transition = 'none';
+        // Force reflow
+        void target.offsetWidth;
+        target.style.transition = 'transform 0.4s cubic-bezier(0.4,0,0.2,1), opacity 0.35s cubic-bezier(0.4,0,0.2,1)';
+        target.style.transform = 'scale(1)';
+        target.style.opacity = '1';
+      }
+      setTimeout(function() { overlay.classList.remove('visible'); }, 150);
+    }, 180);
+  }
+
+  // ── Navigate to module (Level 1 -> 2) ──
+  window.zoomToModule = function(mod) {
+    history.push({ level: currentLevel, module: currentModule, detail: currentDetail });
+    currentLevel = 1;
+    currentModule = mod;
+    currentDetail = null;
+    updateBreadcrumb();
+    showLayer('layer-' + mod, 'in');
+  };
+
+  // ── Navigate to detail (Level 2 -> 3) ──
+  window.zoomToDetail = function(mod, det) {
+    var key = mod + '-' + det;
+    var data = details[key];
+    if (!data) return;
+
+    history.push({ level: currentLevel, module: currentModule, detail: currentDetail });
+    currentLevel = 2;
+    currentModule = mod;
+    currentDetail = det;
+    updateBreadcrumb();
+
+    // Build detail HTML
+    var modInfo = modules[mod];
+    var statusClass = data.status;
+    var accentVar = 'var(--' + modInfo.color + ')';
+    var html = '';
+
+    // Back button target
+    document.getElementById('l3BackBtn').onclick = function() { zoomBack(1); };
+    document.getElementById('l3BackBtn').innerHTML = '&larr; Back to ' + modInfo.name;
+
+    html += '<div class="detail-hero" style="border-color:' + accentVar + '22">';
+    html += '<div style="position:absolute;top:0;left:0;right:0;height:3px;background:' + accentVar + ';border-radius:16px 16px 0 0"></div>';
+    html += '<div class="dh-title">' + data.title + '</div>';
+    html += '<div class="dh-meta">';
+    html += '<span class="dh-meta-item"><span class="mc-status ' + statusClass + '">' + data.statusText + '</span></span>';
+    html += '<span class="dh-meta-item">\u{1F552} ' + data.timing + '</span>';
+    html += '<span class="dh-meta-item">\u{1F4B0} ' + data.cost + '</span>';
+    html += '</div>';
+    html += '<p style="font-size:13px;color:var(--text-dim);line-height:1.6;margin-bottom:20px">' + data.description + '</p>';
+
+    html += '<div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--text-dim);margin-bottom:12px">Artifacts / Sub-tasks</div>';
+    html += '<div class="artifact-grid">';
+    data.items.forEach(function(item) {
+      var icon = item.status === 'complete' ? '<span style="color:var(--green)">\u2713</span>' :
+                 item.status === 'active'   ? '<span style="color:var(--blue)">\u25B6</span>' :
+                                              '<span style="color:var(--text-dim)">\u25CB</span>';
+      html += '<div class="artifact-card">';
+      html += '<div class="ac-name">' + icon + ' ' + item.name + '</div>';
+      html += '<div class="ac-row"><span class="ac-detail">' + item.detail + '</span><span class="ac-cost">' + item.cost + '</span></div>';
+      html += '</div>';
+    });
+    html += '</div>';
+    html += '</div>';
+
+    // Totals
+    html += '<div class="detail-totals">';
+    html += '<div class="dt-item"><span class="dt-label">Progress</span><span class="dt-value">' + data.totals.completed + ' complete</span></div>';
+    html += '<div class="dt-item"><span class="dt-label">Cost</span><span class="dt-value">' + data.totals.cost + '</span></div>';
+    html += '<div class="dt-item"><span class="dt-label">Elapsed</span><span class="dt-value">' + data.totals.time + '</span></div>';
+    html += '</div>';
+
+    document.getElementById('l3Content').innerHTML = html;
+    showLayer('layer3', 'in');
+  };
+
+  // ── Back navigation ──
+  window.zoomBack = function(targetLevel) {
+    if (targetLevel === 0) {
+      currentLevel = 0;
+      currentModule = null;
+      currentDetail = null;
+      history.length = 0;
+      updateBreadcrumb();
+      showLayer('layer0', 'out');
+    } else if (targetLevel === 1 && currentModule) {
+      currentLevel = 1;
+      currentDetail = null;
+      // Trim history
+      while (history.length > 0 && history[history.length - 1].level >= 1) {
+        history.pop();
+      }
+      updateBreadcrumb();
+      showLayer('layer-' + currentModule, 'out');
+    }
+  };
+
+  // ── Breadcrumb navigation exposed ──
+  window._zoom = {
+    goTo: function(level) {
+      if (level === currentLevel) return;
+      if (level === 0) zoomBack(0);
+      else if (level === 1) zoomBack(1);
+    }
+  };
+
+  // ── Keyboard navigation ──
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' || e.key === 'Backspace') {
+      if (currentLevel === 2) zoomBack(1);
+      else if (currentLevel === 1) zoomBack(0);
+    }
+  });
+
+  // Initialize
+  updateBreadcrumb();
+})();
+</script>
+</body>
+</html>

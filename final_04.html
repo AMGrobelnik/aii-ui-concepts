@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Orbital Arcs</title>
+<style>
+  :root {
+    --bg: #0a0b10;
+    --surface: #12141d;
+    --surface2: #1a1d2a;
+    --border: #252838;
+    --text: #e0e2ec;
+    --text-dim: #6b7094;
+    --green: #34d399;
+    --green-glow: rgba(52, 211, 153, 0.4);
+    --purple: #a78bfa;
+    --purple-glow: rgba(167, 139, 250, 0.4);
+    --blue: #60a5fa;
+    --blue-glow: rgba(96, 165, 250, 0.4);
+    --orange: #fb923c;
+    --orange-glow: rgba(251, 146, 60, 0.4);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ===== TOP STRIP — ORBITAL ARCS ===== */
+  .orbital-strip {
+    height: 110px;
+    background: linear-gradient(180deg, #0e1019 0%, var(--bg) 100%);
+    border-bottom: 1px solid var(--border);
+    position: relative;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: visible;
+  }
+
+  .orbital-svg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    overflow: visible;
+  }
+
+  /* SVG glow filters are defined inline in the SVG */
+
+  .nodes-container {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 140px;
+    position: relative;
+    z-index: 2;
+    padding-bottom: 8px;
+  }
+
+  .node-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+    transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    user-select: none;
+  }
+
+  .node-group:hover { transform: scale(1.08); }
+  .node-group.active { transform: scale(1.15); }
+  .node-group.dim { opacity: 0.4; }
+  .node-group.dim:hover { opacity: 0.65; }
+
+  .node-circle {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 700;
+    position: relative;
+    transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+    border: 2px solid transparent;
+  }
+
+  .node-circle.large {
+    width: 40px;
+    height: 40px;
+    font-size: 14px;
+  }
+
+  /* Node colors */
+  .node-seed .node-circle {
+    background: radial-gradient(circle at 35% 35%, #4ade80, #16a34a);
+    box-shadow: 0 0 12px var(--green-glow), 0 0 24px rgba(52, 211, 153, 0.15);
+    border-color: var(--green);
+  }
+  .node-hypo .node-circle {
+    background: radial-gradient(circle at 35% 35%, #c4b5fd, #7c3aed);
+    box-shadow: 0 0 12px var(--purple-glow), 0 0 24px rgba(167, 139, 250, 0.15);
+    border-color: var(--purple);
+  }
+  .node-inv .node-circle {
+    background: radial-gradient(circle at 35% 35%, #93c5fd, #2563eb);
+    box-shadow: 0 0 12px var(--blue-glow), 0 0 24px rgba(96, 165, 250, 0.15);
+    border-color: var(--blue);
+  }
+  .node-paper .node-circle {
+    background: radial-gradient(circle at 35% 35%, #fdba74, #c2410c);
+    box-shadow: 0 0 12px var(--orange-glow), 0 0 24px rgba(251, 146, 60, 0.15);
+    border-color: var(--orange);
+  }
+
+  .node-group.active.node-seed .node-circle { box-shadow: 0 0 18px var(--green-glow), 0 0 36px rgba(52,211,153,.2), 0 0 60px rgba(52,211,153,.08); }
+  .node-group.active.node-hypo .node-circle { box-shadow: 0 0 18px var(--purple-glow), 0 0 36px rgba(167,139,250,.2), 0 0 60px rgba(167,139,250,.08); }
+  .node-group.active.node-inv .node-circle { box-shadow: 0 0 18px var(--blue-glow), 0 0 36px rgba(96,165,250,.2), 0 0 60px rgba(96,165,250,.08); }
+  .node-group.active.node-paper .node-circle { box-shadow: 0 0 18px var(--orange-glow), 0 0 36px rgba(251,146,60,.2), 0 0 60px rgba(251,146,60,.08); }
+
+  /* Pulsing ring on active running node */
+  .node-circle .pulse-ring {
+    position: absolute;
+    inset: -6px;
+    border-radius: 50%;
+    border: 2px solid var(--blue);
+    opacity: 0;
+    animation: pulse-out 2s ease-out infinite;
+  }
+  .node-circle .pulse-ring:nth-child(2) {
+    animation-delay: 0.7s;
+  }
+
+  @keyframes pulse-out {
+    0% { opacity: 0.6; transform: scale(0.85); }
+    100% { opacity: 0; transform: scale(1.6); }
+  }
+
+  .node-icon {
+    color: #fff;
+    font-size: 14px;
+    line-height: 1;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+  }
+
+  .node-badge {
+    position: absolute;
+    top: -6px;
+    right: -10px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 9px;
+    font-weight: 600;
+    padding: 1px 5px;
+    color: var(--text);
+    white-space: nowrap;
+  }
+
+  .node-label {
+    margin-top: 6px;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.03em;
+    color: var(--text-dim);
+    transition: color 0.3s;
+  }
+
+  .node-group.active .node-label {
+    color: var(--text);
+  }
+
+  /* ===== CONTENT AREA ===== */
+  .content-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 28px 32px 40px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  .content-area::-webkit-scrollbar { width: 6px; }
+  .content-area::-webkit-scrollbar-track { background: transparent; }
+  .content-area::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .module-view {
+    max-width: 720px;
+    margin: 0 auto;
+    display: none;
+    animation: fadeSlide 0.35s ease-out;
+  }
+  .module-view.visible { display: block; }
+
+  @keyframes fadeSlide {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .module-header {
+    margin-bottom: 24px;
+  }
+
+  .module-title {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .module-title .status-chip {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 10px;
+    border-radius: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .chip-done {
+    background: rgba(52, 211, 153, 0.15);
+    color: var(--green);
+    border: 1px solid rgba(52, 211, 153, 0.25);
+  }
+  .chip-running {
+    background: rgba(96, 165, 250, 0.15);
+    color: var(--blue);
+    border: 1px solid rgba(96, 165, 250, 0.25);
+  }
+  .chip-pending {
+    background: rgba(107, 112, 148, 0.12);
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+  }
+
+  .module-summary {
+    font-size: 14px;
+    line-height: 1.65;
+    color: var(--text-dim);
+  }
+
+  /* Sub-stages */
+  .substages {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .substage {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    transition: border-color 0.25s;
+  }
+  .substage:hover {
+    border-color: #363a50;
+  }
+
+  .substage-header {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    cursor: pointer;
+    gap: 12px;
+    user-select: none;
+  }
+
+  .substage-icon {
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    flex-shrink: 0;
+  }
+  .substage-icon.done {
+    background: rgba(52, 211, 153, 0.15);
+    color: var(--green);
+  }
+  .substage-icon.running {
+    background: rgba(96, 165, 250, 0.15);
+    color: var(--blue);
+  }
+  .substage-icon.pending {
+    background: rgba(107, 112, 148, 0.1);
+    color: var(--text-dim);
+  }
+
+  .substage-name {
+    flex: 1;
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  .substage-meta {
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  .substage-chevron {
+    font-size: 10px;
+    color: var(--text-dim);
+    transition: transform 0.25s;
+  }
+  .substage.open .substage-chevron {
+    transform: rotate(90deg);
+  }
+
+  .substage-body {
+    display: none;
+    padding: 0 16px 14px 50px;
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: var(--text-dim);
+  }
+  .substage.open .substage-body { display: block; }
+
+  /* Navigation hint */
+  .nav-hint {
+    position: fixed;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 11px;
+    color: var(--text-dim);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 5px 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    opacity: 0.7;
+    z-index: 10;
+  }
+  .nav-hint kbd {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-family: inherit;
+    font-size: 10px;
+  }
+</style>
+</head>
+<body>
+
+<!-- ===== ORBITAL STRIP ===== -->
+<div class="orbital-strip">
+  <svg class="orbital-svg" id="arcSvg" preserveAspectRatio="none">
+    <defs>
+      <filter id="glow-green" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="4" result="blur"/><feFlood flood-color="#34d399" flood-opacity="0.6"/><feComposite in2="blur" operator="in"/><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      <filter id="glow-purple" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="4" result="blur"/><feFlood flood-color="#a78bfa" flood-opacity="0.6"/><feComposite in2="blur" operator="in"/><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      <filter id="glow-blue" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="4" result="blur"/><feFlood flood-color="#60a5fa" flood-opacity="0.6"/><feComposite in2="blur" operator="in"/><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      <filter id="glow-orange" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="4" result="blur"/><feFlood flood-color="#fb923c" flood-opacity="0.5"/><feComposite in2="blur" operator="in"/><feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      <filter id="glow-soft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="6" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    </defs>
+
+    <g id="arcGroup"></g>
+    <g id="particleGroup"></g>
+  </svg>
+
+  <div class="nodes-container" id="nodesContainer">
+    <div class="node-group node-seed" data-idx="0" onclick="selectNode(0)">
+      <div class="node-circle"><span class="node-icon">&#10003;</span></div>
+      <span class="node-label">Seed</span>
+    </div>
+    <div class="node-group node-hypo" data-idx="1" onclick="selectNode(1)">
+      <div class="node-circle"><span class="node-icon">&#10003;</span><span class="node-badge">8.4</span></div>
+      <span class="node-label">Hypothesis</span>
+    </div>
+    <div class="node-group node-inv active" data-idx="2" onclick="selectNode(2)">
+      <div class="node-circle large"><div class="pulse-ring"></div><div class="pulse-ring"></div><span class="node-icon">&#9654;</span><span class="node-badge">3/5</span></div>
+      <span class="node-label">Invention</span>
+    </div>
+    <div class="node-group node-paper dim" data-idx="3" onclick="selectNode(3)">
+      <div class="node-circle"><span class="node-icon">&#9675;</span></div>
+      <span class="node-label">Paper</span>
+    </div>
+  </div>
+</div>
+
+<!-- ===== CONTENT AREA ===== -->
+<div class="content-area" id="contentArea">
+
+  <!-- Module 0: Seed -->
+  <div class="module-view" data-module="0">
+    <div class="module-header">
+      <div class="module-title">
+        Seed Hypotheses
+        <span class="status-chip chip-done">Complete</span>
+      </div>
+      <p class="module-summary">
+        Extracted 12 seed hypotheses from the knowledge graph built over
+        143 papers in computational topology. The graph captures entity
+        relationships, methodological gaps, and cross-domain bridges.
+      </p>
+    </div>
+    <div class="substages">
+      <div class="substage">
+        <div class="substage-header" onclick="toggleSubstage(this)">
+          <div class="substage-icon done">&#10003;</div>
+          <span class="substage-name">Build Knowledge Graph</span>
+          <span class="substage-meta">143 papers</span>
+          <span class="substage-chevron">&#9654;</span>
+        </div>
+        <div class="substage-body">
+          Parsed 143 papers using GROBID, extracted ~2,400 entities and
+          ~5,100 relations. Graph stored in Neo4j with embedding index
+          for similarity queries.
+        </div>
+      </div>
+      <div class="substage">
+        <div class="substage-header" onclick="toggleSubstage(this)">
+          <div class="substage-icon done">&#10003;</div>
+          <span class="substage-name">Extract Seed Hypotheses</span>
+          <span class="substage-meta">12 seeds</span>
+          <span class="substage-chevron">&#9654;</span>
+        </div>
+        <div class="substage-body">
+          LLM-guided extraction identified 12 candidate hypotheses by
+          detecting structural holes and under-explored paths in the
+          knowledge graph. Each seed includes a novelty rationale.
+        </div>
+      </div>
+      <div class="substage">
+        <div class="substage-header" onclick="toggleSubstage(this)">
+          <div class="substage-icon done">&#10003;</div>
+          <span class="substage-name">Deduplicate &amp; Cluster</span>
+          <span class="substage-meta">8 clusters</span>
+          <span class="substage-chevron">&#9654;</span>
+        </div>
+        <div class="substage-body">
+          Cosine similarity de-duplication reduced 12 seeds to 8 unique
+          clusters. Each cluster represents a distinct research direction
+          with 1-3 supporting seed variants.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Module 1: Hypothesis -->
+  <div class="module-view" data-module="1">
+    <div class="module-header">
+      <div class="module-title">
+        Hypothesis Loop
+        <span class="status-chip chip-done">Complete</span>
+      </div>
+      <p class="module-summary">
+        Refined the top 3 seed hypotheses through iterative review. Each
+        hypothesis passed novelty, feasibility, and significance checks.
+        Final average review score: 8.4/10.
+      </p>
+    </div>
+    <div class="substages">
+      <div class="substage">
+        <div class="substage-header" onclick="toggleSubstage(this)">
+          <div class="substage-icon done">&#10003;</div>
+          <span class="substage-name">Generate Hypotheses</span>
+          <span class="substage-meta">3 hypotheses</span>
+          <span class="substage-chevron">&#9654;</span>
+        </div>
+        <div class="substage-body">
+          Expanded the top 3 seed clusters into full hypotheses with
+          formal problem statements, expected outcomes, and evaluation
+          criteria. Each ~500 words.
+        </div>
+      </div>
+      <div class="substage">
+        <div class="substage-header" onclick="toggleSubstage(this)">
+          <div class="substage-icon done">&#10003;</div>
+          <span class="substage-name">Review Hypotheses</span>
+          <span class="substage-meta">Score 8.4</span>
+          <span class="substage-chevron">&#9654;</span>
+        </div>
+        <div class="substage-body">
+          Multi-aspect review scored novelty (8.7), feasibility (7.9),
+          and significance (8.6). Reviewer flagged one hypothesis for
+          scope narrowing, which was addressed in refinement.
+        </div>
+      </div>
+      <div class="substage">
+        <div class="substage-header" onclick="toggleSubstage(this)">
+          <div class="substage-icon done">&#10003;</div>
+          <span class="substage-name">Refine &amp; Finalize</span>
+          <span class="substage-meta">2 iterations</span>
+          <span class="substage-chevron">&#9654;</span>
+        </div>
+        <div class="substage-body">
+          Two refinement iterations addressed reviewer feedback. Scope
+          narrowing on hypothesis #2 improved feasibility from 7.1 to
+          8.3. All three hypotheses accepted.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Module 2: Invention (active) -->
+  <div class="module-view visible" data-module="2">
+    <div class="module-header">
+      <div class="module-title">
+        Invention Loop
+        <span class="status-chip chip-running">Running</span>
+      </div>
+      <p class="module-summary">
+        Developing the invention for hypothesis #1: a persistent-homology
+        guided attention mechanism for graph neural networks. Currently on
+        iteration 3 of 5 in the plan-execute-review cycle.
+      </p>
+    </div>
+    <div class="substages">
+      <div class="substage">
+        <div class="substage-header" onclick="toggleSubstage(this)">
+          <div class="substage-icon done">&#10003;</div>
+          <span class="substage-name">Generate Strategy</span>
+          <span class="substage-meta">Done</span>
+          <span class="substage-chevron">&#9654;</span>
+        </div>
+        <div class="substage-body">
+          Selected a dual-pathway strategy: (1) compute persistent
+          homology features as side-channel, (2) integrate via
+          cross-attention into message-passing layers.
+        </div>
+      </div>
+      <div class="substage">
+        <div class="substage-header" onclick="toggleSubstage(this)">
+          <div class="substage-icon done">&#10003;</div>
+          <span class="substage-name">Generate Plan</span>
+          <span class="substage-meta">5 steps</span>
+          <span class="substage-chevron">&#9654;</span>
+        </div>
+        <div class="substage-body">
+          Five-step plan: (1) filtration construction, (2) persistence
+          diagram vectorization, (3) cross-attention module, (4) end-to-end
+          training protocol, (5) ablation study design.
+        </div>
+      </div>
+      <div class="substage open">
+        <div class="substage-header" onclick="toggleSubstage(this)">
+          <div class="substage-icon running">&#9654;</div>
+          <span class="substage-name">Generate Paper Text</span>
+          <span class="substage-meta">Iteration 3/5</span>
+          <span class="substage-chevron">&#9654;</span>
+        </div>
+        <div class="substage-body">
+          Writing section 4 (Experiments). Sections 1-3 (Intro, Related
+          Work, Method) are drafted. Current focus on synthetic benchmark
+          results table and comparison with baseline methods.
+        </div>
+      </div>
+      <div class="substage">
+        <div class="substage-header" onclick="toggleSubstage(this)">
+          <div class="substage-icon pending">&#9675;</div>
+          <span class="substage-name">Review Paper</span>
+          <span class="substage-meta">Pending</span>
+          <span class="substage-chevron">&#9654;</span>
+        </div>
+        <div class="substage-body">
+          Will evaluate coherence, technical soundness, and novelty claims
+          against the generated experimental evidence.
+        </div>
+      </div>
+      <div class="substage">
+        <div class="substage-header" onclick="toggleSubstage(this)">
+          <div class="substage-icon pending">&#9675;</div>
+          <span class="substage-name">Refine &amp; Iterate</span>
+          <span class="substage-meta">Pending</span>
+          <span class="substage-chevron">&#9654;</span>
+        </div>
+        <div class="substage-body">
+          Address reviewer feedback, strengthen weak sections, and loop
+          back if the score is below threshold.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Module 3: Paper -->
+  <div class="module-view" data-module="3">
+    <div class="module-header">
+      <div class="module-title">
+        Paper Generation
+        <span class="status-chip chip-pending">Pending</span>
+      </div>
+      <p class="module-summary">
+        Awaiting completion of the invention loop. Will compile the final
+        paper with visualizations, code artifacts, and a reproducibility
+        package.
+      </p>
+    </div>
+    <div class="substages">
+      <div class="substage">
+        <div class="substage-header" onclick="toggleSubstage(this)">
+          <div class="substage-icon pending">&#9675;</div>
+          <span class="substage-name">Generate Artifact Demos</span>
+          <span class="substage-meta">Pending</span>
+          <span class="substage-chevron">&#9654;</span>
+        </div>
+        <div class="substage-body">
+          Interactive Python demos for each key component of the method.
+          Will include Jupyter notebooks and standalone scripts.
+        </div>
+      </div>
+      <div class="substage">
+        <div class="substage-header" onclick="toggleSubstage(this)">
+          <div class="substage-icon pending">&#9675;</div>
+          <span class="substage-name">Generate Visualizations</span>
+          <span class="substage-meta">Pending</span>
+          <span class="substage-chevron">&#9654;</span>
+        </div>
+        <div class="substage-body">
+          Publication-quality figures: architecture diagram, persistence
+          diagram overlays, attention heatmaps, and benchmark result
+          charts.
+        </div>
+      </div>
+      <div class="substage">
+        <div class="substage-header" onclick="toggleSubstage(this)">
+          <div class="substage-icon pending">&#9675;</div>
+          <span class="substage-name">Compile Full Paper</span>
+          <span class="substage-meta">Pending</span>
+          <span class="substage-chevron">&#9654;</span>
+        </div>
+        <div class="substage-body">
+          LaTeX compilation with all sections, figures, tables, and
+          references. Output: PDF + source repo with all artifacts.
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Navigation hint -->
+<div class="nav-hint">
+  <kbd>&larr;</kbd> <kbd>&rarr;</kbd> navigate modules
+</div>
+
+<script>
+const MODULE_COUNT = 4;
+let activeIdx = 2;
+const COLORS = ['#34d399', '#a78bfa', '#60a5fa', '#fb923c'];
+const GLOW_IDS = ['glow-green', 'glow-purple', 'glow-blue', 'glow-orange'];
+const ARC_STATUS = [1, 1, 2]; // 0=incomplete, 1=complete, 2=active
+let nodePositions = [];
+
+function computeNodePositions() {
+  const nodes = document.querySelectorAll('.node-group');
+  const stripRect = document.querySelector('.orbital-strip').getBoundingClientRect();
+  nodePositions = [];
+  nodes.forEach(n => {
+    const r = n.querySelector('.node-circle').getBoundingClientRect();
+    nodePositions.push({ x: r.left + r.width / 2 - stripRect.left, y: r.top + r.height / 2 - stripRect.top });
+  });
+}
+
+function mkSvg(tag) { return document.createElementNS('http://www.w3.org/2000/svg', tag); }
+
+function drawArcs() {
+  computeNodePositions();
+  const arcGroup = document.getElementById('arcGroup');
+  arcGroup.innerHTML = '';
+  for (let i = 0; i < MODULE_COUNT - 1; i++) {
+    const from = nodePositions[i], to = nodePositions[i + 1], status = ARC_STATUS[i];
+    const mx = (from.x + to.x) / 2, rise = 38;
+    const cy = Math.min(from.y, to.y) - rise;
+    const d = `M ${from.x} ${from.y} Q ${mx} ${cy} ${to.x} ${to.y}`;
+    // Gradient
+    const gradId = `arcGrad${i}`, grad = mkSvg('linearGradient');
+    grad.setAttribute('id', gradId); grad.setAttribute('x1', '0%'); grad.setAttribute('x2', '100%');
+    const s1 = mkSvg('stop'); s1.setAttribute('offset', '0%'); s1.setAttribute('stop-color', COLORS[i]);
+    const s2 = mkSvg('stop'); s2.setAttribute('offset', '100%'); s2.setAttribute('stop-color', COLORS[i+1]);
+    grad.append(s1, s2);
+    document.querySelector('#arcSvg defs').appendChild(grad);
+    // Background arc
+    const bg = mkSvg('path');
+    bg.setAttribute('d', d); bg.setAttribute('fill', 'none');
+    bg.setAttribute('stroke', `url(#${gradId})`); bg.setAttribute('stroke-width', '2');
+    bg.setAttribute('stroke-opacity', status === 0 ? '0.08' : '0.12');
+    arcGroup.appendChild(bg);
+    if (status >= 1) {
+      const glow = mkSvg('path');
+      glow.setAttribute('d', d); glow.setAttribute('fill', 'none');
+      glow.setAttribute('stroke', `url(#${gradId})`); glow.setAttribute('stroke-width', '2.5');
+      glow.setAttribute('stroke-opacity', '0.6'); glow.setAttribute('filter', `url(#${GLOW_IDS[i]})`);
+      arcGroup.appendChild(glow);
+    }
+    if (status === 2) {
+      const dash = mkSvg('path');
+      dash.setAttribute('d', d); dash.setAttribute('fill', 'none');
+      dash.setAttribute('stroke', `url(#${gradId})`); dash.setAttribute('stroke-width', '2');
+      dash.setAttribute('stroke-dasharray', '6 10'); dash.setAttribute('stroke-opacity', '0.85');
+      dash.classList.add('dash-flow');
+      arcGroup.appendChild(dash);
+    }
+  }
+}
+
+// Particles
+const particles = [];
+const PARTICLE_COUNT = 5;
+
+function initParticles() {
+  const pg = document.getElementById('particleGroup');
+  pg.innerHTML = ''; particles.length = 0;
+  for (let ai = 0; ai < ARC_STATUS.length; ai++) {
+    if (ARC_STATUS[ai] !== 2) continue;
+    for (let p = 0; p < PARTICLE_COUNT; p++) {
+      const c = mkSvg('circle');
+      c.setAttribute('r', '2.5'); c.setAttribute('fill', COLORS[ai + 1]); c.setAttribute('opacity', '0');
+      pg.appendChild(c);
+      particles.push({ el: c, arcIndex: ai, t: p / PARTICLE_COUNT, speed: 0.003 + Math.random() * 0.002, baseOpacity: 0.5 + Math.random() * 0.4 });
+    }
+  }
+}
+
+function getPointOnArc(ai, t) {
+  const from = nodePositions[ai], to = nodePositions[ai + 1];
+  if (!from || !to) return { x: 0, y: 0 };
+  const mx = (from.x + to.x) / 2, cy = Math.min(from.y, to.y) - 38, u = 1 - t;
+  return { x: u*u*from.x + 2*u*t*mx + t*t*to.x, y: u*u*from.y + 2*u*t*cy + t*t*to.y };
+}
+
+// Animation
+let dashOffset = 0;
+function animate() {
+  dashOffset -= 0.6;
+  document.querySelectorAll('.dash-flow').forEach(el => el.setAttribute('stroke-dashoffset', dashOffset));
+  particles.forEach(p => {
+    p.t += p.speed;
+    if (p.t > 1) p.t -= 1;
+    const pos = getPointOnArc(p.arcIndex, p.t);
+    p.el.setAttribute('cx', pos.x); p.el.setAttribute('cy', pos.y);
+    p.el.setAttribute('opacity', (Math.sin(p.t * Math.PI) * p.baseOpacity).toFixed(2));
+  });
+  requestAnimationFrame(animate);
+}
+
+// Node selection
+function selectNode(idx) {
+  if (idx < 0 || idx >= MODULE_COUNT) return;
+  activeIdx = idx;
+  document.querySelectorAll('.node-group').forEach((n, i) => {
+    n.classList.remove('active', 'dim');
+    if (i === idx) n.classList.add('active');
+    else if (i > 2) n.classList.add('dim');
+  });
+  document.querySelectorAll('.module-view').forEach(v => v.classList.remove('visible'));
+  const target = document.querySelector(`.module-view[data-module="${idx}"]`);
+  if (target) {
+    target.style.animation = 'none';
+    target.offsetHeight;
+    target.style.animation = '';
+    target.classList.add('visible');
+  }
+  document.getElementById('contentArea').scrollTop = 0;
+}
+
+// Keyboard nav
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowLeft') { e.preventDefault(); selectNode(Math.max(0, activeIdx - 1)); }
+  else if (e.key === 'ArrowRight') { e.preventDefault(); selectNode(Math.min(MODULE_COUNT - 1, activeIdx + 1)); }
+});
+
+function toggleSubstage(header) { header.parentElement.classList.toggle('open'); }
+
+function init() { drawArcs(); initParticles(); animate(); }
+window.addEventListener('resize', () => { drawArcs(); initParticles(); });
+requestAnimationFrame(() => requestAnimationFrame(init));
+</script>
+</body>
+</html>

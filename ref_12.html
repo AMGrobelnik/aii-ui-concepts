@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Simple View</title>
+<style>
+  /* ===== Reset & Base ===== */
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg-deep: #0a0b10;
+    --bg-surface: #12131a;
+    --text-primary: #e8e9ed;
+    --text-secondary: #8b8d97;
+    --text-dim: #52535c;
+
+    --color-seed: #34d399;
+    --color-hypo: #a78bfa;
+    --color-invention: #60a5fa;
+    --color-paper: #6b7280;
+
+    --card-w: 150px;
+    --card-h: 65px;
+    --glow-size: 120px;
+    --strip-h: 110px;
+
+    --transition-glow: 0.45s cubic-bezier(.4,0,.2,1);
+    --transition-card: 0.3s cubic-bezier(.4,0,.2,1);
+  }
+
+  body {
+    background: var(--bg-deep);
+    color: var(--text-primary);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  /* ===== Top Strip ===== */
+  .top-strip {
+    position: relative;
+    width: 100%;
+    max-width: 900px;
+    height: var(--strip-h);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 56px;
+    margin-top: 48px;
+    padding: 0 32px;
+  }
+
+  /* SVG connector layer */
+  .connector-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ===== Node Card ===== */
+  .node-card {
+    position: relative;
+    width: var(--card-w);
+    height: var(--card-h);
+    z-index: 2;
+    cursor: pointer;
+    flex-shrink: 0;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* Colored glow behind card */
+  .node-card .glow {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: var(--glow-size);
+    height: var(--glow-size);
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    z-index: -1;
+    opacity: 0.30;
+    filter: blur(28px);
+    transition: opacity var(--transition-glow), width var(--transition-glow), height var(--transition-glow);
+    pointer-events: none;
+  }
+  .node-card[data-module="seed"] .glow       { background: radial-gradient(circle, var(--color-seed), transparent 70%); }
+  .node-card[data-module="hypo"] .glow       { background: radial-gradient(circle, var(--color-hypo), transparent 70%); }
+  .node-card[data-module="invention"] .glow  { background: radial-gradient(circle, var(--color-invention), transparent 70%); }
+  .node-card[data-module="paper"] .glow      { background: radial-gradient(circle, var(--color-paper), transparent 70%); }
+
+  /* Dimmed state (unselected) */
+  .node-card.dimmed .glow {
+    opacity: 0.15;
+    width: 90px;
+    height: 90px;
+  }
+
+  /* Selected state */
+  .node-card.selected .glow {
+    opacity: 0.50;
+    width: 150px;
+    height: 150px;
+  }
+
+  /* Glass surface */
+  .node-card .glass {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    border-radius: 12px;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.06);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 8px 10px;
+    transition: border-color var(--transition-card), background var(--transition-card), box-shadow var(--transition-card);
+    overflow: hidden;
+  }
+
+  .node-card[data-module="seed"] .glass       { background: rgba(52,211,153,0.08); }
+  .node-card[data-module="hypo"] .glass       { background: rgba(167,139,250,0.08); }
+  .node-card[data-module="invention"] .glass  { background: rgba(96,165,250,0.08); }
+  .node-card[data-module="paper"] .glass      { background: rgba(107,114,128,0.08); }
+
+  /* Selected glass boost */
+  .node-card.selected[data-module="seed"] .glass       { border-color: rgba(52,211,153,0.35); background: rgba(52,211,153,0.12); box-shadow: 0 0 24px rgba(52,211,153,0.10); }
+  .node-card.selected[data-module="hypo"] .glass       { border-color: rgba(167,139,250,0.35); background: rgba(167,139,250,0.12); box-shadow: 0 0 24px rgba(167,139,250,0.10); }
+  .node-card.selected[data-module="invention"] .glass  { border-color: rgba(96,165,250,0.35); background: rgba(96,165,250,0.12); box-shadow: 0 0 24px rgba(96,165,250,0.10); }
+  .node-card.selected[data-module="paper"] .glass      { border-color: rgba(107,114,128,0.35); background: rgba(107,114,128,0.12); box-shadow: 0 0 24px rgba(107,114,128,0.10); }
+
+  /* Dimmed glass */
+  .node-card.dimmed .glass {
+    border-color: rgba(255,255,255,0.03);
+    opacity: 0.7;
+  }
+
+  /* Card label */
+  .card-label {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+    color: var(--text-secondary);
+    line-height: 1;
+    transition: color var(--transition-card);
+  }
+  .node-card.selected .card-label { color: var(--text-primary); }
+  .node-card.dimmed .card-label   { color: var(--text-dim); }
+
+  /* Card metric row */
+  .card-metric {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .metric-value {
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1;
+    color: var(--text-primary);
+    transition: color var(--transition-card);
+  }
+  .node-card.dimmed .metric-value { color: var(--text-dim); }
+
+  /* Badges */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+
+  .badge-done {
+    background: rgba(52,211,153,0.15);
+    color: var(--color-seed);
+  }
+  .badge-done-purple {
+    background: rgba(167,139,250,0.15);
+    color: var(--color-hypo);
+  }
+  .badge-active {
+    background: rgba(96,165,250,0.15);
+    color: var(--color-invention);
+    animation: pulse-badge 1.8s ease-in-out infinite;
+  }
+  .badge-pending {
+    background: rgba(107,114,128,0.10);
+    color: var(--text-dim);
+  }
+
+  @keyframes pulse-badge {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%      { opacity: 0.55; transform: scale(0.92); }
+  }
+
+  /* ===== SVG Connectors ===== */
+  .connector-line {
+    fill: none;
+    stroke: rgba(255,255,255,0.06);
+    stroke-width: 1.5;
+  }
+  .connector-line.active {
+    stroke: rgba(255,255,255,0.10);
+  }
+
+  /* Animated dots */
+  .flow-dot {
+    r: 2.2;
+    fill: rgba(255,255,255,0.30);
+  }
+  .flow-dot.active {
+    r: 2.6;
+    fill: rgba(255,255,255,0.55);
+  }
+  .flow-dot.dim {
+    fill: rgba(255,255,255,0.10);
+  }
+
+  /* ===== Content Area ===== */
+  .content-area {
+    width: 100%;
+    max-width: 720px;
+    margin-top: 40px;
+    padding: 0 32px 60px;
+    position: relative;
+  }
+
+  .content-panel {
+    display: none;
+    animation: fadeSlideIn 0.35s ease-out forwards;
+  }
+  .content-panel.visible {
+    display: block;
+  }
+
+  @keyframes fadeSlideIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Panel header */
+  .panel-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .panel-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .panel-title {
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .panel-subtitle {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-left: auto;
+  }
+
+  /* Content block */
+  .content-block {
+    position: relative;
+    border-radius: 14px;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,0.05);
+    padding: 24px;
+    margin-bottom: 16px;
+    transition: border-color 0.3s, background 0.3s;
+  }
+
+  .content-block h3 {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 10px;
+    color: var(--text-primary);
+  }
+
+  .content-block p, .content-block li {
+    font-size: 13px;
+    line-height: 1.65;
+    color: var(--text-secondary);
+  }
+
+  .content-block ul {
+    list-style: none;
+    padding: 0;
+  }
+  .content-block li {
+    padding-left: 16px;
+    position: relative;
+    margin-bottom: 6px;
+  }
+  .content-block li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 8px;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--text-dim);
+  }
+
+  /* Module-specific block tints */
+  .content-block[data-tint="seed"]      { background: rgba(52,211,153,0.04); }
+  .content-block[data-tint="hypo"]      { background: rgba(167,139,250,0.04); }
+  .content-block[data-tint="invention"] { background: rgba(96,165,250,0.04); }
+  .content-block[data-tint="paper"]     { background: rgba(107,114,128,0.04); }
+
+  /* Stat row */
+  .stat-row {
+    display: flex;
+    gap: 24px;
+    margin-bottom: 16px;
+  }
+  .stat-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .stat-value {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+  .stat-label {
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  /* Progress bar */
+  .progress-track {
+    height: 4px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 2px;
+    overflow: hidden;
+    margin: 12px 0;
+  }
+  .progress-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.6s ease-out;
+  }
+  .progress-fill[data-color="seed"]      { background: var(--color-seed); }
+  .progress-fill[data-color="hypo"]      { background: var(--color-hypo); }
+  .progress-fill[data-color="invention"] { background: var(--color-invention); }
+  .progress-fill[data-color="paper"]     { background: var(--color-paper); }
+
+  /* Tag */
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 500;
+    margin-right: 6px;
+    margin-bottom: 6px;
+  }
+  .tag-seed      { background: rgba(52,211,153,0.12); color: var(--color-seed); }
+  .tag-hypo      { background: rgba(167,139,250,0.12); color: var(--color-hypo); }
+  .tag-invention { background: rgba(96,165,250,0.12); color: var(--color-invention); }
+  .tag-dim       { background: rgba(107,114,128,0.10); color: var(--text-dim); }
+
+  /* ===== Navigation Arrows ===== */
+  .nav-arrows {
+    display: flex;
+    justify-content: center;
+    gap: 16px;
+    margin-top: 8px;
+  }
+
+  .nav-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.06);
+    background: rgba(255,255,255,0.03);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    color: var(--text-secondary);
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.25s ease;
+  }
+  .nav-btn:hover {
+    background: rgba(255,255,255,0.07);
+    border-color: rgba(255,255,255,0.12);
+    color: var(--text-primary);
+  }
+  .nav-btn:disabled {
+    opacity: 0.25;
+    cursor: default;
+    pointer-events: none;
+  }
+
+  /* ===== Keyboard hint ===== */
+  .key-hint {
+    position: fixed;
+    bottom: 16px;
+    right: 20px;
+    font-size: 11px;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    pointer-events: none;
+    opacity: 0.5;
+  }
+  .key-hint kbd {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.04);
+    font-family: inherit;
+    font-size: 10px;
+  }
+
+  /* ===== Responsive ===== */
+  @media (max-width: 700px) {
+    .top-strip { gap: 24px; padding: 0 16px; }
+    .node-card { --card-w: 120px; --card-h: 58px; }
+    .card-label { font-size: 10px; }
+    .metric-value { font-size: 15px; }
+    .content-area { padding: 0 16px 40px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ===== Top Strip ===== -->
+<div class="top-strip" id="topStrip">
+
+  <!-- SVG Connector Layer -->
+  <svg class="connector-layer" id="connectorSvg" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <filter id="dotGlow" x="-50%" y="-50%" width="200%" height="200%">
+        <feGaussianBlur stdDeviation="1.5" result="blur"/>
+        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+    </defs>
+    <!-- paths injected by JS -->
+  </svg>
+
+  <!-- Seed -->
+  <div class="node-card selected" data-module="seed" data-index="0">
+    <div class="glow"></div>
+    <div class="glass">
+      <span class="card-label">Seed Hypothesis</span>
+      <div class="card-metric">
+        <span class="metric-value">12 gaps</span>
+        <span class="badge badge-done">&#10003;</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hypothesis -->
+  <div class="node-card dimmed" data-module="hypo" data-index="1">
+    <div class="glow"></div>
+    <div class="glass">
+      <span class="card-label">Hypothesis Loop</span>
+      <div class="card-metric">
+        <span class="metric-value">8.4 / 10</span>
+        <span class="badge badge-done-purple">&#10003;</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Invention -->
+  <div class="node-card dimmed" data-module="invention" data-index="2">
+    <div class="glow"></div>
+    <div class="glass">
+      <span class="card-label">Invention Loop</span>
+      <div class="card-metric">
+        <span class="metric-value">3 / 5</span>
+        <span class="badge badge-active">&#9654;</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Paper -->
+  <div class="node-card dimmed" data-module="paper" data-index="3">
+    <div class="glow"></div>
+    <div class="glass">
+      <span class="card-label">Paper &amp; Repo</span>
+      <div class="card-metric">
+        <span class="metric-value">&mdash;</span>
+        <span class="badge badge-pending">&#9675;</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Content Area ===== -->
+<div class="content-area" id="contentArea">
+
+  <!-- ===== Seed Panel ===== -->
+  <div class="content-panel visible" data-panel="0">
+    <div class="panel-header">
+      <div class="panel-dot" style="background:var(--color-seed)"></div>
+      <span class="panel-title">Seed Hypothesis</span>
+      <span class="panel-subtitle">Completed</span>
+    </div>
+
+    <div class="content-block" data-tint="seed">
+      <div class="stat-row">
+        <div class="stat-item">
+          <span class="stat-value">12</span>
+          <span class="stat-label">Research Gaps</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-value">47</span>
+          <span class="stat-label">Papers Scanned</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-value">3</span>
+          <span class="stat-label">Domains</span>
+        </div>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" data-color="seed" style="width:100%"></div>
+      </div>
+    </div>
+
+    <div class="content-block" data-tint="seed">
+      <h3>Identified Gaps</h3>
+      <ul>
+        <li>Cross-modal attention scaling in low-resource settings</li>
+        <li>Temporal coherence loss in diffusion-based video synthesis</li>
+        <li>Gradient routing for mixture-of-expert sparsity</li>
+        <li>Self-supervised pre-training for tabular healthcare data</li>
+        <li>Retrieval-augmented generation with structured knowledge graphs</li>
+      </ul>
+      <div style="margin-top:10px">
+        <span class="tag tag-seed">NLP</span>
+        <span class="tag tag-seed">Vision</span>
+        <span class="tag tag-seed">Healthcare</span>
+      </div>
+    </div>
+
+    <div class="content-block" data-tint="seed">
+      <h3>Source Corpus</h3>
+      <p>Scanned 47 recent publications from arXiv, NeurIPS 2025, and ICML 2025 proceedings. Gap extraction used citation-graph traversal with novelty scoring against existing hypothesis databases.</p>
+    </div>
+  </div>
+
+  <!-- ===== Hypothesis Panel ===== -->
+  <div class="content-panel" data-panel="1">
+    <div class="panel-header">
+      <div class="panel-dot" style="background:var(--color-hypo)"></div>
+      <span class="panel-title">Hypothesis Loop</span>
+      <span class="panel-subtitle">Completed</span>
+    </div>
+
+    <div class="content-block" data-tint="hypo">
+      <div class="stat-row">
+        <div class="stat-item">
+          <span class="stat-value">8.4</span>
+          <span class="stat-label">Quality Score</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-value">3</span>
+          <span class="stat-label">Iterations</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-value">6.1 &rarr; 8.4</span>
+          <span class="stat-label">Score Trajectory</span>
+        </div>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" data-color="hypo" style="width:84%"></div>
+      </div>
+    </div>
+
+    <div class="content-block" data-tint="hypo">
+      <h3>Selected Hypothesis</h3>
+      <p>Hierarchical sparse attention with locality-sensitive routing achieves sub-quadratic scaling while maintaining 97% of dense attention quality on long-document benchmarks, by partitioning tokens into overlapping semantic clusters before computing cross-cluster bridging attention.</p>
+    </div>
+
+    <div class="content-block" data-tint="hypo">
+      <h3>Review History</h3>
+      <ul>
+        <li><strong>Round 1</strong> (6.1) &mdash; Novelty acknowledged; feasibility concerns on routing overhead</li>
+        <li><strong>Round 2</strong> (7.6) &mdash; Added overlapping clusters; reviewer noted improved coverage</li>
+        <li><strong>Round 3</strong> (8.4) &mdash; Bridging attention mechanism refined; accepted for invention</li>
+      </ul>
+      <div style="margin-top:10px">
+        <span class="tag tag-hypo">Attention</span>
+        <span class="tag tag-hypo">Efficiency</span>
+        <span class="tag tag-hypo">NLP</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Invention Panel ===== -->
+  <div class="content-panel" data-panel="2">
+    <div class="panel-header">
+      <div class="panel-dot" style="background:var(--color-invention)"></div>
+      <span class="panel-title">Invention Loop</span>
+      <span class="panel-subtitle">Running &mdash; iteration 3 of 5</span>
+    </div>
+
+    <div class="content-block" data-tint="invention">
+      <div class="stat-row">
+        <div class="stat-item">
+          <span class="stat-value">3 / 5</span>
+          <span class="stat-label">Iterations</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-value">Plan</span>
+          <span class="stat-label">Current Step</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-value">~14 min</span>
+          <span class="stat-label">Est. Remaining</span>
+        </div>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" data-color="invention" style="width:60%"></div>
+      </div>
+    </div>
+
+    <div class="content-block" data-tint="invention">
+      <h3>Experiment Plan</h3>
+      <ul>
+        <li>Implement LSH-based token clustering with configurable bucket size</li>
+        <li>Add overlapping window mechanism (stride = bucket_size / 2)</li>
+        <li>Build bridging attention layer connecting cluster representatives</li>
+        <li>Benchmark against FlashAttention-2 and LongFormer on SCROLLS</li>
+      </ul>
+    </div>
+
+    <div class="content-block" data-tint="invention">
+      <h3>Generated Artifacts</h3>
+      <ul>
+        <li><strong>sparse_attention.py</strong> &mdash; Core clustering + bridging module (412 lines)</li>
+        <li><strong>benchmark_suite.py</strong> &mdash; Comparison harness with memory profiling</li>
+        <li><strong>config.yaml</strong> &mdash; Hyperparameter grid for ablation study</li>
+      </ul>
+      <div style="margin-top:10px">
+        <span class="tag tag-invention">PyTorch</span>
+        <span class="tag tag-invention">CUDA</span>
+        <span class="tag tag-invention">Benchmarks</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Paper Panel ===== -->
+  <div class="content-panel" data-panel="3">
+    <div class="panel-header">
+      <div class="panel-dot" style="background:var(--color-paper)"></div>
+      <span class="panel-title">Paper &amp; Repo</span>
+      <span class="panel-subtitle">Pending</span>
+    </div>
+
+    <div class="content-block" data-tint="paper">
+      <div class="stat-row">
+        <div class="stat-item">
+          <span class="stat-value">&mdash;</span>
+          <span class="stat-label">Paper Sections</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-value">&mdash;</span>
+          <span class="stat-label">Visualizations</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-value">&mdash;</span>
+          <span class="stat-label">Repo Files</span>
+        </div>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" data-color="paper" style="width:0%"></div>
+      </div>
+    </div>
+
+    <div class="content-block" data-tint="paper">
+      <h3>Awaiting Invention Loop</h3>
+      <p>Paper generation will begin once the invention loop completes all 5 iterations and the review step approves the final artifact set. Expected outputs include a full LaTeX paper, figures, and a reproducible code repository.</p>
+    </div>
+
+    <div class="content-block" data-tint="paper">
+      <h3>Planned Outputs</h3>
+      <ul>
+        <li>LaTeX paper with abstract, methods, results, discussion</li>
+        <li>Matplotlib / Plotly visualizations for key results</li>
+        <li>GitHub repository with README, requirements, and run scripts</li>
+        <li>Supplementary material appendix</li>
+      </ul>
+      <div style="margin-top:10px">
+        <span class="tag tag-dim">LaTeX</span>
+        <span class="tag tag-dim">Plotly</span>
+        <span class="tag tag-dim">GitHub</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Navigation Arrows ===== -->
+  <div class="nav-arrows">
+    <button class="nav-btn" id="btnPrev" disabled aria-label="Previous module">&larr;</button>
+    <button class="nav-btn" id="btnNext" aria-label="Next module">&rarr;</button>
+  </div>
+</div>
+
+<!-- Keyboard hint -->
+<div class="key-hint">
+  <kbd>&larr;</kbd> <kbd>&rarr;</kbd> navigate
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  /* ===== State ===== */
+  const MODULES = ['seed', 'hypo', 'invention', 'paper'];
+  let selected = 0;
+
+  /* ===== DOM refs ===== */
+  const cards   = Array.from(document.querySelectorAll('.node-card'));
+  const panels  = Array.from(document.querySelectorAll('.content-panel'));
+  const btnPrev = document.getElementById('btnPrev');
+  const btnNext = document.getElementById('btnNext');
+  const svg     = document.getElementById('connectorSvg');
+
+  /* ===== Connector definitions ===== */
+  // Each connector links card[i] -> card[i+1]
+  // "active" connectors get faster/more dots
+  const connectorDefs = [
+    { from: 0, to: 1, active: true },
+    { from: 1, to: 2, active: true },
+    { from: 2, to: 3, active: false }
+  ];
+
+  /* ===== Build SVG connectors ===== */
+  let connectorPaths = [];
+  let dotGroups = [];
+
+  function buildConnectors() {
+    // Clear existing
+    while (svg.childNodes.length > 1) {
+      if (svg.lastChild !== svg.querySelector('defs')) {
+        svg.removeChild(svg.lastChild);
+      } else break;
+    }
+    connectorPaths = [];
+    dotGroups = [];
+
+    connectorDefs.forEach((def, ci) => {
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.classList.add('connector-line');
+      if (def.active) path.classList.add('active');
+      svg.appendChild(path);
+      connectorPaths.push(path);
+
+      // Dots for this connector
+      const numDots = def.active ? 4 : 2;
+      const dots = [];
+      for (let d = 0; d < numDots; d++) {
+        const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        dot.classList.add('flow-dot');
+        if (def.active) dot.classList.add('active');
+        else dot.classList.add('dim');
+        dot.setAttribute('filter', 'url(#dotGlow)');
+        svg.appendChild(dot);
+        dots.push({ el: dot, offset: d / numDots, speed: def.active ? 0.0012 : 0.0005 });
+      }
+      dotGroups.push(dots);
+    });
+  }
+
+  function updateConnectorPaths() {
+    const strip = document.getElementById('topStrip');
+    const stripRect = strip.getBoundingClientRect();
+
+    connectorDefs.forEach((def, ci) => {
+      const fromCard = cards[def.from];
+      const toCard   = cards[def.to];
+      const fromRect = fromCard.getBoundingClientRect();
+      const toRect   = toCard.getBoundingClientRect();
+
+      // Coordinates relative to SVG (same as strip)
+      const x1 = fromRect.right - stripRect.left;
+      const y1 = fromRect.top + fromRect.height / 2 - stripRect.top;
+      const x2 = toRect.left - stripRect.left;
+      const y2 = toRect.top + toRect.height / 2 - stripRect.top;
+
+      const cpx = (x1 + x2) / 2;
+      const d = `M${x1},${y1} C${cpx},${y1} ${cpx},${y2} ${x2},${y2}`;
+      connectorPaths[ci].setAttribute('d', d);
+    });
+  }
+
+  /* ===== Animate dots along paths ===== */
+  let animFrame;
+  function animateDots(timestamp) {
+    dotGroups.forEach((dots, ci) => {
+      const path = connectorPaths[ci];
+      if (!path) return;
+      const len = path.getTotalLength();
+      if (!len) return;
+
+      dots.forEach(dot => {
+        dot.offset = (dot.offset + dot.speed) % 1;
+        const pt = path.getPointAtLength(dot.offset * len);
+        dot.el.setAttribute('cx', pt.x);
+        dot.el.setAttribute('cy', pt.y);
+      });
+    });
+    animFrame = requestAnimationFrame(animateDots);
+  }
+
+  /* ===== Selection ===== */
+  function selectModule(index) {
+    if (index < 0 || index >= MODULES.length) return;
+    selected = index;
+
+    // Update cards
+    cards.forEach((card, i) => {
+      card.classList.remove('selected', 'dimmed');
+      if (i === selected) card.classList.add('selected');
+      else card.classList.add('dimmed');
+    });
+
+    // Update panels
+    panels.forEach((panel, i) => {
+      panel.classList.remove('visible');
+      if (i === selected) {
+        // Force re-trigger animation
+        panel.style.animation = 'none';
+        panel.offsetHeight; // reflow
+        panel.style.animation = '';
+        panel.classList.add('visible');
+      }
+    });
+
+    // Update nav buttons
+    btnPrev.disabled = (selected === 0);
+    btnNext.disabled = (selected === MODULES.length - 1);
+
+    // Update connector paths after card state change
+    requestAnimationFrame(updateConnectorPaths);
+  }
+
+  /* ===== Event Listeners ===== */
+  cards.forEach((card, i) => {
+    card.addEventListener('click', () => selectModule(i));
+  });
+
+  btnPrev.addEventListener('click', () => selectModule(selected - 1));
+  btnNext.addEventListener('click', () => selectModule(selected + 1));
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowLeft')  { e.preventDefault(); selectModule(selected - 1); }
+    if (e.key === 'ArrowRight') { e.preventDefault(); selectModule(selected + 1); }
+  });
+
+  /* ===== Init ===== */
+  function init() {
+    buildConnectors();
+    updateConnectorPaths();
+    selectModule(0);
+    animFrame = requestAnimationFrame(animateDots);
+  }
+
+  // Resize handler
+  let resizeTimer;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      updateConnectorPaths();
+    }, 100);
+  });
+
+  // Run after layout
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    requestAnimationFrame(init);
+  }
+})();
+</script>
+</body>
+</html>

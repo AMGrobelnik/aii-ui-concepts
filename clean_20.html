@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — ssl-low-resource-v3</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+
+  *, *::before, *::after {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  :root {
+    --bg: #111113;
+    --fg: #e0e0e4;
+    --fg-muted: #7a7a82;
+    --fg-dim: #55555c;
+    --green: #4ade80;
+    --blue: #60a5fa;
+    --gray: #55555c;
+    --highlight-bg: rgba(96, 165, 250, 0.06);
+    --hover-bg: rgba(255, 255, 255, 0.025);
+    --indent: 24px;
+    --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+
+  html {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font);
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    max-width: 700px;
+    margin: 0 auto;
+    padding: 48px 24px 120px;
+  }
+
+  /* ── Header ── */
+
+  .header {
+    margin-bottom: 40px;
+  }
+
+  .header-title {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--fg);
+    letter-spacing: -0.01em;
+  }
+
+  .header-status {
+    font-size: 13px;
+    color: var(--fg-muted);
+    margin-top: 2px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .header-status .running-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--blue);
+    margin-right: 6px;
+    vertical-align: middle;
+    position: relative;
+    top: -1px;
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  /* ── List / Outline ── */
+
+  .outline {
+    list-style: none;
+  }
+
+  .outline .outline {
+    overflow: hidden;
+    transition: max-height 250ms ease, opacity 200ms ease;
+  }
+
+  .outline .outline.collapsed {
+    max-height: 0;
+    opacity: 0;
+  }
+
+  /* ── Item ── */
+
+  .item {
+    position: relative;
+  }
+
+  .item-row {
+    display: flex;
+    align-items: baseline;
+    padding: 6px 8px;
+    border-radius: 6px;
+    cursor: default;
+    user-select: none;
+    gap: 8px;
+  }
+
+  .item-row.expandable {
+    cursor: pointer;
+  }
+
+  .item-row.expandable:hover {
+    background: var(--hover-bg);
+  }
+
+  .item-row.active {
+    background: var(--highlight-bg);
+  }
+
+  .item-row.active:hover {
+    background: var(--highlight-bg);
+  }
+
+  /* Icon */
+
+  .icon {
+    flex-shrink: 0;
+    width: 16px;
+    font-size: 13px;
+    text-align: center;
+    line-height: 1;
+    position: relative;
+    top: 1px;
+  }
+
+  .icon.done { color: var(--green); }
+  .icon.running { color: var(--blue); }
+  .icon.pending { color: var(--gray); }
+
+  /* Name + summary */
+
+  .item-body {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .item-name {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--fg);
+    letter-spacing: -0.01em;
+  }
+
+  .item-row.active .item-name {
+    color: var(--blue);
+  }
+
+  .item.status-pending .item-name {
+    color: var(--fg-muted);
+  }
+
+  .item-summary {
+    font-size: 13px;
+    color: var(--fg-muted);
+    line-height: 1.45;
+    margin-top: 1px;
+  }
+
+  /* Right-aligned timing */
+
+  .item-meta {
+    flex-shrink: 0;
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--fg-dim);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    text-align: right;
+  }
+
+  /* ── Depth indentation ── */
+
+  .depth-0 > .item-row { padding-left: 8px; }
+  .depth-1 > .item-row { padding-left: calc(8px + var(--indent)); }
+  .depth-2 > .item-row { padding-left: calc(8px + var(--indent) * 2); }
+  .depth-3 > .item-row { padding-left: calc(8px + var(--indent) * 3); }
+
+  .depth-0 > .outline { margin-left: 0; }
+  .depth-1 > .outline { margin-left: 0; }
+  .depth-2 > .outline { margin-left: 0; }
+  .depth-3 > .outline { margin-left: 0; }
+
+  /* ── Detail block (leaf expansion) ── */
+
+  .item-detail {
+    overflow: hidden;
+    transition: max-height 250ms ease, opacity 200ms ease;
+  }
+
+  .item-detail.collapsed {
+    max-height: 0;
+    opacity: 0;
+  }
+
+  .item-detail-inner {
+    font-size: 13px;
+    color: var(--fg-muted);
+    line-height: 1.55;
+    padding: 4px 8px 8px;
+    white-space: pre-wrap;
+  }
+
+  .depth-3 > .item-detail .item-detail-inner {
+    padding-left: calc(8px + var(--indent) * 3 + 24px);
+  }
+
+  .depth-2 > .item-detail .item-detail-inner {
+    padding-left: calc(8px + var(--indent) * 2 + 24px);
+  }
+
+  /* ── Spacer between top-level items ── */
+
+  .item.depth-0 + .item.depth-0 {
+    margin-top: 2px;
+  }
+
+  /* ── Separator ── */
+
+  .sep {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.04);
+    margin: 12px 8px;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-title">AI Inventor &mdash; ssl-low-resource-v3</div>
+  <div class="header-status"><span class="running-dot"></span>Running &mdash; 02:34:17 &mdash; $12.47</div>
+</div>
+
+<ul class="outline" id="root"></ul>
+
+<script>
+// ────────────────────────────────────────────────
+// Data: the entire outline as a tree
+// ────────────────────────────────────────────────
+const DATA = [
+  {
+    id: "seed",
+    status: "done",
+    name: "Seed Hypothesis",
+    meta: "2m \u2022 $0.43",
+    summary: "Mined 847 papers, identified 12 research gaps",
+    children: []
+  },
+  {
+    id: "hypo-loop",
+    status: "done",
+    name: "Hypothesis Loop",
+    meta: "18m \u2022 $4.12",
+    summary: "Score: 6.2 \u2192 7.8 \u2192 8.4/10 over 3 iterations",
+    children: [
+      {
+        id: "hypo-iter-1",
+        status: "done",
+        name: "Iteration 1",
+        meta: "5m 12s",
+        summary: "Score: 6.2 \u2014 Initial proposal, 3 major issues",
+        children: []
+      },
+      {
+        id: "hypo-iter-2",
+        status: "done",
+        name: "Iteration 2",
+        meta: "6m 45s",
+        summary: "Score: 7.8 \u2014 Added contrastive pre-training, 1 major issue",
+        children: []
+      },
+      {
+        id: "hypo-iter-3",
+        status: "done",
+        name: "Iteration 3",
+        meta: "6m 25s",
+        summary: "Score: 8.4 \u2014 Narrowed scope, 0 major issues",
+        children: [],
+        detail: [
+          'Title: "Cross-lingual Contrastive Pre-training with',
+          'Synthetic Code-Switching for Low-Resource Transfer"',
+          '',
+          'Review: 8.4/10, confidence 4/5',
+          '0 major issues, 2 minor:',
+          '\u2022 Computational cost discussion needed',
+          '\u2022 Could add more baseline comparisons'
+        ].join("\n")
+      }
+    ]
+  },
+  {
+    id: "inv-loop",
+    status: "running",
+    name: "Invention Loop",
+    meta: "42m \u2022 $12.47",
+    summary: "Iteration 2/3 \u2014 Generating artifacts (3/5)",
+    children: [
+      {
+        id: "inv-strategy",
+        status: "done",
+        name: "Strategy",
+        meta: "1m 45s",
+        summary: "Contrastive alignment with code-switching augmentation",
+        children: []
+      },
+      {
+        id: "inv-plan",
+        status: "done",
+        name: "Plan",
+        meta: "2m 12s",
+        summary: "5 artifacts: 2 experiments, 1 dataset, 1 eval, 1 proof",
+        children: []
+      },
+      {
+        id: "inv-artifacts",
+        status: "running",
+        name: "Artifacts",
+        meta: "12m 08s",
+        summary: "3/5 complete \u2014 running ablation study",
+        children: [
+          {
+            id: "art-baseline",
+            status: "done",
+            name: "Contrastive Baseline",
+            meta: "4m 32s \u2022 $2.14",
+            summary: "Experiment \u2014 acc: 0.847 (+17.5% vs baseline)",
+            children: []
+          },
+          {
+            id: "art-pairs",
+            status: "done",
+            name: "Multilingual Pairs",
+            meta: "3m 15s \u2022 $1.02",
+            summary: "Dataset \u2014 2,400 examples across 12 languages",
+            children: []
+          },
+          {
+            id: "art-proof",
+            status: "done",
+            name: "Convergence Proof",
+            meta: "2m 41s \u2022 $0.89",
+            summary: "Proof \u2014 verified in Lean 4, 3 lemmas",
+            children: []
+          },
+          {
+            id: "art-ablation",
+            status: "running",
+            name: "Ablation Study",
+            meta: "1m 20s \u2022 $1.36",
+            summary: "Experiment \u2014 running, isolating component contributions",
+            children: []
+          },
+          {
+            id: "art-crosslingual",
+            status: "pending",
+            name: "Cross-lingual Evaluation",
+            meta: "",
+            summary: "Evaluation \u2014 pending",
+            children: []
+          }
+        ]
+      },
+      {
+        id: "inv-paper",
+        status: "pending",
+        name: "Paper Draft",
+        meta: "",
+        summary: "",
+        children: []
+      },
+      {
+        id: "inv-review",
+        status: "pending",
+        name: "Review",
+        meta: "",
+        summary: "",
+        children: []
+      },
+      {
+        id: "inv-update",
+        status: "pending",
+        name: "Update Hypothesis",
+        meta: "",
+        summary: "",
+        children: []
+      }
+    ]
+  },
+  {
+    id: "paper-repo",
+    status: "pending",
+    name: "Paper & Repository",
+    meta: "",
+    summary: "Waiting for invention loop",
+    children: []
+  }
+];
+
+// ────────────────────────────────────────────────
+// Icon map
+// ────────────────────────────────────────────────
+const ICONS = {
+  done:    '<span class="icon done">\u2713</span>',
+  running: '<span class="icon running">\u25B6</span>',
+  pending: '<span class="icon pending">\u25CB</span>'
+};
+
+// ────────────────────────────────────────────────
+// State: which nodes are expanded
+// ────────────────────────────────────────────────
+const expanded = new Set();
+
+// ────────────────────────────────────────────────
+// Render
+// ────────────────────────────────────────────────
+function renderItem(node, depth) {
+  const hasChildren = node.children && node.children.length > 0;
+  const hasDetail = !!node.detail;
+  const expandable = hasChildren || hasDetail;
+  const isExpanded = expanded.has(node.id);
+  const isActive = node.status === "running";
+
+  const li = document.createElement("li");
+  li.className = `item depth-${depth} status-${node.status}`;
+  li.dataset.id = node.id;
+
+  // Row
+  const row = document.createElement("div");
+  row.className = "item-row";
+  if (expandable) row.classList.add("expandable");
+  if (isActive) row.classList.add("active");
+
+  // Icon
+  row.innerHTML = ICONS[node.status];
+
+  // Body (name + summary)
+  const body = document.createElement("div");
+  body.className = "item-body";
+
+  const nameEl = document.createElement("div");
+  nameEl.className = "item-name";
+  nameEl.textContent = node.name;
+  body.appendChild(nameEl);
+
+  if (node.summary) {
+    const sumEl = document.createElement("div");
+    sumEl.className = "item-summary";
+    sumEl.textContent = node.summary;
+    body.appendChild(sumEl);
+  }
+
+  row.appendChild(body);
+
+  // Meta (timing / cost)
+  if (node.meta) {
+    const metaEl = document.createElement("div");
+    metaEl.className = "item-meta";
+    metaEl.textContent = node.meta;
+    row.appendChild(metaEl);
+  }
+
+  li.appendChild(row);
+
+  // Children sub-list
+  let childUl = null;
+  if (hasChildren) {
+    childUl = document.createElement("ul");
+    childUl.className = "outline collapsed";
+
+    for (const child of node.children) {
+      childUl.appendChild(renderItem(child, depth + 1));
+    }
+
+    li.appendChild(childUl);
+  }
+
+  // Detail block (leaf expansion like Iteration 3)
+  let detailWrap = null;
+  if (hasDetail) {
+    detailWrap = document.createElement("div");
+    detailWrap.className = "item-detail collapsed";
+
+    const detailInner = document.createElement("div");
+    detailInner.className = "item-detail-inner";
+    detailInner.textContent = node.detail;
+    detailWrap.appendChild(detailInner);
+
+    li.appendChild(detailWrap);
+  }
+
+  // Click handler — toggles in-place for smooth transitions
+  if (expandable) {
+    row.addEventListener("click", () => {
+      const target = childUl || detailWrap;
+      if (!target) return;
+
+      const isOpen = expanded.has(node.id);
+
+      if (isOpen) {
+        // Collapse: set explicit height first, then transition to 0
+        target.style.maxHeight = target.scrollHeight + "px";
+        target.style.opacity = "1";
+        // Force reflow so the browser registers the starting value
+        target.offsetHeight;
+        target.style.maxHeight = "0";
+        target.style.opacity = "0";
+        expanded.delete(node.id);
+      } else {
+        // Expand: remove collapsed, measure, animate
+        target.classList.remove("collapsed");
+        target.style.maxHeight = "0";
+        target.style.opacity = "0";
+        // Force reflow
+        target.offsetHeight;
+        target.style.maxHeight = target.scrollHeight + "px";
+        target.style.opacity = "1";
+        expanded.add(node.id);
+      }
+
+      // After transition, clean up inline styles
+      const onEnd = () => {
+        target.removeEventListener("transitionend", onEnd);
+        if (expanded.has(node.id)) {
+          // Expanded: let it auto-size for nested expansions
+          target.style.maxHeight = "none";
+        } else {
+          // Collapsed: add class back, remove inline styles
+          target.classList.add("collapsed");
+          target.style.maxHeight = "";
+          target.style.opacity = "";
+        }
+      };
+      target.addEventListener("transitionend", onEnd);
+    });
+  }
+
+  // Apply initial expanded state (set during buildTree for pre-expanded items)
+  if (expandable && isExpanded) {
+    const target = childUl || detailWrap;
+    if (target) {
+      target.classList.remove("collapsed");
+      target.style.maxHeight = "none";
+      target.style.opacity = "1";
+    }
+  }
+
+  return li;
+}
+
+function buildTree() {
+  const root = document.getElementById("root");
+  root.innerHTML = "";
+  for (const node of DATA) {
+    root.appendChild(renderItem(node, 0));
+  }
+}
+
+// ────────────────────────────────────────────────
+// Initial render
+// ────────────────────────────────────────────────
+buildTree();
+</script>
+
+</body>
+</html>

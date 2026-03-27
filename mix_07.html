@@ -1,0 +1,1789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor Pipeline - Tree Grow Animation</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* ================================================================
+     RESET & VARIABLES
+     ================================================================ */
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --slate-950: #020617;
+    --slate-900: #0f172a;
+    --slate-850: #131c31;
+    --slate-800: #1e293b;
+    --slate-750: #253349;
+    --slate-700: #334155;
+    --slate-600: #475569;
+    --slate-500: #64748b;
+    --slate-400: #94a3b8;
+    --slate-300: #cbd5e1;
+    --slate-200: #e2e8f0;
+    --slate-100: #f1f5f9;
+
+    --seed-color: #22c55e;
+    --seed-glow: rgba(34, 197, 94, 0.35);
+    --seed-hue: 142;
+
+    --hypo-color: #38bdf8;
+    --hypo-glow: rgba(56, 189, 248, 0.35);
+    --hypo-hue: 199;
+
+    --inv-color: #a78bfa;
+    --inv-glow: rgba(167, 139, 250, 0.35);
+    --inv-hue: 271;
+
+    --paper-color: #fb923c;
+    --paper-glow: rgba(251, 146, 60, 0.35);
+    --paper-hue: 32;
+
+    --card-radius: 14px;
+    --sub-radius: 10px;
+    --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-out-smooth: cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  html {
+    background: var(--slate-950);
+    color: var(--slate-200);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 48px 24px 80px;
+    position: relative;
+  }
+
+  /* ================================================================
+     BACKGROUND AMBIANCE
+     ================================================================ */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 900px 600px at 50% 20%, rgba(99, 102, 241, 0.06) 0%, transparent 70%),
+      radial-gradient(ellipse 600px 400px at 80% 70%, rgba(167, 139, 250, 0.04) 0%, transparent 60%),
+      radial-gradient(ellipse 500px 500px at 20% 80%, rgba(34, 197, 94, 0.03) 0%, transparent 60%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(148, 163, 184, 0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(148, 163, 184, 0.025) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ================================================================
+     HEADER
+     ================================================================ */
+  .header {
+    text-align: center;
+    margin-bottom: 52px;
+    position: relative;
+    z-index: 1;
+  }
+
+  .header h1 {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    color: var(--slate-100);
+    margin-bottom: 8px;
+  }
+
+  .header p {
+    font-size: 14px;
+    color: var(--slate-500);
+    font-weight: 400;
+  }
+
+  /* ================================================================
+     PIPELINE LAYOUT
+     ================================================================ */
+  .pipeline {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 1280px;
+    justify-content: center;
+    flex-wrap: nowrap;
+  }
+
+  .connector-line {
+    position: absolute;
+    top: 42px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg,
+      transparent 0%,
+      var(--slate-700) 10%,
+      var(--slate-700) 90%,
+      transparent 100%
+    );
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  /* ================================================================
+     MODULE COLUMN
+     ================================================================ */
+  .module-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+    min-width: 240px;
+    max-width: 300px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ================================================================
+     MODULE CARD
+     ================================================================ */
+  .module-card {
+    width: 100%;
+    border-radius: var(--card-radius);
+    padding: 18px 20px;
+    position: relative;
+    cursor: pointer;
+    user-select: none;
+    transition:
+      transform 260ms var(--ease-out-smooth),
+      box-shadow 260ms var(--ease-out-smooth),
+      border-color 260ms var(--ease-out-smooth);
+    border: 1.5px solid var(--slate-700);
+    background: linear-gradient(135deg, var(--slate-850) 0%, var(--slate-900) 100%);
+    overflow: hidden;
+  }
+
+  .module-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    opacity: 0;
+    transition: opacity 260ms var(--ease-out-smooth);
+    pointer-events: none;
+  }
+
+  .module-card:hover { transform: translateY(-2px); }
+  .module-card:hover::before { opacity: 1; }
+  .module-card:active { transform: translateY(0px) scale(0.99); }
+
+  /* Per-module card styles */
+  .module-card[data-module="seed"] {
+    border-color: color-mix(in srgb, var(--seed-color) 30%, var(--slate-700));
+  }
+  .module-card[data-module="seed"]::before {
+    background: radial-gradient(ellipse at 30% 20%, var(--seed-glow), transparent 70%);
+  }
+  .module-card[data-module="seed"]:hover {
+    border-color: color-mix(in srgb, var(--seed-color) 50%, var(--slate-600));
+    box-shadow: 0 8px 32px -8px var(--seed-glow);
+  }
+
+  .module-card[data-module="hypo"] {
+    border-color: color-mix(in srgb, var(--hypo-color) 30%, var(--slate-700));
+  }
+  .module-card[data-module="hypo"]::before {
+    background: radial-gradient(ellipse at 30% 20%, var(--hypo-glow), transparent 70%);
+  }
+  .module-card[data-module="hypo"]:hover {
+    border-color: color-mix(in srgb, var(--hypo-color) 50%, var(--slate-600));
+    box-shadow: 0 8px 32px -8px var(--hypo-glow);
+  }
+
+  .module-card[data-module="inv"] {
+    border-color: color-mix(in srgb, var(--inv-color) 50%, var(--slate-600));
+    box-shadow: 0 0 24px -4px var(--inv-glow), 0 4px 16px -4px rgba(0,0,0,0.3);
+  }
+  .module-card[data-module="inv"]::before {
+    background: radial-gradient(ellipse at 30% 20%, var(--inv-glow), transparent 70%);
+    opacity: 0.6;
+  }
+  .module-card[data-module="inv"]:hover {
+    border-color: color-mix(in srgb, var(--inv-color) 60%, var(--slate-500));
+    box-shadow: 0 0 32px -4px var(--inv-glow), 0 8px 24px -4px rgba(0,0,0,0.4);
+  }
+
+  .module-card[data-module="paper"] {
+    border-color: color-mix(in srgb, var(--paper-color) 30%, var(--slate-700));
+  }
+  .module-card[data-module="paper"]::before {
+    background: radial-gradient(ellipse at 30% 20%, var(--paper-glow), transparent 70%);
+  }
+  .module-card[data-module="paper"]:hover {
+    border-color: color-mix(in srgb, var(--paper-color) 50%, var(--slate-600));
+    box-shadow: 0 8px 32px -8px var(--paper-glow);
+  }
+
+  /* Card header */
+  .card-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+
+  .card-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+
+  .module-card[data-module="seed"] .card-icon {
+    background: color-mix(in srgb, var(--seed-color) 15%, var(--slate-800));
+    color: var(--seed-color);
+  }
+  .module-card[data-module="hypo"] .card-icon {
+    background: color-mix(in srgb, var(--hypo-color) 15%, var(--slate-800));
+    color: var(--hypo-color);
+  }
+  .module-card[data-module="inv"] .card-icon {
+    background: color-mix(in srgb, var(--inv-color) 15%, var(--slate-800));
+    color: var(--inv-color);
+  }
+  .module-card[data-module="paper"] .card-icon {
+    background: color-mix(in srgb, var(--paper-color) 15%, var(--slate-800));
+    color: var(--paper-color);
+  }
+
+  .card-title-block { flex: 1; min-width: 0; }
+
+  .card-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--slate-100);
+    line-height: 1.3;
+  }
+
+  .card-subtitle {
+    font-size: 11.5px;
+    color: var(--slate-500);
+    margin-top: 2px;
+  }
+
+  /* Expand chevron */
+  .expand-chevron {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--slate-500);
+    transition: transform 420ms var(--ease-out-smooth);
+    flex-shrink: 0;
+  }
+
+  .module-col.expanded .expand-chevron {
+    transform: rotate(180deg);
+  }
+
+  .expand-chevron svg { width: 14px; height: 14px; }
+
+  /* Status pills */
+  .card-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--slate-400);
+  }
+
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 11.5px;
+    font-weight: 600;
+  }
+
+  .status-pill.complete {
+    background: color-mix(in srgb, #22c55e 12%, var(--slate-800));
+    color: #4ade80;
+  }
+
+  .status-pill.active {
+    background: color-mix(in srgb, var(--inv-color) 15%, var(--slate-800));
+    color: var(--inv-color);
+    animation: status-pulse 2.5s ease-in-out infinite;
+  }
+
+  .status-pill.pending {
+    background: color-mix(in srgb, var(--paper-color) 10%, var(--slate-800));
+    color: var(--slate-400);
+  }
+
+  @keyframes status-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }
+
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .status-dot.complete { background: #22c55e; }
+  .status-dot.active {
+    background: var(--inv-color);
+    animation: dot-pulse 2s ease-in-out infinite;
+  }
+  .status-dot.pending { background: var(--slate-600); }
+
+  @keyframes dot-pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(167, 139, 250, 0.4); }
+    50% { opacity: 0.8; box-shadow: 0 0 8px 2px rgba(167, 139, 250, 0.3); }
+  }
+
+  .score-badge {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--slate-300);
+    background: var(--slate-800);
+    padding: 2px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--slate-700);
+  }
+
+  /* Collapsed summary */
+  .collapsed-summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12.5px;
+    color: var(--slate-400);
+    padding-top: 2px;
+    font-weight: 500;
+  }
+
+  .collapsed-summary .check-mark {
+    color: #4ade80;
+    font-size: 12px;
+  }
+
+  /* ================================================================
+     TREE SECTION — the expandable area below each card
+     ================================================================ */
+  .tree-section {
+    width: 100%;
+    overflow: hidden;
+    /* max-height transitions are driven by JS for precise control */
+  }
+
+  .tree-section.collapsed {
+    max-height: 0 !important;
+    opacity: 0;
+    pointer-events: none;
+    transition: max-height 380ms var(--ease-out-smooth), opacity 200ms ease;
+  }
+
+  .tree-section.expanded {
+    opacity: 1;
+    transition: max-height 420ms var(--ease-out-smooth), opacity 280ms ease 80ms;
+  }
+
+  /* ================================================================
+     TREE LIST — vertical structure with trunk + branches
+     ================================================================ */
+  .tree-list {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    width: 100%;
+    padding: 8px 0 4px 28px;
+    position: relative;
+  }
+
+  /* Background trunk (grey rail) */
+  .tree-list::before {
+    content: '';
+    position: absolute;
+    left: 28px;
+    top: 0;
+    bottom: 14px;
+    width: 2px;
+    background: var(--slate-700);
+  }
+
+  /* Colored trunk overlay — grows on expand via JS animation */
+  .trunk-grow {
+    position: absolute;
+    left: 28px;
+    top: 0;
+    width: 2px;
+    height: 0;
+    z-index: 1;
+    border-radius: 1px;
+    /* No CSS transition — driven entirely by JS for precise 320ms timing */
+  }
+
+  /* Trunk flash/pulse overlay */
+  .trunk-flash {
+    position: absolute;
+    left: 24px;
+    top: 0;
+    width: 10px;
+    height: 0;
+    z-index: 2;
+    border-radius: 5px;
+    opacity: 0;
+    pointer-events: none;
+    filter: blur(4px);
+  }
+
+  /* Module trunk colors */
+  .module-col[data-module="seed"] .trunk-grow { background: var(--seed-color); }
+  .module-col[data-module="hypo"] .trunk-grow { background: var(--hypo-color); }
+  .module-col[data-module="inv"] .trunk-grow { background: var(--inv-color); }
+  .module-col[data-module="paper"] .trunk-grow { background: var(--paper-color); }
+
+  .module-col[data-module="seed"] .trunk-flash { background: var(--seed-color); }
+  .module-col[data-module="hypo"] .trunk-flash { background: var(--hypo-color); }
+  .module-col[data-module="inv"] .trunk-flash { background: var(--inv-color); }
+  .module-col[data-module="paper"] .trunk-flash { background: var(--paper-color); }
+
+  /* ================================================================
+     TREE NODE — each branch row
+     ================================================================ */
+  .tree-node {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    width: 100%;
+    position: relative;
+    padding: 4px 0;
+  }
+
+  /* Nodes start invisible — JS animates them in with stagger */
+  .tree-node.grow-hidden {
+    opacity: 0;
+  }
+
+  .tree-node.grow-visible {
+    opacity: 1;
+    /* smooth transition for the label fade */
+    transition: opacity 180ms ease;
+  }
+
+  /* Horizontal branch line (grey rail) */
+  .tree-branch {
+    width: 18px;
+    height: 2px;
+    background: var(--slate-700);
+    flex-shrink: 0;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Colored branch overlay — grows left-to-right via JS */
+  .tree-branch-inner {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 0;
+    border-radius: 1px;
+  }
+
+  .module-col[data-module="seed"] .tree-branch-inner { background: var(--seed-color); }
+  .module-col[data-module="hypo"] .tree-branch-inner { background: var(--hypo-color); }
+  .module-col[data-module="inv"] .tree-branch-inner { background: var(--inv-color); }
+  .module-col[data-module="paper"] .tree-branch-inner { background: var(--paper-color); }
+
+  /* ================================================================
+     SUB-NODE BUBBLE
+     ================================================================ */
+  .sub-node {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border-radius: var(--sub-radius);
+    border: 1px solid var(--slate-700);
+    background: var(--slate-850);
+    transition:
+      border-color 260ms var(--ease-out-smooth),
+      background 260ms var(--ease-out-smooth),
+      transform 200ms var(--ease-out-smooth);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .sub-node:hover {
+    border-color: var(--slate-600);
+    background: var(--slate-800);
+    transform: translateX(2px);
+  }
+
+  .sub-node.complete { border-color: color-mix(in srgb, #22c55e 25%, var(--slate-700)); }
+  .sub-node.active { border-color: color-mix(in srgb, var(--inv-color) 40%, var(--slate-600)); }
+  .sub-node.pending { border-color: var(--slate-750); opacity: 0.7; }
+
+  /* Active glow */
+  .sub-node.active::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: radial-gradient(ellipse at 20% 50%, var(--inv-glow), transparent 70%);
+    opacity: 0.4;
+    pointer-events: none;
+  }
+
+  .sub-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 7px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    flex-shrink: 0;
+  }
+
+  .sub-node.complete .sub-icon {
+    background: color-mix(in srgb, #22c55e 15%, var(--slate-800));
+    color: #4ade80;
+  }
+  .sub-node.active .sub-icon {
+    background: color-mix(in srgb, var(--inv-color) 18%, var(--slate-800));
+    color: var(--inv-color);
+  }
+  .sub-node.pending .sub-icon {
+    background: var(--slate-800);
+    color: var(--slate-500);
+  }
+
+  .sub-info { flex: 1; min-width: 0; }
+
+  .sub-name {
+    font-size: 12.5px;
+    font-weight: 550;
+    color: var(--slate-200);
+    line-height: 1.3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .sub-node.pending .sub-name { color: var(--slate-400); }
+
+  .sub-meta {
+    font-size: 10.5px;
+    color: var(--slate-500);
+    margin-top: 1px;
+  }
+
+  .sub-status-icon {
+    flex-shrink: 0;
+    font-size: 13px;
+    width: 20px;
+    text-align: center;
+  }
+
+  .sub-node.complete .sub-status-icon { color: #4ade80; }
+  .sub-node.active .sub-status-icon { color: var(--inv-color); }
+  .sub-node.pending .sub-status-icon { color: var(--slate-600); }
+
+  /* Spinner */
+  .spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid transparent;
+    border-top-color: var(--inv-color);
+    border-right-color: var(--inv-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Progress bar for active node */
+  .sub-progress-bar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 2px;
+    border-radius: 0 0 var(--sub-radius) var(--sub-radius);
+    background: var(--inv-color);
+    transition: width 1s ease;
+  }
+
+  /* ================================================================
+     PULSE RING on active card
+     ================================================================ */
+  .pulse-ring {
+    position: absolute;
+    inset: -4px;
+    border-radius: calc(var(--card-radius) + 4px);
+    border: 1.5px solid var(--inv-color);
+    opacity: 0;
+    animation: pulse-ring-anim 3s ease-out infinite;
+    pointer-events: none;
+  }
+
+  @keyframes pulse-ring-anim {
+    0% { opacity: 0.5; inset: -4px; }
+    100% { opacity: 0; inset: -18px; }
+  }
+
+  /* Active card shimmer border */
+  @keyframes border-shimmer {
+    0% { background-position: 0% 50%; }
+    100% { background-position: 200% 50%; }
+  }
+
+  .module-card[data-module="inv"]::after {
+    content: '';
+    position: absolute;
+    inset: -1.5px;
+    border-radius: calc(var(--card-radius) + 1.5px);
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(167, 139, 250, 0.3) 25%,
+      rgba(167, 139, 250, 0.6) 50%,
+      rgba(167, 139, 250, 0.3) 75%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+    animation: border-shimmer 4s linear infinite;
+    z-index: -1;
+    mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
+    mask-composite: exclude;
+    padding: 1.5px;
+    pointer-events: none;
+  }
+
+  /* ================================================================
+     PARTICLE CANVAS
+     ================================================================ */
+  .particle-canvas {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 2;
+  }
+
+  /* ================================================================
+     FLOATING MOTES (ambient)
+     ================================================================ */
+  .mote {
+    position: fixed;
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: var(--slate-600);
+    opacity: 0;
+    pointer-events: none;
+    z-index: 0;
+    animation: mote-float linear infinite;
+  }
+
+  @keyframes mote-float {
+    0% { opacity: 0; transform: translateY(0) translateX(0); }
+    10% { opacity: 0.4; }
+    90% { opacity: 0.4; }
+    100% { opacity: 0; transform: translateY(-200px) translateX(30px); }
+  }
+
+  /* ================================================================
+     RESPONSIVE
+     ================================================================ */
+  @media (max-width: 1100px) {
+    .pipeline { flex-wrap: wrap; justify-content: center; }
+    .connector-line { display: none; }
+    .module-col { max-width: 340px; }
+  }
+
+  @media (max-width: 600px) {
+    body { padding: 32px 12px 60px; }
+    .module-col { min-width: 100%; max-width: 100%; }
+    .pipeline { gap: 16px; }
+    .header h1 { font-size: 22px; }
+  }
+
+  /* ================================================================
+     TRUNK GLOW KEYFRAMES (used by JS during grow animation)
+     ================================================================ */
+  @keyframes trunk-pulse-glow {
+    0%   { opacity: 0; }
+    15%  { opacity: 0.7; }
+    50%  { opacity: 0.4; }
+    85%  { opacity: 0.7; }
+    100% { opacity: 0; }
+  }
+
+  /* ================================================================
+     BRANCH TIP DOT — small colored dot where branch meets node
+     ================================================================ */
+  .branch-dot {
+    position: absolute;
+    right: -3px;
+    top: -2px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    opacity: 0;
+    transform: scale(0);
+    transition: opacity 150ms ease, transform 150ms var(--ease-out-expo);
+  }
+
+  .branch-dot.visible {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  .module-col[data-module="seed"] .branch-dot { background: var(--seed-color); box-shadow: 0 0 6px var(--seed-glow); }
+  .module-col[data-module="hypo"] .branch-dot { background: var(--hypo-color); box-shadow: 0 0 6px var(--hypo-glow); }
+  .module-col[data-module="inv"] .branch-dot { background: var(--inv-color); box-shadow: 0 0 6px var(--inv-glow); }
+  .module-col[data-module="paper"] .branch-dot { background: var(--paper-color); box-shadow: 0 0 6px var(--paper-glow); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>AI Inventor Pipeline</h1>
+  <p>Click a module card to see the tree-grow animation</p>
+</div>
+
+<div class="pipeline" id="pipeline">
+  <div class="connector-line"></div>
+
+  <!-- ======== SEED MODULE ======== -->
+  <div class="module-col" data-module="seed" id="col-seed">
+    <div class="module-card" data-module="seed" onclick="toggleModule('seed')">
+      <div class="card-head">
+        <div class="card-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2z" opacity="0.3" fill="currentColor"/>
+            <circle cx="12" cy="12" r="4"/>
+            <path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>
+          </svg>
+        </div>
+        <div class="card-title-block">
+          <div class="card-title">Seed Hypotheses</div>
+          <div class="card-subtitle">Knowledge graph + generation</div>
+        </div>
+        <div class="expand-chevron">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </div>
+      </div>
+      <div class="card-status">
+        <span class="status-pill complete"><span class="status-dot complete"></span>Complete</span>
+      </div>
+      <div class="collapsed-summary" id="summary-seed">
+        4/4 <span class="check-mark">&#10003;</span>
+      </div>
+    </div>
+
+    <div class="tree-section collapsed" id="tree-seed">
+      <div class="tree-list">
+        <div class="trunk-grow"></div>
+        <div class="trunk-flash"></div>
+        <div class="tree-node grow-hidden">
+          <div class="tree-branch"><div class="tree-branch-inner"></div><div class="branch-dot"></div></div>
+          <div class="sub-node complete">
+            <div class="sub-icon">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg>
+            </div>
+            <div class="sub-info">
+              <div class="sub-name">Build Knowledge Graph</div>
+              <div class="sub-meta">47 nodes, 126 edges</div>
+            </div>
+            <div class="sub-status-icon">&#10003;</div>
+          </div>
+        </div>
+        <div class="tree-node grow-hidden">
+          <div class="tree-branch"><div class="tree-branch-inner"></div><div class="branch-dot"></div></div>
+          <div class="sub-node complete">
+            <div class="sub-icon">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg>
+            </div>
+            <div class="sub-info">
+              <div class="sub-name">Extract Gap Clusters</div>
+              <div class="sub-meta">12 clusters identified</div>
+            </div>
+            <div class="sub-status-icon">&#10003;</div>
+          </div>
+        </div>
+        <div class="tree-node grow-hidden">
+          <div class="tree-branch"><div class="tree-branch-inner"></div><div class="branch-dot"></div></div>
+          <div class="sub-node complete">
+            <div class="sub-icon">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg>
+            </div>
+            <div class="sub-info">
+              <div class="sub-name">Generate Seed Ideas</div>
+              <div class="sub-meta">36 hypotheses seeded</div>
+            </div>
+            <div class="sub-status-icon">&#10003;</div>
+          </div>
+        </div>
+        <div class="tree-node grow-hidden">
+          <div class="tree-branch"><div class="tree-branch-inner"></div><div class="branch-dot"></div></div>
+          <div class="sub-node complete">
+            <div class="sub-icon">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg>
+            </div>
+            <div class="sub-info">
+              <div class="sub-name">Deduplicate & Merge</div>
+              <div class="sub-meta">18 unique hypotheses</div>
+            </div>
+            <div class="sub-status-icon">&#10003;</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== HYPOTHESIS MODULE ======== -->
+  <div class="module-col" data-module="hypo" id="col-hypo">
+    <div class="module-card" data-module="hypo" onclick="toggleModule('hypo')">
+      <div class="card-head">
+        <div class="card-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 1 1 7.072 0l-.548.547A3.374 3.374 0 0 0 14 18.469V19a2 2 0 1 1-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+          </svg>
+        </div>
+        <div class="card-title-block">
+          <div class="card-title">Hypothesis Loop</div>
+          <div class="card-subtitle">Refine, review, iterate</div>
+        </div>
+        <div class="expand-chevron">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </div>
+      </div>
+      <div class="card-status">
+        <span class="status-pill complete"><span class="status-dot complete"></span>Complete</span>
+        <span class="score-badge">8.4 / 10</span>
+      </div>
+      <div class="collapsed-summary" id="summary-hypo">
+        6/6 <span class="check-mark">&#10003;</span> &middot; 8.4/10
+      </div>
+    </div>
+
+    <div class="tree-section collapsed" id="tree-hypo">
+      <div class="tree-list">
+        <div class="trunk-grow"></div>
+        <div class="trunk-flash"></div>
+        <div class="tree-node grow-hidden">
+          <div class="tree-branch"><div class="tree-branch-inner"></div><div class="branch-dot"></div></div>
+          <div class="sub-node complete">
+            <div class="sub-icon">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg>
+            </div>
+            <div class="sub-info">
+              <div class="sub-name">Generate Hypothesis</div>
+              <div class="sub-meta">Iteration 3 &middot; converged</div>
+            </div>
+            <div class="sub-status-icon">&#10003;</div>
+          </div>
+        </div>
+        <div class="tree-node grow-hidden">
+          <div class="tree-branch"><div class="tree-branch-inner"></div><div class="branch-dot"></div></div>
+          <div class="sub-node complete">
+            <div class="sub-icon">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg>
+            </div>
+            <div class="sub-info">
+              <div class="sub-name">Review Hypothesis</div>
+              <div class="sub-meta">Score: 8.4/10</div>
+            </div>
+            <div class="sub-status-icon">&#10003;</div>
+          </div>
+        </div>
+        <div class="tree-node grow-hidden">
+          <div class="tree-branch"><div class="tree-branch-inner"></div><div class="branch-dot"></div></div>
+          <div class="sub-node complete">
+            <div class="sub-icon">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg>
+            </div>
+            <div class="sub-info">
+              <div class="sub-name">Novelty Check</div>
+              <div class="sub-meta">3 prior works compared</div>
+            </div>
+            <div class="sub-status-icon">&#10003;</div>
+          </div>
+        </div>
+        <div class="tree-node grow-hidden">
+          <div class="tree-branch"><div class="tree-branch-inner"></div><div class="branch-dot"></div></div>
+          <div class="sub-node complete">
+            <div class="sub-icon">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg>
+            </div>
+            <div class="sub-info">
+              <div class="sub-name">Feasibility Analysis</div>
+              <div class="sub-meta">High confidence</div>
+            </div>
+            <div class="sub-status-icon">&#10003;</div>
+          </div>
+        </div>
+        <div class="tree-node grow-hidden">
+          <div class="tree-branch"><div class="tree-branch-inner"></div><div class="branch-dot"></div></div>
+          <div class="sub-node complete">
+            <div class="sub-icon">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg>
+            </div>
+            <div class="sub-info">
+              <div class="sub-name">Refine Hypothesis</div>
+              <div class="sub-meta">2 refinement rounds</div>
+            </div>
+            <div class="sub-status-icon">&#10003;</div>
+          </div>
+        </div>
+        <div class="tree-node grow-hidden">
+          <div class="tree-branch"><div class="tree-branch-inner"></div><div class="branch-dot"></div></div>
+          <div class="sub-node complete">
+            <div class="sub-icon">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg>
+            </div>
+            <div class="sub-info">
+              <div class="sub-name">Final Selection</div>
+              <div class="sub-meta">Top hypothesis locked</div>
+            </div>
+            <div class="sub-status-icon">&#10003;</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== INVENTION MODULE (ACTIVE) ======== -->
+  <div class="module-col expanded" data-module="inv" id="col-inv">
+    <div class="module-card" data-module="inv" onclick="toggleModule('inv')">
+      <div class="pulse-ring"></div>
+      <div class="card-head">
+        <div class="card-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+          </svg>
+        </div>
+        <div class="card-title-block">
+          <div class="card-title">Invention Loop</div>
+          <div class="card-subtitle">Plan, build, review, iterate</div>
+        </div>
+        <div class="expand-chevron">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </div>
+      </div>
+      <div class="card-status">
+        <span class="status-pill active"><span class="status-dot active"></span>In Progress</span>
+        <span class="score-badge">Step 4/7</span>
+      </div>
+      <div class="collapsed-summary" id="summary-inv" style="display:none;">
+        4/7 running...
+      </div>
+    </div>
+
+    <div class="tree-section expanded" id="tree-inv" style="max-height: 600px;">
+      <div class="tree-list">
+        <div class="trunk-grow" style="height: calc(100% - 14px);"></div>
+        <div class="trunk-flash"></div>
+        <!-- Sub 1: Complete -->
+        <div class="tree-node grow-visible">
+          <div class="tree-branch"><div class="tree-branch-inner" style="width:100%;"></div><div class="branch-dot visible"></div></div>
+          <div class="sub-node complete">
+            <div class="sub-icon">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg>
+            </div>
+            <div class="sub-info">
+              <div class="sub-name">Generate Strategy</div>
+              <div class="sub-meta">Multi-agent approach</div>
+            </div>
+            <div class="sub-status-icon">&#10003;</div>
+          </div>
+        </div>
+        <!-- Sub 2: Complete -->
+        <div class="tree-node grow-visible">
+          <div class="tree-branch"><div class="tree-branch-inner" style="width:100%;"></div><div class="branch-dot visible"></div></div>
+          <div class="sub-node complete">
+            <div class="sub-icon">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg>
+            </div>
+            <div class="sub-info">
+              <div class="sub-name">Generate Plan</div>
+              <div class="sub-meta">5 sections outlined</div>
+            </div>
+            <div class="sub-status-icon">&#10003;</div>
+          </div>
+        </div>
+        <!-- Sub 3: Complete -->
+        <div class="tree-node grow-visible">
+          <div class="tree-branch"><div class="tree-branch-inner" style="width:100%;"></div><div class="branch-dot visible"></div></div>
+          <div class="sub-node complete">
+            <div class="sub-icon">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg>
+            </div>
+            <div class="sub-info">
+              <div class="sub-name">Generate Pseudocode</div>
+              <div class="sub-meta">3 algorithms defined</div>
+            </div>
+            <div class="sub-status-icon">&#10003;</div>
+          </div>
+        </div>
+        <!-- Sub 4: ACTIVE -->
+        <div class="tree-node grow-visible">
+          <div class="tree-branch"><div class="tree-branch-inner" style="width:100%;"></div><div class="branch-dot visible"></div></div>
+          <div class="sub-node active">
+            <div class="sub-icon">
+              <div class="spinner"></div>
+            </div>
+            <div class="sub-info">
+              <div class="sub-name">Generate Paper Text</div>
+              <div class="sub-meta">Writing section 3 of 5...</div>
+            </div>
+            <div class="sub-status-icon">
+              <div class="spinner"></div>
+            </div>
+            <div class="sub-progress-bar" style="width: 58%;"></div>
+          </div>
+        </div>
+        <!-- Sub 5: Pending -->
+        <div class="tree-node grow-visible">
+          <div class="tree-branch"><div class="tree-branch-inner" style="width:100%;"></div><div class="branch-dot visible"></div></div>
+          <div class="sub-node pending">
+            <div class="sub-icon">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+            </div>
+            <div class="sub-info">
+              <div class="sub-name">Review Paper</div>
+              <div class="sub-meta">Awaiting text generation</div>
+            </div>
+            <div class="sub-status-icon">&middot;</div>
+          </div>
+        </div>
+        <!-- Sub 6: Pending -->
+        <div class="tree-node grow-visible">
+          <div class="tree-branch"><div class="tree-branch-inner" style="width:100%;"></div><div class="branch-dot visible"></div></div>
+          <div class="sub-node pending">
+            <div class="sub-icon">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+            </div>
+            <div class="sub-info">
+              <div class="sub-name">Iterate Revisions</div>
+              <div class="sub-meta">Up to 3 rounds</div>
+            </div>
+            <div class="sub-status-icon">&middot;</div>
+          </div>
+        </div>
+        <!-- Sub 7: Pending -->
+        <div class="tree-node grow-visible">
+          <div class="tree-branch"><div class="tree-branch-inner" style="width:100%;"></div><div class="branch-dot visible"></div></div>
+          <div class="sub-node pending">
+            <div class="sub-icon">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+            </div>
+            <div class="sub-info">
+              <div class="sub-name">Finalize Invention</div>
+              <div class="sub-meta">Lock paper + artifacts</div>
+            </div>
+            <div class="sub-status-icon">&middot;</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <canvas class="particle-canvas" id="particles-inv"></canvas>
+  </div>
+
+  <!-- ======== PAPER MODULE ======== -->
+  <div class="module-col" data-module="paper" id="col-paper">
+    <div class="module-card" data-module="paper" onclick="toggleModule('paper')">
+      <div class="card-head">
+        <div class="card-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+            <polyline points="10 9 9 9 8 9"/>
+          </svg>
+        </div>
+        <div class="card-title-block">
+          <div class="card-title">Paper Repository</div>
+          <div class="card-subtitle">LaTeX, figures, artifacts</div>
+        </div>
+        <div class="expand-chevron">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </div>
+      </div>
+      <div class="card-status">
+        <span class="status-pill pending"><span class="status-dot pending"></span>Pending</span>
+      </div>
+      <div class="collapsed-summary" id="summary-paper">
+        5 pending
+      </div>
+    </div>
+
+    <div class="tree-section collapsed" id="tree-paper">
+      <div class="tree-list">
+        <div class="trunk-grow"></div>
+        <div class="trunk-flash"></div>
+        <div class="tree-node grow-hidden">
+          <div class="tree-branch"><div class="tree-branch-inner"></div><div class="branch-dot"></div></div>
+          <div class="sub-node pending">
+            <div class="sub-icon">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+            </div>
+            <div class="sub-info">
+              <div class="sub-name">Generate Artifacts</div>
+              <div class="sub-meta">Code demos + data</div>
+            </div>
+            <div class="sub-status-icon">&middot;</div>
+          </div>
+        </div>
+        <div class="tree-node grow-hidden">
+          <div class="tree-branch"><div class="tree-branch-inner"></div><div class="branch-dot"></div></div>
+          <div class="sub-node pending">
+            <div class="sub-icon">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+            </div>
+            <div class="sub-info">
+              <div class="sub-name">Generate Visualizations</div>
+              <div class="sub-meta">Figures + diagrams</div>
+            </div>
+            <div class="sub-status-icon">&middot;</div>
+          </div>
+        </div>
+        <div class="tree-node grow-hidden">
+          <div class="tree-branch"><div class="tree-branch-inner"></div><div class="branch-dot"></div></div>
+          <div class="sub-node pending">
+            <div class="sub-icon">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+            </div>
+            <div class="sub-info">
+              <div class="sub-name">Compile Full Paper</div>
+              <div class="sub-meta">LaTeX assembly</div>
+            </div>
+            <div class="sub-status-icon">&middot;</div>
+          </div>
+        </div>
+        <div class="tree-node grow-hidden">
+          <div class="tree-branch"><div class="tree-branch-inner"></div><div class="branch-dot"></div></div>
+          <div class="sub-node pending">
+            <div class="sub-icon">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+            </div>
+            <div class="sub-info">
+              <div class="sub-name">Quality Review</div>
+              <div class="sub-meta">Consistency checks</div>
+            </div>
+            <div class="sub-status-icon">&middot;</div>
+          </div>
+        </div>
+        <div class="tree-node grow-hidden">
+          <div class="tree-branch"><div class="tree-branch-inner"></div><div class="branch-dot"></div></div>
+          <div class="sub-node pending">
+            <div class="sub-icon">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+            </div>
+            <div class="sub-info">
+              <div class="sub-name">Package Repository</div>
+              <div class="sub-meta">Final output bundle</div>
+            </div>
+            <div class="sub-status-icon">&middot;</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Ambient motes container -->
+<div id="motes-container"></div>
+
+<script>
+/* ==================================================================
+   TREE-GROW ANIMATION ENGINE
+   ==================================================================
+   Timing breakdown (total ~800ms):
+   - Trunk draws down:       0ms - 320ms
+   - Trunk flash/pulse:      80ms - 400ms  (overlaps with trunk draw)
+   - Branches extend:        320ms+ with 100ms stagger per branch
+   - Labels fade in:         as each branch completes
+   ================================================================== */
+
+const ACTIVE_MODULE = 'inv';
+let currentExpanded = ACTIVE_MODULE;
+const treeHeights = {};
+
+// Track running animations so we can cancel on rapid clicks
+const runningAnimations = {};
+
+/* ------------------------------------------------------------------
+   MEASURE NATURAL HEIGHTS
+   ------------------------------------------------------------------ */
+function measureTreeHeight(moduleId) {
+  const el = document.getElementById('tree-' + moduleId);
+  if (!el) return 0;
+  const wasColl = el.classList.contains('collapsed');
+  if (wasColl) {
+    el.style.transition = 'none';
+    el.classList.remove('collapsed');
+    el.classList.add('expanded');
+  }
+  const h = el.scrollHeight;
+  if (wasColl) {
+    el.classList.remove('expanded');
+    el.classList.add('collapsed');
+    el.offsetHeight;
+    el.style.transition = '';
+  }
+  return h;
+}
+
+function initHeights() {
+  ['seed', 'hypo', 'inv', 'paper'].forEach(id => {
+    treeHeights[id] = measureTreeHeight(id);
+  });
+  const invTree = document.getElementById('tree-inv');
+  if (invTree) {
+    invTree.style.maxHeight = treeHeights['inv'] + 'px';
+  }
+}
+
+/* ------------------------------------------------------------------
+   EASING FUNCTIONS
+   ------------------------------------------------------------------ */
+function easeOutExpo(t) {
+  return t === 1 ? 1 : 1 - Math.pow(2, -10 * t);
+}
+
+function easeOutCubic(t) {
+  return 1 - Math.pow(1 - t, 3);
+}
+
+function easeInOutQuad(t) {
+  return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+}
+
+/* ------------------------------------------------------------------
+   CORE TREE-GROW ANIMATION
+   ------------------------------------------------------------------ */
+function animateTreeGrow(moduleId) {
+  const treeSection = document.getElementById('tree-' + moduleId);
+  if (!treeSection) return;
+
+  const treeList = treeSection.querySelector('.tree-list');
+  if (!treeList) return;
+
+  const trunkGrow = treeList.querySelector('.trunk-grow');
+  const trunkFlash = treeList.querySelector('.trunk-flash');
+  const nodes = treeList.querySelectorAll('.tree-node');
+
+  // Cancel any previous animation for this module
+  if (runningAnimations[moduleId]) {
+    cancelAnimationFrame(runningAnimations[moduleId]);
+    runningAnimations[moduleId] = null;
+  }
+
+  // Reset everything to initial state
+  if (trunkGrow) trunkGrow.style.height = '0px';
+  if (trunkFlash) {
+    trunkFlash.style.height = '0px';
+    trunkFlash.style.opacity = '0';
+    trunkFlash.style.animation = 'none';
+  }
+
+  nodes.forEach(node => {
+    node.classList.remove('grow-visible');
+    node.classList.add('grow-hidden');
+    const branchInner = node.querySelector('.tree-branch-inner');
+    const branchDot = node.querySelector('.branch-dot');
+    if (branchInner) branchInner.style.width = '0px';
+    if (branchDot) branchDot.classList.remove('visible');
+  });
+
+  // Calculate trunk target height
+  const listRect = treeList.getBoundingClientRect();
+  const trunkTargetH = listRect.height > 0 ? listRect.height - 14 : 200;
+
+  // Timing constants
+  const TRUNK_DURATION = 320;
+  const TRUNK_FLASH_START = 80;
+  const TRUNK_FLASH_DURATION = 320;
+  const BRANCH_START = 320;     // branches start after trunk completes
+  const BRANCH_STAGGER = 100;   // 100ms between each branch
+  const BRANCH_GROW_MS = 180;   // each branch takes 180ms to extend
+  const LABEL_FADE_MS = 180;    // label fades in as branch completes
+
+  const totalNodes = nodes.length;
+  const TOTAL_DURATION = BRANCH_START + (totalNodes * BRANCH_STAGGER) + BRANCH_GROW_MS + LABEL_FADE_MS;
+
+  const startTime = performance.now();
+
+  function tick(now) {
+    const elapsed = now - startTime;
+
+    // --- Phase 1: Trunk grows down (0 - 320ms) ---
+    if (elapsed <= TRUNK_DURATION) {
+      const t = easeOutExpo(elapsed / TRUNK_DURATION);
+      if (trunkGrow) {
+        trunkGrow.style.height = (t * trunkTargetH) + 'px';
+      }
+    } else {
+      if (trunkGrow) {
+        trunkGrow.style.height = trunkTargetH + 'px';
+      }
+    }
+
+    // --- Phase 1b: Trunk flash/pulse (80ms - 400ms) ---
+    if (elapsed >= TRUNK_FLASH_START && elapsed <= TRUNK_FLASH_START + TRUNK_FLASH_DURATION) {
+      const flashT = (elapsed - TRUNK_FLASH_START) / TRUNK_FLASH_DURATION;
+      if (trunkFlash) {
+        // Flash height follows trunk grow
+        const trunkT = Math.min(1, elapsed / TRUNK_DURATION);
+        const flashH = easeOutExpo(trunkT) * trunkTargetH;
+        trunkFlash.style.height = flashH + 'px';
+
+        // Pulse opacity: ramp up, peak, fade out
+        const pulseOpacity = flashT < 0.3
+          ? (flashT / 0.3) * 0.7
+          : flashT < 0.6
+            ? 0.7
+            : 0.7 * (1 - (flashT - 0.6) / 0.4);
+
+        trunkFlash.style.opacity = Math.max(0, pulseOpacity).toString();
+      }
+    } else if (elapsed > TRUNK_FLASH_START + TRUNK_FLASH_DURATION && trunkFlash) {
+      trunkFlash.style.opacity = '0';
+    }
+
+    // --- Phase 2: Branches extend one by one (320ms+, 100ms stagger) ---
+    for (let i = 0; i < totalNodes; i++) {
+      const branchStartMs = BRANCH_START + (i * BRANCH_STAGGER);
+      const branchEndMs = branchStartMs + BRANCH_GROW_MS;
+      const labelStartMs = branchEndMs - 40; // label begins slightly before branch finishes
+      const node = nodes[i];
+      const branchInner = node.querySelector('.tree-branch-inner');
+      const branchDot = node.querySelector('.branch-dot');
+
+      if (elapsed >= branchStartMs) {
+        if (elapsed < branchEndMs) {
+          // Branch is currently growing
+          const branchT = easeOutCubic((elapsed - branchStartMs) / BRANCH_GROW_MS);
+          if (branchInner) branchInner.style.width = (branchT * 100) + '%';
+        } else {
+          // Branch fully extended
+          if (branchInner) branchInner.style.width = '100%';
+          // Show the dot at tip
+          if (branchDot) branchDot.classList.add('visible');
+        }
+
+        // Label fade-in begins slightly before branch completes
+        if (elapsed >= labelStartMs) {
+          node.classList.remove('grow-hidden');
+          node.classList.add('grow-visible');
+        }
+      }
+    }
+
+    // Continue or finish
+    if (elapsed < TOTAL_DURATION + 50) {
+      runningAnimations[moduleId] = requestAnimationFrame(tick);
+    } else {
+      // Ensure everything is in final state
+      if (trunkGrow) trunkGrow.style.height = trunkTargetH + 'px';
+      if (trunkFlash) trunkFlash.style.opacity = '0';
+      nodes.forEach(node => {
+        node.classList.remove('grow-hidden');
+        node.classList.add('grow-visible');
+        const bi = node.querySelector('.tree-branch-inner');
+        const bd = node.querySelector('.branch-dot');
+        if (bi) bi.style.width = '100%';
+        if (bd) bd.classList.add('visible');
+      });
+      runningAnimations[moduleId] = null;
+    }
+  }
+
+  runningAnimations[moduleId] = requestAnimationFrame(tick);
+}
+
+/* ------------------------------------------------------------------
+   COLLAPSE ANIMATION (reverse — fast, not as elaborate)
+   ------------------------------------------------------------------ */
+function animateTreeCollapse(moduleId) {
+  const treeSection = document.getElementById('tree-' + moduleId);
+  if (!treeSection) return;
+
+  const treeList = treeSection.querySelector('.tree-list');
+  if (!treeList) return;
+
+  const trunkGrow = treeList.querySelector('.trunk-grow');
+  const trunkFlash = treeList.querySelector('.trunk-flash');
+  const nodes = treeList.querySelectorAll('.tree-node');
+
+  // Cancel running grow animation
+  if (runningAnimations[moduleId]) {
+    cancelAnimationFrame(runningAnimations[moduleId]);
+    runningAnimations[moduleId] = null;
+  }
+
+  // Quick fade: labels out, branches shrink, trunk shrinks
+  const COLLAPSE_DURATION = 250;
+  const startTime = performance.now();
+
+  // Capture current trunk height
+  const currentTrunkH = trunkGrow ? parseFloat(trunkGrow.style.height) || 0 : 0;
+
+  function tick(now) {
+    const elapsed = now - startTime;
+    const t = Math.min(1, elapsed / COLLAPSE_DURATION);
+    const eased = easeInOutQuad(t);
+    const inv = 1 - eased;
+
+    // Shrink trunk
+    if (trunkGrow) trunkGrow.style.height = (inv * currentTrunkH) + 'px';
+
+    // Shrink branches + fade labels
+    nodes.forEach(node => {
+      const bi = node.querySelector('.tree-branch-inner');
+      const bd = node.querySelector('.branch-dot');
+      if (bi) bi.style.width = (inv * 100) + '%';
+      if (bd) bd.classList.remove('visible');
+      // Opacity handled by CSS transition on grow-hidden
+      if (t > 0.15) {
+        node.classList.remove('grow-visible');
+        node.classList.add('grow-hidden');
+      }
+    });
+
+    if (trunkFlash) trunkFlash.style.opacity = '0';
+
+    if (t < 1) {
+      runningAnimations[moduleId] = requestAnimationFrame(tick);
+    } else {
+      // Final cleanup
+      if (trunkGrow) trunkGrow.style.height = '0px';
+      nodes.forEach(node => {
+        node.classList.remove('grow-visible');
+        node.classList.add('grow-hidden');
+        const bi = node.querySelector('.tree-branch-inner');
+        if (bi) bi.style.width = '0px';
+      });
+      runningAnimations[moduleId] = null;
+    }
+  }
+
+  runningAnimations[moduleId] = requestAnimationFrame(tick);
+}
+
+/* ------------------------------------------------------------------
+   TOGGLE / EXPAND / COLLAPSE MODULE
+   ------------------------------------------------------------------ */
+function toggleModule(moduleId) {
+  if (currentExpanded === moduleId) {
+    if (moduleId !== ACTIVE_MODULE) {
+      collapseModule(moduleId);
+      currentExpanded = null;
+    }
+    return;
+  }
+
+  if (currentExpanded) {
+    collapseModule(currentExpanded);
+  }
+
+  expandModule(moduleId);
+  currentExpanded = moduleId;
+}
+
+function collapseModule(moduleId) {
+  const col = document.getElementById('col-' + moduleId);
+  const tree = document.getElementById('tree-' + moduleId);
+  const summary = document.getElementById('summary-' + moduleId);
+
+  if (!col || !tree) return;
+
+  // Start collapse animation on the tree lines/labels
+  animateTreeCollapse(moduleId);
+
+  col.classList.remove('expanded');
+  tree.style.maxHeight = tree.scrollHeight + 'px';
+  tree.offsetHeight;
+  tree.style.maxHeight = '0px';
+  tree.classList.remove('expanded');
+  tree.classList.add('collapsed');
+
+  if (summary) summary.style.display = '';
+
+  // Manage particles
+  if (moduleId === 'inv' && particleSys) {
+    particleSys.stop();
+    particleSys.ctx.clearRect(0, 0, particleSys.canvas.width, particleSys.canvas.height);
+  }
+}
+
+function expandModule(moduleId) {
+  const col = document.getElementById('col-' + moduleId);
+  const tree = document.getElementById('tree-' + moduleId);
+  const summary = document.getElementById('summary-' + moduleId);
+
+  if (!col || !tree) return;
+
+  col.classList.add('expanded');
+  tree.classList.remove('collapsed');
+  tree.classList.add('expanded');
+
+  tree.style.maxHeight = '0px';
+  tree.offsetHeight;
+  const targetH = treeHeights[moduleId] || tree.scrollHeight;
+  tree.style.maxHeight = targetH + 'px';
+
+  if (summary) summary.style.display = 'none';
+
+  // Start the beautiful tree-grow animation
+  // Small delay so the container has started expanding
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      animateTreeGrow(moduleId);
+    });
+  });
+
+  // After container animation settles, allow overflow
+  setTimeout(() => {
+    if (tree.classList.contains('expanded')) {
+      tree.style.maxHeight = targetH + 40 + 'px';
+    }
+  }, 500);
+
+  // Manage particles
+  if (moduleId === 'inv' && particleSys) {
+    particleSys.resize();
+    if (!particleSys.running) particleSys.start();
+  }
+}
+
+/* ==================================================================
+   PARTICLE SYSTEM (active module only)
+   ================================================================== */
+
+class ParticleSystem {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.particles = [];
+    this.running = true;
+    this.resize();
+    this.raf = null;
+  }
+
+  resize() {
+    const col = this.canvas.closest('.module-col');
+    if (!col) return;
+    const rect = col.getBoundingClientRect();
+    this.canvas.width = rect.width;
+    this.canvas.height = rect.height;
+    this.canvas.style.width = rect.width + 'px';
+    this.canvas.style.height = rect.height + 'px';
+  }
+
+  spawn() {
+    const col = this.canvas.closest('.module-col');
+    if (!col) return;
+    const treeList = col.querySelector('.tree-list');
+    if (!treeList) return;
+
+    const colRect = col.getBoundingClientRect();
+    const treeRect = treeList.getBoundingClientRect();
+
+    const trunkX = treeRect.left - colRect.left + 28;
+    const trunkTop = treeRect.top - colRect.top;
+    const trunkBot = treeRect.bottom - colRect.top;
+
+    const y = trunkTop + Math.random() * (trunkBot - trunkTop);
+
+    // Occasionally spawn along branches too
+    const spawnOnBranch = Math.random() < 0.3;
+    let x = trunkX + (Math.random() - 0.5) * 6;
+    if (spawnOnBranch) {
+      x += Math.random() * 16;
+    }
+
+    this.particles.push({
+      x: x,
+      y: y,
+      vx: (Math.random() - 0.5) * 0.5,
+      vy: -0.3 - Math.random() * 0.6,
+      life: 1.0,
+      decay: 0.008 + Math.random() * 0.006,
+      size: 1.5 + Math.random() * 1.5,
+      hue: 271
+    });
+  }
+
+  update() {
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const p = this.particles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      p.life -= p.decay;
+      if (p.life <= 0) {
+        this.particles.splice(i, 1);
+      }
+    }
+  }
+
+  draw() {
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    for (const p of this.particles) {
+      const alpha = p.life * 0.6;
+
+      // Core dot
+      this.ctx.beginPath();
+      this.ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      this.ctx.fillStyle = `hsla(${p.hue}, 80%, 72%, ${alpha})`;
+      this.ctx.fill();
+
+      // Glow halo
+      this.ctx.beginPath();
+      this.ctx.arc(p.x, p.y, p.size * 2.5, 0, Math.PI * 2);
+      this.ctx.fillStyle = `hsla(${p.hue}, 80%, 72%, ${alpha * 0.2})`;
+      this.ctx.fill();
+    }
+  }
+
+  tick() {
+    if (!this.running) return;
+    if (Math.random() < 0.3) this.spawn();
+    this.update();
+    this.draw();
+    this.raf = requestAnimationFrame(() => this.tick());
+  }
+
+  start() {
+    this.running = true;
+    this.tick();
+  }
+
+  stop() {
+    this.running = false;
+    if (this.raf) cancelAnimationFrame(this.raf);
+  }
+}
+
+/* ==================================================================
+   FLOATING MOTES (ambient background particles)
+   ================================================================== */
+
+function createMotes() {
+  const container = document.getElementById('motes-container');
+  const count = 15;
+  for (let i = 0; i < count; i++) {
+    const mote = document.createElement('div');
+    mote.className = 'mote';
+    mote.style.left = Math.random() * 100 + 'vw';
+    mote.style.top = (40 + Math.random() * 60) + 'vh';
+    mote.style.animationDuration = (8 + Math.random() * 12) + 's';
+    mote.style.animationDelay = Math.random() * 10 + 's';
+    mote.style.width = (2 + Math.random() * 2) + 'px';
+    mote.style.height = mote.style.width;
+    const hues = [142, 199, 271, 32];
+    const hue = hues[Math.floor(Math.random() * hues.length)];
+    mote.style.background = `hsla(${hue}, 60%, 60%, 0.5)`;
+    container.appendChild(mote);
+  }
+}
+
+/* ==================================================================
+   PROGRESS BAR SIMULATION
+   ================================================================== */
+
+let progressValue = 58;
+let progressDir = 1;
+
+function animateProgress() {
+  const bar = document.querySelector('.sub-progress-bar');
+  if (!bar) return;
+  progressValue += progressDir * (0.1 + Math.random() * 0.15);
+  if (progressValue >= 72) progressDir = -0.3;
+  if (progressValue <= 55) progressDir = 1;
+  bar.style.width = progressValue + '%';
+}
+
+/* ==================================================================
+   INITIALIZATION
+   ================================================================== */
+
+let particleSys = null;
+
+function init() {
+  initHeights();
+  createMotes();
+
+  // Initialize particle system on active module
+  const pCanvas = document.getElementById('particles-inv');
+  if (pCanvas) {
+    particleSys = new ParticleSystem(pCanvas);
+    particleSys.start();
+  }
+
+  // Animate progress bar
+  setInterval(animateProgress, 200);
+
+  // Handle resize
+  window.addEventListener('resize', () => {
+    if (particleSys) particleSys.resize();
+    ['seed', 'hypo', 'inv', 'paper'].forEach(id => {
+      treeHeights[id] = measureTreeHeight(id);
+    });
+  });
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
+</script>
+</body>
+</html>

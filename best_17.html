@@ -1,0 +1,995 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Compact Pipeline</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0f1117;
+    --bg2: #13151c;
+    --surface: #1a1d25;
+    --surface2: #1e2129;
+    --border: #252a34;
+    --border-light: #2e3440;
+    --text: #e2e8f0;
+    --text-dim: #8892a4;
+    --text-muted: #555e70;
+    --green: #22c55e;
+    --purple: #a78bfa;
+    --blue: #3b82f6;
+    --orange: #f59e0b;
+    --red: #ef4444;
+    --card-r: 8px;
+    --tree-line: #2e3440;
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── HEADER BAR ── */
+  .hdr {
+    height: 38px; min-height: 38px;
+    display: flex; align-items: center;
+    padding: 0 16px; gap: 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    z-index: 20;
+  }
+  .hdr-title { font-size: 12px; font-weight: 600; letter-spacing: -0.3px; white-space: nowrap; }
+  .hdr-ring { width: 20px; height: 20px; position: relative; flex-shrink: 0; }
+  .hdr-ring svg { width: 100%; height: 100%; }
+  .hdr-ring .rt { fill: none; stroke: var(--border); stroke-width: 2.5; }
+  .hdr-ring .rf { fill: none; stroke: var(--green); stroke-width: 2.5; stroke-linecap: round;
+    stroke-dasharray: 50.3; stroke-dashoffset: 17.6; transition: stroke-dashoffset 1s ease; }
+  .hdr-ring .rtx { fill: var(--text); font-size: 5.5px; font-weight: 700;
+    text-anchor: middle; dominant-baseline: central; font-family: 'Inter', sans-serif; }
+  .ring-glow {
+    position: absolute; inset: -2px; border-radius: 50%;
+    border: 1px dashed var(--green); opacity: 0.3;
+    animation: ringRot 8s linear infinite;
+  }
+  @keyframes ringRot { to { transform: rotate(360deg); } }
+  .ring-ep {
+    position: absolute; width: 4px; height: 4px;
+    background: var(--green); border-radius: 50%;
+    top: -1px; left: 50%; transform: translateX(-50%);
+    animation: ringEpGlow 2s ease-in-out infinite;
+    box-shadow: 0 0 4px var(--green);
+  }
+  @keyframes ringEpGlow {
+    0%, 100% { opacity: 0.5; box-shadow: 0 0 3px var(--green); }
+    50% { opacity: 1; box-shadow: 0 0 8px var(--green), 0 0 14px var(--green); }
+  }
+  .hdr-stats {
+    display: flex; gap: 14px; margin-left: auto;
+    font-size: 10px; color: var(--text-dim);
+  }
+  .hdr-stats span { display: flex; align-items: center; gap: 4px; }
+  .sd { width: 5px; height: 5px; border-radius: 50%; }
+
+  /* ── MAIN LAYOUT ── */
+  .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+  /* ── MODULES ROW ── */
+  .mod-area { padding: 10px 16px 0; position: relative; z-index: 5; }
+  .mod-row { display: flex; gap: 10px; position: relative; }
+
+  /* ── MODULE COLUMN ── */
+  .mod-col { flex: 1; min-width: 0; max-width: 200px; position: relative; }
+
+  /* ── MODULE CARD — 160x60 compact ── */
+  .mod-card {
+    width: 100%; height: 60px;
+    background: linear-gradient(135deg, rgba(26,29,37,0.95), rgba(26,29,37,0.7));
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--border);
+    border-radius: var(--card-r);
+    padding: 8px 10px;
+    cursor: pointer; position: relative; overflow: hidden;
+    transition: border-color 0.3s, transform 0.15s;
+  }
+  .mod-card::before {
+    content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 2px;
+    border-radius: var(--card-r) 0 0 var(--card-r);
+  }
+  .mod-card:hover { transform: translateY(-1px); }
+  .mod-card[data-color="green"]::before { background: var(--green); }
+  .mod-card[data-color="purple"]::before { background: var(--purple); }
+  .mod-card[data-color="blue"]::before { background: var(--blue); }
+  .mod-card[data-color="orange"]::before { background: var(--orange); }
+
+  .mod-card.active { border-color: rgba(255,255,255,0.1); }
+  .mod-card.active[data-color="green"] { box-shadow: 0 0 14px rgba(34,197,94,0.12); }
+  .mod-card.active[data-color="purple"] { box-shadow: 0 0 14px rgba(167,139,250,0.12); }
+  .mod-card.active[data-color="blue"] { box-shadow: 0 0 14px rgba(59,130,246,0.12); }
+  .mod-card.active[data-color="orange"] { box-shadow: 0 0 14px rgba(245,158,11,0.12); }
+
+  .mod-card.active::after {
+    content: ''; position: absolute; inset: -1px;
+    border-radius: var(--card-r);
+    animation: cGlow 2.5s ease-in-out infinite; pointer-events: none;
+  }
+  .mod-card.active[data-color="green"]::after { box-shadow: inset 0 0 16px rgba(34,197,94,0.05); }
+  .mod-card.active[data-color="purple"]::after { box-shadow: inset 0 0 16px rgba(167,139,250,0.05); }
+  .mod-card.active[data-color="blue"]::after { box-shadow: inset 0 0 16px rgba(59,130,246,0.05); }
+  .mod-card.active[data-color="orange"]::after { box-shadow: inset 0 0 16px rgba(245,158,11,0.05); }
+  @keyframes cGlow { 0%, 100% { opacity: 0.4; } 50% { opacity: 1; } }
+
+  /* shimmer */
+  .c-shim {
+    position: absolute; inset: 0;
+    background: linear-gradient(110deg, transparent 30%, rgba(255,255,255,0.02) 48%, rgba(255,255,255,0.05) 50%, rgba(255,255,255,0.02) 52%, transparent 70%);
+    background-size: 250% 100%;
+    animation: shim 3s ease-in-out infinite;
+    pointer-events: none; opacity: 0; border-radius: var(--card-r);
+  }
+  .mod-card.active .c-shim { opacity: 1; }
+  @keyframes shim { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+  .c-top { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
+  .c-icon { font-size: 11px; }
+  .c-title { font-size: 11px; font-weight: 600; }
+
+  /* mini ring in card */
+  .c-ring { width: 20px; height: 20px; position: relative; flex-shrink: 0; margin-left: auto; }
+  .c-ring svg { width: 100%; height: 100%; }
+  .c-ring .crt { fill: none; stroke: var(--border-light); stroke-width: 2; }
+  .c-ring .crf { fill: none; stroke-width: 2; stroke-linecap: round; }
+  .c-ring .crx { font-size: 5px; font-weight: 700; text-anchor: middle; dominant-baseline: central;
+    font-family: 'Inter', sans-serif; }
+
+  .c-bot { display: flex; align-items: center; gap: 6px; }
+  .c-prog { flex: 1; height: 2px; background: rgba(255,255,255,0.04); border-radius: 1px; overflow: hidden; }
+  .c-prog-fill { height: 100%; border-radius: 1px; width: 0; transition: width 0.8s ease; }
+  .c-sub-lbl { font-size: 9px; color: var(--text-muted); white-space: nowrap; }
+
+  .c-status {
+    font-size: 8px; font-weight: 600; padding: 1px 5px;
+    border-radius: 4px; margin-left: auto; white-space: nowrap;
+  }
+  .c-status.done { background: rgba(34,197,94,0.1); color: var(--green); }
+  .c-status.running { background: rgba(59,130,246,0.1); color: var(--blue); animation: stShim 2s ease-in-out infinite; }
+  .c-status.pending { background: rgba(136,146,164,0.08); color: var(--text-muted); }
+  @keyframes stShim { 0%, 100% { opacity: 0.7; } 50% { opacity: 1; background: rgba(59,130,246,0.18); } }
+
+  /* ── TREE SUB-MODULES — 30px rows ── */
+  .subs { padding: 4px 0 0; position: relative; overflow: hidden; transition: max-height 0.35s ease; }
+  .subs.collapsed { max-height: 0 !important; padding: 0; }
+  .tree-c { position: relative; padding-left: 14px; }
+  .tree-c::before {
+    content: ''; position: absolute; left: 5px; top: 0;
+    width: 1px; background: var(--tree-line);
+    height: var(--tree-line-h, calc(100% - 14px));
+    transition: height 0.3s ease;
+  }
+
+  .sub-row {
+    height: 30px; display: flex; align-items: center; gap: 7px;
+    position: relative; font-size: 11px;
+    opacity: 0; transform: translateX(-12px);
+    transition: opacity 0.25s ease, transform 0.25s ease;
+    cursor: pointer; padding-right: 6px; border-radius: 4px;
+  }
+  .sub-row.visible { opacity: 1; transform: translateX(0); }
+  .sub-row:hover { background: rgba(255,255,255,0.02); }
+
+  .sub-row::before {
+    content: ''; position: absolute; left: -9px; top: 50%;
+    width: 9px; height: 1px; background: var(--tree-line);
+  }
+
+  /* colored tree lines for done modules */
+  .tree-c.tree-green::before { background: var(--green); opacity: 0.35; }
+  .tree-c.tree-green .sub-row::before { background: var(--green); opacity: 0.35; }
+  .tree-c.tree-purple::before { background: var(--purple); opacity: 0.35; }
+  .tree-c.tree-purple .sub-row::before { background: var(--purple); opacity: 0.35; }
+  .tree-c.tree-blue::before { background: var(--blue); opacity: 0.35; }
+  .tree-c.tree-blue .sub-row::before { background: var(--blue); opacity: 0.35; }
+  .tree-c.tree-orange::before { background: var(--orange); opacity: 0.35; }
+  .tree-c.tree-orange .sub-row::before { background: var(--orange); opacity: 0.35; }
+
+  .sub-dot {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+    position: relative; transition: all 0.3s;
+  }
+  .sub-dot.done { background: var(--green); opacity: 0.7; }
+  .sub-dot.running { background: var(--blue); animation: dPulse 2s ease-in-out infinite;
+    box-shadow: 0 0 6px rgba(59,130,246,0.5); }
+  @keyframes dPulse {
+    0%, 100% { transform: scale(1); box-shadow: 0 0 4px rgba(59,130,246,0.3); }
+    50% { transform: scale(1.3); box-shadow: 0 0 10px rgba(59,130,246,0.7); }
+  }
+  .sub-dot.pending { background: transparent; border: 1px solid var(--text-muted); opacity: 0.4; }
+
+  .sub-lbl { color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 10px; }
+  .sub-row.active-sub .sub-lbl { color: var(--text); font-weight: 500; }
+  .sub-row.done-sub .sub-lbl { color: var(--text-dim); }
+  .sub-score { margin-left: auto; font-size: 9px; font-weight: 600; color: var(--text-muted); flex-shrink: 0; }
+
+  /* collapse toggle */
+  .col-toggle {
+    display: flex; align-items: center; justify-content: center;
+    width: 100%; height: 16px; cursor: pointer;
+    font-size: 8px; color: var(--text-muted); opacity: 0.6;
+    transition: opacity 0.2s; margin-top: 2px;
+  }
+  .col-toggle:hover { opacity: 1; }
+  .col-toggle svg { width: 10px; height: 10px; transition: transform 0.3s; }
+  .col-toggle.flipped svg { transform: rotate(180deg); }
+
+  /* ── CANVAS ── */
+  #pCanvas { position: fixed; inset: 0; pointer-events: none; z-index: 1; }
+
+  /* ── DASHBOARD ── */
+  .dash {
+    flex: 1; margin: 8px 16px 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--card-r);
+    padding: 14px 18px;
+    position: relative; overflow-y: auto; overflow-x: hidden;
+    z-index: 5;
+    scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+  }
+  .dash::-webkit-scrollbar { width: 4px; }
+  .dash::-webkit-scrollbar-track { background: transparent; }
+  .dash::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .dash-anim { animation: dFade 0.3s ease; }
+  @keyframes dFade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+  .d-hdr { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .d-title { font-size: 13px; font-weight: 600; }
+  .d-badge { font-size: 9px; font-weight: 600; padding: 2px 8px; border-radius: 4px; }
+  .d-badge.done { background: rgba(34,197,94,0.1); color: var(--green); }
+  .d-badge.running { background: rgba(59,130,246,0.1); color: var(--blue); }
+  .d-badge.pending { background: rgba(136,146,164,0.08); color: var(--text-muted); }
+
+  .d-summary { font-size: 11px; color: var(--text-dim); line-height: 1.55; margin-bottom: 12px; max-width: 680px; font-style: italic; }
+
+  .st-cards { display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+  .st-card {
+    flex: 1; min-width: 120px; max-width: 200px;
+    background: rgba(255,255,255,0.015); border: 1px solid var(--border);
+    border-radius: 6px; padding: 8px 10px;
+  }
+  .st-lbl { font-size: 9px; color: var(--text-muted); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.4px; }
+  .st-val { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+  .st-bar { height: 3px; background: rgba(255,255,255,0.04); border-radius: 2px; overflow: hidden; }
+  .st-bar-fill { height: 100%; border-radius: 2px; width: 0; transition: width 0.6s ease; }
+
+  .i-list { margin-bottom: 10px; }
+  .i-title { font-size: 9px; color: var(--text-muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.4px; }
+  .i-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 5px 8px; border-radius: 4px;
+    font-size: 11px; cursor: pointer; transition: background 0.15s;
+  }
+  .i-row:hover { background: rgba(255,255,255,0.02); }
+  .i-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+  .i-dot.done { background: var(--green); }
+  .i-dot.running { background: var(--blue); animation: iDotP 1.5s ease-in-out infinite; }
+  .i-dot.pending { border: 1px solid var(--text-muted); }
+  @keyframes iDotP { 0%, 100% { opacity: 0.6; } 50% { opacity: 1; } }
+  .i-name { color: var(--text-dim); }
+  .i-meta { margin-left: auto; font-size: 9px; color: var(--text-muted); }
+
+  .i-row.running-item { position: relative; overflow: hidden; }
+  .i-row.running-item::after {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent 0%, rgba(59,130,246,0.03) 45%, rgba(59,130,246,0.07) 50%, rgba(59,130,246,0.03) 55%, transparent 100%);
+    background-size: 200% 100%; animation: rShim 2.5s ease-in-out infinite;
+    pointer-events: none; border-radius: 4px;
+  }
+  @keyframes rShim { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+  .a-log { border-top: 1px solid var(--border); padding-top: 10px; }
+  .a-title { font-size: 9px; color: var(--text-muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.4px; }
+  .a-item {
+    display: flex; align-items: center; gap: 6px;
+    padding: 3px 0; font-size: 10px; color: var(--text-dim);
+    transition: opacity 0.4s, transform 0.4s;
+  }
+  .a-time { color: var(--text-muted); font-size: 9px; font-variant-numeric: tabular-nums; flex-shrink: 0; width: 36px; }
+  .a-dot { width: 4px; height: 4px; border-radius: 50%; flex-shrink: 0; }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 800px) { .mod-row { flex-wrap: wrap; } .mod-col { max-width: 48%; flex: 0 0 48%; } }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="hdr">
+  <div class="hdr-title">AI Inventor</div>
+  <div class="hdr-ring">
+    <div class="ring-glow"></div>
+    <div class="ring-ep"></div>
+    <svg viewBox="0 0 20 20">
+      <circle class="rt" cx="10" cy="10" r="8" />
+      <circle class="rf" cx="10" cy="10" r="8" transform="rotate(-90 10 10)" />
+      <text class="rtx" x="10" y="10">65%</text>
+    </svg>
+  </div>
+  <div class="hdr-stats">
+    <span><span class="sd" style="background:var(--green)"></span>3 Done</span>
+    <span><span class="sd" style="background:var(--blue)"></span>1 Active</span>
+    <span><span class="sd" style="background:var(--text-muted)"></span>1 Pending</span>
+    <span style="color:var(--text-muted)">Run 47 &middot; 3h 12m &middot; $4.82</span>
+  </div>
+</div>
+
+<!-- PARTICLE CANVAS -->
+<canvas id="pCanvas"></canvas>
+
+<!-- MAIN -->
+<div class="main">
+  <!-- MODULES -->
+  <div class="mod-area" id="modArea">
+    <div class="mod-row" id="modRow"></div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div class="dash" id="dash"></div>
+</div>
+
+<script>
+// =============================================
+// DATA
+// =============================================
+const MODULES = [
+  {
+    id: 'seed', title: 'Seed', icon: '\u{1F331}', color: 'green',
+    status: 'done', progress: 100, subLabel: '4/4',
+    summary: "Seeded the knowledge graph: 142 entities, 89 relationships from 12 source papers on neural architecture search. The KG covers search strategies, performance predictors, and hardware constraints.",
+    subs: [
+      { label: 'Parse Sources', status: 'done' },
+      { label: 'Extract Entities', status: 'done' },
+      { label: 'Build KG', status: 'done' },
+      { label: 'Validate Links', status: 'done' },
+    ],
+    stats: { dur: '18m', durPct: 22, cost: '$0.34', costPct: 7, msgs: '48 msgs (12 tool)' },
+    items: [],
+    log: [
+      { time: '14:02', text: 'KG validated \u2014 142 entities, 89 edges', color: 'var(--green)' },
+      { time: '13:58', text: 'Link validation pass: 94% accuracy', color: 'var(--green)' },
+      { time: '13:51', text: 'Entity extraction complete', color: 'var(--green)' },
+    ]
+  },
+  {
+    id: 'hypo', title: 'Hypothesis', icon: '\u{1F9EA}', color: 'purple',
+    status: 'done', progress: 100, subLabel: '6/6 (8.4)',
+    summary: "Iterated on the hypothesis 6 times, improving novelty from 6.2 to 8.4. Final hypothesis: differentiable hardware-aware search space jointly optimizing topology and quantization via Gumbel-softmax.",
+    subs: [
+      { label: 'Gen Hypothesis', status: 'done', score: '6.2' },
+      { label: 'Review #1', status: 'done', score: '6.8' },
+      { label: 'Revise #1', status: 'done', score: '7.4' },
+      { label: 'Review #2', status: 'done', score: '7.9' },
+      { label: 'Revise #2', status: 'done', score: '8.1' },
+      { label: 'Final Review', status: 'done', score: '8.4' },
+    ],
+    stats: { dur: '1h 24m', durPct: 55, cost: '$1.86', costPct: 39, msgs: '312 msgs (84 tool)' },
+    items: [],
+    log: [
+      { time: '15:26', text: 'Final score 8.4 \u2014 threshold met', color: 'var(--green)' },
+      { time: '15:18', text: 'Revise #2 improved novelty framing', color: 'var(--purple)' },
+      { time: '15:04', text: 'Review #2 flagged weak baselines', color: 'var(--orange)' },
+    ]
+  },
+  {
+    id: 'invent', title: 'Invention', icon: '\u{1F528}', color: 'blue',
+    status: 'running', progress: 50, subLabel: 'Iter 2 \u2014 3/5',
+    summary: "Iteration 2 of invention loop. Strategy and plan locked. Generating artifact 3/5 \u2014 PyTorch module with differentiable search space and Gumbel-softmax gates. First two artifacts passed validation.",
+    subs: [
+      { label: 'Strategy', status: 'done' },
+      { label: 'Plan', status: 'done' },
+      { label: 'Artifacts', status: 'running', extra: '3/5' },
+      { label: 'Paper Draft', status: 'pending' },
+      { label: 'Review', status: 'pending' },
+      { label: 'Update Hypo', status: 'pending' },
+    ],
+    stats: { dur: '1h 28m', durPct: 58, cost: '$2.14', costPct: 44, msgs: '286 msgs (92 tool)' },
+    items: [
+      { name: 'config_schema.py', status: 'done', meta: '142 lines' },
+      { name: 'search_cell.py', status: 'done', meta: '289 lines' },
+      { name: 'gumbel_gates.py', status: 'running', meta: 'generating...' },
+      { name: 'hw_predictor.py', status: 'pending', meta: '' },
+      { name: 'train_loop.py', status: 'pending', meta: '' },
+    ],
+    log: [
+      { time: '16:30', text: 'Generating gumbel_gates.py module...', color: 'var(--blue)' },
+      { time: '16:24', text: 'search_cell.py passed validation', color: 'var(--green)' },
+      { time: '16:18', text: 'config_schema.py generated (142 LOC)', color: 'var(--green)' },
+    ]
+  },
+  {
+    id: 'paper', title: 'Paper', icon: '\u{1F4C4}', color: 'orange',
+    status: 'pending', progress: 0, subLabel: '0/5',
+    summary: "Waiting for the invention loop to complete. The paper will include LaTeX source, figures, and a reproducibility appendix.",
+    subs: [
+      { label: 'Gen Demos', status: 'pending' },
+      { label: 'Gen Viz', status: 'pending' },
+      { label: 'Full Paper', status: 'pending' },
+      { label: 'Build Repo', status: 'pending' },
+      { label: 'Final Check', status: 'pending' },
+    ],
+    stats: { dur: '\u2014', durPct: 0, cost: '\u2014', costPct: 0, msgs: '\u2014' },
+    items: [],
+    log: [{ time: '\u2014', text: 'Waiting for invention loop', color: 'var(--text-muted)' }]
+  }
+];
+
+let activeMI = 2;
+let canvas, ctx;
+let cardEls = [];
+let subEls = [];
+let collapsed = {};
+let treeParts = [];
+let connParts = [];
+let burstParts = [];
+let bgParts = [];
+let logTimer;
+
+// =============================================
+// BUILD UI
+// =============================================
+function buildModules() {
+  const row = document.getElementById('modRow');
+  row.innerHTML = '';
+  cardEls = [];
+  subEls = [];
+
+  MODULES.forEach((mod, mi) => {
+    const col = document.createElement('div');
+    col.className = 'mod-col';
+
+    // Card
+    const card = document.createElement('div');
+    card.className = 'mod-card' + (mi === activeMI ? ' active' : '');
+    card.dataset.color = mod.color;
+    card.dataset.idx = mi;
+
+    const pctText = mod.progress + '%';
+    const ringOff = 50.3 - (50.3 * mod.progress / 100);
+    const ringColor = `var(--${mod.color})`;
+
+    card.innerHTML = `
+      <div class="c-shim"></div>
+      <div class="c-top">
+        <span class="c-icon">${mod.icon}</span>
+        <span class="c-title">${mod.title}</span>
+        <div class="c-ring">
+          <svg viewBox="0 0 20 20">
+            <circle class="crt" cx="10" cy="10" r="8" />
+            <circle class="crf" cx="10" cy="10" r="8" transform="rotate(-90 10 10)"
+              style="stroke-dasharray:50.3;stroke-dashoffset:${ringOff};stroke:${ringColor};filter:drop-shadow(0 0 2px ${ringColor})" />
+            <text class="crx" x="10" y="10" fill="var(--text)">${pctText}</text>
+          </svg>
+        </div>
+      </div>
+      <div class="c-bot">
+        <div class="c-prog">
+          <div class="c-prog-fill" style="background:var(--${mod.color})" data-pct="${mod.progress}"></div>
+        </div>
+        <span class="c-sub-lbl">${mod.subLabel}</span>
+      </div>
+    `;
+    card.addEventListener('click', () => selectModule(mi));
+    col.appendChild(card);
+    cardEls.push(card);
+
+    // Sub-modules
+    const subsDiv = document.createElement('div');
+    subsDiv.className = 'subs';
+    subsDiv.dataset.mi = mi;
+    if (collapsed[mi]) subsDiv.classList.add('collapsed');
+
+    const tree = document.createElement('div');
+    tree.className = 'tree-c tree-' + mod.color;
+
+    const sArr = [];
+    mod.subs.forEach((sub, si) => {
+      const r = document.createElement('div');
+      r.className = 'sub-row';
+      if (sub.status === 'done') r.classList.add('done-sub');
+      if (sub.status === 'running') r.classList.add('active-sub');
+      r.dataset.modIdx = mi;
+      r.dataset.subIdx = si;
+
+      const scoreH = sub.score ? `<span class="sub-score">${sub.score}</span>` : '';
+      const extraH = sub.extra ? `<span class="sub-score" style="color:var(--blue)">${sub.extra}</span>` : '';
+
+      r.innerHTML = `
+        <span class="sub-dot ${sub.status}"></span>
+        <span class="sub-lbl">${sub.label}</span>
+        ${scoreH}${extraH}
+      `;
+      tree.appendChild(r);
+      sArr.push(r);
+    });
+
+    subsDiv.appendChild(tree);
+
+    // Collapse toggle
+    const toggle = document.createElement('div');
+    toggle.className = 'col-toggle' + (collapsed[mi] ? ' flipped' : '');
+    toggle.innerHTML = '<svg viewBox="0 0 10 10"><path d="M2 4 L5 6 L8 4" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/></svg>';
+    toggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      collapsed[mi] = !collapsed[mi];
+      subsDiv.classList.toggle('collapsed', collapsed[mi]);
+      toggle.classList.toggle('flipped', collapsed[mi]);
+      requestAnimationFrame(() => requestAnimationFrame(computeTreeH));
+    });
+
+    col.appendChild(subsDiv);
+    col.appendChild(toggle);
+    subEls.push(sArr);
+    row.appendChild(col);
+  });
+
+  // Animate progress bars
+  requestAnimationFrame(() => {
+    document.querySelectorAll('.c-prog-fill').forEach(el => {
+      el.style.width = el.dataset.pct + '%';
+    });
+  });
+
+  animateSubEntrance(activeMI);
+  MODULES.forEach((_, mi) => {
+    if (mi !== activeMI) subEls[mi].forEach(el => el.classList.add('visible'));
+  });
+
+  requestAnimationFrame(() => requestAnimationFrame(computeTreeH));
+}
+
+function computeTreeH() {
+  document.querySelectorAll('.tree-c').forEach(tc => {
+    const rows = tc.querySelectorAll('.sub-row');
+    if (!rows.length) return;
+    const last = rows[rows.length - 1];
+    const tcR = tc.getBoundingClientRect();
+    const lR = last.getBoundingClientRect();
+    const h = (lR.top + lR.height / 2) - tcR.top;
+    tc.style.setProperty('--tree-line-h', h + 'px');
+  });
+}
+
+function animateSubEntrance(mi) {
+  const subs = subEls[mi];
+  if (!subs) return;
+  subs.forEach((el, i) => {
+    el.classList.remove('visible');
+    setTimeout(() => el.classList.add('visible'), 60 + i * 40);
+  });
+}
+
+function selectModule(mi) {
+  if (mi === activeMI) return;
+  activeMI = mi;
+  cardEls.forEach((c, i) => c.classList.toggle('active', i === mi));
+  animateSubEntrance(mi);
+  treeParts = [];
+  buildDashboard();
+}
+
+// =============================================
+// DASHBOARD
+// =============================================
+function buildDashboard() {
+  const dash = document.getElementById('dash');
+  const mod = MODULES[activeMI];
+  dash.classList.remove('dash-anim');
+  void dash.offsetWidth;
+  dash.classList.add('dash-anim');
+
+  let itemsH = '';
+  if (mod.items.length > 0) {
+    itemsH = `
+      <div class="i-list">
+        <div class="i-title">Artifacts</div>
+        ${mod.items.map(it => `
+          <div class="i-row ${it.status === 'running' ? 'running-item' : ''}">
+            <span class="i-dot ${it.status}"></span>
+            <span class="i-name">${it.name}</span>
+            <span class="i-meta">${it.meta}</span>
+          </div>
+        `).join('')}
+      </div>
+    `;
+  }
+
+  const cv = `var(--${mod.color})`;
+  dash.innerHTML = `
+    <div class="d-hdr">
+      <span style="font-size:16px">${mod.icon}</span>
+      <span class="d-title">${mod.title}</span>
+      <span class="d-badge ${mod.status}">${mod.status === 'done' ? 'Complete' : mod.status === 'running' ? 'Running' : 'Pending'}</span>
+    </div>
+    <div class="d-summary">"${mod.summary}"</div>
+    <div class="st-cards">
+      <div class="st-card">
+        <div class="st-lbl">Duration</div>
+        <div class="st-val" style="color:${cv}">${mod.stats.dur}</div>
+        <div class="st-bar"><div class="st-bar-fill" style="background:${cv}" data-pct="${mod.stats.durPct}"></div></div>
+      </div>
+      <div class="st-card">
+        <div class="st-lbl">Cost</div>
+        <div class="st-val" style="color:${cv}">${mod.stats.cost}</div>
+        <div class="st-bar"><div class="st-bar-fill" style="background:${cv}" data-pct="${mod.stats.costPct}"></div></div>
+      </div>
+      <div class="st-card">
+        <div class="st-lbl">Messages</div>
+        <div class="st-val" style="color:${cv};font-size:12px;margin-top:2px">${mod.stats.msgs}</div>
+      </div>
+    </div>
+    ${itemsH}
+    <div class="a-log">
+      <div class="a-title">Activity</div>
+      <div id="aItems">
+        ${mod.log.map(l => `
+          <div class="a-item">
+            <span class="a-time">${l.time}</span>
+            <span class="a-dot" style="background:${l.color}"></span>
+            <span>${l.text}</span>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+
+  requestAnimationFrame(() => {
+    dash.querySelectorAll('.st-bar-fill').forEach(el => {
+      el.style.width = el.dataset.pct + '%';
+    });
+  });
+
+  startLogRotation();
+}
+
+function startLogRotation() {
+  if (logTimer) clearInterval(logTimer);
+  const mod = MODULES[activeMI];
+  if (mod.status !== 'running') return;
+
+  const extra = [
+    { time: '16:31', text: 'Token count: 14,282 in / 3,841 out', color: 'var(--text-dim)' },
+    { time: '16:30', text: 'gumbel_gates.py \u2014 writing forward() method', color: 'var(--blue)' },
+    { time: '16:29', text: 'Tool call: file_write search_cell.py', color: 'var(--text-dim)' },
+    { time: '16:28', text: 'Validation: search_cell.py all checks passed', color: 'var(--green)' },
+  ];
+  let idx = 0;
+
+  logTimer = setInterval(() => {
+    const c = document.getElementById('aItems');
+    if (!c) return;
+    const e = extra[idx % extra.length]; idx++;
+
+    const items = c.querySelectorAll('.a-item');
+    if (items.length >= 3) {
+      const last = items[items.length - 1];
+      last.style.opacity = '0'; last.style.transform = 'translateY(3px)';
+      setTimeout(() => last.remove(), 300);
+    }
+
+    const ni = document.createElement('div');
+    ni.className = 'a-item';
+    ni.style.opacity = '0'; ni.style.transform = 'translateY(-3px)';
+    ni.innerHTML = `<span class="a-time">${e.time}</span><span class="a-dot" style="background:${e.color}"></span><span>${e.text}</span>`;
+    c.insertBefore(ni, c.firstChild);
+    requestAnimationFrame(() => { ni.style.opacity = '1'; ni.style.transform = 'translateY(0)'; });
+  }, 5000);
+}
+
+// =============================================
+// CANVAS — Particles
+// =============================================
+function initCanvas() {
+  canvas = document.getElementById('pCanvas');
+  ctx = canvas.getContext('2d');
+  resizeCanvas();
+  window.addEventListener('resize', resizeCanvas);
+  initBgParticles();
+}
+
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  computeTreeH();
+}
+
+function elRect(el) { return el.getBoundingClientRect(); }
+
+// ── BACKGROUND PARTICLES ──
+function initBgParticles() {
+  bgParts = [];
+  const count = 40;
+  for (let i = 0; i < count; i++) {
+    bgParts.push({
+      x: Math.random() * window.innerWidth,
+      y: Math.random() * window.innerHeight,
+      vx: (Math.random() - 0.5) * 6,
+      vy: (Math.random() - 0.5) * 6,
+      size: Math.random() * 1.2 + 0.4,
+      alpha: Math.random() * 0.15 + 0.03,
+    });
+  }
+}
+
+function drawBgParticles(dt) {
+  for (const p of bgParts) {
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+
+    if (p.x < 0) p.x = canvas.width;
+    if (p.x > canvas.width) p.x = 0;
+    if (p.y < 0) p.y = canvas.height;
+    if (p.y > canvas.height) p.y = 0;
+
+    ctx.globalAlpha = p.alpha;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    ctx.fillStyle = '#8892a4';
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ── CONNECTOR PARTICLES (between cards) ──
+function spawnConnParticle() {
+  for (let i = 0; i < MODULES.length - 1; i++) {
+    const fc = cardEls[i], tc = cardEls[i + 1];
+    if (!fc || !tc) continue;
+    const fm = MODULES[i], tm = MODULES[i + 1];
+    if (fm.status === 'pending' || tm.status === 'pending') continue;
+
+    const fr = elRect(fc), tr = elRect(tc);
+    const y = fr.top + fr.height / 2;
+    const cs = getComputedStyle(document.documentElement);
+    let color, speed, size, alpha;
+
+    if (fm.status === 'done' && (tm.status === 'done' || tm.status === 'running')) {
+      speed = 35 + Math.random() * 20;
+      color = cs.getPropertyValue('--' + fm.color).trim();
+      size = 1.8; alpha = 0.45;
+    } else {
+      speed = 60 + Math.random() * 25;
+      color = cs.getPropertyValue('--blue').trim();
+      size = 2.2; alpha = 0.7;
+    }
+
+    connParts.push({
+      x: fr.right, y: y + (Math.random() - 0.5) * 3,
+      targetX: tr.left, speed, color, size, alpha, trail: [],
+    });
+  }
+}
+
+// ── TREE PARTICLES (card -> running sub) ──
+function findRunSub(mi) {
+  for (let i = 0; i < MODULES[mi].subs.length; i++) {
+    if (MODULES[mi].subs[i].status === 'running') return i;
+  }
+  return -1;
+}
+
+function spawnTreeParticle() {
+  const mi = activeMI;
+  if (collapsed[mi]) return;
+  const si = findRunSub(mi);
+  if (si < 0) return;
+  if (!cardEls[mi] || !subEls[mi] || !subEls[mi][si]) return;
+
+  const cardR = elRect(cardEls[mi]);
+  const subRow = subEls[mi][si];
+  const subDot = subRow.querySelector('.sub-dot');
+  if (!subDot) return;
+
+  const dotR = elRect(subDot);
+  const treeC = subRow.closest('.tree-c');
+  if (!treeC) return;
+  const treeR = elRect(treeC);
+
+  const startX = cardR.left + cardR.width / 2;
+  const startY = cardR.bottom;
+  const vertX = treeR.left + 5;
+  const branchY = dotR.top + dotR.height / 2;
+  const endX = dotR.left + dotR.width / 2;
+  const endY = branchY;
+
+  const waypoints = [
+    { x: startX, y: startY },
+    { x: vertX, y: startY + 4 },
+    { x: vertX, y: branchY },
+    { x: endX, y: endY },
+  ];
+
+  const cs = getComputedStyle(document.documentElement);
+  const color = cs.getPropertyValue('--blue').trim();
+
+  treeParts.push({
+    waypoints, wpIdx: 0,
+    x: waypoints[0].x, y: waypoints[0].y,
+    speed: 70, color, size: 2, alpha: 0.85, trail: [],
+  });
+}
+
+// ── BURST ──
+function spawnBurst(x, y, color) {
+  for (let i = 0; i < 5; i++) {
+    const angle = (Math.PI * 2 * i) / 5 + Math.random() * 0.3;
+    const speed = 25 + Math.random() * 35;
+    burstParts.push({
+      x, y,
+      vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
+      life: 1, decay: 1.5 + Math.random() * 0.5,
+      color, size: 1.5,
+    });
+  }
+}
+
+// ── ANIMATION LOOP ──
+let lastT = 0, connT = 0, treeT = 0;
+
+function animate(now) {
+  requestAnimationFrame(animate);
+  const dt = Math.min((now - lastT) / 1000, 0.05);
+  lastT = now;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Background particles
+  drawBgParticles(dt);
+
+  // Spawn timers
+  connT += dt;
+  if (connT > 0.9) { connT = 0; spawnConnParticle(); }
+  treeT += dt;
+  if (treeT > 0.55) { treeT = 0; spawnTreeParticle(); }
+
+  // ── Draw connector lines (static) ──
+  for (let i = 0; i < MODULES.length - 1; i++) {
+    const fc = cardEls[i], tc = cardEls[i + 1];
+    if (!fc || !tc) continue;
+    if (MODULES[i].status === 'pending') continue;
+    const fr = elRect(fc), tr = elRect(tc);
+    const y = fr.top + fr.height / 2;
+    const toPending = MODULES[i + 1].status === 'pending';
+
+    ctx.beginPath();
+    ctx.moveTo(fr.right + 1, y);
+    ctx.lineTo(tr.left - 1, y);
+    ctx.strokeStyle = '#2e3440';
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = toPending ? 0.25 : 0.5;
+    ctx.setLineDash(toPending ? [3, 3] : []);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+  }
+
+  // ── Connector particles ──
+  for (let i = connParts.length - 1; i >= 0; i--) {
+    const p = connParts[i];
+    p.x += p.speed * dt;
+    p.trail.push({ x: p.x, y: p.y });
+    if (p.trail.length > 10) p.trail.shift();
+
+    if (p.trail.length > 1) {
+      ctx.beginPath();
+      ctx.moveTo(p.trail[0].x, p.trail[0].y);
+      for (let t = 1; t < p.trail.length; t++) ctx.lineTo(p.trail[t].x, p.trail[t].y);
+      ctx.strokeStyle = p.color;
+      ctx.globalAlpha = p.alpha * 0.25;
+      ctx.lineWidth = p.size * 0.5;
+      ctx.stroke();
+    }
+
+    ctx.globalAlpha = p.alpha;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    ctx.fillStyle = p.color;
+    ctx.fill();
+
+    ctx.globalAlpha = p.alpha * 0.25;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size * 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = p.color;
+    ctx.fill();
+
+    ctx.globalAlpha = 1;
+    if (p.x >= p.targetX) connParts.splice(i, 1);
+  }
+
+  // ── Tree particles ──
+  for (let i = treeParts.length - 1; i >= 0; i--) {
+    const p = treeParts[i];
+    const wp = p.waypoints[p.wpIdx + 1];
+    if (!wp) { spawnBurst(p.x, p.y, p.color); treeParts.splice(i, 1); continue; }
+
+    const dx = wp.x - p.x, dy = wp.y - p.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist < 2) { p.x = wp.x; p.y = wp.y; p.wpIdx++; }
+    else { const step = p.speed * dt; p.x += (dx / dist) * step; p.y += (dy / dist) * step; }
+
+    p.trail.push({ x: p.x, y: p.y });
+    if (p.trail.length > 14) p.trail.shift();
+
+    if (p.trail.length > 1) {
+      for (let t = 1; t < p.trail.length; t++) {
+        const ratio = t / p.trail.length;
+        ctx.globalAlpha = ratio * p.alpha * 0.35;
+        ctx.beginPath();
+        ctx.moveTo(p.trail[t - 1].x, p.trail[t - 1].y);
+        ctx.lineTo(p.trail[t].x, p.trail[t].y);
+        ctx.strokeStyle = p.color;
+        ctx.lineWidth = p.size * 0.4 * ratio;
+        ctx.stroke();
+      }
+    }
+
+    ctx.globalAlpha = p.alpha * 0.2;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size * 3, 0, Math.PI * 2);
+    ctx.fillStyle = p.color;
+    ctx.fill();
+
+    ctx.globalAlpha = p.alpha;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    ctx.fillStyle = p.color;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  // ── Burst particles ──
+  for (let i = burstParts.length - 1; i >= 0; i--) {
+    const p = burstParts[i];
+    p.life -= p.decay * dt;
+    if (p.life <= 0) { burstParts.splice(i, 1); continue; }
+    p.x += p.vx * dt; p.y += p.vy * dt;
+    p.vx *= 0.95; p.vy *= 0.95;
+
+    ctx.globalAlpha = p.life * 0.7;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+    ctx.fillStyle = p.color;
+    ctx.fill();
+
+    ctx.globalAlpha = p.life * 0.25;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size * 2.5 * p.life, 0, Math.PI * 2);
+    ctx.fillStyle = p.color;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+}
+
+// =============================================
+// INIT
+// =============================================
+function init() {
+  buildModules();
+  buildDashboard();
+  initCanvas();
+  lastT = performance.now();
+  requestAnimationFrame(animate);
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

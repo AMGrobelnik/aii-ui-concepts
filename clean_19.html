@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Pipeline View</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0e1117;
+    --surface: #161b22;
+    --border: #21262d;
+    --text: #e6edf3;
+    --text-muted: #7d8590;
+    --text-dim: #484f58;
+
+    --seed: #3fb950;
+    --hypo: #a371f7;
+    --inv: #58a6ff;
+    --paper: #f0883e;
+
+    --seed-dim: rgba(63,185,80,0.25);
+    --hypo-dim: rgba(163,113,247,0.25);
+    --inv-dim: rgba(88,166,255,0.25);
+    --paper-dim: rgba(240,136,62,0.25);
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Timeline ── */
+  .timeline-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 80px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    padding: 0 24px;
+  }
+
+  .timeline-inner {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0;
+    max-width: 900px;
+    width: 100%;
+  }
+
+  /* Connecting line behind dots */
+  .timeline-inner::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 6px;
+    right: 6px;
+    height: 1.5px;
+    background: var(--border);
+    transform: translateY(-50%);
+    z-index: 0;
+  }
+
+  .module-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    z-index: 1;
+  }
+
+  .module-label {
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+    cursor: pointer;
+    transition: opacity 0.15s;
+    user-select: none;
+  }
+  .module-label:hover { opacity: 0.7; }
+  .module-label.selected { text-decoration: underline; text-underline-offset: 3px; }
+
+  .module-label[data-module="seed"]  { color: var(--seed); }
+  .module-label[data-module="hypo"]  { color: var(--hypo); }
+  .module-label[data-module="inv"]   { color: var(--inv); }
+  .module-label[data-module="paper"] { color: var(--paper); }
+
+  .dots-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .gap { width: 12px; flex-shrink: 0; }
+
+  .dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+    position: relative;
+    flex-shrink: 0;
+    z-index: 1;
+  }
+  .dot:hover { transform: scale(1.3); }
+
+  /* Status: complete */
+  .dot.complete[data-module="seed"]  { background: var(--seed); }
+  .dot.complete[data-module="hypo"]  { background: var(--hypo); }
+  .dot.complete[data-module="inv"]   { background: var(--inv); }
+  .dot.complete[data-module="paper"] { background: var(--paper); }
+
+  /* Status: pending — ring outline */
+  .dot.pending {
+    background: transparent;
+    border: 2px solid;
+  }
+  .dot.pending[data-module="seed"]  { border-color: var(--seed-dim); }
+  .dot.pending[data-module="hypo"]  { border-color: var(--hypo-dim); }
+  .dot.pending[data-module="inv"]   { border-color: var(--inv-dim); }
+  .dot.pending[data-module="paper"] { border-color: var(--paper-dim); }
+
+  /* Status: active — pulsing glow */
+  .dot.active {
+    width: 16px;
+    height: 16px;
+    margin: -2px;
+    border: none;
+  }
+  .dot.active[data-module="inv"] {
+    background: var(--inv);
+    animation: pulse-inv 2s ease-in-out infinite;
+  }
+  @keyframes pulse-inv {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(88,166,255,0.5); }
+    50%      { box-shadow: 0 0 10px 4px rgba(88,166,255,0.35); }
+  }
+
+  /* Status: running */
+  .dot.running[data-module="inv"] {
+    background: var(--inv);
+    opacity: 0.7;
+  }
+
+  /* Selected ring */
+  .dot.selected {
+    box-shadow: 0 0 0 3px var(--bg), 0 0 0 5px #fff !important;
+  }
+
+  /* ── Content Area ── */
+  .content-area {
+    margin-top: 100px;
+    padding: 20px 24px 60px;
+    display: flex;
+    justify-content: center;
+  }
+
+  .content-card {
+    max-width: 650px;
+    width: 100%;
+    opacity: 1;
+    transition: opacity 0.2s ease;
+  }
+  .content-card.fading { opacity: 0; }
+
+  .content-step {
+    font-size: 20px;
+    font-weight: 600;
+    line-height: 1.3;
+    margin-bottom: 4px;
+  }
+
+  .content-meta {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .content-meta .sep { color: var(--text-dim); }
+
+  .content-summary {
+    font-size: 15px;
+    line-height: 1.65;
+    color: var(--text-muted);
+    margin-bottom: 28px;
+  }
+
+  /* Detail list */
+  .detail-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .detail-list li {
+    font-size: 14px;
+    line-height: 1.5;
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+  .detail-list .icon {
+    flex-shrink: 0;
+    width: 18px;
+    text-align: center;
+    font-size: 13px;
+  }
+  .detail-list .icon.done    { color: var(--seed); }
+  .detail-list .icon.running { color: var(--inv); }
+  .detail-list .icon.pend    { color: var(--text-dim); }
+
+  .detail-list .label { color: var(--text); }
+  .detail-list .note  { color: var(--text-muted); margin-left: 2px; }
+
+  .detail-list li.is-pending .label,
+  .detail-list li.is-pending .note { color: var(--text-dim); }
+
+  /* Muted card for pending steps */
+  .content-card.is-pending .content-step,
+  .content-card.is-pending .content-summary {
+    color: var(--text-dim);
+  }
+  .content-card.is-pending .content-meta {
+    color: var(--text-dim);
+  }
+
+  /* Module-level summary */
+  .module-summary-bar {
+    width: 100%;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--border);
+    margin-bottom: 24px;
+    overflow: hidden;
+  }
+  .module-summary-bar .fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.4s ease;
+  }
+</style>
+</head>
+<body>
+
+<!-- Timeline -->
+<div class="timeline-bar">
+  <div class="timeline-inner" id="timeline">
+    <!-- Built by JS -->
+  </div>
+</div>
+
+<!-- Content -->
+<div class="content-area">
+  <div class="content-card" id="content">
+    <!-- Filled by JS -->
+  </div>
+</div>
+
+<script>
+// ── Data ──
+
+const MODULES = {
+  seed:  { label: 'Seed',       color: 'var(--seed)',  colorHex: '#3fb950' },
+  hypo:  { label: 'Hypothesis', color: 'var(--hypo)',  colorHex: '#a371f7' },
+  inv:   { label: 'Invention',  color: 'var(--inv)',   colorHex: '#58a6ff' },
+  paper: { label: 'Paper',      color: 'var(--paper)', colorHex: '#f0883e' },
+};
+
+const MODULE_SUMMARIES = {
+  seed: {
+    title: 'Seed Hypothesis',
+    meta: 'Complete',
+    summary: 'Generated initial research directions from literature survey. Extracted knowledge graph with 2,341 triples across 847 papers. Identified 12 candidate hypotheses in NLP, cross-lingual transfer, and few-shot learning domains.',
+  },
+  hypo: {
+    title: 'Hypothesis Loop',
+    meta: '3 of 3 iterations complete',
+    summary: 'Iteratively refined the hypothesis through generation and critical review. Final hypothesis scored 8.4/10 focusing on contrastive cross-lingual alignment with convergence guarantees. All major issues resolved.',
+  },
+  inv: {
+    title: 'Invention Loop',
+    meta: 'Iteration 2 of 3 \u2014 60% complete',
+    summary: 'Building research artifacts. Strategy: contrastive alignment with ablation. 5 artifacts planned, 3 complete.',
+  },
+  paper: {
+    title: 'Paper Generation',
+    meta: 'Pending \u2014 will begin after invention loop',
+    summary: 'Will compile all artifacts, results, and hypothesis narrative into a full research paper with visualizations and supplementary materials.',
+  },
+};
+
+// Dots: id, module, status, data
+const DOTS = [
+  // ── Seed (4) ──
+  { id: 's1', module: 'seed', status: 'complete',
+    title: 'Build Knowledge Graph', phase: 'Seed Hypothesis',
+    meta: 'Complete \u2022 45s \u2022 $0.12',
+    summary: 'Extracted 2,341 triples from 847 papers. Topics: NLP, cross-lingual, few-shot learning.',
+    details: [
+      { s: 'done', label: 'Parse corpus', note: '847 papers' },
+      { s: 'done', label: 'Entity extraction', note: '1,204 entities' },
+      { s: 'done', label: 'Relation linking', note: '2,341 triples' },
+    ]},
+  { id: 's2', module: 'seed', status: 'complete',
+    title: 'Survey Gaps', phase: 'Seed Hypothesis',
+    meta: 'Complete \u2022 1m 12s \u2022 $0.34',
+    summary: 'Identified 12 under-explored research directions from the knowledge graph. Ranked by novelty and feasibility.',
+    details: [
+      { s: 'done', label: 'Gap detection', note: '12 gaps found' },
+      { s: 'done', label: 'Novelty scoring', note: 'top-3 selected' },
+    ]},
+  { id: 's3', module: 'seed', status: 'complete',
+    title: 'Generate Seed Hypotheses', phase: 'Seed Hypothesis',
+    meta: 'Complete \u2022 2m 01s \u2022 $0.56',
+    summary: 'Generated 5 candidate hypotheses. Top candidate: contrastive cross-lingual alignment using parallel sentence pairs with convergence bounds.',
+    details: [
+      { s: 'done', label: 'Hypothesis generation', note: '5 candidates' },
+      { s: 'done', label: 'Feasibility filter', note: '3 viable' },
+    ]},
+  { id: 's4', module: 'seed', status: 'complete',
+    title: 'Select Best Seed', phase: 'Seed Hypothesis',
+    meta: 'Complete \u2022 38s \u2022 $0.18',
+    summary: 'Selected contrastive cross-lingual alignment hypothesis. Confidence: 0.87. Strong literature support with clear gap for convergence analysis.',
+    details: [
+      { s: 'done', label: 'Comparative ranking', note: 'top-1 chosen' },
+      { s: 'done', label: 'Literature validation', note: 'confidence 0.87' },
+    ]},
+
+  // ── Hypothesis (6: 3 iter x 2 steps) ──
+  { id: 'h1', module: 'hypo', status: 'complete',
+    title: 'Generate Hypothesis', phase: 'Iteration 1',
+    meta: 'Complete \u2022 1m 45s \u2022 $0.52',
+    summary: 'First draft of the formal hypothesis. Defined contrastive alignment objective over parallel corpora with language-agnostic representation targets.',
+    details: [
+      { s: 'done', label: 'Formal statement', note: 'drafted' },
+      { s: 'done', label: 'Variable definitions', note: '6 variables' },
+    ]},
+  { id: 'h2', module: 'hypo', status: 'complete',
+    title: 'Review Hypothesis', phase: 'Iteration 1',
+    meta: 'Complete \u2022 2m 10s \u2022 $0.71',
+    summary: 'Score: 6.2/10. 2 major issues: missing convergence analysis, no baseline specification. 3 minor issues flagged.',
+    details: [
+      { s: 'done', label: 'Novelty', note: '7/10' },
+      { s: 'done', label: 'Feasibility', note: '5/10 \u2014 needs baselines' },
+      { s: 'done', label: 'Rigor', note: '6/10 \u2014 convergence missing' },
+    ]},
+  { id: 'h3', module: 'hypo', status: 'complete',
+    title: 'Generate Hypothesis', phase: 'Iteration 2',
+    meta: 'Complete \u2022 1m 58s \u2022 $0.61',
+    summary: 'Revised hypothesis adds convergence bound and specifies 3 baseline methods. Tightened scope to sentence-level alignment.',
+    details: [
+      { s: 'done', label: 'Convergence bound', note: 'O(1/sqrt(n))' },
+      { s: 'done', label: 'Baseline spec', note: '3 methods' },
+    ]},
+  { id: 'h4', module: 'hypo', status: 'complete',
+    title: 'Review Hypothesis', phase: 'Iteration 2',
+    meta: 'Complete \u2022 2m 34s \u2022 $0.87',
+    summary: 'Score: 7.8/10. 1 major issue: needs convergence analysis. 2 minor: strengthen baselines, tighten abstract.',
+    details: [
+      { s: 'done', label: 'Novelty', note: '8/10' },
+      { s: 'done', label: 'Feasibility', note: '7/10' },
+      { s: 'done', label: 'Rigor', note: '8/10' },
+    ]},
+  { id: 'h5', module: 'hypo', status: 'complete',
+    title: 'Generate Hypothesis', phase: 'Iteration 3',
+    meta: 'Complete \u2022 2m 22s \u2022 $0.74',
+    summary: 'Final revision incorporates full convergence proof sketch, tightened abstract, and expanded baselines to include mBERT, XLM-R, and LaBSE.',
+    details: [
+      { s: 'done', label: 'Convergence proof', note: 'sketch added' },
+      { s: 'done', label: 'Abstract revision', note: 'tightened' },
+    ]},
+  { id: 'h6', module: 'hypo', status: 'complete',
+    title: 'Review Hypothesis', phase: 'Iteration 3',
+    meta: 'Complete \u2022 1m 51s \u2022 $0.63',
+    summary: 'Score: 8.4/10. No major issues. 1 minor: could expand related work section. Approved for invention phase.',
+    details: [
+      { s: 'done', label: 'Novelty', note: '9/10' },
+      { s: 'done', label: 'Feasibility', note: '8/10' },
+      { s: 'done', label: 'Rigor', note: '8/10' },
+    ]},
+
+  // ── Invention (18: 6 steps x 3 iter) ──
+  // Iter 1 (6 complete)
+  { id: 'i1', module: 'inv', status: 'complete',
+    title: 'Generate Plan', phase: 'Invention Loop Iter 1',
+    meta: 'Complete \u2022 3m 05s \u2022 $1.12',
+    summary: 'Planned 5 artifacts: contrastive baseline, multilingual pair generation, convergence proof, ablation study, cross-lingual evaluation.',
+    details: [
+      { s: 'done', label: 'Artifact spec', note: '5 artifacts' },
+      { s: 'done', label: 'Resource estimate', note: '~45min compute' },
+    ]},
+  { id: 'i2', module: 'inv', status: 'complete',
+    title: 'Generate Paper Text', phase: 'Invention Loop Iter 1',
+    meta: 'Complete \u2022 4m 12s \u2022 $1.34',
+    summary: 'First draft of methods and experiment sections. Defined notation, loss function, and training procedure.',
+    details: [
+      { s: 'done', label: 'Methods section', note: '1,200 words' },
+      { s: 'done', label: 'Experiment design', note: 'drafted' },
+    ]},
+  { id: 'i3', module: 'inv', status: 'complete',
+    title: 'Generate Artifacts', phase: 'Invention Loop Iter 1',
+    meta: 'Complete \u2022 8m 45s \u2022 $3.21',
+    summary: 'Executed initial artifacts. Contrastive baseline shows 14.2% improvement over XLM-R. Convergence proof has gap in Lemma 3.',
+    details: [
+      { s: 'done', label: 'Contrastive Baseline', note: 'acc: 0.812' },
+      { s: 'done', label: 'Multilingual Pairs', note: '1,800 examples' },
+      { s: 'done', label: 'Convergence Proof', note: 'gap in Lemma 3' },
+      { s: 'done', label: 'Ablation Study', note: '3 ablations' },
+      { s: 'done', label: 'Cross-lingual Eval', note: '6 lang pairs' },
+    ]},
+  { id: 'i4', module: 'inv', status: 'complete',
+    title: 'Review Paper', phase: 'Invention Loop Iter 1',
+    meta: 'Complete \u2022 3m 18s \u2022 $0.95',
+    summary: 'Review identified convergence proof gap as critical. Baseline promising but needs more training data. Recommends fixing proof and expanding dataset.',
+    details: [
+      { s: 'done', label: 'Proof gap flagged', note: 'Lemma 3' },
+      { s: 'done', label: 'Data expansion', note: 'recommended' },
+    ]},
+  { id: 'i5', module: 'inv', status: 'complete',
+    title: 'Generate Plan', phase: 'Invention Loop Iter 2',
+    meta: 'Complete \u2022 2m 40s \u2022 $0.98',
+    summary: 'Revised plan fixes convergence proof, expands training data to 2,400 pairs, adds ablation for embedding dimension.',
+    details: [
+      { s: 'done', label: 'Proof revision', note: 'Lemma 3 fix planned' },
+      { s: 'done', label: 'Data expansion', note: '+600 pairs' },
+    ]},
+  { id: 'i6', module: 'inv', status: 'complete',
+    title: 'Generate Paper Text', phase: 'Invention Loop Iter 2',
+    meta: 'Complete \u2022 3m 52s \u2022 $1.18',
+    summary: 'Revised methods with corrected proof. Updated results table. Added ablation analysis section.',
+    details: [
+      { s: 'done', label: 'Proof corrected', note: 'Lemma 3 fixed' },
+      { s: 'done', label: 'Results table', note: 'updated' },
+    ]},
+
+  // Iter 2 (3 complete, 1 active, 2 pending)
+  { id: 'i7', module: 'inv', status: 'complete',
+    title: 'Contrastive Baseline', phase: 'Generate Artifacts \u2014 Iter 2',
+    meta: 'Complete \u2022 4m 22s \u2022 $1.45',
+    summary: 'Re-trained contrastive baseline with expanded dataset. Accuracy improved from 0.812 to 0.847.',
+    details: [
+      { s: 'done', label: 'Contrastive Baseline', note: 'acc: 0.847' },
+    ]},
+  { id: 'i8', module: 'inv', status: 'complete',
+    title: 'Multilingual Pairs', phase: 'Generate Artifacts \u2014 Iter 2',
+    meta: 'Complete \u2022 2m 15s \u2022 $0.78',
+    summary: 'Generated 2,400 high-quality multilingual sentence pairs across 8 language families.',
+    details: [
+      { s: 'done', label: 'Multilingual Pairs', note: '2,400 examples' },
+    ]},
+  { id: 'i9', module: 'inv', status: 'complete',
+    title: 'Convergence Proof', phase: 'Generate Artifacts \u2014 Iter 2',
+    meta: 'Complete \u2022 5m 31s \u2022 $1.73',
+    summary: 'Convergence proof verified. Lemma 3 corrected with tighter bound. Rate: O(1/sqrt(n)) confirmed.',
+    details: [
+      { s: 'done', label: 'Convergence Proof', note: 'verified' },
+    ]},
+
+  // ACTIVE DOT
+  { id: 'i10', module: 'inv', status: 'active',
+    title: 'Generate Artifacts', phase: 'Invention Loop Iter 2',
+    meta: '3 of 5 complete \u2022 12m 08s \u2022 $5.41',
+    summary: 'Executing computational artifacts to provide evidence for the hypothesis. Baseline experiment shows 17.5% improvement. Running ablation study.',
+    details: [
+      { s: 'done',    label: 'Contrastive Baseline', note: 'acc: 0.847' },
+      { s: 'done',    label: 'Multilingual Pairs', note: '2,400 examples' },
+      { s: 'done',    label: 'Convergence Proof', note: 'verified' },
+      { s: 'running', label: 'Ablation Study', note: 'running' },
+      { s: 'pend',    label: 'Cross-lingual Eval', note: 'pending' },
+    ]},
+  { id: 'i11', module: 'inv', status: 'pending',
+    title: 'Review Paper', phase: 'Invention Loop Iter 2',
+    meta: 'Pending',
+    summary: 'Will review updated paper with new artifacts and corrected convergence proof.',
+    details: []},
+
+  // Iter 3 (6 pending)
+  { id: 'i12', module: 'inv', status: 'pending',
+    title: 'Generate Plan', phase: 'Invention Loop Iter 3',
+    meta: 'Pending',
+    summary: 'Will plan final iteration based on review feedback.',
+    details: []},
+  { id: 'i13', module: 'inv', status: 'pending',
+    title: 'Generate Paper Text', phase: 'Invention Loop Iter 3',
+    meta: 'Pending',
+    summary: 'Will revise paper text for final iteration.',
+    details: []},
+  { id: 'i14', module: 'inv', status: 'pending',
+    title: 'Generate Artifacts', phase: 'Invention Loop Iter 3',
+    meta: 'Pending',
+    summary: 'Will execute final round of artifacts.',
+    details: []},
+  { id: 'i15', module: 'inv', status: 'pending',
+    title: 'Review Paper', phase: 'Invention Loop Iter 3',
+    meta: 'Pending',
+    summary: 'Final review before paper generation.',
+    details: []},
+  { id: 'i16', module: 'inv', status: 'pending',
+    title: 'Generate Plan', phase: 'Invention Loop Iter 3',
+    meta: 'Pending',
+    summary: 'Will plan supplementary materials if needed.',
+    details: []},
+  { id: 'i17', module: 'inv', status: 'pending',
+    title: 'Generate Paper Text', phase: 'Invention Loop Iter 3',
+    meta: 'Pending',
+    summary: 'Final paper text revision.',
+    details: []},
+
+  // ── Paper (5) ──
+  { id: 'p1', module: 'paper', status: 'pending',
+    title: 'Generate Artifact Demos', phase: 'Paper Generation',
+    meta: 'Pending \u2014 will begin after invention loop',
+    summary: 'Will generate interactive demonstrations for each computational artifact.',
+    details: []},
+  { id: 'p2', module: 'paper', status: 'pending',
+    title: 'Generate Visualizations', phase: 'Paper Generation',
+    meta: 'Pending \u2014 will begin after invention loop',
+    summary: 'Will create figures, tables, and plots for the paper.',
+    details: []},
+  { id: 'p3', module: 'paper', status: 'pending',
+    title: 'Paper Draft', phase: 'Paper Generation',
+    meta: 'Pending \u2014 will begin after invention loop',
+    summary: 'Will compile full paper draft from all accumulated text and artifacts.',
+    details: []},
+  { id: 'p4', module: 'paper', status: 'pending',
+    title: 'Paper Review', phase: 'Paper Generation',
+    meta: 'Pending \u2014 will begin after invention loop',
+    summary: 'Automated review of the full paper for consistency and completeness.',
+    details: []},
+  { id: 'p5', module: 'paper', status: 'pending',
+    title: 'Final Compilation', phase: 'Paper Generation',
+    meta: 'Pending \u2014 will begin after invention loop',
+    summary: 'LaTeX compilation and supplementary package assembly.',
+    details: []},
+];
+
+// Group dots by module
+const GROUPS = [
+  { module: 'seed',  dots: DOTS.filter(d => d.module === 'seed') },
+  { module: 'hypo',  dots: DOTS.filter(d => d.module === 'hypo') },
+  { module: 'inv',   dots: DOTS.filter(d => d.module === 'inv') },
+  { module: 'paper', dots: DOTS.filter(d => d.module === 'paper') },
+];
+
+// ── State ──
+let selectedId = 'i10'; // active dot by default
+let selectedModule = null;
+
+// ── Build Timeline ──
+function buildTimeline() {
+  const tl = document.getElementById('timeline');
+  tl.innerHTML = '';
+
+  GROUPS.forEach((group, gi) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'module-group';
+
+    // Label
+    const label = document.createElement('div');
+    label.className = 'module-label';
+    label.dataset.module = group.module;
+    label.textContent = MODULES[group.module].label;
+    label.addEventListener('click', () => selectModule(group.module));
+    wrap.appendChild(label);
+
+    // Dots row
+    const row = document.createElement('div');
+    row.className = 'dots-row';
+
+    group.dots.forEach(dot => {
+      const el = document.createElement('div');
+      el.className = `dot ${dot.status}`;
+      el.dataset.module = dot.module;
+      el.dataset.id = dot.id;
+      el.title = dot.title;
+      if (dot.id === selectedId && !selectedModule) el.classList.add('selected');
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        selectDot(dot.id);
+      });
+      row.appendChild(el);
+    });
+
+    wrap.appendChild(row);
+    tl.appendChild(wrap);
+
+    // Gap between groups
+    if (gi < GROUPS.length - 1) {
+      const gap = document.createElement('div');
+      gap.className = 'gap';
+      tl.appendChild(gap);
+    }
+  });
+}
+
+// ── Select Dot ──
+function selectDot(id) {
+  selectedId = id;
+  selectedModule = null;
+  updateSelectionVisuals();
+  transitionContent(() => renderDotContent(id));
+}
+
+// ── Select Module ──
+function selectModule(mod) {
+  if (selectedModule === mod) {
+    // Deselect module, revert to active dot
+    selectedModule = null;
+    selectedId = 'i10';
+  } else {
+    selectedModule = mod;
+    selectedId = null;
+  }
+  updateSelectionVisuals();
+  transitionContent(() => {
+    if (selectedModule) renderModuleContent(selectedModule);
+    else renderDotContent('i10');
+  });
+}
+
+// ── Visuals ──
+function updateSelectionVisuals() {
+  // Dots
+  document.querySelectorAll('.dot').forEach(el => {
+    el.classList.toggle('selected', el.dataset.id === selectedId);
+  });
+  // Module labels
+  document.querySelectorAll('.module-label').forEach(el => {
+    el.classList.toggle('selected', el.dataset.module === selectedModule);
+  });
+}
+
+// ── Transition ──
+function transitionContent(renderFn) {
+  const card = document.getElementById('content');
+  card.classList.add('fading');
+  setTimeout(() => {
+    renderFn();
+    card.classList.remove('fading');
+  }, 180);
+}
+
+// ── Render Dot Content ──
+function renderDotContent(id) {
+  const dot = DOTS.find(d => d.id === id);
+  if (!dot) return;
+  const card = document.getElementById('content');
+  const isPending = dot.status === 'pending';
+
+  let html = `<div class="${isPending ? 'is-pending' : ''}">`;
+  html += `<div class="content-step">${dot.title} &mdash; ${dot.phase}</div>`;
+  html += `<div class="content-meta">${dot.meta}</div>`;
+  html += `<div class="content-summary">${dot.summary}</div>`;
+
+  if (dot.details && dot.details.length > 0) {
+    html += '<ul class="detail-list">';
+    dot.details.forEach(d => {
+      const iconMap = { done: '\u2713', running: '\u25B6', pend: '\u25CB' };
+      const classMap = { done: 'done', running: 'running', pend: 'pend' };
+      const liClass = d.s === 'pend' ? ' class="is-pending"' : '';
+      html += `<li${liClass}>`;
+      html += `<span class="icon ${classMap[d.s]}">${iconMap[d.s]}</span>`;
+      html += `<span class="label">${d.label}</span>`;
+      if (d.note) html += `<span class="note">\u2014 ${d.note}</span>`;
+      html += '</li>';
+    });
+    html += '</ul>';
+  }
+
+  html += '</div>';
+  card.className = `content-card${isPending ? ' is-pending' : ''}`;
+  card.innerHTML = html;
+}
+
+// ── Render Module Content ──
+function renderModuleContent(mod) {
+  const info = MODULE_SUMMARIES[mod];
+  const modData = MODULES[mod];
+  const card = document.getElementById('content');
+
+  const dots = DOTS.filter(d => d.module === mod);
+  const done = dots.filter(d => d.status === 'complete').length;
+  const total = dots.length;
+  const pct = Math.round((done / total) * 100);
+  const isPending = done === 0;
+
+  let html = `<div class="${isPending ? 'is-pending' : ''}">`;
+  html += `<div class="content-step">${info.title}</div>`;
+  html += `<div class="content-meta">${info.meta}</div>`;
+  html += `<div class="module-summary-bar"><div class="fill" style="width:${pct}%;background:${modData.color}"></div></div>`;
+  html += `<div class="content-summary">${info.summary}</div>`;
+
+  // List sub-steps
+  html += '<ul class="detail-list">';
+  dots.forEach(d => {
+    const statusMap = {
+      complete: { icon: '\u2713', cls: 'done' },
+      active:   { icon: '\u25B6', cls: 'running' },
+      running:  { icon: '\u25B6', cls: 'running' },
+      pending:  { icon: '\u25CB', cls: 'pend' },
+    };
+    const s = statusMap[d.status];
+    const liClass = d.status === 'pending' ? ' class="is-pending"' : '';
+    html += `<li${liClass}>`;
+    html += `<span class="icon ${s.cls}">${s.icon}</span>`;
+    html += `<span class="label">${d.title}</span>`;
+    html += `<span class="note">\u2014 ${d.phase}</span>`;
+    html += '</li>';
+  });
+  html += '</ul>';
+
+  html += '</div>';
+  card.className = `content-card${isPending ? ' is-pending' : ''}`;
+  card.innerHTML = html;
+}
+
+// ── Init ──
+buildTimeline();
+renderDotContent('i10');
+</script>
+</body>
+</html>

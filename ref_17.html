@@ -1,0 +1,1188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Simple View</title>
+<style>
+  /* ── Reset & Base ─────────────────────────────────────────── */
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg:        #0b0e14;
+    --surface:   #12161f;
+    --border:    #1e2433;
+    --text:      #c8cdd8;
+    --text-dim:  #5a6178;
+    --text-bright: #eef0f6;
+
+    /* Module palette */
+    --seed-color:      #34d399;
+    --seed-glow:       rgba(52, 211, 153, .55);
+    --hypo-color:      #a78bfa;
+    --hypo-glow:       rgba(167, 139, 250, .55);
+    --invention-color: #60a5fa;
+    --invention-glow:  rgba(96, 165, 250, .55);
+    --paper-color:     #f472b6;
+    --paper-glow:      rgba(244, 114, 182, .55);
+
+    --bar-height: 40px;
+    --bar-radius: 12px;
+    --node-size:  16px;
+    --strip-top:  24px;
+  }
+
+  html, body {
+    height: 100%;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    overflow-x: hidden;
+  }
+
+  body {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+  }
+
+  /* ── Import Inter font ────────────────────────────────────── */
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+  /* ── Top Strip Container ──────────────────────────────────── */
+  .strip-container {
+    position: relative;
+    width: 100%;
+    padding: 28px 36px 52px 36px;
+    flex-shrink: 0;
+  }
+
+  /* ── The Gradient Bar ─────────────────────────────────────── */
+  .gradient-bar-wrapper {
+    position: relative;
+    width: 100%;
+    height: var(--bar-height);
+  }
+
+  /* Background track (the unfilled part) */
+  .bar-track {
+    position: absolute;
+    inset: 0;
+    background: #181d28;
+    border-radius: var(--bar-radius);
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+
+  /* The filled gradient portion */
+  .bar-fill {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    /*
+       Seed = 0-25%, Hypo = 25-50%, Invention = 50-75%, Paper = 75-100%
+       60% of Invention section = 50% + (0.6 * 25%) = 65% total
+    */
+    width: 65%;
+    border-radius: var(--bar-radius) 0 0 var(--bar-radius);
+    background: linear-gradient(
+      to right,
+      var(--seed-color)      0%,
+      var(--seed-color)      22%,
+      var(--hypo-color)      30%,
+      var(--hypo-color)      47%,
+      var(--invention-color) 55%,
+      var(--invention-color) 100%
+    );
+    transition: width 0.8s cubic-bezier(.4, 0, .2, 1);
+  }
+
+  /* Bright glow bloom at the fill edge */
+  .bar-fill::after {
+    content: '';
+    position: absolute;
+    right: -18px;
+    top: -12px;
+    width: 36px;
+    height: calc(100% + 24px);
+    background: radial-gradient(
+      ellipse at center,
+      rgba(96, 165, 250, .9) 0%,
+      rgba(96, 165, 250, .4) 35%,
+      transparent 70%
+    );
+    filter: blur(6px);
+    pointer-events: none;
+    animation: edgePulse 2.5s ease-in-out infinite;
+  }
+
+  @keyframes edgePulse {
+    0%, 100% { opacity: 0.8; transform: scaleX(1); }
+    50%      { opacity: 1;   transform: scaleX(1.3); }
+  }
+
+  /* Downward glow from the filled bar */
+  .bar-glow {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 65%;
+    height: var(--bar-height);
+    border-radius: var(--bar-radius);
+    box-shadow:
+      /* Seed glow downward */
+      -30% 18px 30px -6px var(--seed-glow),
+      /* Hypo glow downward */
+      0px  18px 30px -6px var(--hypo-glow),
+      /* Invention glow downward */
+      30%  18px 30px -6px var(--invention-glow);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Multi-point downward glow using pseudo + gradient shadow trick */
+  .gradient-bar-wrapper::after {
+    content: '';
+    position: absolute;
+    top: calc(var(--bar-height) - 4px);
+    left: 0;
+    width: 65%;
+    height: 50px;
+    background: linear-gradient(
+      to right,
+      var(--seed-glow)      0%,
+      var(--seed-glow)      22%,
+      var(--hypo-glow)      30%,
+      var(--hypo-glow)      47%,
+      var(--invention-glow) 55%,
+      var(--invention-glow) 100%
+    );
+    filter: blur(20px);
+    opacity: 0.5;
+    border-radius: 0 0 20px 20px;
+    pointer-events: none;
+    z-index: 0;
+    transition: width 0.8s cubic-bezier(.4, 0, .2, 1);
+  }
+
+  /* Subtle shimmer across the filled portion */
+  .bar-fill-shimmer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 65%;
+    height: 100%;
+    border-radius: var(--bar-radius) 0 0 var(--bar-radius);
+    overflow: hidden;
+    pointer-events: none;
+  }
+
+  .bar-fill-shimmer::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, .06) 40%,
+      rgba(255, 255, 255, .12) 50%,
+      rgba(255, 255, 255, .06) 60%,
+      transparent 100%
+    );
+    animation: shimmer 4s ease-in-out infinite;
+  }
+
+  @keyframes shimmer {
+    0%   { left: -100%; }
+    100% { left: 200%; }
+  }
+
+  /* ── Node Markers ─────────────────────────────────────────── */
+  .nodes-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: var(--bar-height);
+    z-index: 5;
+    pointer-events: none;
+  }
+
+  .node {
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: var(--node-size);
+    height: var(--node-size);
+    border-radius: 50%;
+    background: #fff;
+    transition: all 0.4s ease;
+  }
+
+  /* Boundary nodes (between modules) */
+  .node--boundary {
+    width: 12px;
+    height: 12px;
+    background: rgba(255, 255, 255, 0.85);
+    box-shadow: 0 0 6px rgba(255, 255, 255, .3);
+  }
+
+  /* Dim node (in unfilled territory) */
+  .node--dim {
+    width: 12px;
+    height: 12px;
+    background: rgba(255, 255, 255, 0.2);
+    box-shadow: none;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+  }
+
+  /* The playhead — bright with glow halo */
+  .node--playhead {
+    width: 18px;
+    height: 18px;
+    background: #fff;
+    box-shadow:
+      0 0 8px  rgba(255, 255, 255, .9),
+      0 0 20px rgba(96, 165, 250, .8),
+      0 0 40px rgba(96, 165, 250, .4),
+      0 0 60px rgba(96, 165, 250, .2);
+    animation: playheadPulse 2s ease-in-out infinite;
+  }
+
+  .node--playhead::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: radial-gradient(
+      circle,
+      rgba(96, 165, 250, .3) 0%,
+      transparent 70%
+    );
+    animation: haloExpand 2s ease-in-out infinite;
+  }
+
+  @keyframes playheadPulse {
+    0%, 100% { box-shadow: 0 0 8px rgba(255,255,255,.9), 0 0 20px rgba(96,165,250,.8), 0 0 40px rgba(96,165,250,.4); }
+    50%      { box-shadow: 0 0 12px rgba(255,255,255,1), 0 0 28px rgba(96,165,250,.9), 0 0 56px rgba(96,165,250,.5); }
+  }
+
+  @keyframes haloExpand {
+    0%, 100% { transform: translate(-50%, -50%) scale(1);   opacity: 0.7; }
+    50%      { transform: translate(-50%, -50%) scale(1.4); opacity: 1; }
+  }
+
+  /* Node positions: at 25%, 50%, 65% (playhead), 75% */
+  .node-seed-hypo      { left: 25%; }
+  .node-hypo-invention { left: 50%; }
+  .node-playhead       { left: 65%; }
+  .node-invention-paper{ left: 75%; }
+
+  /* ── Module Labels ────────────────────────────────────────── */
+  .labels-row {
+    display: flex;
+    width: 100%;
+    margin-top: 14px;
+    position: relative;
+    z-index: 2;
+  }
+
+  .label {
+    flex: 1;
+    text-align: center;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    transition: color 0.3s, text-shadow 0.3s;
+    cursor: pointer;
+    user-select: none;
+    padding: 4px 0;
+  }
+
+  .label:hover {
+    color: var(--text);
+  }
+
+  .label--active {
+    color: var(--text-bright);
+    text-shadow: 0 0 12px currentColor;
+  }
+
+  .label--seed.label--active      { color: var(--seed-color); }
+  .label--hypo.label--active      { color: var(--hypo-color); }
+  .label--invention.label--active { color: var(--invention-color); }
+  .label--paper.label--active     { color: var(--paper-color); }
+
+  /* Small colored dot above active label */
+  .label--active::before {
+    content: '';
+    display: block;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: currentColor;
+    margin: 0 auto 6px auto;
+    box-shadow: 0 0 8px currentColor;
+  }
+
+  /* ── Content Area ─────────────────────────────────────────── */
+  .content-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 0 36px 28px 36px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .content-viewport {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    border-radius: 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+  }
+
+  /* Slides wrapper */
+  .slides {
+    display: flex;
+    height: 100%;
+    transition: transform 0.55s cubic-bezier(.4, 0, .2, 1);
+  }
+
+  .slide {
+    min-width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: 32px 40px;
+    overflow-y: auto;
+  }
+
+  /* ── Slide Header ─────────────────────────────────────────── */
+  .slide-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 24px;
+  }
+
+  .slide-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+
+  .slide--seed .slide-icon      { background: rgba(52, 211, 153, .12); color: var(--seed-color); }
+  .slide--hypo .slide-icon      { background: rgba(167, 139, 250, .12); color: var(--hypo-color); }
+  .slide--invention .slide-icon { background: rgba(96, 165, 250, .12); color: var(--invention-color); }
+  .slide--paper .slide-icon     { background: rgba(244, 114, 182, .12); color: var(--paper-color); }
+
+  .slide-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-bright);
+  }
+
+  .slide-subtitle {
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-top: 2px;
+  }
+
+  /* ── Status Badge ─────────────────────────────────────────── */
+  .status-badge {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .status-badge--done {
+    background: rgba(52, 211, 153, .1);
+    color: var(--seed-color);
+    border: 1px solid rgba(52, 211, 153, .2);
+  }
+
+  .status-badge--active {
+    background: rgba(96, 165, 250, .1);
+    color: var(--invention-color);
+    border: 1px solid rgba(96, 165, 250, .2);
+  }
+
+  .status-badge--pending {
+    background: rgba(255, 255, 255, .04);
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+  }
+
+  .status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  .status-badge--active .status-dot {
+    animation: statusBlink 1.5s ease-in-out infinite;
+  }
+
+  @keyframes statusBlink {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.3; }
+  }
+
+  /* ── Card Grid ────────────────────────────────────────────── */
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 14px;
+    margin-top: 8px;
+  }
+
+  .card {
+    background: rgba(255, 255, 255, .025);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 20px;
+    transition: background 0.25s, border-color 0.25s, transform 0.25s;
+    cursor: default;
+  }
+
+  .card:hover {
+    background: rgba(255, 255, 255, .04);
+    border-color: rgba(255, 255, 255, .1);
+    transform: translateY(-1px);
+  }
+
+  .card-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+  }
+
+  .card-value {
+    font-size: 14px;
+    color: var(--text);
+    line-height: 1.5;
+  }
+
+  .card-value strong {
+    color: var(--text-bright);
+    font-weight: 600;
+  }
+
+  /* Color-accented cards */
+  .card--seed      { border-left: 3px solid var(--seed-color); }
+  .card--hypo      { border-left: 3px solid var(--hypo-color); }
+  .card--invention { border-left: 3px solid var(--invention-color); }
+  .card--paper     { border-left: 3px solid var(--paper-color); }
+
+  /* ── Step List ────────────────────────────────────────────── */
+  .step-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 8px;
+  }
+
+  .step-item {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 18px;
+    background: rgba(255, 255, 255, .02);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    transition: background 0.2s;
+  }
+
+  .step-item:hover {
+    background: rgba(255, 255, 255, .04);
+  }
+
+  .step-num {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .step-num--done {
+    background: rgba(52, 211, 153, .15);
+    color: var(--seed-color);
+  }
+
+  .step-num--active {
+    background: rgba(96, 165, 250, .15);
+    color: var(--invention-color);
+    animation: stepPulse 2s ease-in-out infinite;
+  }
+
+  .step-num--pending {
+    background: rgba(255, 255, 255, .05);
+    color: var(--text-dim);
+  }
+
+  @keyframes stepPulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(96, 165, 250, 0); }
+    50%      { box-shadow: 0 0 0 4px rgba(96, 165, 250, .15); }
+  }
+
+  .step-text {
+    flex: 1;
+  }
+
+  .step-text-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-bright);
+  }
+
+  .step-text-detail {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 2px;
+  }
+
+  .step-check {
+    font-size: 14px;
+    color: var(--text-dim);
+  }
+
+  .step-check--done { color: var(--seed-color); }
+
+  /* ── Progress Mini-bar (inside invention slide) ───────────── */
+  .mini-progress {
+    margin-top: 20px;
+    padding: 18px 20px;
+    background: rgba(255, 255, 255, .02);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+  }
+
+  .mini-progress-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+
+  .mini-progress-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .mini-progress-pct {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--invention-color);
+  }
+
+  .mini-bar-track {
+    width: 100%;
+    height: 8px;
+    background: #1a1f2c;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .mini-bar-fill {
+    height: 100%;
+    width: 60%;
+    background: linear-gradient(90deg, var(--invention-color), #93c5fd);
+    border-radius: 4px;
+    position: relative;
+    transition: width 0.6s ease;
+  }
+
+  .mini-bar-fill::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: -4px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(96,165,250,.6), transparent 70%);
+    filter: blur(3px);
+    animation: miniPulse 2s ease-in-out infinite;
+  }
+
+  @keyframes miniPulse {
+    0%, 100% { opacity: .6; }
+    50%      { opacity: 1; }
+  }
+
+  /* ── Navigation Arrows ────────────────────────────────────── */
+  .nav-arrows {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    padding: 18px 0 24px 0;
+    flex-shrink: 0;
+  }
+
+  .nav-btn {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 18px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.25s;
+    user-select: none;
+  }
+
+  .nav-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, .06);
+    border-color: rgba(255, 255, 255, .15);
+    color: var(--text-bright);
+    transform: translateY(-1px);
+  }
+
+  .nav-btn:active:not(:disabled) {
+    transform: translateY(0);
+  }
+
+  .nav-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+
+  /* Current page indicator between arrows */
+  .page-indicator {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 12px;
+  }
+
+  .page-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, .12);
+    transition: all 0.35s;
+    cursor: pointer;
+  }
+
+  .page-dot--active {
+    width: 24px;
+    border-radius: 4px;
+  }
+
+  .page-dot--seed.page-dot--active      { background: var(--seed-color); box-shadow: 0 0 10px var(--seed-glow); }
+  .page-dot--hypo.page-dot--active      { background: var(--hypo-color); box-shadow: 0 0 10px var(--hypo-glow); }
+  .page-dot--invention.page-dot--active { background: var(--invention-color); box-shadow: 0 0 10px var(--invention-glow); }
+  .page-dot--paper.page-dot--active     { background: var(--paper-color); box-shadow: 0 0 10px var(--paper-glow); }
+
+  /* ── Paper slide: empty state ─────────────────────────────── */
+  .empty-state {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    opacity: 0.5;
+  }
+
+  .empty-icon {
+    font-size: 40px;
+    opacity: 0.4;
+  }
+
+  .empty-text {
+    font-size: 14px;
+    color: var(--text-dim);
+    text-align: center;
+    line-height: 1.6;
+  }
+
+  /* ── Misc helpers ─────────────────────────────────────────── */
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    background: rgba(255,255,255,.04);
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+  }
+
+  .tag--green  { color: var(--seed-color);      border-color: rgba(52,211,153,.2);  background: rgba(52,211,153,.06); }
+  .tag--purple { color: var(--hypo-color);      border-color: rgba(167,139,250,.2); background: rgba(167,139,250,.06); }
+  .tag--blue   { color: var(--invention-color); border-color: rgba(96,165,250,.2);  background: rgba(96,165,250,.06); }
+
+  /* Scrollbar */
+  .slide::-webkit-scrollbar       { width: 6px; }
+  .slide::-webkit-scrollbar-track { background: transparent; }
+  .slide::-webkit-scrollbar-thumb { background: rgba(255,255,255,.08); border-radius: 3px; }
+  .slide::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.14); }
+
+  /* Keyboard shortcut hint */
+  .keyboard-hint {
+    position: fixed;
+    bottom: 12px;
+    right: 20px;
+    font-size: 11px;
+    color: var(--text-dim);
+    opacity: 0.5;
+    pointer-events: none;
+  }
+
+  kbd {
+    display: inline-block;
+    padding: 1px 5px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    font-family: inherit;
+    font-size: 11px;
+    margin: 0 1px;
+  }
+
+  /* ── Responsive ───────────────────────────────────────────── */
+  @media (max-width: 700px) {
+    .strip-container { padding: 18px 16px 44px 16px; }
+    .content-area    { padding: 0 16px 18px 16px; }
+    .slide           { padding: 22px 20px; }
+    .card-grid       { grid-template-columns: 1fr; }
+    .label           { font-size: 10px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════
+     TOP STRIP — Glowing gradient bar with node markers
+     ═══════════════════════════════════════════════════════════ -->
+<div class="strip-container">
+  <div class="gradient-bar-wrapper">
+    <!-- Dark unfilled track -->
+    <div class="bar-track"></div>
+
+    <!-- Colored fill (65% = all Seed + all Hypo + 60% Invention) -->
+    <div class="bar-fill" id="barFill"></div>
+
+    <!-- Shimmer overlay -->
+    <div class="bar-fill-shimmer" id="barShimmer"></div>
+
+    <!-- Node markers sitting on the bar -->
+    <div class="nodes-layer">
+      <!-- Between Seed and Hypothesis (25%) -->
+      <div class="node node--boundary node-seed-hypo" title="Seed / Hypothesis boundary"></div>
+
+      <!-- Between Hypothesis and Invention (50%) -->
+      <div class="node node--boundary node-hypo-invention" title="Hypothesis / Invention boundary"></div>
+
+      <!-- Playhead at the fill edge (65%) -->
+      <div class="node node--playhead node-playhead" id="playheadNode" title="Current position"></div>
+
+      <!-- Between Invention and Paper (75%) — dim, unfilled territory -->
+      <div class="node node--dim node-invention-paper" title="Invention / Paper boundary"></div>
+    </div>
+  </div>
+
+  <!-- Module name labels below the bar -->
+  <div class="labels-row" id="labelsRow">
+    <div class="label label--seed" data-index="0" onclick="goTo(0)">Seed</div>
+    <div class="label label--hypo" data-index="1" onclick="goTo(1)">Hypothesis</div>
+    <div class="label label--invention label--active" data-index="2" onclick="goTo(2)">Invention</div>
+    <div class="label label--paper" data-index="3" onclick="goTo(3)">Paper</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     CONTENT AREA — Slide deck per module
+     ═══════════════════════════════════════════════════════════ -->
+<div class="content-area">
+  <div class="content-viewport">
+    <div class="slides" id="slidesTrack">
+
+      <!-- ─── SLIDE 0: Seed ───────────────────────────────── -->
+      <div class="slide slide--seed">
+        <div class="slide-header">
+          <div class="slide-icon">&#x1f331;</div>
+          <div>
+            <div class="slide-title">Seed Hypotheses</div>
+            <div class="slide-subtitle">Initial knowledge-graph extraction and idea generation</div>
+          </div>
+          <div class="status-badge status-badge--done">
+            <span class="status-dot"></span>
+            Complete
+          </div>
+        </div>
+
+        <div class="card-grid">
+          <div class="card card--seed">
+            <div class="card-label">Domain</div>
+            <div class="card-value"><strong>Quantum Error Correction</strong> for near-term superconducting qubits</div>
+          </div>
+          <div class="card card--seed">
+            <div class="card-label">Source Papers</div>
+            <div class="card-value"><strong>12</strong> papers processed from ArXiv pool</div>
+          </div>
+          <div class="card card--seed">
+            <div class="card-label">KG Entities</div>
+            <div class="card-value"><strong>247</strong> entities, <strong>891</strong> relations extracted</div>
+          </div>
+          <div class="card card--seed">
+            <div class="card-label">Raw Seeds</div>
+            <div class="card-value"><strong>18</strong> hypotheses generated from gap analysis</div>
+          </div>
+          <div class="card card--seed">
+            <div class="card-label">Duration</div>
+            <div class="card-value"><strong>4m 32s</strong> &mdash; 3 agent turns</div>
+          </div>
+          <div class="card card--seed">
+            <div class="card-label">Cost</div>
+            <div class="card-value"><strong>$0.47</strong> &mdash; 84K input tokens</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ─── SLIDE 1: Hypothesis ─────────────────────────── -->
+      <div class="slide slide--hypo">
+        <div class="slide-header">
+          <div class="slide-icon">&#x1f52c;</div>
+          <div>
+            <div class="slide-title">Hypothesis Loop</div>
+            <div class="slide-subtitle">Refinement, review, and selection of strongest candidates</div>
+          </div>
+          <div class="status-badge status-badge--done">
+            <span class="status-dot"></span>
+            Complete
+          </div>
+        </div>
+
+        <div class="step-list">
+          <div class="step-item">
+            <div class="step-num step-num--done">1</div>
+            <div class="step-text">
+              <div class="step-text-title">Generate Hypotheses</div>
+              <div class="step-text-detail">18 raw hypotheses from seed KG &rarr; 18 structured proposals</div>
+            </div>
+            <div class="step-check step-check--done">&#x2713;</div>
+          </div>
+          <div class="step-item">
+            <div class="step-num step-num--done">2</div>
+            <div class="step-text">
+              <div class="step-text-title">Review Hypotheses</div>
+              <div class="step-text-detail">Novelty + feasibility scoring &mdash; 18 &rarr; 6 candidates retained</div>
+            </div>
+            <div class="step-check step-check--done">&#x2713;</div>
+          </div>
+          <div class="step-item">
+            <div class="step-num step-num--done">3</div>
+            <div class="step-text">
+              <div class="step-text-title">Refine Top Candidates</div>
+              <div class="step-text-detail">2 refinement iterations per candidate with literature grounding</div>
+            </div>
+            <div class="step-check step-check--done">&#x2713;</div>
+          </div>
+          <div class="step-item">
+            <div class="step-num step-num--done">4</div>
+            <div class="step-text">
+              <div class="step-text-title">Final Selection</div>
+              <div class="step-text-detail">Top hypothesis: <strong>Adaptive surface-code decoding via reinforcement learning</strong></div>
+            </div>
+            <div class="step-check step-check--done">&#x2713;</div>
+          </div>
+        </div>
+
+        <div class="card-grid" style="margin-top: 18px;">
+          <div class="card card--hypo">
+            <div class="card-label">Selected Hypothesis</div>
+            <div class="card-value"><strong>Adaptive RL-based surface code decoder</strong> that dynamically adjusts to time-varying noise profiles in superconducting qubit arrays</div>
+          </div>
+          <div class="card card--hypo">
+            <div class="card-label">Novelty Score</div>
+            <div class="card-value"><strong>8.4 / 10</strong> &mdash; no prior work on real-time RL adaptation for surface codes</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ─── SLIDE 2: Invention (active, 60%) ────────────── -->
+      <div class="slide slide--invention">
+        <div class="slide-header">
+          <div class="slide-icon">&#x2699;</div>
+          <div>
+            <div class="slide-title">Invention Loop</div>
+            <div class="slide-subtitle">Plan generation, paper text drafting, and iterative review</div>
+          </div>
+          <div class="status-badge status-badge--active">
+            <span class="status-dot"></span>
+            In Progress
+          </div>
+        </div>
+
+        <div class="step-list">
+          <div class="step-item">
+            <div class="step-num step-num--done">1</div>
+            <div class="step-text">
+              <div class="step-text-title">Generate Strategy</div>
+              <div class="step-text-detail">High-level research plan with 5 experimental tracks</div>
+            </div>
+            <div class="step-check step-check--done">&#x2713;</div>
+          </div>
+          <div class="step-item">
+            <div class="step-num step-num--done">2</div>
+            <div class="step-text">
+              <div class="step-text-title">Generate Plan</div>
+              <div class="step-text-detail">Detailed section outline: 8 sections, 23 subsections defined</div>
+            </div>
+            <div class="step-check step-check--done">&#x2713;</div>
+          </div>
+          <div class="step-item">
+            <div class="step-num step-num--done">3</div>
+            <div class="step-text">
+              <div class="step-text-title">Draft Paper Text</div>
+              <div class="step-text-detail">Initial draft: 4,200 words across all sections</div>
+            </div>
+            <div class="step-check step-check--done">&#x2713;</div>
+          </div>
+          <div class="step-item">
+            <div class="step-num step-num--active">4</div>
+            <div class="step-text">
+              <div class="step-text-title">Review Paper</div>
+              <div class="step-text-detail">Iteration 2 of 3 &mdash; addressing methodology clarity &amp; missing baselines</div>
+            </div>
+            <div class="step-check" style="color: var(--invention-color);">&#x25CB;</div>
+          </div>
+          <div class="step-item">
+            <div class="step-num step-num--pending">5</div>
+            <div class="step-text">
+              <div class="step-text-title">Revise &amp; Finalize</div>
+              <div class="step-text-detail">Final round of revisions pending review completion</div>
+            </div>
+            <div class="step-check">&#x25CB;</div>
+          </div>
+        </div>
+
+        <div class="mini-progress">
+          <div class="mini-progress-header">
+            <span class="mini-progress-label">Invention Loop Progress</span>
+            <span class="mini-progress-pct">60%</span>
+          </div>
+          <div class="mini-bar-track">
+            <div class="mini-bar-fill"></div>
+          </div>
+        </div>
+
+        <div class="card-grid" style="margin-top: 16px;">
+          <div class="card card--invention">
+            <div class="card-label">Current Task</div>
+            <div class="card-value"><strong>Paper review iteration 2</strong> &mdash; focusing on experimental design rigor and comparison baselines</div>
+          </div>
+          <div class="card card--invention">
+            <div class="card-label">Tokens Used</div>
+            <div class="card-value"><strong>312K</strong> input &middot; <strong>48K</strong> output &mdash; <span class="tag tag--blue">$2.14</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ─── SLIDE 3: Paper (pending) ────────────────────── -->
+      <div class="slide slide--paper">
+        <div class="slide-header">
+          <div class="slide-icon">&#x1f4c4;</div>
+          <div>
+            <div class="slide-title">Paper Generation</div>
+            <div class="slide-subtitle">Final paper, visualizations, artifact demos, and repository</div>
+          </div>
+          <div class="status-badge status-badge--pending">
+            <span class="status-dot"></span>
+            Pending
+          </div>
+        </div>
+
+        <div class="empty-state">
+          <div class="empty-icon">&#x23F3;</div>
+          <div class="empty-text">
+            Waiting for the Invention Loop to complete.<br>
+            Paper generation, visualizations, and repository<br>
+            packaging will begin automatically.
+          </div>
+        </div>
+
+        <div class="step-list" style="margin-top: auto;">
+          <div class="step-item" style="opacity: .45;">
+            <div class="step-num step-num--pending">1</div>
+            <div class="step-text">
+              <div class="step-text-title">Generate Figures &amp; Visualizations</div>
+              <div class="step-text-detail">Plots, diagrams, and architecture figures</div>
+            </div>
+            <div class="step-check">&#x25CB;</div>
+          </div>
+          <div class="step-item" style="opacity: .45;">
+            <div class="step-num step-num--pending">2</div>
+            <div class="step-text">
+              <div class="step-text-title">Generate Artifact Demos</div>
+              <div class="step-text-detail">Interactive Python demos and notebooks</div>
+            </div>
+            <div class="step-check">&#x25CB;</div>
+          </div>
+          <div class="step-item" style="opacity: .45;">
+            <div class="step-num step-num--pending">3</div>
+            <div class="step-text">
+              <div class="step-text-title">Compile Full Paper</div>
+              <div class="step-text-detail">LaTeX compilation and final PDF export</div>
+            </div>
+            <div class="step-check">&#x25CB;</div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /slides -->
+  </div><!-- /content-viewport -->
+</div><!-- /content-area -->
+
+<!-- ═══════════════════════════════════════════════════════════
+     NAVIGATION ARROWS
+     ═══════════════════════════════════════════════════════════ -->
+<div class="nav-arrows">
+  <button class="nav-btn" id="btnPrev" aria-label="Previous module" disabled>&#x2190;</button>
+  <div class="page-indicator" id="pageIndicator">
+    <div class="page-dot page-dot--seed" data-idx="0" onclick="goTo(0)"></div>
+    <div class="page-dot page-dot--hypo" data-idx="1" onclick="goTo(1)"></div>
+    <div class="page-dot page-dot--invention page-dot--active" data-idx="2" onclick="goTo(2)"></div>
+    <div class="page-dot page-dot--paper" data-idx="3" onclick="goTo(3)"></div>
+  </div>
+  <button class="nav-btn" id="btnNext" aria-label="Next module">&#x2192;</button>
+</div>
+
+<div class="keyboard-hint"><kbd>&larr;</kbd> <kbd>&rarr;</kbd> to navigate</div>
+
+<!-- ═══════════════════════════════════════════════════════════
+     SCRIPT — Navigation & interaction
+     ═══════════════════════════════════════════════════════════ -->
+<script>
+(function () {
+  'use strict';
+
+  /* ── State ────────────────────────────────────────────────── */
+  const MODULES = ['seed', 'hypo', 'invention', 'paper'];
+  let current = 2; // Start on Invention (the active one)
+
+  /* ── DOM refs ─────────────────────────────────────────────── */
+  const slidesTrack   = document.getElementById('slidesTrack');
+  const btnPrev       = document.getElementById('btnPrev');
+  const btnNext       = document.getElementById('btnNext');
+  const labelsRow     = document.getElementById('labelsRow');
+  const labels        = labelsRow.querySelectorAll('.label');
+  const pageDots      = document.querySelectorAll('.page-dot');
+
+  /* ── Navigate to slide ────────────────────────────────────── */
+  function goTo(index) {
+    if (index < 0 || index >= MODULES.length) return;
+    current = index;
+    render();
+  }
+
+  /* Expose globally for onclick handlers */
+  window.goTo = goTo;
+
+  /* ── Render current state ─────────────────────────────────── */
+  function render() {
+    /* Slide transform */
+    slidesTrack.style.transform = `translateX(-${current * 100}%)`;
+
+    /* Arrow enable/disable */
+    btnPrev.disabled = current === 0;
+    btnNext.disabled = current === MODULES.length - 1;
+
+    /* Labels: highlight active */
+    labels.forEach(function (lbl, i) {
+      lbl.classList.toggle('label--active', i === current);
+    });
+
+    /* Page dots */
+    pageDots.forEach(function (dot, i) {
+      dot.classList.toggle('page-dot--active', i === current);
+    });
+  }
+
+  /* ── Button handlers ──────────────────────────────────────── */
+  btnPrev.addEventListener('click', function () { goTo(current - 1); });
+  btnNext.addEventListener('click', function () { goTo(current + 1); });
+
+  /* ── Keyboard navigation ──────────────────────────────────── */
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowLeft')  { goTo(current - 1); e.preventDefault(); }
+    if (e.key === 'ArrowRight') { goTo(current + 1); e.preventDefault(); }
+
+    /* Number keys 1-4 jump directly */
+    var num = parseInt(e.key, 10);
+    if (num >= 1 && num <= 4) { goTo(num - 1); e.preventDefault(); }
+  });
+
+  /* ── Touch swipe support ──────────────────────────────────── */
+  var touchStartX = 0;
+  var touchEndX   = 0;
+  var viewport    = document.querySelector('.content-viewport');
+
+  viewport.addEventListener('touchstart', function (e) {
+    touchStartX = e.changedTouches[0].screenX;
+  }, { passive: true });
+
+  viewport.addEventListener('touchend', function (e) {
+    touchEndX = e.changedTouches[0].screenX;
+    var diff = touchStartX - touchEndX;
+    if (Math.abs(diff) > 50) {
+      if (diff > 0) goTo(current + 1); // swipe left = next
+      else          goTo(current - 1); // swipe right = prev
+    }
+  }, { passive: true });
+
+  /* ── Initial render ───────────────────────────────────────── */
+  render();
+
+})();
+</script>
+
+</body>
+</html>

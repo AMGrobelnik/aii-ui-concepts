@@ -1,0 +1,1051 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor - Mosaic Assembly</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0a0a0f;
+    --bg-card: #12121a;
+    --gap: 3px;
+    --tile-w: 1fr;
+    --tile-h: 1fr;
+    --seed-1: #2dd4a0; --seed-2: #22c088; --seed-3: #19a872; --seed-4: #10905c;
+    --hypo-1: #c084fc; --hypo-2: #a855f7; --hypo-3: #9333ea; --hypo-4: #7e22ce; --hypo-5: #6b21a8; --hypo-6: #581c87;
+    --inv-1: #60a5fa; --inv-2: #3b82f6; --inv-3: #2563eb; --inv-4: #1d4ed8;
+    --inv-5: #1e40af; --inv-6: #1e3a8a; --inv-7: #4f87f7; --inv-8: #3672e8;
+    --inv-9: #2960d4; --inv-10: #1f50bf; --inv-11: #5c9bfc; --inv-12: #4a88f0;
+    --paper-1: #fb923c; --paper-2: #f97316; --paper-3: #ea580c; --paper-4: #dc4a04; --paper-5: #c2410c;
+  }
+
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: var(--bg);
+    color: #e2e8f0;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ─── Top Bar ─── */
+  .top-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 24px;
+    background: linear-gradient(180deg, rgba(15,15,25,0.98) 0%, rgba(10,10,15,0.95) 100%);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    flex-shrink: 0;
+    z-index: 100;
+    backdrop-filter: blur(12px);
+  }
+
+  .top-bar .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .top-bar .brand-icon {
+    width: 28px;
+    height: 28px;
+    background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .top-bar .brand-name {
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: -0.3px;
+    background: linear-gradient(135deg, #e2e8f0, #94a3b8);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .top-bar .sep {
+    width: 1px;
+    height: 20px;
+    background: rgba(255,255,255,0.1);
+    margin: 0 4px;
+  }
+
+  .top-bar .run-name {
+    font-size: 13px;
+    color: #64748b;
+    font-weight: 400;
+  }
+
+  .top-bar .stats {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+  }
+
+  .stat {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+  }
+
+  .stat-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: #475569;
+    font-weight: 500;
+  }
+
+  .stat-value {
+    font-size: 14px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .stat-value.progress { color: #60a5fa; }
+  .stat-value.time { color: #a78bfa; }
+  .stat-value.cost { color: #34d399; }
+
+  .progress-ring {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .progress-ring svg {
+    width: 32px;
+    height: 32px;
+    transform: rotate(-90deg);
+  }
+
+  .progress-ring .ring-bg {
+    fill: none;
+    stroke: rgba(255,255,255,0.06);
+    stroke-width: 3;
+  }
+
+  .progress-ring .ring-fill {
+    fill: none;
+    stroke: url(#progressGrad);
+    stroke-width: 3;
+    stroke-linecap: round;
+    stroke-dasharray: 82;
+    stroke-dashoffset: 82;
+    transition: stroke-dashoffset 0.6s ease;
+  }
+
+  /* ─── Main Mosaic Area ─── */
+  .mosaic-viewport {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+
+  /* Ambient background glow */
+  .mosaic-viewport::before {
+    content: '';
+    position: absolute;
+    width: 600px;
+    height: 600px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(59,130,246,0.06) 0%, transparent 70%);
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+  }
+
+  .mosaic-grid {
+    display: grid;
+    grid-template-columns: repeat(8, minmax(90px, 140px));
+    grid-template-rows: repeat(5, minmax(60px, 90px));
+    gap: var(--gap);
+    position: relative;
+  }
+
+  /* ─── Tile Styles ─── */
+  .tile {
+    position: relative;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  .tile:hover {
+    transform: scale(1.04);
+    z-index: 10;
+  }
+
+  /* Pending — empty slot */
+  .tile.pending {
+    background: rgba(255,255,255,0.015);
+    border: 1.5px dashed rgba(255,255,255,0.08);
+    animation: pendingPulse 4s ease-in-out infinite;
+  }
+
+  .tile.pending .tile-inner { display: none; }
+
+  .tile.pending::after {
+    content: attr(data-abbr);
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    font-weight: 500;
+    color: rgba(255,255,255,0.12);
+    letter-spacing: 0.5px;
+  }
+
+  @keyframes pendingPulse {
+    0%, 100% { border-color: rgba(255,255,255,0.06); }
+    50% { border-color: rgba(255,255,255,0.12); }
+  }
+
+  /* Placed — completed tile */
+  .tile.placed .tile-inner {
+    position: absolute;
+    inset: 0;
+    border-radius: 6px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: flex-start;
+    padding: 6px 8px;
+    overflow: hidden;
+  }
+
+  .tile.placed .tile-label {
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    color: rgba(0,0,0,0.55);
+    position: relative;
+    z-index: 2;
+    text-shadow: 0 1px 2px rgba(255,255,255,0.15);
+  }
+
+  /* Texture patterns */
+  .tile.placed .tile-inner::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    opacity: 0.12;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .tile.placed[data-module="seed"] .tile-inner::before {
+    background: repeating-linear-gradient(45deg, transparent, transparent 4px, rgba(0,0,0,0.15) 4px, rgba(0,0,0,0.15) 5px);
+  }
+
+  .tile.placed[data-module="hypo"] .tile-inner::before {
+    background: radial-gradient(circle 3px at 8px 8px, rgba(0,0,0,0.2) 1px, transparent 2px);
+    background-size: 12px 12px;
+  }
+
+  .tile.placed[data-module="invention"] .tile-inner::before {
+    background: repeating-linear-gradient(-45deg, transparent, transparent 6px, rgba(0,0,0,0.12) 6px, rgba(0,0,0,0.12) 7px);
+  }
+
+  .tile.placed[data-module="paper"] .tile-inner::before {
+    background: repeating-linear-gradient(0deg, transparent, transparent 5px, rgba(0,0,0,0.12) 5px, rgba(0,0,0,0.12) 6px);
+  }
+
+  /* Shimmer on placed tiles */
+  .tile.placed .tile-inner::after {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -60%;
+    width: 40%;
+    height: 200%;
+    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.08) 50%, transparent 100%);
+    transform: rotate(25deg);
+    pointer-events: none;
+    z-index: 3;
+  }
+
+  .tile.placed.shimmer .tile-inner::after {
+    animation: shimmerSweep 1.2s ease-in-out;
+  }
+
+  @keyframes shimmerSweep {
+    0% { left: -60%; }
+    100% { left: 160%; }
+  }
+
+  /* Active — currently processing */
+  .tile.active .tile-inner {
+    position: absolute;
+    inset: 0;
+    border-radius: 6px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: flex-start;
+    padding: 6px 8px;
+    overflow: hidden;
+    animation: activeVibrate 0.15s ease-in-out infinite alternate;
+  }
+
+  .tile.active {
+    z-index: 5;
+  }
+
+  .tile.active::before {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border-radius: 8px;
+    z-index: -1;
+    animation: activeBorderGlow 1.8s ease-in-out infinite;
+  }
+
+  .tile.active .tile-label {
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    color: rgba(0,0,0,0.55);
+    position: relative;
+    z-index: 2;
+    text-shadow: 0 1px 2px rgba(255,255,255,0.15);
+  }
+
+  .tile.active .tile-inner::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    opacity: 0.12;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  @keyframes activeVibrate {
+    from { transform: translate(-0.3px, -0.3px); }
+    to { transform: translate(0.3px, 0.3px); }
+  }
+
+  @keyframes activeBorderGlow {
+    0%, 100% { box-shadow: 0 0 8px 2px rgba(96,165,250,0.4), inset 0 0 4px rgba(96,165,250,0.1); }
+    50% { box-shadow: 0 0 18px 4px rgba(139,92,246,0.5), inset 0 0 8px rgba(139,92,246,0.15); }
+  }
+
+  /* ─── Assembly Animation (Flying In) ─── */
+  .tile.assembling {
+    z-index: 50;
+  }
+
+  .tile.assembling .tile-inner {
+    position: absolute;
+    inset: 0;
+    border-radius: 6px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: flex-start;
+    padding: 6px 8px;
+    overflow: hidden;
+    animation: tileAssemble 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+  }
+
+  .tile.assembling .tile-label {
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    color: rgba(0,0,0,0.55);
+    position: relative;
+    z-index: 2;
+    opacity: 0;
+    animation: labelFadeIn 0.3s ease 0.6s forwards;
+  }
+
+  @keyframes tileAssemble {
+    0% {
+      opacity: 0;
+      transform: translate(var(--fly-x, 200px), var(--fly-y, -150px)) rotate(var(--fly-rot, 15deg)) scale(0.4);
+    }
+    60% {
+      opacity: 1;
+      transform: translate(0, 0) rotate(0deg) scale(1.12);
+    }
+    80% {
+      transform: translate(0, 0) rotate(0deg) scale(0.95);
+    }
+    100% {
+      opacity: 1;
+      transform: translate(0, 0) rotate(0deg) scale(1);
+    }
+  }
+
+  @keyframes labelFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  /* Click flash when tile snaps in */
+  .tile .snap-flash {
+    position: absolute;
+    inset: -4px;
+    border-radius: 10px;
+    pointer-events: none;
+    z-index: 20;
+    opacity: 0;
+  }
+
+  .tile.assembling .snap-flash {
+    animation: snapFlash 0.5s ease 0.45s;
+  }
+
+  @keyframes snapFlash {
+    0% { opacity: 0; box-shadow: 0 0 0 0 rgba(255,255,255,0.6); }
+    30% { opacity: 1; box-shadow: 0 0 20px 6px rgba(255,255,255,0.4); }
+    100% { opacity: 0; box-shadow: 0 0 30px 12px rgba(255,255,255,0); }
+  }
+
+  /* ─── Tooltip (glassmorphism) ─── */
+  .tile-tooltip {
+    position: fixed;
+    z-index: 1000;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+    padding: 14px 18px;
+    border-radius: 12px;
+    background: rgba(20, 20, 35, 0.75);
+    backdrop-filter: blur(20px) saturate(1.4);
+    -webkit-backdrop-filter: blur(20px) saturate(1.4);
+    border: 1px solid rgba(255,255,255,0.1);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+    min-width: 200px;
+    max-width: 280px;
+  }
+
+  .tile-tooltip.visible { opacity: 1; }
+
+  .tile-tooltip .tt-name {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: #f1f5f9;
+  }
+
+  .tile-tooltip .tt-module {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    font-weight: 500;
+    margin-bottom: 10px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    display: inline-block;
+  }
+
+  .tile-tooltip .tt-status {
+    font-size: 11px;
+    color: #94a3b8;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+  }
+
+  .tile-tooltip .tt-status .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .tile-tooltip .tt-metric {
+    font-size: 11px;
+    color: #64748b;
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+  }
+
+  /* ─── Detail Card (click) ─── */
+  .detail-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 500;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(6px);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+  }
+
+  .detail-overlay.visible {
+    opacity: 1;
+    pointer-events: all;
+  }
+
+  .detail-card {
+    background: rgba(18, 18, 30, 0.92);
+    backdrop-filter: blur(24px);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px;
+    padding: 28px 32px;
+    width: 380px;
+    box-shadow: 0 24px 64px rgba(0,0,0,0.6);
+    transform: scale(0.92) translateY(10px);
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .detail-overlay.visible .detail-card {
+    transform: scale(1) translateY(0);
+  }
+
+  .detail-card .dc-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .detail-card .dc-swatch {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    flex-shrink: 0;
+  }
+
+  .detail-card .dc-title {
+    font-size: 16px;
+    font-weight: 600;
+  }
+
+  .detail-card .dc-subtitle {
+    font-size: 11px;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    margin-top: 2px;
+  }
+
+  .detail-card .dc-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    font-size: 13px;
+  }
+
+  .detail-card .dc-row .dc-key { color: #64748b; }
+  .detail-card .dc-row .dc-val { font-weight: 500; color: #cbd5e1; font-variant-numeric: tabular-nums; }
+
+  .detail-card .dc-close {
+    margin-top: 18px;
+    width: 100%;
+    padding: 8px;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.03);
+    color: #94a3b8;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s ease;
+  }
+
+  .detail-card .dc-close:hover {
+    background: rgba(255,255,255,0.06);
+    color: #e2e8f0;
+  }
+
+  /* ─── Module legend ─── */
+  .legend {
+    position: absolute;
+    bottom: 16px;
+    right: 24px;
+    display: flex;
+    gap: 16px;
+    align-items: center;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    font-weight: 500;
+  }
+
+  .legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+  }
+
+  /* ─── Particle container ─── */
+  .particles {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 60;
+    overflow: hidden;
+  }
+
+  .particle {
+    position: absolute;
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    opacity: 0;
+    animation: particleBurst 0.8s ease-out forwards;
+  }
+
+  @keyframes particleBurst {
+    0% { opacity: 1; transform: translate(0, 0) scale(1); }
+    100% { opacity: 0; transform: translate(var(--px), var(--py)) scale(0); }
+  }
+</style>
+</head>
+<body>
+
+<!-- SVG defs for progress gradient -->
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <linearGradient id="progressGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#3b82f6" />
+      <stop offset="100%" stop-color="#8b5cf6" />
+    </linearGradient>
+  </defs>
+</svg>
+
+<!-- Top Bar -->
+<div class="top-bar">
+  <div class="brand">
+    <div class="brand-icon">Ai</div>
+    <span class="brand-name">AI Inventor</span>
+    <div class="sep"></div>
+    <span class="run-name">run-2026-03-26-alpha</span>
+  </div>
+  <div class="stats">
+    <div class="progress-ring">
+      <svg viewBox="0 0 32 32">
+        <circle class="ring-bg" cx="16" cy="16" r="13" />
+        <circle class="ring-fill" id="progressRing" cx="16" cy="16" r="13" />
+      </svg>
+      <div class="stat">
+        <span class="stat-label">Tiles Placed</span>
+        <span class="stat-value progress" id="progressText">0 / 40</span>
+      </div>
+    </div>
+    <div class="stat">
+      <span class="stat-label">Elapsed</span>
+      <span class="stat-value time" id="elapsedTime">00:00</span>
+    </div>
+    <div class="stat">
+      <span class="stat-label">Cost</span>
+      <span class="stat-value cost" id="costValue">$0.00</span>
+    </div>
+  </div>
+</div>
+
+<!-- Mosaic viewport -->
+<div class="mosaic-viewport">
+  <div class="particles" id="particleContainer"></div>
+  <div class="mosaic-grid" id="mosaicGrid"></div>
+
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#2dd4a0"></div>Seed</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#a855f7"></div>Hypothesis</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#3b82f6"></div>Invention</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#f97316"></div>Paper</div>
+  </div>
+</div>
+
+<!-- Tooltip -->
+<div class="tile-tooltip" id="tooltip">
+  <div class="tt-name" id="ttName"></div>
+  <div class="tt-module" id="ttModule"></div>
+  <div class="tt-status" id="ttStatus"><span class="dot"></span><span></span></div>
+  <div class="tt-metric" id="ttMetric"></div>
+</div>
+
+<!-- Detail Overlay -->
+<div class="detail-overlay" id="detailOverlay">
+  <div class="detail-card" id="detailCard"></div>
+</div>
+
+<script>
+// ─── Tile Data ───
+const TILES = [
+  // Row 0: Seed (4) + Hypothesis start (4)
+  { id: 0,  r:0, c:0, module:'seed', color:'#2dd4a0', abbr:'KG-I',  name:'Knowledge Graph Init',       metric:'1,247 nodes' },
+  { id: 1,  r:0, c:1, module:'seed', color:'#22c088', abbr:'KG-E',  name:'KG Edge Extraction',         metric:'3,892 edges' },
+  { id: 2,  r:0, c:2, module:'seed', color:'#19a872', abbr:'S-CL',  name:'Seed Clustering',            metric:'18 clusters' },
+  { id: 3,  r:0, c:3, module:'seed', color:'#10905c', abbr:'S-RK',  name:'Seed Ranking',               metric:'Top-5 scored' },
+  { id: 4,  r:0, c:4, module:'hypo', color:'#c084fc', abbr:'H-GN',  name:'Hypothesis Generation',      metric:'24 hypotheses' },
+  { id: 5,  r:0, c:5, module:'hypo', color:'#a855f7', abbr:'H-FT',  name:'Hypothesis Filtering',       metric:'18 passed' },
+  { id: 6,  r:0, c:6, module:'hypo', color:'#9333ea', abbr:'H-SC',  name:'Hypothesis Scoring',         metric:'Avg 0.82' },
+  { id: 7,  r:0, c:7, module:'hypo', color:'#7e22ce', abbr:'H-RV',  name:'Hypothesis Review',          metric:'12 accepted' },
+
+  // Row 1: Hypothesis end (2) + Invention start (6)
+  { id: 8,  r:1, c:0, module:'hypo', color:'#6b21a8', abbr:'H-RF',  name:'Hypothesis Refinement',      metric:'8 refined' },
+  { id: 9,  r:1, c:1, module:'hypo', color:'#581c87', abbr:'H-SL',  name:'Hypothesis Selection',       metric:'5 selected' },
+  { id: 10, r:1, c:2, module:'invention', color:'#7cb8ff', abbr:'I-PL',  name:'Plan Generation',       metric:'5 plans' },
+  { id: 11, r:1, c:3, module:'invention', color:'#60a5fa', abbr:'I-ST',  name:'Strategy Formulation',  metric:'3 strategies' },
+  { id: 12, r:1, c:4, module:'invention', color:'#4f87f7', abbr:'I-EX',  name:'Experiment Design',     metric:'12 experiments' },
+  { id: 13, r:1, c:5, module:'invention', color:'#3b82f6', abbr:'I-SM',  name:'Simulation Setup',      metric:'Config ready' },
+  { id: 14, r:1, c:6, module:'invention', color:'#3672e8', abbr:'I-RN',  name:'Simulation Run',        metric:'2,048 iters' },
+  { id: 15, r:1, c:7, module:'invention', color:'#2563eb', abbr:'I-AN',  name:'Result Analysis',       metric:'p < 0.003' },
+
+  // Row 2: Invention middle (8)
+  { id: 16, r:2, c:0, module:'invention', color:'#2960d4', abbr:'I-VL',  name:'Result Validation',     metric:'4/5 pass' },
+  { id: 17, r:2, c:1, module:'invention', color:'#1d4ed8', abbr:'I-AB',  name:'Ablation Study',        metric:'6 ablations' },
+  { id: 18, r:2, c:2, module:'invention', color:'#1f50bf', abbr:'I-BS',  name:'Baseline Comparison',   metric:'+12.3% over SOTA' },
+  { id: 19, r:2, c:3, module:'invention', color:'#1e40af', abbr:'I-SN',  name:'Significance Testing',  metric:'p = 0.0012' },
+
+  // Row 3: Invention end (4) + Paper start (4)
+  { id: 20, r:3, c:0, module:'invention', color:'#1e3a8a', abbr:'I-TX',  name:'Text Drafting',         metric:'4,200 words' },
+  { id: 21, r:3, c:1, module:'invention', color:'#5c9bfc', abbr:'I-RW',  name:'Paper Review',          metric:'3 rounds' },
+  { id: 22, r:3, c:2, module:'paper', color:'#fdba74', abbr:'P-FM',  name:'Paper Formatting',          metric:'LaTeX ready' },
+  { id: 23, r:3, c:3, module:'paper', color:'#fb923c', abbr:'P-FG',  name:'Figure Generation',         metric:'7 figures' },
+  { id: 24, r:3, c:4, module:'paper', color:'#f97316', abbr:'P-VZ',  name:'Visualization Code',        metric:'3 viz scripts' },
+  { id: 25, r:3, c:5, module:'paper', color:'#ea580c', abbr:'P-DM',  name:'Demo Artifacts',            metric:'2 demos' },
+  { id: 26, r:3, c:6, module:'paper', color:'#dc4a04', abbr:'P-RP',  name:'Repo Packaging',            metric:'setup.py done' },
+
+  // Fill remaining cells for complete 8x5 grid
+  { id: 27, r:2, c:4, module:'invention', color:'#4a88f0', abbr:'I-CI',  name:'CI Pipeline',           metric:'All green' },
+  { id: 28, r:2, c:5, module:'invention', color:'#3a73db', abbr:'I-DG',  name:'Diagnostics',           metric:'12 metrics' },
+  { id: 29, r:2, c:6, module:'invention', color:'#2e62c8', abbr:'I-LG',  name:'Logging & Telemetry',   metric:'432 events' },
+  { id: 30, r:2, c:7, module:'invention', color:'#2454b5', abbr:'I-CK',  name:'Checkpoint Save',       metric:'3 snapshots' },
+  { id: 31, r:1, c:0, module:'hypo', color:'#6b21a8', abbr:'H-RF',  name:'Hypothesis Refinement',      metric:'8 refined' }, // overlap fix below
+  { id: 32, r:3, c:7, module:'paper', color:'#c2410c', abbr:'P-FN',  name:'Final Assembly',            metric:'Complete' },
+
+  // Row 4: Bottom row — mixed completion tiles
+  { id: 33, r:4, c:0, module:'seed',      color:'#0d7a4e', abbr:'S-AR',  name:'Seed Archive',          metric:'Stored' },
+  { id: 34, r:4, c:1, module:'hypo',      color:'#4a1d7a', abbr:'H-AR',  name:'Hypothesis Archive',    metric:'Stored' },
+  { id: 35, r:4, c:2, module:'invention', color:'#1a3570', abbr:'I-MG',  name:'Model Merge',           metric:'Merged' },
+  { id: 36, r:4, c:3, module:'invention', color:'#17306a', abbr:'I-OT',  name:'Output Tables',         metric:'8 tables' },
+  { id: 37, r:4, c:4, module:'invention', color:'#142b60', abbr:'I-SP',  name:'Supplementary',         metric:'12 pages' },
+  { id: 38, r:4, c:5, module:'paper',     color:'#b33a0a', abbr:'P-UP',  name:'Upload Prep',           metric:'arXiv ready' },
+  { id: 39, r:4, c:6, module:'paper',     color:'#9a3208', abbr:'P-MT',  name:'Metadata',              metric:'Tags set' },
+  { id: 40, r:4, c:7, module:'paper',     color:'#832b07', abbr:'P-SB',  name:'Submission',            metric:'Submitted' },
+];
+
+// Fix overlapping id 8 and 31 — reassign row 1 col 0
+// id 8 already occupies r:1,c:0 — remove id 31 duplicate by reassigning
+TILES[31] = { id: 31, r:1, c:0, module:'seed', color:'#0b7d50', abbr:'S-MG', name:'Seed Merging', metric:'12 merged' };
+// Now id 8 and 31 both claim r:1,c:0. Fix: move id 8 to a unique spot.
+// Actually fix: re-layout row 1. id 8 was hypo at r:1,c:0 and id 31 was seed at r:1,c:0.
+// Reassign id 31 to r:4, shifting others. Simpler: just remove dupe from grid.
+// We have 41 entries (id 0-40), need exactly 40 cells (8x5). Remove id 31.
+const TILE_MAP = new Map();
+const tileData = TILES.filter(t => {
+  const key = `${t.r}-${t.c}`;
+  if (TILE_MAP.has(key)) return false;
+  TILE_MAP.set(key, t);
+  return true;
+}).slice(0, 40);
+
+// ─── State ───
+let placedCount = 0;
+let activeIndex = -1;
+let assemblyQueue = [];
+let elapsedSec = 0;
+let cost = 0;
+let assemblyRunning = true;
+
+// ─── Build Grid ───
+const grid = document.getElementById('mosaicGrid');
+const tooltip = document.getElementById('tooltip');
+const overlay = document.getElementById('detailOverlay');
+
+// Sort tiles by grid position for assembly order
+const assemblyOrder = [...tileData].sort((a, b) => {
+  // Seed first, then hypo, invention, paper — with some natural flow
+  const moduleOrder = { seed: 0, hypo: 1, invention: 2, paper: 3 };
+  const ma = moduleOrder[a.module], mb = moduleOrder[b.module];
+  if (ma !== mb) return ma - mb;
+  return (a.r * 8 + a.c) - (b.r * 8 + b.c);
+});
+
+// Create tile elements
+const tileElements = new Map();
+
+tileData.forEach(t => {
+  const el = document.createElement('div');
+  el.className = 'tile pending';
+  el.dataset.id = t.id;
+  el.dataset.abbr = t.abbr;
+  el.dataset.module = t.module;
+  el.style.gridRow = t.r + 1;
+  el.style.gridColumn = t.c + 1;
+
+  el.innerHTML = `
+    <div class="tile-inner" style="background: ${t.color};">
+      <span class="tile-label">${t.abbr}</span>
+    </div>
+    <div class="snap-flash"></div>
+  `;
+
+  // Hover
+  el.addEventListener('mouseenter', (e) => showTooltip(e, t));
+  el.addEventListener('mousemove', (e) => moveTooltip(e));
+  el.addEventListener('mouseleave', hideTooltip);
+
+  // Click
+  el.addEventListener('click', () => showDetail(t, el));
+
+  grid.appendChild(el);
+  tileElements.set(t.id, el);
+});
+
+// ─── Tooltip ───
+function showTooltip(e, t) {
+  const el = document.getElementById('tooltip');
+  document.getElementById('ttName').textContent = t.name;
+
+  const modEl = document.getElementById('ttModule');
+  modEl.textContent = t.module;
+  const modColors = { seed: '#10905c', hypo: '#7e22ce', invention: '#1d4ed8', paper: '#ea580c' };
+  modEl.style.background = modColors[t.module] + '30';
+  modEl.style.color = t.color;
+
+  const tileEl = tileElements.get(t.id);
+  const state = tileEl.classList.contains('placed') ? 'Completed' :
+                tileEl.classList.contains('active') ? 'Processing' :
+                tileEl.classList.contains('assembling') ? 'Assembling' : 'Pending';
+
+  const dotColors = { Completed: '#34d399', Processing: '#60a5fa', Assembling: '#fbbf24', Pending: '#475569' };
+  const statusEl = document.getElementById('ttStatus');
+  statusEl.innerHTML = `<span class="dot" style="background:${dotColors[state]}"></span><span>${state}</span>`;
+
+  document.getElementById('ttMetric').textContent = state === 'Pending' ? 'Waiting...' : t.metric;
+
+  el.classList.add('visible');
+  moveTooltip(e);
+}
+
+function moveTooltip(e) {
+  const el = document.getElementById('tooltip');
+  const pad = 14;
+  let x = e.clientX + pad;
+  let y = e.clientY + pad;
+  const rect = el.getBoundingClientRect();
+  if (x + rect.width > window.innerWidth - 10) x = e.clientX - rect.width - pad;
+  if (y + rect.height > window.innerHeight - 10) y = e.clientY - rect.height - pad;
+  el.style.left = x + 'px';
+  el.style.top = y + 'px';
+}
+
+function hideTooltip() {
+  document.getElementById('tooltip').classList.remove('visible');
+}
+
+// ─── Detail Card ───
+function showDetail(t, tileEl) {
+  const state = tileEl.classList.contains('placed') ? 'Completed' :
+                tileEl.classList.contains('active') ? 'Processing' :
+                tileEl.classList.contains('assembling') ? 'Assembling' : 'Pending';
+
+  const card = document.getElementById('detailCard');
+  card.innerHTML = `
+    <div class="dc-header">
+      <div class="dc-swatch" style="background:${t.color}; box-shadow: 0 0 16px ${t.color}40;"></div>
+      <div>
+        <div class="dc-title">${t.name}</div>
+        <div class="dc-subtitle">${t.module} module / ${t.abbr}</div>
+      </div>
+    </div>
+    <div class="dc-row"><span class="dc-key">Status</span><span class="dc-val">${state}</span></div>
+    <div class="dc-row"><span class="dc-key">Grid Position</span><span class="dc-val">Row ${t.r + 1}, Col ${t.c + 1}</span></div>
+    <div class="dc-row"><span class="dc-key">Metric</span><span class="dc-val">${state === 'Pending' ? '---' : t.metric}</span></div>
+    <div class="dc-row"><span class="dc-key">Tile ID</span><span class="dc-val">#${String(t.id).padStart(2, '0')}</span></div>
+    <div class="dc-row"><span class="dc-key">Module Color</span><span class="dc-val" style="color:${t.color}">${t.color}</span></div>
+    <button class="dc-close" onclick="document.getElementById('detailOverlay').classList.remove('visible')">Close</button>
+  `;
+  overlay.classList.add('visible');
+}
+
+overlay.addEventListener('click', (e) => {
+  if (e.target === overlay) overlay.classList.remove('visible');
+});
+
+// ─── Assembly Engine ───
+assemblyQueue = [...assemblyOrder];
+
+function getRandomFlyDirection() {
+  const dirs = [
+    { x: -300, y: -200, rot: -20 },
+    { x: 300, y: -200, rot: 15 },
+    { x: -250, y: 200, rot: 25 },
+    { x: 350, y: 150, rot: -15 },
+    { x: 0, y: -350, rot: 10 },
+    { x: 0, y: 350, rot: -10 },
+    { x: -400, y: 0, rot: 20 },
+    { x: 400, y: 0, rot: -20 },
+  ];
+  return dirs[Math.floor(Math.random() * dirs.length)];
+}
+
+function spawnParticles(tileEl, color) {
+  const container = document.getElementById('particleContainer');
+  const rect = tileEl.getBoundingClientRect();
+  const vpRect = container.getBoundingClientRect();
+  const cx = rect.left + rect.width / 2 - vpRect.left;
+  const cy = rect.top + rect.height / 2 - vpRect.top;
+
+  for (let i = 0; i < 12; i++) {
+    const p = document.createElement('div');
+    p.className = 'particle';
+    p.style.left = cx + 'px';
+    p.style.top = cy + 'px';
+    p.style.background = color;
+    p.style.width = (2 + Math.random() * 3) + 'px';
+    p.style.height = p.style.width;
+
+    const angle = (Math.PI * 2 * i) / 12 + (Math.random() - 0.5) * 0.5;
+    const dist = 30 + Math.random() * 50;
+    p.style.setProperty('--px', Math.cos(angle) * dist + 'px');
+    p.style.setProperty('--py', Math.sin(angle) * dist + 'px');
+
+    container.appendChild(p);
+    setTimeout(() => p.remove(), 900);
+  }
+}
+
+function assembleTile(tileInfo) {
+  const el = tileElements.get(tileInfo.id);
+  if (!el || el.classList.contains('placed')) return;
+
+  // Clear any previous active state
+  if (activeIndex >= 0) {
+    const prevEl = tileElements.get(activeIndex);
+    if (prevEl && prevEl.classList.contains('active')) {
+      prevEl.classList.remove('active');
+      prevEl.classList.add('placed');
+    }
+  }
+
+  el.classList.remove('pending');
+  el.classList.add('assembling');
+
+  const dir = getRandomFlyDirection();
+  el.style.setProperty('--fly-x', dir.x + 'px');
+  el.style.setProperty('--fly-y', dir.y + 'px');
+  el.style.setProperty('--fly-rot', dir.rot + 'deg');
+
+  // Spawn particles on snap
+  setTimeout(() => {
+    spawnParticles(el, tileInfo.color);
+  }, 450);
+
+  // After assembly animation finishes, mark as active briefly then placed
+  setTimeout(() => {
+    el.classList.remove('assembling');
+    el.classList.add('active');
+    activeIndex = tileInfo.id;
+    placedCount++;
+    updateStats();
+
+    // After a beat, finalize as placed
+    setTimeout(() => {
+      if (el.classList.contains('active')) {
+        el.classList.remove('active');
+        el.classList.add('placed');
+      }
+    }, 1800);
+  }, 850);
+}
+
+function updateStats() {
+  const total = tileData.length;
+  document.getElementById('progressText').textContent = `${placedCount} / ${total}`;
+
+  // Update ring
+  const circumference = 2 * Math.PI * 13; // ~81.68
+  const offset = circumference * (1 - placedCount / total);
+  document.getElementById('progressRing').style.strokeDashoffset = offset;
+}
+
+// ─── Shimmer random placed tiles ───
+setInterval(() => {
+  const placedEls = [...document.querySelectorAll('.tile.placed:not(.shimmer)')];
+  if (placedEls.length === 0) return;
+  const pick = placedEls[Math.floor(Math.random() * placedEls.length)];
+  pick.classList.add('shimmer');
+  setTimeout(() => pick.classList.remove('shimmer'), 1300);
+}, 2000);
+
+// ─── Auto-assembly loop ───
+let assemblyIdx = 0;
+
+function nextAssembly() {
+  if (!assemblyRunning) return;
+  if (assemblyIdx >= assemblyQueue.length) {
+    assemblyRunning = false;
+    // Make sure last active becomes placed
+    setTimeout(() => {
+      document.querySelectorAll('.tile.active').forEach(el => {
+        el.classList.remove('active');
+        el.classList.add('placed');
+      });
+    }, 2000);
+    return;
+  }
+
+  assembleTile(assemblyQueue[assemblyIdx]);
+  assemblyIdx++;
+
+  // Random interval 2.5-4.5s
+  const delay = 2500 + Math.random() * 2000;
+  setTimeout(nextAssembly, delay);
+}
+
+// Start assembly after brief intro pause
+setTimeout(nextAssembly, 1200);
+
+// ─── Timer & Cost ───
+setInterval(() => {
+  elapsedSec++;
+  const m = Math.floor(elapsedSec / 60);
+  const s = elapsedSec % 60;
+  document.getElementById('elapsedTime').textContent =
+    String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+
+  // Simulated cost: ~$0.03-0.08 per tile
+  if (placedCount > 0) {
+    cost += 0.01 + Math.random() * 0.02;
+    document.getElementById('costValue').textContent = '$' + cost.toFixed(2);
+  }
+}, 1000);
+
+// ─── Keyboard shortcut: Space to manually place next tile ───
+document.addEventListener('keydown', (e) => {
+  if (e.code === 'Escape') {
+    overlay.classList.remove('visible');
+  }
+});
+
+// Initial stats
+updateStats();
+</script>
+</body>
+</html>

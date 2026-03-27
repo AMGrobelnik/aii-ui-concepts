@@ -1,0 +1,893 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor - Animated Connectors</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f; --surface: #12121a; --surface2: #1a1a26;
+    --border: #2a2a3a; --text: #e0e0e8; --text-dim: #8888a0;
+    --green: #34d399; --purple: #a78bfa; --blue: #60a5fa; --orange: #fb923c; --gray: #4a4a5e;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; min-height: 100vh; overflow: hidden; }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 160px 1fr;
+    grid-template-rows: auto auto 1fr;
+    height: 100vh;
+  }
+
+  /* ── Ring Panel ── */
+  .ring-panel {
+    grid-column: 1; grid-row: 1 / 4;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 28px 12px;
+    border-right: 1px solid var(--border); background: var(--surface);
+    position: relative; z-index: 20;
+  }
+  .ring-container { position: relative; width: 120px; height: 120px; margin-bottom: 8px; }
+  .ring-svg { width: 120px; height: 120px; transform: rotate(-90deg); }
+  .ring-track { fill: none; stroke: var(--border); stroke-width: 7; }
+  .ring-progress {
+    fill: none; stroke-width: 7; stroke-linecap: round;
+    stroke-dasharray: 301.6; stroke-dashoffset: 301.6;
+    transition: stroke-dashoffset 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+    filter: drop-shadow(0 0 6px rgba(96,165,250,0.4));
+  }
+  .ring-endpoint {
+    position: absolute; width: 10px; height: 10px; border-radius: 50%;
+    background: var(--blue);
+    box-shadow: 0 0 10px rgba(96,165,250,.6), 0 0 20px rgba(96,165,250,.3);
+    transition: all 1.2s cubic-bezier(0.4, 0, 0.2, 1); pointer-events: none;
+  }
+  .ring-center-text {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%); text-align: center;
+  }
+  .ring-percent {
+    font-size: 26px; font-weight: 700;
+    background: linear-gradient(135deg, var(--green), var(--purple), var(--blue));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .ring-label {
+    font-size: 10px; color: var(--text-dim); text-transform: uppercase;
+    letter-spacing: 1px; text-align: center; margin-bottom: 20px;
+  }
+  .ring-highlight {
+    fill: none; stroke-width: 11; stroke-linecap: round; opacity: 0;
+    transition: opacity 0.4s, stroke-dashoffset 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .ring-highlight.visible { opacity: 0.25; }
+
+  .legend { width: 100%; display: flex; flex-direction: column; gap: 6px; }
+  .legend-item {
+    display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+    border-radius: 6px; cursor: pointer; transition: all 0.2s;
+    font-size: 11px; color: var(--text-dim);
+  }
+  .legend-item:hover { background: var(--surface2); color: var(--text); }
+  .legend-item.active { background: var(--surface2); color: var(--text); }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .legend-count { margin-left: auto; font-size: 10px; font-weight: 600; opacity: 0.6; }
+
+  /* ── Row 1: Module Nodes ── */
+  .module-row {
+    grid-column: 2; grid-row: 1;
+    display: flex; align-items: center; justify-content: center;
+    padding: 20px 24px 16px; gap: 0;
+    border-bottom: 1px solid var(--border); background: var(--surface);
+    position: sticky; top: 0; z-index: 11;
+  }
+  .mod-node {
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    cursor: pointer; transition: all 0.3s; position: relative; z-index: 2;
+  }
+  .mod-node .node-circle {
+    width: 32px; height: 32px; border-radius: 50%; position: relative;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; transition: all 0.3s;
+    border: 2px solid transparent;
+  }
+  .mod-node.completed .node-circle {
+    border-color: var(--color);
+    background: color-mix(in srgb, var(--color) 15%, transparent);
+    box-shadow: 0 0 10px color-mix(in srgb, var(--color) 30%, transparent);
+  }
+  .mod-node.active .node-circle {
+    border-color: var(--color);
+    background: color-mix(in srgb, var(--color) 20%, transparent);
+    box-shadow: 0 0 14px color-mix(in srgb, var(--color) 40%, transparent);
+    animation: nodePulse 2s ease-in-out infinite;
+  }
+  .mod-node.pending .node-circle { border-color: var(--gray); background: transparent; opacity: 0.5; }
+  .mod-node.selected .node-circle {
+    transform: scale(1.2);
+    box-shadow: 0 0 20px var(--color), 0 0 40px color-mix(in srgb, var(--color) 40%, transparent);
+  }
+  .mod-node .node-label { font-size: 10px; color: var(--text-dim); transition: color 0.3s; }
+  .mod-node.selected .node-label { color: var(--text); }
+
+  /* Connector space between module nodes -- canvas overlays these */
+  .mod-connector-space { width: 80px; height: 32px; position: relative; z-index: 1; }
+
+  @keyframes nodePulse {
+    0%, 100% { box-shadow: 0 0 10px var(--color); }
+    50% { box-shadow: 0 0 24px var(--color), 0 0 40px color-mix(in srgb, var(--color) 30%, transparent); }
+  }
+
+  /* ── Row 2: Sub-step Dots ── */
+  .sub-row {
+    grid-column: 2; grid-row: 2;
+    display: flex; align-items: center; justify-content: center;
+    padding: 12px 24px 12px; gap: 4px;
+    border-bottom: 1px solid var(--border);
+    background: color-mix(in srgb, var(--surface) 80%, var(--bg));
+    position: sticky; top: 72px; z-index: 10;
+    max-height: 56px; overflow: hidden;
+    transition: max-height 0.35s ease, padding 0.35s ease, opacity 0.3s;
+    opacity: 1;
+  }
+  .sub-row.collapsed { max-height: 0; padding: 0 24px; opacity: 0; border-bottom: none; }
+  .sub-dot-wrapper {
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    cursor: pointer; transition: all 0.2s;
+  }
+  .sub-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    border: 2px solid transparent; transition: all 0.3s;
+  }
+  .sub-dot.completed { background: var(--color); border-color: var(--color); opacity: 0.8; }
+  .sub-dot.active {
+    background: color-mix(in srgb, var(--color) 30%, transparent);
+    border-color: var(--color);
+    box-shadow: 0 0 8px var(--color);
+    animation: subPulse 2s ease-in-out infinite;
+  }
+  .sub-dot.pending { border-color: var(--gray); opacity: 0.4; }
+  .sub-dot.selected {
+    transform: scale(1.5);
+    box-shadow: 0 0 12px var(--color), 0 0 24px color-mix(in srgb, var(--color) 40%, transparent);
+  }
+  .sub-dot-label { font-size: 8px; color: var(--text-dim); white-space: nowrap; transition: color 0.3s; }
+  .sub-dot-wrapper.sel .sub-dot-label { color: var(--text); font-weight: 500; }
+  .sub-connector { width: 14px; height: 1px; background: var(--border); flex-shrink: 0; }
+  @keyframes subPulse {
+    0%, 100% { box-shadow: 0 0 6px var(--color); }
+    50% { box-shadow: 0 0 14px var(--color); }
+  }
+
+  /* ── Particle Canvas (overlay) ── */
+  #particleCanvas {
+    position: fixed; top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none; z-index: 15;
+  }
+
+  /* ── Content ── */
+  .content {
+    grid-column: 2; grid-row: 3;
+    padding: 24px 32px; overflow-y: auto;
+  }
+  .content-inner { max-width: 700px; }
+  .tag {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 12px; border-radius: 20px;
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.8px; margin-bottom: 8px; border: 1px solid;
+  }
+  .title { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
+  .summary { font-size: 14px; color: var(--text-dim); line-height: 1.65; margin-bottom: 20px; max-width: 650px; }
+
+  .rows { display: flex; flex-direction: column; gap: 6px; }
+  .row-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; overflow: hidden; transition: all 0.3s;
+  }
+  .row-card:hover { border-color: #3a3a50; }
+  .row-card.expanded { box-shadow: 0 2px 16px rgba(0,0,0,.3); }
+  .row-hdr {
+    display: flex; align-items: center; padding: 12px 16px;
+    cursor: pointer; gap: 12px; transition: background 0.2s;
+  }
+  .row-hdr:hover { background: var(--surface2); }
+  .row-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .row-name { font-size: 13px; font-weight: 600; flex: 1; }
+  .row-meta { font-size: 11px; color: var(--text-dim); }
+  .row-chev {
+    width: 16px; height: 16px; color: var(--text-dim);
+    transition: transform 0.3s; flex-shrink: 0;
+  }
+  .row-card.expanded .row-chev { transform: rotate(180deg); }
+  .row-body { max-height: 0; overflow: hidden; transition: max-height 0.35s ease; }
+  .row-card.expanded .row-body { max-height: 300px; }
+  .row-detail {
+    padding: 0 16px 14px 36px; font-size: 12.5px;
+    color: var(--text-dim); line-height: 1.65;
+  }
+
+  .footer { margin-top: 20px; font-size: 11px; color: var(--text-dim); }
+  .nav-hint {
+    display: flex; align-items: center; gap: 8px; margin-top: 14px; font-size: 11px; color: var(--text-dim);
+  }
+  .key {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 24px; height: 22px; padding: 0 5px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 4px; font-size: 10px;
+  }
+
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  .fade-in { animation: fadeIn 0.4s ease forwards; opacity: 0; }
+</style>
+</head>
+<body>
+<div class="layout">
+
+  <!-- Ring Panel -->
+  <div class="ring-panel">
+    <div class="ring-container">
+      <svg class="ring-svg" viewBox="0 0 120 120">
+        <defs>
+          <linearGradient id="rg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="var(--green)"/>
+            <stop offset="40%" stop-color="var(--purple)"/>
+            <stop offset="70%" stop-color="var(--blue)"/>
+            <stop offset="100%" stop-color="var(--gray)"/>
+          </linearGradient>
+        </defs>
+        <circle class="ring-track" cx="60" cy="60" r="48"/>
+        <circle class="ring-progress" cx="60" cy="60" r="48" stroke="url(#rg)"/>
+        <circle class="ring-highlight" cx="60" cy="60" r="48"/>
+      </svg>
+      <div class="ring-endpoint" id="ep"></div>
+      <div class="ring-center-text"><div class="ring-percent" id="pct">0%</div></div>
+    </div>
+    <div class="ring-label">Pipeline Progress</div>
+    <div class="legend" id="legend"></div>
+  </div>
+
+  <!-- Row 1: Module nodes -->
+  <div class="module-row" id="modRow"></div>
+
+  <!-- Row 2: Sub-step dots -->
+  <div class="sub-row" id="subRow"></div>
+
+  <!-- Content -->
+  <div class="content">
+    <div class="content-inner" id="contentInner"></div>
+  </div>
+
+</div>
+
+<!-- Particle overlay canvas -->
+<canvas id="particleCanvas"></canvas>
+
+<script>
+// ────────────────────────────────────────────────
+// DATA
+// ────────────────────────────────────────────────
+const CIRC = 2 * Math.PI * 48;
+
+const MODULES = [
+  {
+    id: 'seed', name: 'Seed Hypothesis', short: 'Seed', color: 'var(--green)', raw: '#34d399',
+    status: 'completed', metric: '\u2713', weight: 10,
+    summary: 'Mined 847 papers from OpenAlex, built knowledge graph with 2,341 triples. Identified 12 research gaps. Selected 5 seed topics.',
+    steps: [
+      { name: 'Mine Papers', status: 'completed', metric: '847 papers',
+        detail: 'Extracted papers from OpenAlex API across computational linguistics domain.' },
+      { name: 'Build KG', status: 'completed', metric: '2,341 triples',
+        detail: 'Constructed knowledge graph from paper abstracts using NER and relation extraction.' },
+      { name: 'Find Gaps', status: 'completed', metric: '12 gaps',
+        detail: 'Identified unexplored intersections in the knowledge graph via blind spot analysis.' },
+      { name: 'Select Seeds', status: 'completed', metric: '5 topics',
+        detail: 'BM25-matched seed topics against research direction. Round-robin agent assignment.' },
+    ]
+  },
+  {
+    id: 'hypo', name: 'Hypothesis Loop', short: 'Hypothesis', color: 'var(--purple)', raw: '#a78bfa',
+    status: 'completed', metric: '8.4', weight: 25,
+    summary: 'Refined hypothesis over 3 iterations of generation and adversarial review. Score improved from 6.2 to 8.4/10. Final: "Cross-lingual Contrastive Pre-training with Synthetic Code-Switching."',
+    steps: [
+      { name: 'Gen Hypo 1', status: 'completed', metric: 'Score 6.2',
+        detail: 'Generated 8 hypotheses across 3 models. Best: cross-lingual transfer via code-switching. 3 major issues flagged.' },
+      { name: 'Review 1', status: 'completed', metric: '3 major',
+        detail: 'Adversarial review: weak baselines, unclear methodology, missing related work.' },
+      { name: 'Gen Hypo 2', status: 'completed', metric: 'Score 7.8',
+        detail: 'Refined to 4 hypotheses. Added contrastive pre-training approach. 1 major issue remaining.' },
+      { name: 'Review 2', status: 'completed', metric: '1 major',
+        detail: 'Needs convergence analysis. 2 minor: strengthen baselines, tighten abstract.' },
+      { name: 'Gen Hypo 3', status: 'completed', metric: 'Score 8.4',
+        detail: 'Final refinement. Narrowed to 8 language families. Added convergence analysis.' },
+      { name: 'Review 3', status: 'completed', metric: '0 major',
+        detail: 'Score 8.4/10. Confidence 4/5. 0 major issues, 2 minor. Ready for research.' },
+    ]
+  },
+  {
+    id: 'inv', name: 'Invention Loop', short: 'Invention', color: 'var(--blue)', raw: '#60a5fa',
+    status: 'active', metric: '3/5', weight: 40,
+    summary: 'Iteration 2 of 3. Generating artifacts to validate the hypothesis. Baseline shows 17.5% accuracy improvement. Ablation study running.',
+    steps: [
+      { name: 'Strategy', status: 'completed', metric: 'Selected',
+        detail: 'Contrastive alignment with code-switching augmentation. Added ablation experiments per reviewer feedback.' },
+      { name: 'Plan', status: 'completed', metric: '5 planned',
+        detail: '5 artifacts: 2 experiments, 1 dataset, 1 evaluation, 1 proof. Compute profiles assigned.' },
+      { name: 'Artifacts', status: 'active', metric: '3/5',
+        detail: '3 complete: Contrastive Baseline (acc 0.847, +17.5%), Multilingual Pairs (2,400 examples), Convergence Proof (Lean 4 verified). Running: Ablation Study. Pending: Cross-lingual Eval.',
+        children: [
+          { name: 'Contrastive Baseline', status: 'completed', metric: 'acc: 0.847 (+17.5%)', time: '4m 32s', cost: '$2.14' },
+          { name: 'Multilingual Pairs', status: 'completed', metric: '2,400 examples', time: '3m 15s', cost: '$1.02' },
+          { name: 'Convergence Proof', status: 'completed', metric: 'Verified (Lean 4)', time: '2m 41s', cost: '$0.89' },
+          { name: 'Ablation Study', status: 'active', metric: 'Running...', time: '1m 20s', cost: '$1.36' },
+          { name: 'Cross-lingual Eval', status: 'pending', metric: 'Pending', time: '\u2014', cost: '\u2014' },
+        ]
+      },
+      { name: 'Paper Draft', status: 'pending', metric: '\u2014', detail: 'Will synthesize paper from artifact results.' },
+      { name: 'Review', status: 'pending', metric: '\u2014', detail: 'Adversarial review of paper draft.' },
+      { name: 'Update Hypo', status: 'pending', metric: '\u2014', detail: 'Refine hypothesis based on findings.' },
+    ]
+  },
+  {
+    id: 'paper', name: 'Paper & Repository', short: 'Paper', color: 'var(--orange)', raw: '#fb923c',
+    status: 'pending', metric: '\u25CB', weight: 25,
+    summary: 'Waiting for Invention Loop to complete. Will generate demos, visualizations, compile LaTeX paper, and deploy to GitHub.',
+    steps: [
+      { name: 'Gen Repo', status: 'pending', metric: '\u2014', detail: 'Initialize GitHub repository.' },
+      { name: 'Demos + Viz', status: 'pending', metric: '\u2014', detail: 'Generate artifact demos and figure visualizations.' },
+      { name: 'Full Paper', status: 'pending', metric: '\u2014', detail: 'Compile LaTeX paper with all sections and figures.' },
+      { name: 'Deploy Source', status: 'pending', metric: '\u2014', detail: 'Push code and data to GitHub.' },
+      { name: 'Deploy Paper', status: 'pending', metric: '\u2014', detail: 'Upload compiled PDF and deploy.' },
+    ]
+  }
+];
+
+let selMod = 2;
+let selStep = 2;
+
+// ────────────────────────────────────────────────
+// PROGRESS
+// ────────────────────────────────────────────────
+function progress() {
+  let total = 0, done = 0;
+  MODULES.forEach(m => {
+    const w = m.weight / m.steps.length;
+    m.steps.forEach(s => {
+      total += w;
+      if (s.status === 'completed') done += w;
+      else if (s.status === 'active') done += w * 0.5;
+    });
+  });
+  return Math.round(done / total * 100);
+}
+
+// ────────────────────────────────────────────────
+// RING
+// ────────────────────────────────────────────────
+function updateRing(pct) {
+  document.querySelector('.ring-progress').style.strokeDashoffset = CIRC - (pct / 100) * CIRC;
+  const el = document.getElementById('pct');
+  let c = 0; const step = pct / 30;
+  const iv = setInterval(() => {
+    c += step; if (c >= pct) { c = pct; clearInterval(iv); }
+    el.textContent = Math.round(c) + '%';
+  }, 30);
+  const ang = (pct / 100) * 360 - 90, rad = ang * Math.PI / 180;
+  const ep = document.getElementById('ep');
+  ep.style.left = (60 + 48 * Math.cos(rad) - 5) + 'px';
+  ep.style.top = (60 + 48 * Math.sin(rad) - 5) + 'px';
+}
+
+function highlightArc(mi) {
+  const hl = document.querySelector('.ring-highlight');
+  if (mi < 0) { hl.classList.remove('visible'); return; }
+  let off = 0;
+  for (let i = 0; i < mi; i++) off += (MODULES[i].weight / 100) * CIRC;
+  const len = (MODULES[mi].weight / 100) * CIRC;
+  hl.style.stroke = MODULES[mi].color;
+  hl.style.strokeDasharray = `${len} ${CIRC}`;
+  hl.style.strokeDashoffset = -off;
+  hl.classList.add('visible');
+}
+
+// ────────────────────────────────────────────────
+// LEGEND
+// ────────────────────────────────────────────────
+function buildLegend() {
+  const el = document.getElementById('legend');
+  el.innerHTML = '';
+  MODULES.forEach((m, i) => {
+    const done = m.steps.filter(s => s.status === 'completed').length;
+    const d = document.createElement('div');
+    d.className = 'legend-item' + (i === selMod ? ' active' : '');
+    d.innerHTML = `<span class="legend-dot" style="background:${m.color}"></span><span>${m.short}</span><span class="legend-count">${done}/${m.steps.length}</span>`;
+    d.onclick = () => selectModule(i);
+    el.appendChild(d);
+  });
+}
+
+// ────────────────────────────────────────────────
+// ROW 1 : MODULE NODES
+// ────────────────────────────────────────────────
+function buildModuleRow() {
+  const row = document.getElementById('modRow');
+  row.innerHTML = '';
+  MODULES.forEach((m, i) => {
+    if (i > 0) {
+      const spacer = document.createElement('div');
+      spacer.className = 'mod-connector-space';
+      spacer.dataset.connIdx = i - 1;
+      row.appendChild(spacer);
+    }
+    const node = document.createElement('div');
+    node.className = `mod-node ${m.status}`;
+    node.style.setProperty('--color', m.raw);
+    node.dataset.idx = i;
+    node.innerHTML = `<div class="node-circle">${m.metric}</div><div class="node-label">${m.short}</div>`;
+    node.onclick = () => selectModule(i);
+    row.appendChild(node);
+  });
+}
+
+// ────────────────────────────────────────────────
+// ROW 2 : SUB-STEP DOTS
+// ────────────────────────────────────────────────
+function buildSubRow() {
+  const row = document.getElementById('subRow');
+  row.innerHTML = '';
+  const m = MODULES[selMod];
+  if (!m.steps.length) { row.classList.add('collapsed'); return; }
+  row.classList.remove('collapsed');
+  m.steps.forEach((s, i) => {
+    if (i > 0) {
+      const c = document.createElement('div');
+      c.className = 'sub-connector';
+      row.appendChild(c);
+    }
+    const w = document.createElement('div');
+    w.className = 'sub-dot-wrapper' + (i === selStep ? ' sel' : '');
+    w.style.setProperty('--color', m.raw);
+    const dot = document.createElement('div');
+    dot.className = `sub-dot ${s.status}`;
+    dot.style.setProperty('--color', m.raw);
+    if (i === selStep) dot.classList.add('selected');
+    const lbl = document.createElement('div');
+    lbl.className = 'sub-dot-label';
+    lbl.textContent = s.name;
+    w.appendChild(dot);
+    w.appendChild(lbl);
+    w.onclick = () => selectStep(i);
+    row.appendChild(w);
+  });
+}
+
+// ────────────────────────────────────────────────
+// CONTENT
+// ────────────────────────────────────────────────
+function renderContent() {
+  const m = MODULES[selMod];
+  const s = m.steps[selStep];
+  const el = document.getElementById('contentInner');
+
+  let html = `<div class="fade-in">
+    <div class="tag" style="border-color:${m.color};color:${m.raw};background:${m.raw}15">
+      ${m.status === 'completed' ? '\u2713' : m.status === 'active' ? '\u25B6' : '\u25CB'} ${m.short} / ${s.name}
+    </div>
+    <div class="title">${s.name} \u2014 ${m.name}</div>
+    <div class="summary">${s.detail || m.summary}</div>`;
+
+  if (s.children) {
+    html += '<div class="rows">';
+    s.children.forEach((c, ci) => {
+      const sc = c.status === 'completed' ? m.raw : c.status === 'active' ? m.raw : 'var(--gray)';
+      const glow = c.status === 'active' ? `box-shadow:0 0 6px ${sc}` : '';
+      const icon = c.status === 'completed' ? '\u2713' : c.status === 'active' ? '\u25B6' : '\u25CB';
+      html += `<div class="row-card fade-in" style="animation-delay:${ci * 0.06}s">
+        <div class="row-hdr" onclick="this.parentElement.classList.toggle('expanded')">
+          <div class="row-dot" style="background:${sc};${glow}"></div>
+          <div class="row-name">${icon} ${c.name}</div>
+          <div class="row-meta">${c.metric}</div>
+          <svg class="row-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+        <div class="row-body"><div class="row-detail">${c.time} \u2022 ${c.cost}</div></div>
+      </div>`;
+    });
+    html += '</div>';
+  } else if (s.status !== 'pending') {
+    html += `<div class="rows"><div class="row-card expanded fade-in">
+      <div class="row-hdr" onclick="this.parentElement.classList.toggle('expanded')">
+        <div class="row-dot" style="background:${m.raw}"></div>
+        <div class="row-name">Details</div>
+        <div class="row-meta">${s.metric}</div>
+        <svg class="row-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+      <div class="row-body"><div class="row-detail">${s.detail}</div></div>
+    </div></div>`;
+  }
+
+  html += `<div class="footer">
+    ${m.status === 'completed' ? '\u2713 Complete' : m.status === 'active' ? '\u25B6 Running \u2014 42m \u2022 $12.47' : '\u25CB Pending'}
+  </div>
+  <div class="nav-hint">
+    <span class="key">\u2190</span><span class="key">\u2192</span> Navigate steps
+    <span style="margin-left:8px">|</span>
+    <span class="key">\u2191</span><span class="key">\u2193</span> Switch modules
+  </div></div>`;
+  el.innerHTML = html;
+}
+
+// ────────────────────────────────────────────────
+// SELECTION
+// ────────────────────────────────────────────────
+function selectModule(i) {
+  selMod = i;
+  const m = MODULES[i];
+  selStep = 0;
+  for (let j = 0; j < m.steps.length; j++) {
+    if (m.steps[j].status === 'active') { selStep = j; break; }
+    if (m.steps[j].status !== 'completed') { selStep = j; break; }
+  }
+  updateAll();
+}
+
+function selectStep(i) {
+  selStep = Math.max(0, Math.min(i, MODULES[selMod].steps.length - 1));
+  updateAll();
+}
+
+function updateAll() {
+  highlightArc(selMod);
+  document.querySelectorAll('.mod-node').forEach((n, i) => n.classList.toggle('selected', i === selMod));
+  document.querySelectorAll('.legend-item').forEach((n, i) => n.classList.toggle('active', i === selMod));
+  buildSubRow();
+  renderContent();
+  // Rebuild particle geometry after DOM settles
+  requestAnimationFrame(() => rebuildParticleGeometry());
+}
+
+// ────────────────────────────────────────────────
+// KEYBOARD
+// ────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowUp') { e.preventDefault(); selectModule(Math.max(0, selMod - 1)); }
+  if (e.key === 'ArrowDown') { e.preventDefault(); selectModule(Math.min(MODULES.length - 1, selMod + 1)); }
+  if (e.key === 'ArrowLeft') { e.preventDefault(); selectStep(selStep - 1); }
+  if (e.key === 'ArrowRight') { e.preventDefault(); selectStep(selStep + 1); }
+});
+
+// ────────────────────────────────────────────────
+// PARTICLE SYSTEM (Canvas)
+// ────────────────────────────────────────────────
+const canvas = document.getElementById('particleCanvas');
+const ctx = canvas.getContext('2d');
+let dpr = window.devicePixelRatio || 1;
+
+function resizeCanvas() {
+  dpr = window.devicePixelRatio || 1;
+  canvas.width = window.innerWidth * dpr;
+  canvas.height = window.innerHeight * dpr;
+  canvas.style.width = window.innerWidth + 'px';
+  canvas.style.height = window.innerHeight + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+resizeCanvas();
+window.addEventListener('resize', () => { resizeCanvas(); rebuildParticleGeometry(); });
+
+// Parse hex to {r,g,b}
+function hexToRGB(hex) {
+  hex = hex.replace('#', '');
+  return {
+    r: parseInt(hex.substring(0, 2), 16),
+    g: parseInt(hex.substring(2, 4), 16),
+    b: parseInt(hex.substring(4, 6), 16)
+  };
+}
+
+// Interpolate two hex colors
+function lerpColor(hex1, hex2, t) {
+  const a = hexToRGB(hex1), b = hexToRGB(hex2);
+  return {
+    r: Math.round(a.r + (b.r - a.r) * t),
+    g: Math.round(a.g + (b.g - a.g) * t),
+    b: Math.round(a.b + (b.b - a.b) * t)
+  };
+}
+
+// ── Connector data ──
+// Each horizontal connector between module nodes
+let hConnectors = []; // {x1,y1,x2,y2,fromColor,toColor,type:'completed'|'active'|'pending'}
+// Vertical beam from selected module node to selected sub-step dot
+let vBeam = null; // {x1,y1,x2,y2,color}
+
+// Particles live on connectors
+let particles = [];
+
+function rebuildParticleGeometry() {
+  hConnectors = [];
+  particles = [];
+  vBeam = null;
+
+  const modNodes = document.querySelectorAll('.mod-node');
+  const nodeRects = [];
+  modNodes.forEach(n => {
+    const circle = n.querySelector('.node-circle');
+    const r = circle.getBoundingClientRect();
+    nodeRects.push({ cx: r.left + r.width / 2, cy: r.top + r.height / 2, r: r.width / 2 });
+  });
+
+  // Build horizontal connectors
+  for (let i = 0; i < MODULES.length - 1; i++) {
+    const a = nodeRects[i], b = nodeRects[i + 1];
+    if (!a || !b) continue;
+    const prevMod = MODULES[i], nextMod = MODULES[i + 1];
+    let type = 'pending';
+    if (prevMod.status === 'completed' && (nextMod.status === 'completed' || nextMod.status === 'active')) {
+      type = nextMod.status === 'active' ? 'active' : 'completed';
+    }
+    hConnectors.push({
+      x1: a.cx + a.r + 2,
+      y1: a.cy,
+      x2: b.cx - b.r - 2,
+      y2: b.cy,
+      fromColor: prevMod.raw,
+      toColor: nextMod.raw,
+      type: type
+    });
+  }
+
+  // Spawn initial particles for completed / active connectors
+  hConnectors.forEach((conn, ci) => {
+    if (conn.type === 'completed') {
+      // Slow: 1 particle drifting
+      spawnParticle(ci, Math.random());
+    } else if (conn.type === 'active') {
+      // Fast: 3-4 particles spread out
+      for (let p = 0; p < 4; p++) {
+        spawnParticle(ci, p * 0.25 + Math.random() * 0.1);
+      }
+    }
+  });
+
+  // Vertical beam: from selected module circle to selected sub-step dot
+  if (nodeRects[selMod]) {
+    const subDots = document.querySelectorAll('.sub-dot');
+    const selDotEl = subDots[selStep];
+    if (selDotEl) {
+      const mr = nodeRects[selMod];
+      const sr = selDotEl.getBoundingClientRect();
+      vBeam = {
+        x1: mr.cx,
+        y1: mr.cy + mr.r + 2,
+        x2: sr.left + sr.width / 2,
+        y2: sr.top,
+        color: MODULES[selMod].raw
+      };
+    }
+  }
+}
+
+function spawnParticle(connIdx, initialT) {
+  const conn = hConnectors[connIdx];
+  if (!conn) return;
+  const speed = conn.type === 'active' ? (0.25 + Math.random() * 0.15) : (0.08 + Math.random() * 0.04);
+  const size = conn.type === 'active' ? (2.5 + Math.random() * 1.5) : (1.8 + Math.random() * 1.0);
+  particles.push({
+    connIdx: connIdx,
+    t: initialT % 1.0,
+    speed: speed, // units per second (0..1 range)
+    size: size,
+    brightness: conn.type === 'active' ? 1.0 : 0.7
+  });
+}
+
+let lastTime = performance.now();
+
+function animate(now) {
+  const dt = (now - lastTime) / 1000;
+  lastTime = now;
+
+  ctx.clearRect(0, 0, canvas.width / dpr, canvas.height / dpr);
+
+  // ── Draw horizontal connectors ──
+  hConnectors.forEach((conn, ci) => {
+    const dx = conn.x2 - conn.x1;
+    const dy = conn.y2 - conn.y1;
+    const len = Math.sqrt(dx * dx + dy * dy);
+
+    if (conn.type === 'pending') {
+      // Dashed gray line
+      ctx.save();
+      ctx.setLineDash([4, 6]);
+      ctx.strokeStyle = '#4a4a5e';
+      ctx.lineWidth = 1.5;
+      ctx.globalAlpha = 0.4;
+      ctx.beginPath();
+      ctx.moveTo(conn.x1, conn.y1);
+      ctx.lineTo(conn.x2, conn.y2);
+      ctx.stroke();
+      ctx.restore();
+    } else {
+      // Gradient line
+      const grad = ctx.createLinearGradient(conn.x1, conn.y1, conn.x2, conn.y2);
+      const fc = hexToRGB(conn.fromColor), tc = hexToRGB(conn.toColor);
+      grad.addColorStop(0, `rgba(${fc.r},${fc.g},${fc.b},0.6)`);
+      grad.addColorStop(1, `rgba(${tc.r},${tc.g},${tc.b},0.6)`);
+      ctx.save();
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(conn.x1, conn.y1);
+      ctx.lineTo(conn.x2, conn.y2);
+      ctx.stroke();
+
+      // Subtle glow underneath
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = 8;
+      ctx.globalAlpha = 0.12;
+      ctx.beginPath();
+      ctx.moveTo(conn.x1, conn.y1);
+      ctx.lineTo(conn.x2, conn.y2);
+      ctx.stroke();
+      ctx.restore();
+    }
+  });
+
+  // ── Update and draw particles ──
+  const toRemove = [];
+  particles.forEach((p, pi) => {
+    p.t += p.speed * dt;
+    if (p.t >= 1.0) {
+      const conn = hConnectors[p.connIdx];
+      if (conn && (conn.type === 'completed' || conn.type === 'active')) {
+        // Respawn with small random delay
+        p.t = -Math.random() * (conn.type === 'active' ? 0.3 : 1.5);
+      } else {
+        toRemove.push(pi);
+      }
+      return;
+    }
+    if (p.t < 0) return; // Waiting to spawn
+
+    const conn = hConnectors[p.connIdx];
+    if (!conn) return;
+
+    const x = conn.x1 + (conn.x2 - conn.x1) * p.t;
+    const y = conn.y1 + (conn.y2 - conn.y1) * p.t;
+    const c = lerpColor(conn.fromColor, conn.toColor, p.t);
+
+    // Bright core
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(x, y, p.size, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(${c.r},${c.g},${c.b},${p.brightness})`;
+    ctx.fill();
+
+    // Glow halo
+    const grd = ctx.createRadialGradient(x, y, 0, x, y, p.size * 4);
+    grd.addColorStop(0, `rgba(${c.r},${c.g},${c.b},${p.brightness * 0.5})`);
+    grd.addColorStop(0.4, `rgba(${c.r},${c.g},${c.b},${p.brightness * 0.15})`);
+    grd.addColorStop(1, `rgba(${c.r},${c.g},${c.b},0)`);
+    ctx.beginPath();
+    ctx.arc(x, y, p.size * 4, 0, Math.PI * 2);
+    ctx.fillStyle = grd;
+    ctx.fill();
+
+    // Trailing tail
+    const tailLen = conn.type === 'active' ? 0.08 : 0.04;
+    const tailT = Math.max(0, p.t - tailLen);
+    const tx = conn.x1 + (conn.x2 - conn.x1) * tailT;
+    const ty = conn.y1 + (conn.y2 - conn.y1) * tailT;
+    const tailGrad = ctx.createLinearGradient(tx, ty, x, y);
+    tailGrad.addColorStop(0, `rgba(${c.r},${c.g},${c.b},0)`);
+    tailGrad.addColorStop(1, `rgba(${c.r},${c.g},${c.b},${p.brightness * 0.6})`);
+    ctx.strokeStyle = tailGrad;
+    ctx.lineWidth = p.size * 1.2;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(tx, ty);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    ctx.restore();
+  });
+
+  // Clean up dead particles
+  for (let i = toRemove.length - 1; i >= 0; i--) {
+    particles.splice(toRemove[i], 1);
+  }
+
+  // ── Respawn logic for connectors that lost all particles ──
+  hConnectors.forEach((conn, ci) => {
+    if (conn.type === 'pending') return;
+    const alive = particles.filter(p => p.connIdx === ci);
+    const target = conn.type === 'active' ? 4 : 1;
+    if (alive.length < target) {
+      spawnParticle(ci, -Math.random() * 0.5);
+    }
+  });
+
+  // ── Draw vertical glow beam ──
+  if (vBeam) {
+    const bc = hexToRGB(vBeam.color);
+    const beamPhase = (now / 1000) % 3.0;
+    const breathe = 0.6 + 0.4 * Math.sin(beamPhase * Math.PI * 2 / 3);
+
+    // Outer glow
+    ctx.save();
+    const bGrad = ctx.createLinearGradient(vBeam.x1, vBeam.y1, vBeam.x2, vBeam.y2);
+    bGrad.addColorStop(0, `rgba(${bc.r},${bc.g},${bc.b},${0.05 * breathe})`);
+    bGrad.addColorStop(0.3, `rgba(${bc.r},${bc.g},${bc.b},${0.15 * breathe})`);
+    bGrad.addColorStop(0.7, `rgba(${bc.r},${bc.g},${bc.b},${0.15 * breathe})`);
+    bGrad.addColorStop(1, `rgba(${bc.r},${bc.g},${bc.b},${0.05 * breathe})`);
+    ctx.strokeStyle = bGrad;
+    ctx.lineWidth = 16;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(vBeam.x1, vBeam.y1);
+    ctx.lineTo(vBeam.x2, vBeam.y2);
+    ctx.stroke();
+
+    // Core beam
+    const cGrad = ctx.createLinearGradient(vBeam.x1, vBeam.y1, vBeam.x2, vBeam.y2);
+    cGrad.addColorStop(0, `rgba(${bc.r},${bc.g},${bc.b},${0.1 * breathe})`);
+    cGrad.addColorStop(0.3, `rgba(${bc.r},${bc.g},${bc.b},${0.5 * breathe})`);
+    cGrad.addColorStop(0.7, `rgba(${bc.r},${bc.g},${bc.b},${0.5 * breathe})`);
+    cGrad.addColorStop(1, `rgba(${bc.r},${bc.g},${bc.b},${0.1 * breathe})`);
+    ctx.strokeStyle = cGrad;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(vBeam.x1, vBeam.y1);
+    ctx.lineTo(vBeam.x2, vBeam.y2);
+    ctx.stroke();
+
+    // Small traveling spark on the beam
+    const sparkT = ((now / 800) % 1.0);
+    const sx = vBeam.x1 + (vBeam.x2 - vBeam.x1) * sparkT;
+    const sy = vBeam.y1 + (vBeam.y2 - vBeam.y1) * sparkT;
+    const sparkAlpha = Math.sin(sparkT * Math.PI) * breathe;
+    const sparkGrd = ctx.createRadialGradient(sx, sy, 0, sx, sy, 6);
+    sparkGrd.addColorStop(0, `rgba(${bc.r},${bc.g},${bc.b},${sparkAlpha * 0.9})`);
+    sparkGrd.addColorStop(0.5, `rgba(${bc.r},${bc.g},${bc.b},${sparkAlpha * 0.3})`);
+    sparkGrd.addColorStop(1, `rgba(${bc.r},${bc.g},${bc.b},0)`);
+    ctx.beginPath();
+    ctx.arc(sx, sy, 6, 0, Math.PI * 2);
+    ctx.fillStyle = sparkGrd;
+    ctx.fill();
+
+    // End-point dots (subtle)
+    [{ x: vBeam.x1, y: vBeam.y1 }, { x: vBeam.x2, y: vBeam.y2 }].forEach(pt => {
+      const dotGrd = ctx.createRadialGradient(pt.x, pt.y, 0, pt.x, pt.y, 5);
+      dotGrd.addColorStop(0, `rgba(${bc.r},${bc.g},${bc.b},${0.6 * breathe})`);
+      dotGrd.addColorStop(1, `rgba(${bc.r},${bc.g},${bc.b},0)`);
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, 5, 0, Math.PI * 2);
+      ctx.fillStyle = dotGrd;
+      ctx.fill();
+    });
+
+    ctx.restore();
+  }
+
+  requestAnimationFrame(animate);
+}
+
+// ────────────────────────────────────────────────
+// INIT
+// ────────────────────────────────────────────────
+buildLegend();
+buildModuleRow();
+requestAnimationFrame(() => {
+  setTimeout(() => updateRing(progress()), 200);
+  selectModule(selMod);
+  requestAnimationFrame(animate);
+});
+</script>
+</body>
+</html>

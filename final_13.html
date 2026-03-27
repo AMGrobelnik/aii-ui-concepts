@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Thin Line with Accent Dots</title>
+<style>
+  /* ── Reset & Base ──────────────────────────────────────── */
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg:        #0a0a0f;
+    --surface:   #111118;
+    --surface-2: #18181f;
+    --border:    #222230;
+    --text:      #c8c8d4;
+    --text-dim:  #5e5e72;
+    --text-bright: #eeeef4;
+
+    --green:     #34d399;
+    --purple:    #a78bfa;
+    --blue:      #60a5fa;
+    --gray:      #4a4a5a;
+
+    --green-glow:  rgba(52, 211, 153, 0.35);
+    --purple-glow: rgba(167, 139, 250, 0.35);
+    --blue-glow:   rgba(96, 165, 250, 0.45);
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    line-height: 1.6;
+    overflow-x: hidden;
+    min-height: 100vh;
+  }
+
+  /* ── Top Strip ─────────────────────────────────────────── */
+  .strip {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    height: 60px;
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 40px;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+  }
+
+  .line-container {
+    position: relative;
+    width: min(900px, 80vw);
+    height: 60px;
+    display: flex;
+    align-items: center;
+  }
+
+  /* The base line (gray, full width) */
+  .line-track {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: 2px;
+    background: var(--gray);
+    transform: translateY(-50%);
+    border-radius: 1px;
+  }
+
+  /* Gradient fill up to active dot */
+  .line-fill {
+    position: absolute;
+    left: 0;
+    top: 50%;
+    height: 2px;
+    border-radius: 1px;
+    transform: translateY(-50%);
+    transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1),
+                background 0.6s ease;
+  }
+
+  /* ── Dots ──────────────────────────────────────────────── */
+  .dot-group {
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+    z-index: 2;
+    user-select: none;
+  }
+  .dot-group:nth-child(3) { top: 50%; }
+
+  /* Even spacing: 0%, 33.3%, 66.6%, 100% */
+  .dot-group[data-idx="0"] { left: 0%; }
+  .dot-group[data-idx="1"] { left: 33.33%; }
+  .dot-group[data-idx="2"] { left: 66.66%; }
+  .dot-group[data-idx="3"] { left: 100%; }
+
+  .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    transition: all 0.4s ease;
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  /* Selection ring */
+  .dot-group.selected .dot::after {
+    content: '';
+    position: absolute;
+    inset: -5px;
+    border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.85);
+    animation: ring-in 0.3s ease-out;
+  }
+
+  @keyframes ring-in {
+    from { transform: scale(0.6); opacity: 0; }
+    to   { transform: scale(1);   opacity: 1; }
+  }
+
+  /* Active dot: bigger + pulsing glow */
+  .dot-group.active .dot {
+    width: 14px;
+    height: 14px;
+  }
+
+  .dot-group.active .dot::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    animation: halo-pulse 2.2s ease-in-out infinite;
+    pointer-events: none;
+  }
+
+  @keyframes halo-pulse {
+    0%, 100% { opacity: 0.25; transform: translate(-50%, -50%) scale(0.7); }
+    50%      { opacity: 0.55; transform: translate(-50%, -50%) scale(1.0); }
+  }
+
+  /* Dot colors */
+  .dot-group[data-idx="0"] .dot { background: var(--green); }
+  .dot-group[data-idx="1"] .dot { background: var(--purple); }
+  .dot-group[data-idx="2"] .dot { background: var(--blue); }
+  .dot-group[data-idx="3"] .dot { background: var(--gray); }
+
+  .dot-group[data-idx="0"].active .dot::before { background: var(--green-glow); }
+  .dot-group[data-idx="1"].active .dot::before { background: var(--purple-glow); }
+  .dot-group[data-idx="2"].active .dot::before { background: var(--blue-glow); }
+  .dot-group[data-idx="3"].active .dot::before { background: rgba(74,74,90,0.35); }
+
+  /* Labels — alternate above/below */
+  .dot-label {
+    position: absolute;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+    transition: color 0.3s ease, opacity 0.3s ease;
+    opacity: 0.7;
+  }
+
+  .dot-group.selected .dot-label,
+  .dot-group.active .dot-label {
+    opacity: 1;
+  }
+
+  /* Alternating: 0 above, 1 below, 2 above, 3 below */
+  .dot-group[data-idx="0"] .dot-label,
+  .dot-group[data-idx="2"] .dot-label {
+    bottom: calc(50% + 16px);
+  }
+  .dot-group[data-idx="1"] .dot-label,
+  .dot-group[data-idx="3"] .dot-label {
+    top: calc(50% + 16px);
+  }
+
+  .dot-group[data-idx="0"] .dot-label { color: var(--green); }
+  .dot-group[data-idx="1"] .dot-label { color: var(--purple); }
+  .dot-group[data-idx="2"] .dot-label { color: var(--blue); }
+  .dot-group[data-idx="3"] .dot-label { color: var(--text-dim); }
+
+  /* Completed dots: subtle brightness */
+  .dot-group.completed .dot { filter: brightness(1.1); }
+  .dot-group.pending .dot   { opacity: 0.5; }
+
+  /* ── Content Area ──────────────────────────────────────── */
+  .content {
+    max-width: 820px;
+    margin: 0 auto;
+    padding: 40px 28px 80px;
+  }
+
+  .stage-view {
+    display: none;
+    animation: fadeUp 0.35s ease-out;
+  }
+  .stage-view.visible { display: block; }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Stage header */
+  .stage-header {
+    margin-bottom: 32px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .stage-header h1 {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--text-bright);
+    margin-bottom: 6px;
+  }
+
+  .stage-header .meta {
+    font-size: 13px;
+    color: var(--text-dim);
+    display: flex;
+    gap: 18px;
+    flex-wrap: wrap;
+  }
+
+  .stage-header .meta span {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .status-badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+  }
+  .status-badge.done     { background: rgba(52,211,153,0.12); color: var(--green); }
+  .status-badge.running  { background: rgba(96,165,250,0.12); color: var(--blue); }
+  .status-badge.pending  { background: rgba(74,74,90,0.2);    color: var(--text-dim); }
+
+  /* Cards */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px 24px;
+    margin-bottom: 16px;
+    transition: border-color 0.2s ease;
+  }
+  .card:hover { border-color: #333340; }
+
+  .card-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-bright);
+    margin-bottom: 10px;
+  }
+
+  .card p, .card li {
+    font-size: 13px;
+    color: var(--text);
+    line-height: 1.65;
+  }
+
+  .card ul {
+    list-style: none;
+    padding: 0;
+  }
+  .card ul li {
+    padding: 4px 0;
+    padding-left: 16px;
+    position: relative;
+  }
+  .card ul li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 12px;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--text-dim);
+  }
+
+  /* Colored left borders */
+  .card.green-accent  { border-left: 3px solid var(--green); }
+  .card.purple-accent { border-left: 3px solid var(--purple); }
+  .card.blue-accent   { border-left: 3px solid var(--blue); }
+  .card.gray-accent   { border-left: 3px solid var(--gray); }
+
+  /* Key-value rows */
+  .kv-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    font-size: 13px;
+  }
+  .kv-row:last-child { border-bottom: none; }
+  .kv-key   { color: var(--text-dim); }
+  .kv-value { color: var(--text-bright); font-weight: 500; text-align: right; }
+
+  /* Section sub-headers */
+  .section-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+    margin: 28px 0 12px;
+  }
+
+  /* Progress bar */
+  .progress-bar {
+    width: 100%;
+    height: 4px;
+    background: var(--surface-2);
+    border-radius: 2px;
+    overflow: hidden;
+    margin: 8px 0;
+  }
+  .progress-bar .fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.5s ease;
+  }
+
+  /* Log entries */
+  .log-entry {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 11.5px;
+    padding: 6px 0;
+    color: var(--text-dim);
+    border-bottom: 1px solid rgba(255,255,255,0.025);
+    display: flex;
+    gap: 12px;
+  }
+  .log-entry .log-time { color: var(--green); min-width: 60px; flex-shrink: 0; }
+  .log-entry .log-msg  { color: var(--text); }
+
+  /* Iteration chips */
+  .iter-chips {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+  }
+  .iter-chip {
+    padding: 4px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+  }
+  .iter-chip.current {
+    border-color: var(--blue);
+    color: var(--blue);
+    background: rgba(96,165,250,0.08);
+  }
+  .iter-chip.done {
+    border-color: rgba(52,211,153,0.3);
+    color: var(--green);
+  }
+
+  /* Nav hint */
+  .nav-hint {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 11px;
+    color: var(--text-dim);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 6px 16px;
+    border-radius: 8px;
+    opacity: 0.6;
+    transition: opacity 0.3s;
+    pointer-events: none;
+  }
+  .nav-hint kbd {
+    display: inline-block;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 6px;
+    font-family: inherit;
+    font-size: 10px;
+    margin: 0 2px;
+  }
+
+  /* Two-column grid */
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  @media (max-width: 640px) {
+    .grid-2 { grid-template-columns: 1fr; }
+    .line-container { width: 90vw; }
+    .strip { padding: 0 20px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ─── Top Strip ───────────────────────────────────────── -->
+<div class="strip">
+  <div class="line-container">
+    <div class="line-track"></div>
+    <div class="line-fill" id="lineFill"></div>
+
+    <div class="dot-group completed selected" data-idx="0" onclick="goTo(0)">
+      <span class="dot-label">Seed &#10003;</span>
+      <div class="dot"></div>
+    </div>
+
+    <div class="dot-group completed" data-idx="1" onclick="goTo(1)">
+      <span class="dot-label">Hypo &#10003;</span>
+      <div class="dot"></div>
+    </div>
+
+    <div class="dot-group active" data-idx="2" onclick="goTo(2)">
+      <span class="dot-label">Invention &#9654;</span>
+      <div class="dot"></div>
+    </div>
+
+    <div class="dot-group pending" data-idx="3" onclick="goTo(3)">
+      <span class="dot-label">Paper &#9675;</span>
+      <div class="dot"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Content Area ────────────────────────────────────── -->
+<div class="content">
+
+  <!-- ── Stage 0: Seed ─────────────────────────────── -->
+  <div class="stage-view visible" data-stage="0">
+    <div class="stage-header">
+      <h1>Seed Hypotheses</h1>
+      <div class="meta">
+        <span><span class="status-badge done">Complete</span></span>
+        <span>Duration: 4m 12s</span>
+        <span>12 seeds generated</span>
+      </div>
+    </div>
+
+    <div class="card green-accent">
+      <div class="card-title">Knowledge Graph Extraction</div>
+      <p>Parsed 38 source papers from the input corpus. Extracted 214 entities and 587 relations to build the invention knowledge graph used for hypothesis seeding.</p>
+    </div>
+
+    <div class="section-label">Generated Seeds</div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">Seed #1 &mdash; Adaptive Regularization</div>
+        <p>Context-dependent regularization that adjusts penalty strength based on local loss curvature, reducing overfitting on heterogeneous data.</p>
+      </div>
+      <div class="card">
+        <div class="card-title">Seed #2 &mdash; Graph Distillation</div>
+        <p>Knowledge distillation applied to GNN architectures via edge-aware soft targets, preserving structural information during compression.</p>
+      </div>
+      <div class="card">
+        <div class="card-title">Seed #3 &mdash; Sparse Attention Routing</div>
+        <p>Dynamically routes tokens to sparse attention heads based on learned relevance scores, cutting compute while maintaining accuracy.</p>
+      </div>
+      <div class="card">
+        <div class="card-title">Seed #4 &mdash; Temporal Embeddings</div>
+        <p>Time-aware positional embeddings that encode both sequence position and wall-clock duration for event-stream transformers.</p>
+      </div>
+    </div>
+
+    <div class="section-label">Extraction Stats</div>
+    <div class="card green-accent">
+      <div class="kv-row"><span class="kv-key">Source papers</span><span class="kv-value">38</span></div>
+      <div class="kv-row"><span class="kv-key">Entities extracted</span><span class="kv-value">214</span></div>
+      <div class="kv-row"><span class="kv-key">Relations mapped</span><span class="kv-value">587</span></div>
+      <div class="kv-row"><span class="kv-key">Seed candidates</span><span class="kv-value">12</span></div>
+      <div class="kv-row"><span class="kv-key">Tokens consumed</span><span class="kv-value">142,800</span></div>
+    </div>
+
+    <div class="section-label">Activity Log</div>
+    <div class="card">
+      <div class="log-entry"><span class="log-time">14:01</span><span class="log-msg">Started knowledge graph extraction from 38 papers</span></div>
+      <div class="log-entry"><span class="log-time">14:02</span><span class="log-msg">Entity extraction complete &mdash; 214 entities</span></div>
+      <div class="log-entry"><span class="log-time">14:03</span><span class="log-msg">Relation mapping done &mdash; 587 edges</span></div>
+      <div class="log-entry"><span class="log-time">14:04</span><span class="log-msg">Generated 12 seed hypotheses via subgraph sampling</span></div>
+      <div class="log-entry"><span class="log-time">14:05</span><span class="log-msg">Seed stage complete</span></div>
+    </div>
+  </div>
+
+  <!-- ── Stage 1: Hypothesis ──────────────────────── -->
+  <div class="stage-view" data-stage="1">
+    <div class="stage-header">
+      <h1>Hypothesis Loop</h1>
+      <div class="meta">
+        <span><span class="status-badge done">Complete</span></span>
+        <span>3 iterations</span>
+        <span>Duration: 11m 38s</span>
+      </div>
+    </div>
+
+    <div class="section-label">Iterations</div>
+    <div class="iter-chips">
+      <span class="iter-chip done">Iter 1 &#10003;</span>
+      <span class="iter-chip done">Iter 2 &#10003;</span>
+      <span class="iter-chip done">Iter 3 &#10003;</span>
+    </div>
+
+    <div class="section-label" style="margin-top: 24px;">Final Hypothesis</div>
+    <div class="card purple-accent">
+      <div class="card-title">Curvature-Aware Sparse Attention (CASA)</div>
+      <p>A unified framework that combines adaptive regularization with sparse attention routing. Token-level routing decisions are informed by local loss-surface curvature, enabling the model to allocate more attention heads to high-curvature regions while aggressively pruning in flat areas. This yields a 2.3x throughput improvement with &lt;0.5% accuracy loss on standard benchmarks.</p>
+    </div>
+
+    <div class="section-label">Review Scores</div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="kv-row"><span class="kv-key">Novelty</span><span class="kv-value">8.4 / 10</span></div>
+        <div class="kv-row"><span class="kv-key">Feasibility</span><span class="kv-value">7.9 / 10</span></div>
+        <div class="kv-row"><span class="kv-key">Significance</span><span class="kv-value">8.1 / 10</span></div>
+      </div>
+      <div class="card">
+        <div class="kv-row"><span class="kv-key">Clarity</span><span class="kv-value">8.7 / 10</span></div>
+        <div class="kv-row"><span class="kv-key">Overall</span><span class="kv-value">8.3 / 10</span></div>
+        <div class="kv-row"><span class="kv-key">Confidence</span><span class="kv-value">High</span></div>
+      </div>
+    </div>
+
+    <div class="section-label">Iteration History</div>
+    <div class="card">
+      <div class="log-entry"><span class="log-time">Iter 1</span><span class="log-msg">Initial draft scored 6.8 &mdash; reviewer flagged weak novelty claim</span></div>
+      <div class="log-entry"><span class="log-time">Iter 2</span><span class="log-msg">Added curvature-routing mechanism, score rose to 7.6</span></div>
+      <div class="log-entry"><span class="log-time">Iter 3</span><span class="log-msg">Refined efficiency claims with concrete benchmarks &mdash; final score 8.3</span></div>
+    </div>
+
+    <div class="section-label">Cost</div>
+    <div class="card purple-accent">
+      <div class="kv-row"><span class="kv-key">LLM calls</span><span class="kv-value">9</span></div>
+      <div class="kv-row"><span class="kv-key">Input tokens</span><span class="kv-value">284,500</span></div>
+      <div class="kv-row"><span class="kv-key">Output tokens</span><span class="kv-value">41,200</span></div>
+      <div class="kv-row"><span class="kv-key">Estimated cost</span><span class="kv-value">$3.42</span></div>
+    </div>
+  </div>
+
+  <!-- ── Stage 2: Invention (Active) ──────────────── -->
+  <div class="stage-view" data-stage="2">
+    <div class="stage-header">
+      <h1>Invention Loop</h1>
+      <div class="meta">
+        <span><span class="status-badge running">Running</span></span>
+        <span>Iteration 2 of 4</span>
+        <span>Elapsed: 8m 22s</span>
+      </div>
+    </div>
+
+    <div class="section-label">Iterations</div>
+    <div class="iter-chips">
+      <span class="iter-chip done">Iter 1 &#10003;</span>
+      <span class="iter-chip current">Iter 2 &#9654;</span>
+      <span class="iter-chip">Iter 3</span>
+      <span class="iter-chip">Iter 4</span>
+    </div>
+
+    <div class="section-label" style="margin-top: 24px;">Current Step: Generate Plan</div>
+    <div class="card blue-accent">
+      <div class="card-title">Experimental Design Plan v2</div>
+      <p>Refining the experimental protocol for CASA. Current plan includes ablation studies on curvature estimation granularity, comparison against top-k and random routing baselines, and scaling experiments from 125M to 1.3B parameters.</p>
+      <div class="progress-bar" style="margin-top: 12px;">
+        <div class="fill" style="width: 65%; background: linear-gradient(90deg, var(--purple), var(--blue));"></div>
+      </div>
+      <div style="font-size: 11px; color: var(--text-dim); margin-top: 4px;">Step 2 of 5 &mdash; Plan generation 65% complete</div>
+    </div>
+
+    <div class="section-label">Pipeline Steps</div>
+    <div class="card">
+      <ul>
+        <li style="color: var(--green);">&#10003; Generate strategy &mdash; complete</li>
+        <li style="color: var(--blue);">&#9654; Generate plan &mdash; in progress</li>
+        <li>Generate paper text &mdash; pending</li>
+        <li>Generate figures &mdash; pending</li>
+        <li>Review paper &mdash; pending</li>
+      </ul>
+    </div>
+
+    <div class="section-label">Iteration 1 Summary</div>
+    <div class="card">
+      <div class="card-title">Plan v1 Review Feedback</div>
+      <p>Reviewer noted that the ablation matrix was too sparse &mdash; missing interaction effects between curvature window size and head count. Also requested explicit FLOPs measurements alongside wall-clock time. Plan v2 addresses both.</p>
+    </div>
+
+    <div class="section-label">Live Output</div>
+    <div class="card">
+      <div class="log-entry"><span class="log-time">14:18</span><span class="log-msg">Invention loop started &mdash; iteration 2</span></div>
+      <div class="log-entry"><span class="log-time">14:19</span><span class="log-msg">Strategy refinement complete, forwarding to plan gen</span></div>
+      <div class="log-entry"><span class="log-time">14:20</span><span class="log-msg">Plan generation in progress &mdash; section 3/5</span></div>
+      <div class="log-entry"><span class="log-time">14:22</span><span class="log-msg">Ablation matrix expanded: 4x3 grid (curvature window x head count)</span></div>
+      <div class="log-entry"><span class="log-time">14:23</span><span class="log-msg">Adding FLOPs instrumentation to protocol...</span></div>
+    </div>
+
+    <div class="section-label">Cost So Far</div>
+    <div class="card blue-accent">
+      <div class="kv-row"><span class="kv-key">LLM calls</span><span class="kv-value">14</span></div>
+      <div class="kv-row"><span class="kv-key">Input tokens</span><span class="kv-value">512,300</span></div>
+      <div class="kv-row"><span class="kv-key">Output tokens</span><span class="kv-value">78,600</span></div>
+      <div class="kv-row"><span class="kv-key">Estimated cost</span><span class="kv-value">$6.18</span></div>
+    </div>
+  </div>
+
+  <!-- ── Stage 3: Paper ───────────────────────────── -->
+  <div class="stage-view" data-stage="3">
+    <div class="stage-header">
+      <h1>Paper Generation</h1>
+      <div class="meta">
+        <span><span class="status-badge pending">Pending</span></span>
+        <span>Waiting for invention loop</span>
+      </div>
+    </div>
+
+    <div class="card gray-accent">
+      <div class="card-title">Awaiting Upstream</div>
+      <p>Paper generation will begin once the invention loop completes all iterations and produces the final experimental plan and paper text. Expected steps:</p>
+      <ul>
+        <li>Generate artifact demos (interactive visualizations)</li>
+        <li>Generate static figures (matplotlib/tikz)</li>
+        <li>Compile full LaTeX paper</li>
+        <li>Build paper repository</li>
+      </ul>
+    </div>
+
+    <div class="section-label">Expected Outputs</div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title">LaTeX Paper</div>
+        <p>Full camera-ready paper with abstract, methods, experiments, results, and references in NeurIPS format.</p>
+      </div>
+      <div class="card">
+        <div class="card-title">Code Repository</div>
+        <p>Reproducible implementation with training scripts, evaluation code, and configuration files.</p>
+      </div>
+      <div class="card">
+        <div class="card-title">Visualizations</div>
+        <p>Interactive HTML demos and static PDF figures for all key results and ablation studies.</p>
+      </div>
+      <div class="card">
+        <div class="card-title">Supplementary</div>
+        <p>Extended appendix with full ablation tables, hyperparameter sensitivity analysis, and additional baselines.</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ─── Nav Hint ─────────────────────────────────────────── -->
+<div class="nav-hint">
+  <kbd>&larr;</kbd> <kbd>&rarr;</kbd> navigate stages
+</div>
+
+<!-- ─── Script ───────────────────────────────────────────── -->
+<script>
+(function() {
+  const stages    = ['seed', 'hypo', 'invention', 'paper'];
+  const activeIdx = 2;  // invention is running
+  let   current   = 0;
+
+  const dotGroups = document.querySelectorAll('.dot-group');
+  const views     = document.querySelectorAll('.stage-view');
+  const lineFill  = document.getElementById('lineFill');
+
+  /* ── Gradient builder ─────────────────────────────────── */
+  const colors = ['var(--green)', 'var(--purple)', 'var(--blue)', 'var(--gray)'];
+  const rawColors = ['#34d399', '#a78bfa', '#60a5fa', '#4a4a5a'];
+
+  function updateLineFill() {
+    // Fill up to the active stage dot position
+    const positions = [0, 33.33, 66.66, 100];
+    const fillTo = positions[activeIdx];
+    lineFill.style.width = fillTo + '%';
+
+    // Build gradient from stage colors up to active
+    if (activeIdx === 0) {
+      lineFill.style.background = rawColors[0];
+    } else {
+      const stops = [];
+      for (let i = 0; i <= activeIdx; i++) {
+        const pct = (positions[i] / fillTo) * 100;
+        stops.push(rawColors[i] + ' ' + pct + '%');
+      }
+      lineFill.style.background = 'linear-gradient(90deg, ' + stops.join(', ') + ')';
+    }
+  }
+
+  /* ── View switching ───────────────────────────────────── */
+  function goTo(idx) {
+    if (idx < 0 || idx >= stages.length) return;
+    current = idx;
+
+    // Update selected state on dots
+    dotGroups.forEach(function(g) {
+      g.classList.remove('selected');
+    });
+    dotGroups[idx].classList.add('selected');
+
+    // Show matching content
+    views.forEach(function(v) {
+      v.classList.remove('visible');
+    });
+    views[idx].classList.add('visible');
+  }
+
+  /* Make goTo global for onclick */
+  window.goTo = goTo;
+
+  /* ── Keyboard navigation ──────────────────────────────── */
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      goTo(current + 1);
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      goTo(current - 1);
+    }
+  });
+
+  /* ── Init ─────────────────────────────────────────────── */
+  updateLineFill();
+  goTo(0);
+})();
+</script>
+
+</body>
+</html>

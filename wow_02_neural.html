@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Neural Network Pipeline</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #06060e;
+    font-family: 'Inter', system-ui, sans-serif;
+    color: #e0e0e0;
+    overflow: hidden;
+    width: 100vw;
+    height: 100vh;
+  }
+
+  canvas#bg {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+  }
+
+  canvas#main {
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+  }
+
+  /* ── Layer column headers ── */
+  .layer-labels {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 2;
+    pointer-events: none;
+  }
+  .layer-label {
+    position: absolute;
+    top: 38px;
+    text-align: center;
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: 1.6px;
+    text-transform: uppercase;
+    opacity: 0.72;
+    transition: opacity 0.3s;
+  }
+  .layer-label .sub {
+    display: block;
+    font-size: 10px;
+    font-weight: 400;
+    letter-spacing: 0.8px;
+    opacity: 0.55;
+    margin-top: 3px;
+  }
+
+  /* ── Tooltip ── */
+  #tooltip {
+    position: fixed;
+    z-index: 10;
+    pointer-events: none;
+    background: rgba(10, 10, 22, 0.92);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px;
+    padding: 12px 16px;
+    font-size: 12.5px;
+    line-height: 1.6;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    opacity: 0;
+    transition: opacity 0.18s;
+    max-width: 240px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  }
+  #tooltip.visible { opacity: 1; }
+  #tooltip .tt-name {
+    font-weight: 600;
+    font-size: 13.5px;
+    margin-bottom: 4px;
+  }
+  #tooltip .tt-status {
+    display: inline-block;
+    padding: 1px 8px;
+    border-radius: 6px;
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+  }
+  #tooltip .tt-metric {
+    opacity: 0.6;
+    font-size: 11.5px;
+  }
+
+  /* ── Bottom bar ── */
+  .bottom-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    padding: 16px 32px;
+    font-size: 12px;
+    letter-spacing: 0.6px;
+    color: rgba(255,255,255,0.45);
+    background: linear-gradient(to top, rgba(6,6,14,0.9) 0%, transparent 100%);
+    pointer-events: none;
+  }
+  .bottom-bar span { white-space: nowrap; }
+  .bottom-bar .sep { opacity: 0.25; }
+  .bottom-bar .brand {
+    font-weight: 600;
+    color: rgba(255,255,255,0.62);
+  }
+  .bottom-bar .active-step {
+    color: #7b8aff;
+    font-weight: 500;
+  }
+</style>
+</head>
+<body>
+
+<canvas id="bg"></canvas>
+<canvas id="main"></canvas>
+
+<div class="layer-labels" id="layerLabels"></div>
+
+<div id="tooltip">
+  <div class="tt-name"></div>
+  <div class="tt-status"></div>
+  <div class="tt-metric"></div>
+</div>
+
+<div class="bottom-bar">
+  <span class="brand">AI Inventor</span>
+  <span class="sep">/</span>
+  <span>ssl-low-resource-v3</span>
+  <span class="sep">/</span>
+  <span class="active-step">Invention Loop Iter 2</span>
+  <span class="sep">/</span>
+  <span id="clock">00:00:00</span>
+</div>
+
+<script>
+// ============================================================
+//  CONFIG
+// ============================================================
+const LAYER_COLORS = {
+  seed:       { r: 52, g: 211, b: 153 },   // green
+  hypothesis: { r: 167, g: 109, b: 255 },  // purple
+  invention:  { r: 79, g: 140, b: 255 },   // blue
+  paper:      { r: 255, g: 167, b: 68 },   // orange
+};
+
+const LAYERS = [
+  {
+    id: 'seed', label: 'Seed', sub: 'Knowledge Sources', count: 3,
+    color: LAYER_COLORS.seed,
+    nodes: [
+      { name: 'ArXiv Corpus',        status: 'complete', metric: '2,847 papers ingested' },
+      { name: 'Domain Ontology',     status: 'complete', metric: 'SSL + NLP taxonomy loaded' },
+      { name: 'Gap Analysis',        status: 'complete', metric: '14 research gaps identified' },
+    ]
+  },
+  {
+    id: 'hypothesis', label: 'Hypothesis', sub: 'Generation & Review', count: 6,
+    color: LAYER_COLORS.hypothesis,
+    nodes: [
+      { name: 'Hypo Gen (Iter 1)',     status: 'complete', metric: '8 hypotheses generated' },
+      { name: 'Hypo Review (Iter 1)',   status: 'complete', metric: 'Score: 7.4 / 10' },
+      { name: 'Hypo Gen (Iter 2)',     status: 'complete', metric: '6 hypotheses generated' },
+      { name: 'Hypo Review (Iter 2)',   status: 'complete', metric: 'Score: 8.1 / 10' },
+      { name: 'Hypo Gen (Iter 3)',     status: 'complete', metric: '5 hypotheses generated' },
+      { name: 'Hypo Review (Iter 3)',   status: 'complete', metric: 'Score: 8.9 / 10' },
+    ]
+  },
+  {
+    id: 'invention', label: 'Invention', sub: 'Loop Iterations', count: 12,
+    color: LAYER_COLORS.invention,
+    nodes: [
+      { name: 'Gen Strategy (I1)',   status: 'complete', metric: '3 strategies proposed' },
+      { name: 'Gen Plan (I1)',       status: 'complete', metric: '12 experiment steps' },
+      { name: 'Gen Figures (I1)',    status: 'complete', metric: '4 figures designed' },
+      { name: 'Gen Paper Text (I1)', status: 'complete', metric: '3,200 words drafted' },
+      { name: 'Review Paper (I1)',   status: 'complete', metric: 'Accepted with revisions' },
+      { name: 'Revision (I1)',       status: 'complete', metric: 'All 5 issues resolved' },
+      { name: 'Gen Strategy (I2)',   status: 'complete', metric: '4 strategies proposed' },
+      { name: 'Gen Plan (I2)',       status: 'active',   metric: '8 / 14 steps planned' },
+      { name: 'Gen Figures (I2)',    status: 'active',   metric: '2 / 5 figures rendering' },
+      { name: 'Gen Paper Text (I2)', status: 'pending',  metric: 'Awaiting plan + figures' },
+      { name: 'Review Paper (I2)',   status: 'pending',  metric: 'Queued' },
+      { name: 'Revision (I2)',       status: 'pending',  metric: 'Queued' },
+    ]
+  },
+  {
+    id: 'paper', label: 'Paper', sub: 'Output Generation', count: 4,
+    color: LAYER_COLORS.paper,
+    nodes: [
+      { name: 'Artifact Demos',  status: 'pending', metric: 'Awaiting invention loop' },
+      { name: 'Visualizations',  status: 'pending', metric: '0 / 6 charts' },
+      { name: 'Full Paper',      status: 'pending', metric: 'LaTeX compilation pending' },
+      { name: 'Repository',      status: 'pending', metric: 'GitHub repo not yet created' },
+    ]
+  },
+];
+
+// ============================================================
+//  CANVAS SETUP
+// ============================================================
+const bgCanvas  = document.getElementById('bg');
+const bgCtx     = bgCanvas.getContext('2d');
+const canvas    = document.getElementById('main');
+const ctx       = canvas.getContext('2d');
+let W, H, dpr;
+
+function resize() {
+  dpr = window.devicePixelRatio || 1;
+  W = window.innerWidth;
+  H = window.innerHeight;
+  bgCanvas.width  = canvas.width  = W * dpr;
+  bgCanvas.height = canvas.height = H * dpr;
+  bgCanvas.style.width  = canvas.style.width  = W + 'px';
+  bgCanvas.style.height = canvas.style.height = H + 'px';
+  bgCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  buildLayout();
+}
+window.addEventListener('resize', resize);
+
+// ============================================================
+//  LAYOUT — place nodes & build connections
+// ============================================================
+let nodes = [];
+let connections = [];
+const MARGIN_X = 0.12;   // fraction of W
+const MARGIN_TOP = 100;
+const MARGIN_BOT = 80;
+
+function buildLayout() {
+  nodes = [];
+  connections = [];
+
+  const layerCount = LAYERS.length;
+  const usableW = W * (1 - 2 * MARGIN_X);
+  const startX  = W * MARGIN_X;
+  const usableH = H - MARGIN_TOP - MARGIN_BOT;
+
+  // Place nodes per layer
+  LAYERS.forEach((layer, li) => {
+    const cx = startX + (usableW / (layerCount - 1)) * li;
+    const n  = layer.count;
+    const spacing = Math.min(usableH / (n + 1), 68);
+    const totalH  = spacing * (n - 1);
+    const topY    = MARGIN_TOP + (usableH - totalH) / 2;
+
+    layer.nodes.forEach((nd, ni) => {
+      const baseRadius = li === 2 ? 10 : (li === 1 ? 12 : 14);
+      nodes.push({
+        x: cx,
+        y: topY + spacing * ni,
+        r: baseRadius,
+        layer: li,
+        index: ni,
+        color: layer.color,
+        data: nd,
+      });
+    });
+  });
+
+  // Build connections between adjacent layers
+  let idxOffset = 0;
+  for (let li = 0; li < layerCount - 1; li++) {
+    const curLayer  = LAYERS[li];
+    const nextLayer = LAYERS[li + 1];
+    const curStart  = idxOffset;
+    const nextStart = idxOffset + curLayer.count;
+
+    for (let a = 0; a < curLayer.count; a++) {
+      for (let b = 0; b < nextLayer.count; b++) {
+        const from = nodes[curStart + a];
+        const to   = nodes[nextStart + b];
+        const fromStatus = from.data.status;
+        const toStatus   = to.data.status;
+
+        let state = 'pending';
+        if (fromStatus === 'complete' && toStatus === 'complete') state = 'complete';
+        else if (fromStatus === 'complete' && toStatus === 'active') state = 'active';
+        else if (fromStatus === 'active' && toStatus === 'active') state = 'active';
+        else if (fromStatus === 'active' && toStatus === 'pending') state = 'dimactive';
+
+        connections.push({
+          from, to, state,
+          path: computeCurvePath(from, to),
+        });
+      }
+    }
+    idxOffset += curLayer.count;
+  }
+
+  // Render labels
+  renderLayerLabels(startX, usableW, layerCount);
+
+  // Rebuild pulses
+  buildPulses();
+}
+
+function computeCurvePath(a, b) {
+  const dx = b.x - a.x;
+  const cpOff = dx * 0.42;
+  return { ax: a.x, ay: a.y, bx: b.x, by: b.y, cp1x: a.x + cpOff, cp1y: a.y, cp2x: b.x - cpOff, cp2y: b.y };
+}
+
+// ============================================================
+//  LAYER LABELS (DOM overlay)
+// ============================================================
+function renderLayerLabels(startX, usableW, layerCount) {
+  const el = document.getElementById('layerLabels');
+  el.innerHTML = '';
+  LAYERS.forEach((layer, li) => {
+    const cx = startX + (usableW / (layerCount - 1)) * li;
+    const div = document.createElement('div');
+    div.className = 'layer-label';
+    const c = layer.color;
+    div.style.left = (cx - 70) + 'px';
+    div.style.width = '140px';
+    div.style.color = `rgb(${c.r},${c.g},${c.b})`;
+    div.innerHTML = `${layer.label}<span class="sub">${layer.sub}</span>`;
+    el.appendChild(div);
+  });
+}
+
+// ============================================================
+//  PULSES
+// ============================================================
+let pulses = [];
+
+function buildPulses() {
+  pulses = [];
+  connections.forEach(conn => {
+    if (conn.state === 'pending') return;
+
+    const count = conn.state === 'active' ? randInt(3, 5)
+                : conn.state === 'dimactive' ? randInt(1, 2)
+                : randInt(1, 2);
+
+    for (let i = 0; i < count; i++) {
+      pulses.push(createPulse(conn));
+    }
+  });
+}
+
+function createPulse(conn) {
+  const speed = conn.state === 'active' ? rand(0.18, 0.38)
+              : conn.state === 'dimactive' ? rand(0.08, 0.16)
+              : rand(0.04, 0.10);
+  return {
+    conn,
+    t: rand(0, 1),          // position along path [0..1]
+    speed,                   // units per second
+    size: conn.state === 'active' ? rand(4, 7) : rand(3, 5),
+    brightness: conn.state === 'active' ? rand(0.85, 1) : rand(0.4, 0.7),
+  };
+}
+
+// ============================================================
+//  BACKGROUND — subtle grid + radial glow
+// ============================================================
+let bgDirty = true;
+
+function drawBG() {
+  if (!bgDirty) return;
+  bgDirty = false;
+
+  bgCtx.fillStyle = '#06060e';
+  bgCtx.fillRect(0, 0, W, H);
+
+  // Radial glow behind active layer (invention)
+  const invX = W * MARGIN_X + (W * (1 - 2 * MARGIN_X)) / 3 * 2;
+  const grad = bgCtx.createRadialGradient(invX, H * 0.5, 0, invX, H * 0.5, H * 0.7);
+  grad.addColorStop(0, 'rgba(79,140,255,0.045)');
+  grad.addColorStop(0.5, 'rgba(79,140,255,0.015)');
+  grad.addColorStop(1, 'transparent');
+  bgCtx.fillStyle = grad;
+  bgCtx.fillRect(0, 0, W, H);
+
+  // Secondary glow at hypothesis layer
+  const hypoX = W * MARGIN_X + (W * (1 - 2 * MARGIN_X)) / 3;
+  const grad2 = bgCtx.createRadialGradient(hypoX, H * 0.5, 0, hypoX, H * 0.5, H * 0.55);
+  grad2.addColorStop(0, 'rgba(167,109,255,0.025)');
+  grad2.addColorStop(1, 'transparent');
+  bgCtx.fillStyle = grad2;
+  bgCtx.fillRect(0, 0, W, H);
+
+  // Subtle dot grid
+  bgCtx.fillStyle = 'rgba(255,255,255,0.018)';
+  const gs = 40;
+  for (let x = gs; x < W; x += gs) {
+    for (let y = gs; y < H; y += gs) {
+      bgCtx.beginPath();
+      bgCtx.arc(x, y, 0.7, 0, Math.PI * 2);
+      bgCtx.fill();
+    }
+  }
+}
+
+// ============================================================
+//  DRAW CONNECTIONS
+// ============================================================
+function drawConnections() {
+  connections.forEach(conn => {
+    const p = conn.path;
+    ctx.beginPath();
+    ctx.moveTo(p.ax, p.ay);
+    ctx.bezierCurveTo(p.cp1x, p.cp1y, p.cp2x, p.cp2y, p.bx, p.by);
+
+    if (conn.state === 'complete') {
+      const fc = conn.from.color;
+      const tc = conn.to.color;
+      const gr = ctx.createLinearGradient(p.ax, p.ay, p.bx, p.by);
+      gr.addColorStop(0, `rgba(${fc.r},${fc.g},${fc.b},0.18)`);
+      gr.addColorStop(1, `rgba(${tc.r},${tc.g},${tc.b},0.18)`);
+      ctx.strokeStyle = gr;
+      ctx.lineWidth = 1.2;
+      ctx.stroke();
+    } else if (conn.state === 'active') {
+      const fc = conn.from.color;
+      const tc = conn.to.color;
+      const gr = ctx.createLinearGradient(p.ax, p.ay, p.bx, p.by);
+      gr.addColorStop(0, `rgba(${fc.r},${fc.g},${fc.b},0.28)`);
+      gr.addColorStop(1, `rgba(${tc.r},${tc.g},${tc.b},0.28)`);
+      ctx.strokeStyle = gr;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    } else if (conn.state === 'dimactive') {
+      ctx.strokeStyle = 'rgba(79,140,255,0.08)';
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+    } else {
+      ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+      ctx.lineWidth = 0.5;
+      ctx.setLineDash([4, 6]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  });
+}
+
+// ============================================================
+//  DRAW NODES
+// ============================================================
+function drawNodes(time) {
+  nodes.forEach(n => {
+    const c = n.color;
+    const s = n.data.status;
+    const isActive = s === 'active';
+    const isComplete = s === 'complete';
+    const isPending = s === 'pending';
+
+    // Outer glow for active / complete
+    if (isActive || isComplete) {
+      const glowR = n.r * (isActive ? 3.5 : 2.2);
+      const pulseScale = isActive ? 1 + 0.15 * Math.sin(time * 3 + n.index) : 1;
+      const gr = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, glowR * pulseScale);
+      const alpha = isActive ? 0.28 : 0.12;
+      gr.addColorStop(0, `rgba(${c.r},${c.g},${c.b},${alpha})`);
+      gr.addColorStop(1, `rgba(${c.r},${c.g},${c.b},0)`);
+      ctx.fillStyle = gr;
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, glowR * pulseScale, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Ring for active nodes
+    if (isActive) {
+      const ringR = n.r + 5 + 2 * Math.sin(time * 2.5 + n.index * 0.7);
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, ringR, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(${c.r},${c.g},${c.b},0.3)`;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    // Core circle
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+    if (isPending) {
+      ctx.fillStyle = `rgba(${c.r},${c.g},${c.b},0.12)`;
+      ctx.fill();
+      ctx.strokeStyle = `rgba(${c.r},${c.g},${c.b},0.2)`;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    } else {
+      const alpha = isActive ? 0.95 : 0.7;
+      ctx.fillStyle = `rgba(${c.r},${c.g},${c.b},${alpha})`;
+      ctx.fill();
+    }
+
+    // Inner bright spot
+    if (!isPending) {
+      const innerGr = ctx.createRadialGradient(n.x - n.r * 0.25, n.y - n.r * 0.25, 0, n.x, n.y, n.r);
+      innerGr.addColorStop(0, `rgba(255,255,255,${isActive ? 0.45 : 0.2})`);
+      innerGr.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = innerGr;
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  });
+}
+
+// ============================================================
+//  DRAW PULSES — the electric signals
+// ============================================================
+function bezierPoint(t, ax, ay, cp1x, cp1y, cp2x, cp2y, bx, by) {
+  const u = 1 - t;
+  const tt = t * t, uu = u * u;
+  const uuu = uu * u, ttt = tt * t;
+  return {
+    x: uuu * ax + 3 * uu * t * cp1x + 3 * u * tt * cp2x + ttt * bx,
+    y: uuu * ay + 3 * uu * t * cp1y + 3 * u * tt * cp2y + ttt * by,
+  };
+}
+
+function drawPulses(time, dt) {
+  pulses.forEach(pulse => {
+    pulse.t += pulse.speed * dt;
+    if (pulse.t > 1) pulse.t -= 1;
+
+    const p = pulse.conn.path;
+    const pos = bezierPoint(pulse.t, p.ax, p.ay, p.cp1x, p.cp1y, p.cp2x, p.cp2y, p.bx, p.by);
+
+    // Comet trail — draw several trailing dots
+    const tailLen = 6;
+    const fc = pulse.conn.from.color;
+    const tc = pulse.conn.to.color;
+    const cr = lerp(fc.r, tc.r, pulse.t);
+    const cg = lerp(fc.g, tc.g, pulse.t);
+    const cb = lerp(fc.b, tc.b, pulse.t);
+
+    for (let i = tailLen; i >= 0; i--) {
+      const tt = pulse.t - i * 0.018;
+      if (tt < 0) continue;
+      const tp = bezierPoint(tt, p.ax, p.ay, p.cp1x, p.cp1y, p.cp2x, p.cp2y, p.bx, p.by);
+      const frac = 1 - i / tailLen;
+      const alpha = frac * frac * pulse.brightness * 0.7;
+      const sz = pulse.size * frac;
+      ctx.beginPath();
+      ctx.arc(tp.x, tp.y, sz, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${cr|0},${cg|0},${cb|0},${alpha})`;
+      ctx.fill();
+    }
+
+    // Head glow
+    const headGr = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, pulse.size * 3);
+    headGr.addColorStop(0, `rgba(${cr|0},${cg|0},${cb|0},${pulse.brightness * 0.5})`);
+    headGr.addColorStop(0.5, `rgba(${cr|0},${cg|0},${cb|0},${pulse.brightness * 0.12})`);
+    headGr.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = headGr;
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, pulse.size * 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Bright core
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, pulse.size * 0.6, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(255,255,255,${pulse.brightness * 0.85})`;
+    ctx.fill();
+  });
+}
+
+// ============================================================
+//  FLOATING PARTICLES — ambient dust
+// ============================================================
+const particles = [];
+const PARTICLE_COUNT = 80;
+
+function initParticles() {
+  for (let i = 0; i < PARTICLE_COUNT; i++) {
+    particles.push({
+      x: rand(0, W),
+      y: rand(0, H),
+      vx: rand(-6, 6),
+      vy: rand(-4, 4),
+      size: rand(0.4, 1.4),
+      alpha: rand(0.03, 0.1),
+      life: rand(0, 1),
+    });
+  }
+}
+
+function drawParticles(dt) {
+  particles.forEach(p => {
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.life += dt * 0.08;
+    if (p.x < -10 || p.x > W + 10 || p.y < -10 || p.y > H + 10 || p.life > 1) {
+      p.x = rand(0, W);
+      p.y = rand(0, H);
+      p.life = 0;
+    }
+    const a = p.alpha * Math.sin(p.life * Math.PI);
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(180,200,255,${a})`;
+    ctx.fill();
+  });
+}
+
+// ============================================================
+//  TOOLTIP / HOVER
+// ============================================================
+const tooltip = document.getElementById('tooltip');
+let hoveredNode = null;
+
+canvas.addEventListener('mousemove', e => {
+  const mx = e.clientX, my = e.clientY;
+  let found = null;
+  for (const n of nodes) {
+    const dx = mx - n.x, dy = my - n.y;
+    if (dx * dx + dy * dy < (n.r + 12) * (n.r + 12)) {
+      found = n;
+      break;
+    }
+  }
+  hoveredNode = found;
+
+  if (found) {
+    const d = found.data;
+    const c = found.color;
+    tooltip.querySelector('.tt-name').textContent = d.name;
+
+    const statusEl = tooltip.querySelector('.tt-status');
+    statusEl.textContent = d.status.charAt(0).toUpperCase() + d.status.slice(1);
+    const statusColors = {
+      complete: 'rgba(52,211,153,0.2)',
+      active:   'rgba(79,140,255,0.25)',
+      pending:  'rgba(255,255,255,0.07)',
+    };
+    const statusTextColors = {
+      complete: 'rgb(52,211,153)',
+      active:   'rgb(130,170,255)',
+      pending:  'rgba(255,255,255,0.4)',
+    };
+    statusEl.style.background = statusColors[d.status] || statusColors.pending;
+    statusEl.style.color = statusTextColors[d.status] || statusTextColors.pending;
+
+    tooltip.querySelector('.tt-metric').textContent = d.metric;
+
+    let tx = mx + 16, ty = my - 10;
+    if (tx + 250 > W) tx = mx - 256;
+    if (ty + 100 > H) ty = my - 100;
+    tooltip.style.left = tx + 'px';
+    tooltip.style.top  = ty + 'px';
+    tooltip.style.borderColor = `rgba(${c.r},${c.g},${c.b},0.3)`;
+    tooltip.classList.add('visible');
+    canvas.style.cursor = 'pointer';
+  } else {
+    tooltip.classList.remove('visible');
+    canvas.style.cursor = 'default';
+  }
+});
+
+// ============================================================
+//  CLOCK
+// ============================================================
+const clockEl = document.getElementById('clock');
+const baseSeconds = 2 * 3600 + 34 * 60 + 17;
+const clockStart = performance.now();
+
+function updateClock() {
+  const elapsed = (performance.now() - clockStart) / 1000;
+  const total = baseSeconds + elapsed;
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = Math.floor(total % 60);
+  clockEl.textContent =
+    String(h).padStart(2, '0') + ':' +
+    String(m).padStart(2, '0') + ':' +
+    String(s).padStart(2, '0');
+}
+
+// ============================================================
+//  MAIN LOOP
+// ============================================================
+let lastTime = 0;
+
+function frame(ts) {
+  const time = ts / 1000;
+  const dt = Math.min(time - lastTime, 0.05);
+  lastTime = time;
+
+  drawBG();
+
+  ctx.clearRect(0, 0, W, H);
+  drawConnections();
+  drawParticles(dt);
+  drawPulses(time, dt);
+  drawNodes(time);
+
+  // Hovered node highlight ring
+  if (hoveredNode) {
+    const n = hoveredNode;
+    const c = n.color;
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, n.r + 8, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(${c.r},${c.g},${c.b},0.5)`;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+
+  updateClock();
+  requestAnimationFrame(frame);
+}
+
+// ============================================================
+//  UTILS
+// ============================================================
+function rand(a, b) { return a + Math.random() * (b - a); }
+function randInt(a, b) { return Math.floor(rand(a, b + 1)); }
+function lerp(a, b, t) { return a + (b - a) * t; }
+
+// ============================================================
+//  BOOT
+// ============================================================
+resize();
+initParticles();
+requestAnimationFrame(frame);
+window.addEventListener('resize', () => { bgDirty = true; });
+</script>
+</body>
+</html>

@@ -1,0 +1,1117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Drill-Down Breadcrumb Navigator</title>
+<style>
+  :root {
+    --bg: #0a0c10;
+    --surface: #12151c;
+    --surface2: #1a1e28;
+    --border: #252a36;
+    --text: #c8cdd8;
+    --text-dim: #6b7280;
+    --text-bright: #e8ecf4;
+    --accent: #7c6aef;
+    --accent-glow: rgba(124, 106, 239, 0.35);
+    --green: #34d399;
+    --green-glow: rgba(52, 211, 153, 0.3);
+    --amber: #f59e0b;
+    --amber-glow: rgba(245, 158, 11, 0.3);
+    --blue: #60a5fa;
+    --blue-glow: rgba(96, 165, 250, 0.3);
+    --red: #f87171;
+    --row-transition: 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Overall Progress Bar ── */
+  .overall-bar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: var(--surface2);
+    z-index: 100;
+  }
+  .overall-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--blue));
+    border-radius: 0 2px 2px 0;
+    transition: width 0.6s ease;
+    box-shadow: 0 0 8px var(--accent-glow);
+  }
+  .overall-label {
+    position: fixed;
+    top: 6px; right: 16px;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-dim);
+    letter-spacing: 0.5px;
+    z-index: 101;
+  }
+
+  /* ── Navigator Container ── */
+  .navigator {
+    position: fixed;
+    top: 3px; left: 0; right: 0;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    z-index: 50;
+    padding: 10px 0 6px;
+    transition: padding var(--row-transition);
+  }
+
+  /* ── Row Shared ── */
+  .nav-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    padding: 6px 24px;
+    transition: all var(--row-transition);
+    overflow: hidden;
+    position: relative;
+  }
+  .nav-row.compressed {
+    padding: 2px 24px;
+    cursor: pointer;
+    opacity: 0.7;
+  }
+  .nav-row.compressed:hover {
+    opacity: 1;
+    background: rgba(124, 106, 239, 0.04);
+  }
+  .nav-row.entering {
+    animation: rowSlideIn 0.4s ease forwards;
+  }
+  @keyframes rowSlideIn {
+    from { opacity: 0; transform: translateY(-8px); max-height: 0; }
+    to   { opacity: 1; transform: translateY(0);  max-height: 60px; }
+  }
+  .nav-row.collapsing {
+    animation: rowCollapse 0.35s ease forwards;
+  }
+  @keyframes rowCollapse {
+    from { max-height: 60px; }
+    to   { max-height: 0; padding: 0; opacity: 0; }
+  }
+
+  /* ── Step Node ── */
+  .step {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    cursor: pointer;
+    position: relative;
+    user-select: none;
+    flex-shrink: 0;
+  }
+
+  .step-marker {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--row-transition);
+  }
+
+  /* Full-size markers */
+  .step-marker .diamond,
+  .step-marker .circle {
+    transition: all var(--row-transition);
+  }
+
+  /* Diamond marker (level 1) */
+  .step-marker .diamond {
+    width: 14px; height: 14px;
+    transform: rotate(45deg);
+    border: 2px solid var(--text-dim);
+    border-radius: 2px;
+    position: relative;
+  }
+  .step-marker .diamond .inner {
+    position: absolute;
+    top: 2px; left: 2px; right: 2px; bottom: 2px;
+    border-radius: 1px;
+    background: transparent;
+    transition: background 0.3s;
+  }
+
+  /* Circle marker (level 2+) */
+  .step-marker .circle {
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    border: 2px solid var(--text-dim);
+    position: relative;
+  }
+  .step-marker .circle .inner {
+    position: absolute;
+    top: 2px; left: 2px; right: 2px; bottom: 2px;
+    border-radius: 50%;
+    background: transparent;
+    transition: background 0.3s;
+  }
+
+  /* ── State Colors ── */
+  .step.done .diamond,
+  .step.done .circle {
+    border-color: var(--green);
+    box-shadow: 0 0 6px var(--green-glow);
+  }
+  .step.done .diamond .inner,
+  .step.done .circle .inner {
+    background: var(--green);
+  }
+
+  .step.active .diamond,
+  .step.active .circle {
+    border-color: var(--accent);
+    box-shadow: 0 0 10px var(--accent-glow);
+    animation: activePulse 2s ease-in-out infinite;
+  }
+  .step.active .diamond .inner,
+  .step.active .circle .inner {
+    background: var(--accent);
+  }
+  @keyframes activePulse {
+    0%, 100% { box-shadow: 0 0 6px var(--accent-glow); }
+    50%      { box-shadow: 0 0 14px var(--accent-glow), 0 0 24px rgba(124,106,239,0.15); }
+  }
+
+  .step.pending .diamond,
+  .step.pending .circle {
+    border-color: var(--text-dim);
+    opacity: 0.5;
+  }
+
+  .step.selected .diamond,
+  .step.selected .circle {
+    border-color: var(--blue);
+    box-shadow: 0 0 10px var(--blue-glow);
+  }
+
+  /* ── Step Label ── */
+  .step-label {
+    margin-left: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-dim);
+    white-space: nowrap;
+    transition: all var(--row-transition);
+  }
+  .step.done .step-label { color: var(--green); }
+  .step.active .step-label { color: var(--accent); font-weight: 600; }
+  .step.selected .step-label { color: var(--blue); }
+
+  .step-badge {
+    margin-left: 4px;
+    font-size: 10px;
+    padding: 1px 5px;
+    border-radius: 6px;
+    font-weight: 600;
+    transition: all var(--row-transition);
+  }
+  .step.done .step-badge {
+    background: rgba(52, 211, 153, 0.12);
+    color: var(--green);
+  }
+  .step.active .step-badge {
+    background: rgba(124, 106, 239, 0.12);
+    color: var(--accent);
+  }
+
+  /* ── Connector Line ── */
+  .connector {
+    width: 40px;
+    height: 2px;
+    background: var(--border);
+    margin: 0 4px;
+    position: relative;
+    flex-shrink: 0;
+    transition: all var(--row-transition);
+  }
+  .connector.done {
+    background: var(--green);
+    box-shadow: 0 0 4px var(--green-glow);
+  }
+  .connector.active {
+    background: linear-gradient(90deg, var(--green), var(--accent));
+  }
+
+  /* ── Compressed Row Styles ── */
+  .compressed .step-label { display: none; }
+  .compressed .step-badge { display: none; }
+  .compressed .connector {
+    width: 12px;
+    margin: 0 2px;
+    opacity: 0.4;
+  }
+  .compressed .step-marker .diamond {
+    width: 8px; height: 8px;
+    border-width: 1.5px;
+  }
+  .compressed .step-marker .diamond .inner {
+    top: 1px; left: 1px; right: 1px; bottom: 1px;
+  }
+  .compressed .step-marker .circle {
+    width: 8px; height: 8px;
+    border-width: 1.5px;
+  }
+  .compressed .step-marker .circle .inner {
+    top: 1px; left: 1px; right: 1px; bottom: 1px;
+  }
+
+  /* Compressed letter label */
+  .step-letter {
+    display: none;
+    margin-left: 3px;
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  .compressed .step-letter { display: inline; }
+  .compressed .step.done .step-letter { color: var(--green); }
+  .compressed .step.active .step-letter { color: var(--accent); }
+  .compressed .step.selected .step-letter { color: var(--blue); }
+
+  /* ── Level Indicator ── */
+  .level-tag {
+    position: absolute;
+    left: 8px;
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--text-dim);
+    letter-spacing: 0.5px;
+    opacity: 0.5;
+    text-transform: uppercase;
+  }
+
+  /* ── Content Area ── */
+  .content-area {
+    margin-top: 0;
+    padding: 24px 32px;
+    transition: margin-top 0.3s ease;
+  }
+
+  .content-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 24px;
+    max-width: 900px;
+    margin: 0 auto;
+    animation: fadeIn 0.3s ease;
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .content-card h2 {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-bright);
+    margin-bottom: 4px;
+  }
+  .content-card .subtitle {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-bottom: 16px;
+  }
+
+  .content-card .detail-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .detail-item {
+    background: var(--surface2);
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+  .detail-item .label {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+  }
+  .detail-item .value {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-bright);
+  }
+  .detail-item .value.green { color: var(--green); }
+  .detail-item .value.amber { color: var(--amber); }
+  .detail-item .value.accent { color: var(--accent); }
+
+  .content-card .log-lines {
+    background: var(--bg);
+    border-radius: 8px;
+    padding: 14px;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 11px;
+    line-height: 1.7;
+    color: var(--text-dim);
+    max-height: 220px;
+    overflow-y: auto;
+  }
+  .log-lines .log-time { color: var(--green); }
+  .log-lines .log-level { color: var(--amber); }
+  .log-lines .log-func { color: var(--blue); }
+  .log-lines .log-msg { color: var(--text); }
+
+  .content-card .status-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 14px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+  }
+  .status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    animation: statusBlink 1.5s ease infinite;
+  }
+  .status-dot.running { background: var(--accent); }
+  .status-dot.done { background: var(--green); animation: none; }
+  @keyframes statusBlink {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.4; }
+  }
+  .status-text {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-dim);
+  }
+
+  /* ── Keyboard Hint ── */
+  .key-hint {
+    position: fixed;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 16px;
+    font-size: 11px;
+    color: var(--text-dim);
+    opacity: 0.5;
+  }
+  .key-hint kbd {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-family: inherit;
+    font-size: 10px;
+    color: var(--text);
+  }
+</style>
+</head>
+<body>
+
+<!-- Overall progress bar -->
+<div class="overall-bar">
+  <div class="overall-bar-fill" id="overallFill" style="width: 0%"></div>
+</div>
+<div class="overall-label" id="overallLabel">0%</div>
+
+<!-- Navigator -->
+<div class="navigator" id="navigator"></div>
+
+<!-- Content -->
+<div class="content-area" id="contentArea"></div>
+
+<!-- Keyboard hints -->
+<div class="key-hint">
+  <span><kbd>&larr;</kbd><kbd>&rarr;</kbd> navigate</span>
+  <span><kbd>Enter</kbd> drill down</span>
+  <span><kbd>Esc</kbd> go back</span>
+</div>
+
+<script>
+// ────────────────────────────────────────────
+// DATA MODEL
+// ────────────────────────────────────────────
+const LEVELS = [
+  {
+    id: 'pipeline',
+    markerType: 'diamond',
+    steps: [
+      {
+        id: 'seed', name: 'Seed', letter: 'S', state: 'done', badge: '\u2713',
+        children: null,
+        detail: {
+          title: 'Seed Hypotheses',
+          subtitle: 'Knowledge graph extraction + initial hypothesis generation',
+          grid: [
+            { label: 'Hypotheses', value: '24', cls: 'green' },
+            { label: 'Duration', value: '4m 12s', cls: '' },
+            { label: 'KG Nodes', value: '1,847', cls: '' },
+            { label: 'Status', value: 'Complete', cls: 'green' }
+          ],
+          logs: [
+            { time: '14:02:31', level: 'INFO', func: 'seed_hypo', msg: 'Loaded 12 source papers from pool' },
+            { time: '14:03:08', level: 'INFO', func: 'build_kg', msg: 'Knowledge graph built: 1,847 nodes, 3,291 edges' },
+            { time: '14:05:44', level: 'INFO', func: 'gen_hypo', msg: 'Generated 24 seed hypotheses' },
+            { time: '14:06:43', level: 'INFO', func: 'seed_hypo', msg: 'Seed phase complete' }
+          ],
+          status: { state: 'done', text: 'Completed at 14:06:43' }
+        }
+      },
+      {
+        id: 'hypo', name: 'Hypothesis', letter: 'H', state: 'done', badge: '8.4',
+        children: null,
+        detail: {
+          title: 'Hypothesis Loop',
+          subtitle: 'Iterative refinement via review + scoring',
+          grid: [
+            { label: 'Score', value: '8.4 / 10', cls: 'green' },
+            { label: 'Iterations', value: '3', cls: '' },
+            { label: 'Candidates', value: '24 \u2192 6', cls: 'amber' },
+            { label: 'Top Hypo', value: 'H-17', cls: 'accent' }
+          ],
+          logs: [
+            { time: '14:06:50', level: 'INFO', func: 'hypo_loop', msg: 'Starting hypothesis refinement loop' },
+            { time: '14:12:18', level: 'INFO', func: 'review_hypo', msg: 'Round 1: 24 \u2192 12 candidates (threshold 6.0)' },
+            { time: '14:18:33', level: 'INFO', func: 'review_hypo', msg: 'Round 2: 12 \u2192 6 candidates (threshold 7.5)' },
+            { time: '14:24:01', level: 'INFO', func: 'review_hypo', msg: 'Round 3: top score 8.4 — converged' }
+          ],
+          status: { state: 'done', text: 'Converged after 3 iterations' }
+        }
+      },
+      {
+        id: 'invention', name: 'Invention', letter: 'I', state: 'active', badge: '3/5',
+        children: 'invention_loop',
+        detail: {
+          title: 'Invention Loop',
+          subtitle: 'Strategy \u2192 Plan \u2192 Artifacts \u2192 Paper \u2192 Review cycle',
+          grid: [
+            { label: 'Iteration', value: '3 of 5', cls: 'amber' },
+            { label: 'Elapsed', value: '18m 44s', cls: '' },
+            { label: 'Current Step', value: 'Artifacts', cls: 'accent' },
+            { label: 'Paper Score', value: '7.1', cls: 'amber' }
+          ],
+          logs: [
+            { time: '14:24:10', level: 'INFO', func: 'inv_loop', msg: 'Invention loop iteration 3 started' },
+            { time: '14:26:31', level: 'INFO', func: 'gen_strat', msg: 'Strategy generated: adaptive-threshold approach' },
+            { time: '14:30:15', level: 'INFO', func: 'gen_plan', msg: 'Plan generated: 4 artifacts, 2 visualizations' },
+            { time: '14:32:00', level: 'INFO', func: 'gen_art', msg: 'Generating artifacts...' }
+          ],
+          status: { state: 'running', text: 'Running artifact generation' }
+        }
+      },
+      {
+        id: 'paper', name: 'Paper', letter: 'P', state: 'pending', badge: '',
+        children: null,
+        detail: {
+          title: 'Paper Generation',
+          subtitle: 'Full paper assembly + repository generation',
+          grid: [
+            { label: 'Status', value: 'Waiting', cls: '' },
+            { label: 'Depends On', value: 'Invention Loop', cls: '' },
+            { label: 'Est. Time', value: '~12 min', cls: '' },
+            { label: 'Outputs', value: 'PDF + Repo', cls: '' }
+          ],
+          logs: [],
+          status: { state: 'pending', text: 'Waiting for invention loop to complete' }
+        }
+      }
+    ]
+  },
+  {
+    id: 'invention_loop',
+    markerType: 'circle',
+    steps: [
+      {
+        id: 'strat', name: 'Strategy', letter: 'S', state: 'done', badge: '\u2713',
+        children: null,
+        detail: {
+          title: 'Generate Strategy',
+          subtitle: 'Invention Loop \u2014 Step 1',
+          grid: [
+            { label: 'Approach', value: 'Adaptive Threshold', cls: 'green' },
+            { label: 'Duration', value: '2m 21s', cls: '' },
+            { label: 'Novelty', value: 'High', cls: 'green' },
+            { label: 'Feasibility', value: 'Medium', cls: 'amber' }
+          ],
+          logs: [
+            { time: '14:24:12', level: 'INFO', func: 'gen_strat', msg: 'Analyzing hypothesis H-17 for invention strategy' },
+            { time: '14:25:40', level: 'INFO', func: 'gen_strat', msg: 'Selected adaptive-threshold approach with 3 variants' },
+            { time: '14:26:31', level: 'INFO', func: 'gen_strat', msg: 'Strategy finalized' }
+          ],
+          status: { state: 'done', text: 'Completed at 14:26:31' }
+        }
+      },
+      {
+        id: 'plan', name: 'Plan', letter: 'P', state: 'done', badge: '\u2713',
+        children: null,
+        detail: {
+          title: 'Generate Plan',
+          subtitle: 'Invention Loop \u2014 Step 2',
+          grid: [
+            { label: 'Artifacts', value: '4 planned', cls: '' },
+            { label: 'Visualizations', value: '2 planned', cls: '' },
+            { label: 'Duration', value: '3m 44s', cls: '' },
+            { label: 'Status', value: 'Complete', cls: 'green' }
+          ],
+          logs: [
+            { time: '14:26:35', level: 'INFO', func: 'gen_plan', msg: 'Planning artifact suite for adaptive-threshold' },
+            { time: '14:28:12', level: 'INFO', func: 'gen_plan', msg: 'Planned: baseline, dataset_gen, proof, ablation' },
+            { time: '14:30:15', level: 'INFO', func: 'gen_plan', msg: 'Plan complete: 4 artifacts, 2 visualizations' }
+          ],
+          status: { state: 'done', text: 'Completed at 14:30:15' }
+        }
+      },
+      {
+        id: 'art', name: 'Artifacts', letter: 'A', state: 'active', badge: '\u25b6',
+        children: 'artifact_gen',
+        detail: {
+          title: 'Generate Artifacts',
+          subtitle: 'Invention Loop \u2014 Step 3',
+          grid: [
+            { label: 'Total', value: '4 artifacts', cls: '' },
+            { label: 'Complete', value: '3 of 4', cls: 'amber' },
+            { label: 'Running', value: 'Ablation', cls: 'accent' },
+            { label: 'Elapsed', value: '12m 45s', cls: '' }
+          ],
+          logs: [
+            { time: '14:30:18', level: 'INFO', func: 'gen_art', msg: 'Starting artifact generation suite' },
+            { time: '14:33:01', level: 'INFO', func: 'gen_art', msg: 'baseline.py \u2014 complete (2m 43s)' },
+            { time: '14:36:22', level: 'INFO', func: 'gen_art', msg: 'dataset_gen.py \u2014 complete (3m 21s)' },
+            { time: '14:39:50', level: 'INFO', func: 'gen_art', msg: 'proof.py \u2014 complete (3m 28s)' },
+            { time: '14:40:02', level: 'INFO', func: 'gen_art', msg: 'ablation.py \u2014 running...' }
+          ],
+          status: { state: 'running', text: 'Running ablation.py' }
+        }
+      },
+      {
+        id: 'paper_text', name: 'Paper', letter: 'P', state: 'pending', badge: '',
+        children: null,
+        detail: {
+          title: 'Generate Paper Text',
+          subtitle: 'Invention Loop \u2014 Step 4',
+          grid: [
+            { label: 'Status', value: 'Waiting', cls: '' },
+            { label: 'Depends On', value: 'Artifacts', cls: '' },
+            { label: 'Sections', value: '6 planned', cls: '' },
+            { label: 'Est. Time', value: '~5 min', cls: '' }
+          ],
+          logs: [],
+          status: { state: 'pending', text: 'Waiting for artifact generation' }
+        }
+      },
+      {
+        id: 'review', name: 'Review', letter: 'R', state: 'pending', badge: '',
+        children: null,
+        detail: {
+          title: 'Review Paper',
+          subtitle: 'Invention Loop \u2014 Step 5',
+          grid: [
+            { label: 'Status', value: 'Waiting', cls: '' },
+            { label: 'Depends On', value: 'Paper Text', cls: '' },
+            { label: 'Criteria', value: '8 metrics', cls: '' },
+            { label: 'Threshold', value: '8.0', cls: '' }
+          ],
+          logs: [],
+          status: { state: 'pending', text: 'Waiting for paper text' }
+        }
+      },
+      {
+        id: 'update', name: 'Update', letter: 'U', state: 'pending', badge: '',
+        children: null,
+        detail: {
+          title: 'Update Strategy',
+          subtitle: 'Invention Loop \u2014 Step 6',
+          grid: [
+            { label: 'Status', value: 'Waiting', cls: '' },
+            { label: 'Depends On', value: 'Review', cls: '' },
+            { label: 'Purpose', value: 'Refine approach', cls: '' },
+            { label: 'Iterations Left', value: '2', cls: '' }
+          ],
+          logs: [],
+          status: { state: 'pending', text: 'Waiting for review feedback' }
+        }
+      }
+    ]
+  },
+  {
+    id: 'artifact_gen',
+    markerType: 'circle',
+    steps: [
+      {
+        id: 'baseline', name: 'Baseline', letter: 'B', state: 'done', badge: '\u2713',
+        children: null,
+        detail: {
+          title: 'Baseline Implementation',
+          subtitle: 'Artifact 1 of 4 \u2014 Reference implementation',
+          grid: [
+            { label: 'File', value: 'baseline.py', cls: '' },
+            { label: 'Lines', value: '284', cls: '' },
+            { label: 'Duration', value: '2m 43s', cls: '' },
+            { label: 'Tests', value: 'Passed', cls: 'green' }
+          ],
+          logs: [
+            { time: '14:30:18', level: 'INFO', func: 'gen_baseline', msg: 'Generating baseline implementation' },
+            { time: '14:31:45', level: 'INFO', func: 'gen_baseline', msg: 'Core algorithm implemented (142 lines)' },
+            { time: '14:32:30', level: 'INFO', func: 'gen_baseline', msg: 'Test harness added, running validation' },
+            { time: '14:33:01', level: 'INFO', func: 'gen_baseline', msg: 'All 6 tests passed \u2014 baseline complete' }
+          ],
+          status: { state: 'done', text: 'Completed at 14:33:01' }
+        }
+      },
+      {
+        id: 'dataset', name: 'Dataset', letter: 'D', state: 'done', badge: '\u2713',
+        children: null,
+        detail: {
+          title: 'Dataset Generator',
+          subtitle: 'Artifact 2 of 4 \u2014 Synthetic evaluation data',
+          grid: [
+            { label: 'File', value: 'dataset_gen.py', cls: '' },
+            { label: 'Samples', value: '10,000', cls: '' },
+            { label: 'Duration', value: '3m 21s', cls: '' },
+            { label: 'Tests', value: 'Passed', cls: 'green' }
+          ],
+          logs: [
+            { time: '14:33:04', level: 'INFO', func: 'gen_dataset', msg: 'Generating synthetic dataset pipeline' },
+            { time: '14:34:50', level: 'INFO', func: 'gen_dataset', msg: 'Generator implemented: 4 distribution modes' },
+            { time: '14:35:55', level: 'INFO', func: 'gen_dataset', msg: 'Validation: 10,000 samples generated, stats nominal' },
+            { time: '14:36:22', level: 'INFO', func: 'gen_dataset', msg: 'Dataset generator complete' }
+          ],
+          status: { state: 'done', text: 'Completed at 14:36:22' }
+        }
+      },
+      {
+        id: 'proof', name: 'Proof', letter: 'P', state: 'done', badge: '\u2713',
+        children: null,
+        detail: {
+          title: 'Convergence Proof',
+          subtitle: 'Artifact 3 of 4 \u2014 Formal correctness argument',
+          grid: [
+            { label: 'File', value: 'proof.py', cls: '' },
+            { label: 'Lemmas', value: '3', cls: '' },
+            { label: 'Duration', value: '3m 28s', cls: '' },
+            { label: 'Verified', value: 'Yes', cls: 'green' }
+          ],
+          logs: [
+            { time: '14:36:25', level: 'INFO', func: 'gen_proof', msg: 'Generating convergence proof scaffold' },
+            { time: '14:37:40', level: 'INFO', func: 'gen_proof', msg: 'Lemma 1 (boundedness) \u2014 proved' },
+            { time: '14:38:50', level: 'INFO', func: 'gen_proof', msg: 'Lemma 2 (monotonicity) \u2014 proved' },
+            { time: '14:39:30', level: 'INFO', func: 'gen_proof', msg: 'Lemma 3 (convergence) \u2014 proved via composition' },
+            { time: '14:39:50', level: 'INFO', func: 'gen_proof', msg: 'Proof complete, all lemmas verified' }
+          ],
+          status: { state: 'done', text: 'Completed at 14:39:50' }
+        }
+      },
+      {
+        id: 'ablation', name: 'Ablation', letter: 'A', state: 'active', badge: '\u25b6',
+        children: null,
+        detail: {
+          title: 'Ablation Study',
+          subtitle: 'Artifact 4 of 4 \u2014 Component importance analysis',
+          grid: [
+            { label: 'File', value: 'ablation.py', cls: '' },
+            { label: 'Variants', value: '6', cls: '' },
+            { label: 'Elapsed', value: '2m 58s', cls: 'amber' },
+            { label: 'Progress', value: '4/6 variants', cls: 'accent' }
+          ],
+          logs: [
+            { time: '14:40:02', level: 'INFO', func: 'gen_ablation', msg: 'Starting ablation study generation' },
+            { time: '14:40:55', level: 'INFO', func: 'gen_ablation', msg: 'Variant 1 (no-threshold) \u2014 implemented' },
+            { time: '14:41:30', level: 'INFO', func: 'gen_ablation', msg: 'Variant 2 (fixed-threshold) \u2014 implemented' },
+            { time: '14:42:10', level: 'INFO', func: 'gen_ablation', msg: 'Variant 3 (no-adaptation) \u2014 implemented' },
+            { time: '14:42:48', level: 'INFO', func: 'gen_ablation', msg: 'Variant 4 (linear-decay) \u2014 implemented' },
+            { time: '14:42:50', level: 'INFO', func: 'gen_ablation', msg: 'Generating variant 5 (half-features)...' }
+          ],
+          status: { state: 'running', text: 'Generating variant 5 of 6' }
+        }
+      },
+      {
+        id: 'eval', name: 'Evaluation', letter: 'E', state: 'pending', badge: '',
+        children: null,
+        detail: {
+          title: 'Evaluation Runner',
+          subtitle: 'Artifact 5 \u2014 Cross-artifact comparison metrics',
+          grid: [
+            { label: 'Status', value: 'Waiting', cls: '' },
+            { label: 'Depends On', value: 'Ablation', cls: '' },
+            { label: 'Metrics', value: '8 planned', cls: '' },
+            { label: 'Est. Time', value: '~2 min', cls: '' }
+          ],
+          logs: [],
+          status: { state: 'pending', text: 'Waiting for ablation study' }
+        }
+      }
+    ]
+  }
+];
+
+// ────────────────────────────────────────────
+// STATE
+// ────────────────────────────────────────────
+let drillStack = [
+  { levelId: 'pipeline', selectedIdx: 2 }   // Start at Invention
+];
+let activeRowIdx = 0;  // Which row in the stack is "active"
+
+// ────────────────────────────────────────────
+// HELPERS
+// ────────────────────────────────────────────
+function getLevelData(id) {
+  return LEVELS.find(l => l.id === id);
+}
+
+function getActiveLevel() {
+  return drillStack[activeRowIdx];
+}
+
+function computeOverallProgress() {
+  const top = getLevelData('pipeline');
+  let done = 0, total = 0;
+  for (const s of top.steps) {
+    total++;
+    if (s.state === 'done') done++;
+    else if (s.state === 'active') done += 0.5;
+  }
+  // Weight sub-levels
+  const invLevel = getLevelData('invention_loop');
+  if (invLevel) {
+    let subDone = 0, subTotal = 0;
+    for (const s of invLevel.steps) {
+      subTotal++;
+      if (s.state === 'done') subDone++;
+      else if (s.state === 'active') subDone += 0.5;
+    }
+    done += (subDone / subTotal) * 0.3;
+  }
+  return Math.round((done / total) * 100);
+}
+
+// ────────────────────────────────────────────
+// RENDER
+// ────────────────────────────────────────────
+function render() {
+  renderNavigator();
+  renderContent();
+  renderOverallProgress();
+  updateContentOffset();
+}
+
+function renderOverallProgress() {
+  const pct = computeOverallProgress();
+  document.getElementById('overallFill').style.width = pct + '%';
+  document.getElementById('overallLabel').textContent = pct + '%';
+}
+
+function renderNavigator() {
+  const nav = document.getElementById('navigator');
+  nav.innerHTML = '';
+
+  drillStack.forEach((entry, rowIdx) => {
+    const level = getLevelData(entry.levelId);
+    const isActive = rowIdx === activeRowIdx;
+    const isCompressed = !isActive;
+
+    const row = document.createElement('div');
+    row.className = 'nav-row' + (isCompressed ? ' compressed' : '');
+    row.dataset.rowIdx = rowIdx;
+
+    if (isCompressed) {
+      row.addEventListener('click', () => jumpToRow(rowIdx));
+    }
+
+    level.steps.forEach((step, stepIdx) => {
+      // Step node
+      const stepEl = document.createElement('div');
+      stepEl.className = 'step ' + step.state;
+
+      // Highlight selection in active row
+      if (isActive && stepIdx === entry.selectedIdx) {
+        stepEl.classList.add('selected');
+      }
+
+      // Marker
+      const marker = document.createElement('div');
+      marker.className = 'step-marker';
+
+      if (level.markerType === 'diamond') {
+        const d = document.createElement('div');
+        d.className = 'diamond';
+        const inner = document.createElement('div');
+        inner.className = 'inner';
+        d.appendChild(inner);
+        marker.appendChild(d);
+      } else {
+        const c = document.createElement('div');
+        c.className = 'circle';
+        const inner = document.createElement('div');
+        inner.className = 'inner';
+        c.appendChild(inner);
+        marker.appendChild(c);
+      }
+      stepEl.appendChild(marker);
+
+      // Compressed letter
+      const letter = document.createElement('span');
+      letter.className = 'step-letter';
+      letter.textContent = step.letter;
+      stepEl.appendChild(letter);
+
+      // Full label
+      const label = document.createElement('span');
+      label.className = 'step-label';
+      label.textContent = step.name;
+      stepEl.appendChild(label);
+
+      // Badge
+      if (step.badge) {
+        const badge = document.createElement('span');
+        badge.className = 'step-badge';
+        badge.textContent = step.badge;
+        stepEl.appendChild(badge);
+      }
+
+      // Click handler for active row steps
+      if (isActive) {
+        stepEl.addEventListener('click', () => selectStep(stepIdx));
+      }
+
+      row.appendChild(stepEl);
+
+      // Connector (unless last)
+      if (stepIdx < level.steps.length - 1) {
+        const conn = document.createElement('div');
+        conn.className = 'connector';
+        // Color connector based on completion
+        if (step.state === 'done') {
+          const nextStep = level.steps[stepIdx + 1];
+          if (nextStep.state === 'done') conn.classList.add('done');
+          else if (nextStep.state === 'active') conn.classList.add('active');
+        }
+        row.appendChild(conn);
+      }
+    });
+
+    nav.appendChild(row);
+  });
+}
+
+function renderContent() {
+  const area = document.getElementById('contentArea');
+  const entry = drillStack[activeRowIdx];
+  const level = getLevelData(entry.levelId);
+  const step = level.steps[entry.selectedIdx];
+
+  if (!step || !step.detail) {
+    area.innerHTML = '';
+    return;
+  }
+
+  const d = step.detail;
+  let html = '<div class="content-card">';
+  html += `<h2>${d.title}</h2>`;
+  html += `<div class="subtitle">${d.subtitle}</div>`;
+
+  // Grid
+  if (d.grid && d.grid.length) {
+    html += '<div class="detail-grid">';
+    d.grid.forEach(g => {
+      html += `<div class="detail-item">`;
+      html += `<div class="label">${g.label}</div>`;
+      html += `<div class="value ${g.cls}">${g.value}</div>`;
+      html += `</div>`;
+    });
+    html += '</div>';
+  }
+
+  // Logs
+  if (d.logs && d.logs.length) {
+    html += '<div class="log-lines">';
+    d.logs.forEach(l => {
+      html += `<span class="log-time">${l.time}</span> | `;
+      html += `<span class="log-level">${l.level.padEnd(7)}</span> | `;
+      html += `<span class="log-func">${l.func}</span> | `;
+      html += `<span class="log-msg">${l.msg}</span><br>`;
+    });
+    html += '</div>';
+  } else {
+    html += '<div class="log-lines" style="color:var(--text-dim);opacity:0.4;text-align:center;padding:30px;">No log output yet</div>';
+  }
+
+  // Status
+  if (d.status) {
+    const dotClass = d.status.state === 'done' ? 'done' : (d.status.state === 'running' ? 'running' : '');
+    html += '<div class="status-row">';
+    html += `<div class="status-dot ${dotClass}"></div>`;
+    html += `<span class="status-text">${d.status.text}</span>`;
+    html += '</div>';
+  }
+
+  html += '</div>';
+  area.innerHTML = html;
+}
+
+function updateContentOffset() {
+  const nav = document.getElementById('navigator');
+  const area = document.getElementById('contentArea');
+  const navHeight = nav.getBoundingClientRect().height + 3; // +3 for overall bar
+  area.style.marginTop = navHeight + 'px';
+}
+
+// ────────────────────────────────────────────
+// INTERACTION
+// ────────────────────────────────────────────
+function selectStep(stepIdx) {
+  const entry = drillStack[activeRowIdx];
+  const level = getLevelData(entry.levelId);
+
+  if (stepIdx < 0 || stepIdx >= level.steps.length) return;
+  entry.selectedIdx = stepIdx;
+
+  const step = level.steps[stepIdx];
+
+  // If this step has children and we're clicking it, drill down
+  if (step.children && drillStack.length === activeRowIdx + 1) {
+    drillDown(step.children);
+    return;
+  }
+
+  // If step has children and we already have deeper levels, update them
+  if (step.children) {
+    // Remove levels below current + 1
+    drillStack.splice(activeRowIdx + 1);
+    drillDown(step.children);
+    return;
+  }
+
+  // No children — just re-render
+  // Also trim any levels below that no longer apply
+  drillStack.splice(activeRowIdx + 1);
+  render();
+}
+
+function drillDown(childLevelId) {
+  const childLevel = getLevelData(childLevelId);
+  if (!childLevel) return;
+
+  // Find the first active or first step to select
+  let defaultIdx = 0;
+  for (let i = 0; i < childLevel.steps.length; i++) {
+    if (childLevel.steps[i].state === 'active') { defaultIdx = i; break; }
+  }
+
+  // Remove any existing levels below current active
+  drillStack.splice(activeRowIdx + 1);
+
+  // Push new level
+  drillStack.push({ levelId: childLevelId, selectedIdx: defaultIdx });
+  activeRowIdx = drillStack.length - 1;
+
+  render();
+}
+
+function jumpToRow(rowIdx) {
+  if (rowIdx < 0 || rowIdx >= drillStack.length) return;
+
+  // Collapse all rows below this one
+  drillStack.splice(rowIdx + 1);
+  activeRowIdx = rowIdx;
+
+  render();
+}
+
+function goBack() {
+  if (activeRowIdx > 0) {
+    jumpToRow(activeRowIdx - 1);
+  }
+}
+
+function moveInRow(direction) {
+  const entry = drillStack[activeRowIdx];
+  const level = getLevelData(entry.levelId);
+  const newIdx = entry.selectedIdx + direction;
+
+  if (newIdx >= 0 && newIdx < level.steps.length) {
+    // If moving away from a step that had drilled-down children, collapse them
+    drillStack.splice(activeRowIdx + 1);
+    entry.selectedIdx = newIdx;
+    render();
+  }
+}
+
+function drillIntoSelected() {
+  const entry = drillStack[activeRowIdx];
+  const level = getLevelData(entry.levelId);
+  const step = level.steps[entry.selectedIdx];
+
+  if (step.children) {
+    drillDown(step.children);
+  }
+}
+
+// ────────────────────────────────────────────
+// KEYBOARD
+// ────────────────────────────────────────────
+document.addEventListener('keydown', (e) => {
+  switch (e.key) {
+    case 'ArrowLeft':
+      e.preventDefault();
+      moveInRow(-1);
+      break;
+    case 'ArrowRight':
+      e.preventDefault();
+      moveInRow(1);
+      break;
+    case 'Enter':
+      e.preventDefault();
+      drillIntoSelected();
+      break;
+    case 'Escape':
+      e.preventDefault();
+      goBack();
+      break;
+    case 'ArrowUp':
+      e.preventDefault();
+      if (activeRowIdx > 0) {
+        // Move active focus up without collapsing
+        activeRowIdx--;
+        render();
+      }
+      break;
+    case 'ArrowDown':
+      e.preventDefault();
+      if (activeRowIdx < drillStack.length - 1) {
+        activeRowIdx++;
+        render();
+      } else {
+        drillIntoSelected();
+      }
+      break;
+  }
+});
+
+// Resize handler
+window.addEventListener('resize', updateContentOffset);
+
+// ────────────────────────────────────────────
+// INIT
+// ────────────────────────────────────────────
+render();
+</script>
+</body>
+</html>

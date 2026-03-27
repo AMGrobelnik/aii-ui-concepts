@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Particle Trail Strip</title>
+<style>
+  *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+  :root{
+    --bg:#0a0a0f;
+    --surface:#12121a;
+    --surface-2:#1a1a26;
+    --border:#252535;
+    --text:#e0e0ec;
+    --text-dim:#7a7a90;
+    --seed:#34d399;
+    --hypo:#a78bfa;
+    --inv:#38bdf8;
+    --paper:#6b7280;
+    --accent:#38bdf8;
+  }
+  html,body{height:100%;overflow:hidden;font-family:'Inter','SF Pro Display',-apple-system,system-ui,sans-serif;background:var(--bg);color:var(--text)}
+
+  /* ── Layout ── */
+  #app{display:flex;flex-direction:column;height:100vh}
+
+  /* ── Top strip ── */
+  .strip{position:relative;width:100%;height:90px;background:#08080d;border-bottom:1px solid var(--border);flex-shrink:0}
+  .strip canvas{display:block;width:100%;height:100%}
+  .strip-labels{position:absolute;bottom:6px;left:0;right:0;display:flex;pointer-events:none;z-index:2}
+  .strip-label{flex:1;text-align:center;font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;opacity:.55;transition:opacity .4s,color .4s,transform .3s}
+  .strip-label.active{opacity:1;transform:translateY(-1px)}
+  .strip-label[data-zone="0"]{color:var(--seed)}
+  .strip-label[data-zone="1"]{color:var(--hypo)}
+  .strip-label[data-zone="2"]{color:var(--inv)}
+  .strip-label[data-zone="3"]{color:var(--paper)}
+
+  /* ── Content ── */
+  .content-wrap{flex:1;overflow:hidden;position:relative}
+  .slides{display:flex;transition:transform .55s cubic-bezier(.4,0,.15,1);height:100%}
+  .slide{min-width:100%;height:100%;overflow-y:auto;padding:48px 60px 60px}
+
+  /* scrollbar */
+  .slide::-webkit-scrollbar{width:5px}
+  .slide::-webkit-scrollbar-track{background:transparent}
+  .slide::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+  h2{font-size:26px;font-weight:700;margin-bottom:6px}
+  .subtitle{font-size:13px;color:var(--text-dim);margin-bottom:32px}
+
+  /* cards */
+  .card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:18px;margin-bottom:28px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:22px 24px;transition:border-color .25s,box-shadow .25s}
+  .card:hover{border-color:color-mix(in srgb,var(--accent) 40%,transparent);box-shadow:0 0 20px color-mix(in srgb,var(--accent) 8%,transparent)}
+  .card h3{font-size:15px;font-weight:600;margin-bottom:8px}
+  .card p{font-size:13px;color:var(--text-dim);line-height:1.6}
+
+  .stat-row{display:flex;gap:14px;margin-bottom:28px;flex-wrap:wrap}
+  .stat{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:18px 22px;min-width:140px;flex:1}
+  .stat .val{font-size:28px;font-weight:700;margin-bottom:2px}
+  .stat .lbl{font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em}
+
+  .tag{display:inline-block;font-size:11px;padding:3px 10px;border-radius:20px;margin-right:6px;margin-bottom:6px;font-weight:500}
+
+  .table-wrap{overflow-x:auto;margin-bottom:28px}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;padding:10px 14px;border-bottom:1px solid var(--border);color:var(--text-dim);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+  td{padding:10px 14px;border-bottom:1px solid color-mix(in srgb,var(--border) 50%,transparent)}
+
+  .progress-bar{height:6px;background:var(--surface-2);border-radius:3px;overflow:hidden;margin-top:6px}
+  .progress-fill{height:100%;border-radius:3px;transition:width .6s ease}
+
+  /* nav hint */
+  .nav-hint{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);font-size:11px;color:var(--text-dim);background:var(--surface);border:1px solid var(--border);padding:6px 18px;border-radius:20px;z-index:10;pointer-events:none;opacity:.7}
+  .nav-hint kbd{display:inline-block;background:var(--surface-2);border:1px solid var(--border);border-radius:4px;padding:1px 7px;font-family:inherit;font-size:10px;margin:0 2px}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- Particle strip -->
+  <div class="strip">
+    <canvas id="particleCanvas"></canvas>
+    <div class="strip-labels">
+      <div class="strip-label" data-zone="0">Seed</div>
+      <div class="strip-label" data-zone="1">Hypothesis</div>
+      <div class="strip-label" data-zone="2">Invention</div>
+      <div class="strip-label" data-zone="3">Paper</div>
+    </div>
+  </div>
+
+  <!-- Slides -->
+  <div class="content-wrap">
+    <div class="slides" id="slides">
+
+      <!-- 0: Seed -->
+      <div class="slide" id="slide-0">
+        <h2 style="color:var(--seed)">Seed Generation</h2>
+        <p class="subtitle">Knowledge graph traversal and initial concept extraction</p>
+        <div class="stat-row">
+          <div class="stat"><div class="val" style="color:var(--seed)">2,847</div><div class="lbl">Papers Indexed</div></div>
+          <div class="stat"><div class="val" style="color:var(--seed)">164</div><div class="lbl">Seed Concepts</div></div>
+          <div class="stat"><div class="val" style="color:var(--seed)">38</div><div class="lbl">Cross-Domain Links</div></div>
+          <div class="stat"><div class="val" style="color:var(--seed)">12s</div><div class="lbl">Avg Extraction</div></div>
+        </div>
+        <div class="card-grid">
+          <div class="card" style="--accent:var(--seed)">
+            <h3>Knowledge Graph</h3>
+            <p>Traverses citation networks to identify under-explored intersections between research domains. Builds a concept map connecting 164 seed nodes.</p>
+          </div>
+          <div class="card" style="--accent:var(--seed)">
+            <h3>Concept Clustering</h3>
+            <p>Embedding-based clustering groups related concepts, identifying 12 distinct thematic clusters with cross-domain potential.</p>
+          </div>
+          <div class="card" style="--accent:var(--seed)">
+            <h3>Novelty Scoring</h3>
+            <p>Each seed is scored against existing literature. High novelty seeds (top 15%) are prioritized for hypothesis generation.</p>
+          </div>
+          <div class="card" style="--accent:var(--seed)">
+            <h3>Domain Coverage</h3>
+            <p>Sources span ML, systems, HCI, and theoretical CS. Weighted sampling ensures balanced representation across fields.</p>
+          </div>
+        </div>
+        <h3 style="margin-bottom:12px;font-size:14px;color:var(--text-dim)">Top Seed Clusters</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Cluster</th><th>Seeds</th><th>Novelty</th><th>Coverage</th></tr></thead>
+            <tbody>
+              <tr><td>Adaptive optimization</td><td>24</td><td><span class="tag" style="background:#34d39922;color:var(--seed)">High</span></td><td><div class="progress-bar"><div class="progress-fill" style="width:87%;background:var(--seed)"></div></div></td></tr>
+              <tr><td>Graph reasoning</td><td>19</td><td><span class="tag" style="background:#34d39922;color:var(--seed)">High</span></td><td><div class="progress-bar"><div class="progress-fill" style="width:72%;background:var(--seed)"></div></div></td></tr>
+              <tr><td>Sparse representations</td><td>31</td><td><span class="tag" style="background:#fbbf2422;color:#fbbf24">Med</span></td><td><div class="progress-bar"><div class="progress-fill" style="width:64%;background:var(--seed)"></div></div></td></tr>
+              <tr><td>Causal inference</td><td>16</td><td><span class="tag" style="background:#34d39922;color:var(--seed)">High</span></td><td><div class="progress-bar"><div class="progress-fill" style="width:91%;background:var(--seed)"></div></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 1: Hypothesis -->
+      <div class="slide" id="slide-1">
+        <h2 style="color:var(--hypo)">Hypothesis Loop</h2>
+        <p class="subtitle">Iterative generation, review, and refinement of research hypotheses</p>
+        <div class="stat-row">
+          <div class="stat"><div class="val" style="color:var(--hypo)">48</div><div class="lbl">Generated</div></div>
+          <div class="stat"><div class="val" style="color:var(--hypo)">3</div><div class="lbl">Review Rounds</div></div>
+          <div class="stat"><div class="val" style="color:var(--hypo)">12</div><div class="lbl">Accepted</div></div>
+          <div class="stat"><div class="val" style="color:var(--hypo)">83%</div><div class="lbl">Refinement Rate</div></div>
+        </div>
+        <div class="card-grid">
+          <div class="card" style="--accent:var(--hypo)">
+            <h3>Generation Phase</h3>
+            <p>LLM-driven hypothesis creation from seed concepts. Each seed generates 2-4 candidate hypotheses exploring different angles and combinations.</p>
+          </div>
+          <div class="card" style="--accent:var(--hypo)">
+            <h3>Review & Critique</h3>
+            <p>Multi-agent review evaluates feasibility, novelty, and scientific rigor. Hypotheses receive structured feedback with specific improvement suggestions.</p>
+          </div>
+          <div class="card" style="--accent:var(--hypo)">
+            <h3>Refinement Loop</h3>
+            <p>Hypotheses iterate through review cycles. Each round narrows scope and strengthens claims until convergence criteria are met.</p>
+          </div>
+          <div class="card" style="--accent:var(--hypo)">
+            <h3>Selection Criteria</h3>
+            <p>Final selection uses composite scoring: novelty (30%), feasibility (25%), impact (25%), testability (20%). Top 12 advance to invention.</p>
+          </div>
+        </div>
+        <h3 style="margin-bottom:12px;font-size:14px;color:var(--text-dim)">Hypothesis Pipeline</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Hypothesis</th><th>Round</th><th>Score</th><th>Status</th></tr></thead>
+            <tbody>
+              <tr><td>Adaptive sparse attention</td><td>3</td><td>0.92</td><td><span class="tag" style="background:#a78bfa22;color:var(--hypo)">Accepted</span></td></tr>
+              <tr><td>Graph-guided optimization</td><td>3</td><td>0.88</td><td><span class="tag" style="background:#a78bfa22;color:var(--hypo)">Accepted</span></td></tr>
+              <tr><td>Causal feature selection</td><td>2</td><td>0.85</td><td><span class="tag" style="background:#a78bfa22;color:var(--hypo)">Accepted</span></td></tr>
+              <tr><td>Neural architecture priors</td><td>2</td><td>0.71</td><td><span class="tag" style="background:#fbbf2422;color:#fbbf24">Refining</span></td></tr>
+              <tr><td>Meta-learning shortcuts</td><td>1</td><td>0.54</td><td><span class="tag" style="background:#ef444422;color:#ef4444">Rejected</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 2: Invention -->
+      <div class="slide" id="slide-2">
+        <h2 style="color:var(--inv)">Invention Loop</h2>
+        <p class="subtitle">Plan generation, paper text synthesis, and iterative review</p>
+        <div class="stat-row">
+          <div class="stat"><div class="val" style="color:var(--inv)">7</div><div class="lbl">Active Plans</div></div>
+          <div class="stat"><div class="val" style="color:var(--inv)">4</div><div class="lbl">Drafts Written</div></div>
+          <div class="stat"><div class="val" style="color:var(--inv)">2</div><div class="lbl">Under Review</div></div>
+          <div class="stat"><div class="val" style="color:var(--inv)">18min</div><div class="lbl">Avg per Draft</div></div>
+        </div>
+        <div class="card-grid">
+          <div class="card" style="--accent:var(--inv)">
+            <h3>Plan Generation</h3>
+            <p>Structures each hypothesis into a research plan with methodology, expected results, and validation strategy. Plans define the paper skeleton.</p>
+          </div>
+          <div class="card" style="--accent:var(--inv)">
+            <h3>Paper Text Synthesis</h3>
+            <p>Generates full paper sections: abstract, introduction, methodology, experiments, results, discussion. Each section is internally consistent.</p>
+          </div>
+          <div class="card" style="--accent:var(--inv)">
+            <h3>Review & Iteration</h3>
+            <p>Automated review checks logical consistency, claim support, and identifies gaps. Papers iterate until quality thresholds are met.</p>
+          </div>
+          <div class="card" style="--accent:var(--inv)">
+            <h3>Strategy Selection</h3>
+            <p>Parallel invention strategies compete. The best-performing approach (by review score) is selected for final paper assembly.</p>
+          </div>
+        </div>
+        <h3 style="margin-bottom:12px;font-size:14px;color:var(--text-dim)">Current Inventions</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Invention</th><th>Stage</th><th>Quality</th><th>Progress</th></tr></thead>
+            <tbody>
+              <tr><td>SparseFlow Attention</td><td>Review 2</td><td>0.94</td><td><div class="progress-bar"><div class="progress-fill" style="width:92%;background:var(--inv)"></div></div></td></tr>
+              <tr><td>GraphOpt Framework</td><td>Drafting</td><td>0.87</td><td><div class="progress-bar"><div class="progress-fill" style="width:68%;background:var(--inv)"></div></div></td></tr>
+              <tr><td>CausalSelect Module</td><td>Planning</td><td>--</td><td><div class="progress-bar"><div class="progress-fill" style="width:35%;background:var(--inv)"></div></div></td></tr>
+              <tr><td>NeuroArch Priors</td><td>Planning</td><td>--</td><td><div class="progress-bar"><div class="progress-fill" style="width:20%;background:var(--inv)"></div></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 3: Paper -->
+      <div class="slide" id="slide-3">
+        <h2 style="color:var(--paper)">Paper Output</h2>
+        <p class="subtitle">Final assembly, visualization generation, and repository packaging</p>
+        <div class="stat-row">
+          <div class="stat"><div class="val" style="color:var(--text-dim)">1</div><div class="lbl">Completed</div></div>
+          <div class="stat"><div class="val" style="color:var(--text-dim)">6</div><div class="lbl">Figures</div></div>
+          <div class="stat"><div class="val" style="color:var(--text-dim)">3</div><div class="lbl">Demos</div></div>
+          <div class="stat"><div class="val" style="color:var(--text-dim)">1</div><div class="lbl">Repository</div></div>
+        </div>
+        <div class="card-grid">
+          <div class="card" style="--accent:var(--paper)">
+            <h3>Full Paper Assembly</h3>
+            <p>Compiles all sections into a coherent paper with proper formatting, cross-references, and citation management. LaTeX-ready output.</p>
+          </div>
+          <div class="card" style="--accent:var(--paper)">
+            <h3>Visualization Suite</h3>
+            <p>Auto-generates figures: architecture diagrams, result plots, comparison tables, and ablation charts. SVG and PDF formats.</p>
+          </div>
+          <div class="card" style="--accent:var(--paper)">
+            <h3>Artifact Demos</h3>
+            <p>Produces runnable Python demos showcasing key results. Each demo is self-contained with inline documentation.</p>
+          </div>
+          <div class="card" style="--accent:var(--paper)">
+            <h3>Repository Package</h3>
+            <p>Bundles paper, figures, demos, and metadata into a structured repository with README and reproducibility instructions.</p>
+          </div>
+        </div>
+        <h3 style="margin-bottom:12px;font-size:14px;color:var(--text-dim)">Output Artifacts</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Artifact</th><th>Type</th><th>Size</th><th>Status</th></tr></thead>
+            <tbody>
+              <tr><td>sparseflow_paper.pdf</td><td>Paper</td><td>2.4 MB</td><td><span class="tag" style="background:#34d39922;color:var(--seed)">Complete</span></td></tr>
+              <tr><td>figures/</td><td>6 SVGs</td><td>840 KB</td><td><span class="tag" style="background:#34d39922;color:var(--seed)">Complete</span></td></tr>
+              <tr><td>demos/</td><td>3 .py files</td><td>28 KB</td><td><span class="tag" style="background:#34d39922;color:var(--seed)">Complete</span></td></tr>
+              <tr><td>graphopt_paper.pdf</td><td>Paper</td><td>--</td><td><span class="tag" style="background:#6b728022;color:var(--paper)">Pending</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div><!-- /slides -->
+  </div><!-- /content-wrap -->
+
+  <div class="nav-hint"><kbd>&larr;</kbd> <kbd>&rarr;</kbd> Navigate modules</div>
+</div><!-- /app -->
+
+<script>
+/* ================================================================
+   PARTICLE TRAIL STRIP — 60fps canvas-based particle river
+   ================================================================ */
+(() => {
+  'use strict';
+
+  // ── Zone config ──
+  const ZONES = [
+    { label: 'Seed',       color: [52, 211, 153],  density: 0.6,  brightness: 0.7,  spark: false },
+    { label: 'Hypothesis', color: [167, 139, 250], density: 0.7,  brightness: 0.75, spark: false },
+    { label: 'Invention',  color: [56, 189, 248],  density: 1.0,  brightness: 1.0,  spark: true  },
+    { label: 'Paper',      color: [107, 114, 128], density: 0.15, brightness: 0.25, spark: false },
+  ];
+
+  const ACTIVE_ZONE = 2; // Invention
+
+  // ── State ──
+  let currentSlide = 0;
+  const totalSlides = 4;
+  const slidesEl = document.getElementById('slides');
+  const labels = document.querySelectorAll('.strip-label');
+  const canvas = document.getElementById('particleCanvas');
+  const ctx = canvas.getContext('2d');
+
+  let W, H, dpr;
+  let particles = [];
+  let sparks = [];
+
+  // ── Particle class ──
+  class Particle {
+    constructor() {
+      this.reset(true);
+    }
+
+    reset(randomX = false) {
+      this.x = randomX ? Math.random() * W : -2;
+      this.y = H * 0.38 + (Math.random() - 0.5) * H * 0.32;
+      this.baseY = this.y;
+      this.vx = 0.4 + Math.random() * 0.9;
+      this.vy = 0;
+      this.size = 1.5 + Math.random() * 2;
+      this.wobbleAmp = 2 + Math.random() * 6;
+      this.wobbleFreq = 0.003 + Math.random() * 0.006;
+      this.wobblePhase = Math.random() * Math.PI * 2;
+      this.life = 1;
+      this.alive = true;
+    }
+
+    update(t) {
+      // Horizontal movement
+      this.x += this.vx;
+
+      // Vertical wobble — organic feel
+      this.wobblePhase += this.wobbleFreq;
+      this.y = this.baseY + Math.sin(this.wobblePhase) * this.wobbleAmp;
+
+      // Slight vertical drift
+      this.baseY += (Math.random() - 0.5) * 0.15;
+      // Keep in bounds
+      if (this.baseY < H * 0.15) this.baseY = H * 0.15;
+      if (this.baseY > H * 0.6) this.baseY = H * 0.6;
+
+      // Off screen
+      if (this.x > W + 10) {
+        this.alive = false;
+      }
+    }
+
+    getZoneIndex() {
+      const frac = this.x / W;
+      const idx = Math.floor(frac * 4);
+      return Math.max(0, Math.min(3, idx));
+    }
+
+    getZoneFraction() {
+      const frac = this.x / W;
+      return (frac * 4) % 1;
+    }
+
+    getColor() {
+      const zi = this.getZoneIndex();
+      const zf = this.getZoneFraction();
+      const z0 = ZONES[zi];
+      const z1 = ZONES[Math.min(3, zi + 1)];
+
+      // Smooth color interpolation at boundaries
+      let blend = 0;
+      if (zf > 0.8) {
+        blend = (zf - 0.8) / 0.2; // interpolate in last 20% of zone
+      }
+
+      const r = z0.color[0] + (z1.color[0] - z0.color[0]) * blend;
+      const g = z0.color[1] + (z1.color[1] - z0.color[1]) * blend;
+      const b = z0.color[2] + (z1.color[2] - z0.color[2]) * blend;
+
+      // Brightness based on zone
+      const bright = z0.brightness + (z1.brightness - z0.brightness) * blend;
+
+      return { r, g, b, bright };
+    }
+
+    shouldExist() {
+      // Density-based culling — particles in low-density zones fade/skip
+      const zi = this.getZoneIndex();
+      return Math.random() < ZONES[zi].density;
+    }
+
+    draw(ctx) {
+      const { r, g, b, bright } = this.getColor();
+      const alpha = bright * 0.85;
+      const sz = this.size * bright;
+
+      // Glow
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, sz + 2, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${r|0},${g|0},${b|0},${alpha * 0.15})`;
+      ctx.fill();
+
+      // Core
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, sz, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${r|0},${g|0},${b|0},${alpha})`;
+      ctx.fill();
+    }
+  }
+
+  // ── Spark class (for Invention zone) ──
+  class Spark {
+    constructor(x, y, color) {
+      this.x = x;
+      this.y = y;
+      this.vx = (Math.random() - 0.5) * 3;
+      this.vy = (Math.random() - 0.5) * 3;
+      this.life = 1;
+      this.decay = 0.02 + Math.random() * 0.04;
+      this.size = 1 + Math.random() * 1.5;
+      this.color = color;
+    }
+
+    update() {
+      this.x += this.vx;
+      this.y += this.vy;
+      this.vx *= 0.96;
+      this.vy *= 0.96;
+      this.life -= this.decay;
+    }
+
+    draw(ctx) {
+      const a = this.life * 0.8;
+      const { r, g, b } = this.color;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.size * this.life, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${r|0},${g|0},${b|0},${a})`;
+      ctx.fill();
+    }
+  }
+
+  // ── Resize ──
+  function resize() {
+    dpr = window.devicePixelRatio || 1;
+    const rect = canvas.parentElement.getBoundingClientRect();
+    W = rect.width;
+    H = rect.height;
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  // ── Init particles ──
+  function initParticles() {
+    particles = [];
+    const count = Math.floor(W * 0.35); // ~1 particle per 3px width
+    for (let i = 0; i < count; i++) {
+      const p = new Particle();
+      // Only keep if zone density allows
+      if (p.shouldExist()) {
+        particles.push(p);
+      }
+    }
+  }
+
+  // ── Spawn new particles at left edge ──
+  function spawnParticles() {
+    // Spawn rate — enough for a steady stream
+    const rate = 2 + Math.random() * 2;
+    for (let i = 0; i < rate; i++) {
+      const p = new Particle();
+      p.x = -2 - Math.random() * 20;
+      particles.push(p);
+    }
+  }
+
+  // ── Spawn sparks in invention zone ──
+  function spawnSparks() {
+    // Only in invention zone
+    const zoneStart = W * (ACTIVE_ZONE / 4);
+    const zoneEnd = W * ((ACTIVE_ZONE + 1) / 4);
+
+    if (Math.random() < 0.15) {
+      const x = zoneStart + Math.random() * (zoneEnd - zoneStart);
+      const y = H * 0.38 + (Math.random() - 0.5) * H * 0.25;
+      const c = ZONES[ACTIVE_ZONE].color;
+      const count = 2 + Math.floor(Math.random() * 3);
+      for (let i = 0; i < count; i++) {
+        sparks.push(new Spark(x, y, { r: c[0], g: c[1], b: c[2] }));
+      }
+    }
+  }
+
+  // ── Draw zone glow ──
+  function drawZoneGlow() {
+    // Subtle glow under active zone
+    const zoneStart = W * (ACTIVE_ZONE / 4);
+    const zoneEnd = W * ((ACTIVE_ZONE + 1) / 4);
+    const zoneMid = (zoneStart + zoneEnd) / 2;
+    const zoneW = zoneEnd - zoneStart;
+
+    const grad = ctx.createRadialGradient(zoneMid, H * 0.38, 0, zoneMid, H * 0.38, zoneW * 0.6);
+    const c = ZONES[ACTIVE_ZONE].color;
+    grad.addColorStop(0, `rgba(${c[0]},${c[1]},${c[2]},0.04)`);
+    grad.addColorStop(1, `rgba(${c[0]},${c[1]},${c[2]},0)`);
+    ctx.fillStyle = grad;
+    ctx.fillRect(zoneStart - 20, 0, zoneW + 40, H);
+  }
+
+  // ── Draw zone separators ──
+  function drawSeparators() {
+    ctx.save();
+    ctx.setLineDash([2, 4]);
+    ctx.lineWidth = 0.5;
+    for (let i = 1; i < 4; i++) {
+      const x = W * (i / 4);
+      ctx.beginPath();
+      ctx.moveTo(x, 4);
+      ctx.lineTo(x, H - 20);
+      ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // ── Render loop ──
+  let frameTime = 0;
+  function render(t) {
+    frameTime = t;
+
+    ctx.clearRect(0, 0, W, H);
+
+    // Zone glow
+    drawZoneGlow();
+    drawSeparators();
+
+    // Spawn
+    spawnParticles();
+    spawnSparks();
+
+    // Update and draw particles
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.update(t);
+      if (!p.alive) {
+        particles.splice(i, 1);
+        continue;
+      }
+      // Density-based visibility: particles in sparse zones may be skipped in draw
+      const zi = p.getZoneIndex();
+      const density = ZONES[zi].density;
+      // Always draw, but alpha is handled in getColor via brightness
+      p.draw(ctx);
+    }
+
+    // Update and draw sparks
+    for (let i = sparks.length - 1; i >= 0; i--) {
+      const s = sparks[i];
+      s.update();
+      if (s.life <= 0) {
+        sparks.splice(i, 1);
+        continue;
+      }
+      s.draw(ctx);
+    }
+
+    // Cap particle count
+    if (particles.length > 800) {
+      particles.splice(0, particles.length - 800);
+    }
+    if (sparks.length > 100) {
+      sparks.splice(0, sparks.length - 100);
+    }
+
+    requestAnimationFrame(render);
+  }
+
+  // ── Slide navigation ──
+  function goToSlide(idx) {
+    if (idx < 0 || idx >= totalSlides) return;
+    currentSlide = idx;
+    slidesEl.style.transform = `translateX(-${idx * 100}%)`;
+
+    // Update labels
+    labels.forEach((l, i) => {
+      l.classList.toggle('active', i === idx);
+    });
+
+    // Update card accent per slide
+    const accents = ['var(--seed)', 'var(--hypo)', 'var(--inv)', 'var(--paper)'];
+    document.querySelectorAll(`#slide-${idx} .card`).forEach(c => {
+      c.style.setProperty('--accent', accents[idx]);
+    });
+  }
+
+  // ── Keyboard ──
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      goToSlide(currentSlide + 1);
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      goToSlide(currentSlide - 1);
+    }
+  });
+
+  // ── Click on labels ──
+  labels.forEach((l, i) => {
+    l.style.cursor = 'pointer';
+    l.style.pointerEvents = 'auto';
+    l.addEventListener('click', () => goToSlide(i));
+  });
+
+  // ── Init ──
+  resize();
+  initParticles();
+  goToSlide(0);
+  requestAnimationFrame(render);
+
+  window.addEventListener('resize', () => {
+    resize();
+    // Don't reinit particles — they'll naturally fill
+  });
+
+})();
+</script>
+</body>
+</html>

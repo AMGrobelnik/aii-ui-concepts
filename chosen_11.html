@@ -1,0 +1,1671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor Pipeline Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* ─── Reset & Variables ─── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #1a1d23;
+    --surface: #22262e;
+    --surface-raised: #282d37;
+    --border: #2e3440;
+    --border-light: #3b4252;
+    --text: #e2e8f0;
+    --text-dim: #8892a4;
+    --text-muted: #5a6377;
+    --green: #22c55e;
+    --purple: #a78bfa;
+    --blue: #3b82f6;
+    --orange: #f59e0b;
+    --green-dim: rgba(34, 197, 94, .12);
+    --purple-dim: rgba(167, 139, 250, .12);
+    --blue-dim: rgba(59, 130, 246, .12);
+    --orange-dim: rgba(245, 159, 11, .12);
+    --ring-strip: 60px;
+    --module-panel: 180px;
+    --sidebar-w: calc(var(--ring-strip) + var(--module-panel));
+  }
+
+  html, body { height: 100%; overflow: hidden; }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ─── Ring Strip (Thin Left Column, 60px) ─── */
+  .ring-strip {
+    width: var(--ring-strip);
+    min-height: 100vh;
+    background: var(--bg);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 18px 0 16px;
+    gap: 24px;
+    z-index: 10;
+    flex-shrink: 0;
+  }
+
+  .ring-wrap {
+    position: relative;
+    width: 50px;
+    height: 50px;
+  }
+
+  .ring-svg {
+    width: 50px;
+    height: 50px;
+    transform: rotate(-90deg);
+  }
+
+  .ring-track {
+    fill: none;
+    stroke: var(--border);
+    stroke-width: 3.5;
+  }
+
+  .ring-fill {
+    fill: none;
+    stroke-width: 3.5;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1),
+                stroke 0.4s ease;
+  }
+
+  .ring-pct {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: -0.5px;
+  }
+
+  .ring-endpoint {
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .ring-endpoint.glow {
+    box-shadow: 0 0 6px 2px currentColor;
+    animation: endpointGlow 2.2s ease-in-out infinite;
+  }
+
+  @keyframes endpointGlow {
+    0%, 100% { filter: brightness(1); opacity: 0.85; }
+    50% { filter: brightness(1.6); opacity: 1; }
+  }
+
+  /* Vertical divider below ring */
+  .strip-divider {
+    width: 1px;
+    height: 16px;
+    background: var(--border);
+    opacity: 0.5;
+  }
+
+  /* Module dots in ring strip */
+  .module-dots {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .mod-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    opacity: 0.4;
+    position: relative;
+  }
+
+  .mod-dot:hover {
+    opacity: 0.8;
+    transform: scale(1.35);
+  }
+
+  .mod-dot.active {
+    opacity: 1;
+    transform: scale(1.5);
+  }
+
+  .mod-dot.active.pulse {
+    animation: dotPulse 2s ease-in-out infinite;
+  }
+
+  @keyframes dotPulse {
+    0%, 100% { box-shadow: 0 0 0 0 currentColor; }
+    50% { box-shadow: 0 0 8px 3px currentColor; }
+  }
+
+  /* Tooltip for dots */
+  .mod-dot::after {
+    content: attr(data-label);
+    position: absolute;
+    left: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: var(--surface-raised);
+    color: var(--text);
+    font-size: 9px;
+    font-weight: 600;
+    padding: 3px 7px;
+    border-radius: 4px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease;
+    border: 1px solid var(--border);
+    z-index: 30;
+  }
+
+  .mod-dot:hover::after {
+    opacity: 1;
+  }
+
+  /* ─── Module Panel (180px) ─── */
+  .module-panel {
+    width: var(--module-panel);
+    min-height: 100vh;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 14px 10px;
+    overflow-y: auto;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    position: relative;
+  }
+
+  .module-panel::-webkit-scrollbar { width: 3px; }
+  .module-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .module-panel::-webkit-scrollbar-track { background: transparent; }
+
+  .panel-title {
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.3px;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+    padding: 0 6px;
+  }
+
+  /* Module card */
+  .mod-card {
+    border-radius: 8px;
+    padding: 8px 10px;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: visible;
+  }
+
+  .mod-card:hover {
+    background: rgba(255, 255, 255, 0.025);
+  }
+
+  .mod-card.active {
+    border-color: var(--blue);
+    background: rgba(59, 130, 246, 0.05);
+    animation: cardGlow 2.5s ease-in-out infinite;
+  }
+
+  @keyframes cardGlow {
+    0%, 100% { box-shadow: 0 0 8px -2px rgba(59, 130, 246, 0.25); }
+    50% { box-shadow: 0 0 18px 1px rgba(59, 130, 246, 0.45); }
+  }
+
+  .mod-card-header {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .mod-card-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .mod-card-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.2;
+  }
+
+  .mod-card-meta {
+    font-size: 9px;
+    color: var(--text-muted);
+    margin-top: 3px;
+    padding-left: 14px;
+  }
+
+  /* Progress mini-bar in card */
+  .mod-card-bar {
+    height: 2px;
+    background: rgba(255, 255, 255, 0.04);
+    border-radius: 1px;
+    margin-top: 5px;
+    margin-left: 14px;
+    overflow: hidden;
+  }
+
+  .mod-card-bar-fill {
+    height: 100%;
+    border-radius: 1px;
+    transition: width 0.5s ease;
+  }
+
+  /* Sub-module list */
+  .sub-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    margin-top: 5px;
+    padding-left: 8px;
+    position: relative;
+  }
+
+  .sub-list::before {
+    content: '';
+    position: absolute;
+    left: 11px;
+    top: 0;
+    bottom: 8px;
+    width: 1px;
+    background: var(--border);
+  }
+
+  .sub-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 6px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+  }
+
+  .sub-item:hover {
+    background: rgba(255, 255, 255, 0.035);
+  }
+
+  .sub-item.active {
+    background: rgba(59, 130, 246, 0.1);
+  }
+
+  .sub-item.active .sub-label {
+    color: var(--text);
+    font-weight: 500;
+  }
+
+  .sub-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: var(--text-muted);
+    transition: all 0.25s ease;
+  }
+
+  .sub-item.active .sub-dot {
+    background: var(--blue);
+    box-shadow: 0 0 5px var(--blue);
+  }
+
+  .sub-item.done .sub-dot {
+    background: var(--green);
+  }
+
+  .sub-label {
+    font-size: 10px;
+    color: var(--text-dim);
+    transition: color 0.2s ease;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .sub-status {
+    margin-left: auto;
+    font-size: 7px;
+    font-weight: 700;
+    padding: 1px 4px;
+    border-radius: 3px;
+    flex-shrink: 0;
+    letter-spacing: 0.3px;
+  }
+
+  .sub-status.done { color: var(--green); background: var(--green-dim); }
+  .sub-status.running { color: var(--blue); background: var(--blue-dim); }
+  .sub-status.pending { color: var(--text-muted); background: rgba(255, 255, 255, 0.03); }
+
+  /* ─── Particle Canvas ─── */
+  .particle-canvas {
+    position: fixed;
+    left: var(--ring-strip);
+    top: 0;
+    width: var(--module-panel);
+    height: 100vh;
+    pointer-events: none;
+    z-index: 20;
+  }
+
+  /* ─── Main Content Area ─── */
+  .main {
+    flex: 1;
+    overflow-y: auto;
+    padding: 28px 36px 40px;
+  }
+
+  .main::-webkit-scrollbar { width: 5px; }
+  .main::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  .main::-webkit-scrollbar-track { background: transparent; }
+
+  /* Header */
+  .main-header { margin-bottom: 24px; }
+
+  .main-header .breadcrumb {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .breadcrumb .sep { color: var(--border-light); font-size: 10px; }
+  .breadcrumb .mod-name { color: var(--text-dim); }
+  .breadcrumb .sub-name { color: var(--text-dim); font-weight: 500; }
+
+  .main-header h1 {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+  }
+
+  .main-header .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 10px;
+    margin-left: 10px;
+    vertical-align: middle;
+    position: relative;
+    top: -1px;
+  }
+
+  .status-pill.done { color: var(--green); background: var(--green-dim); }
+  .status-pill.pending { color: var(--text-muted); background: rgba(255, 255, 255, 0.04); }
+  .status-pill .pill-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  /* ─── Summary Card ─── */
+  .summary-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px 22px;
+    margin-bottom: 20px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .summary-card::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    border-radius: 3px 0 0 3px;
+  }
+
+  .summary-card .label {
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+
+  .summary-card .text {
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--text-dim);
+    font-style: italic;
+  }
+
+  /* ─── Step Timeline ─── */
+  .step-timeline {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    margin-bottom: 24px;
+    padding: 0 2px;
+  }
+
+  .step-node {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+    position: relative;
+    z-index: 2;
+  }
+
+  .step-circle {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--text-muted);
+    transition: all 0.25s ease;
+  }
+
+  .step-node.done .step-circle {
+    border-color: var(--green);
+    color: var(--green);
+    background: var(--green-dim);
+  }
+
+  .step-node.active .step-circle {
+    border-color: var(--blue);
+    color: var(--blue);
+    background: var(--blue-dim);
+    box-shadow: 0 0 8px rgba(59, 130, 246, 0.3);
+  }
+
+  .step-node.pending .step-circle {
+    border-color: var(--border);
+    color: var(--text-muted);
+  }
+
+  .step-node .step-lbl {
+    font-size: 8px;
+    color: var(--text-muted);
+    margin-top: 5px;
+    max-width: 56px;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .step-node.active .step-lbl { color: var(--text-dim); font-weight: 500; }
+
+  .step-line {
+    flex: 1;
+    height: 2px;
+    background: var(--border);
+    min-width: 12px;
+    position: relative;
+    top: -8px;
+  }
+
+  .step-line.done { background: var(--green); opacity: 0.5; }
+
+  /* ─── Stats Row ─── */
+  .stat-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    margin-bottom: 24px;
+  }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+    transition: border-color 0.2s ease;
+  }
+
+  .stat-card:hover {
+    border-color: var(--border-light);
+  }
+
+  .stat-card .stat-label {
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+  }
+
+  .stat-card .stat-value {
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 12px;
+    letter-spacing: -0.5px;
+  }
+
+  .stat-bar-track {
+    height: 6px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 5px;
+  }
+
+  .stat-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+  }
+
+  .stat-bar-fill::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 20px;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15));
+    border-radius: 0 3px 3px 0;
+  }
+
+  .stat-bar-labels {
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .stat-bar-labels span {
+    font-size: 9px;
+    color: var(--text-muted);
+  }
+
+  /* Message breakdown */
+  .msg-breakdown {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+  }
+
+  .msg-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .msg-row .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .msg-row .lbl {
+    font-size: 10px;
+    color: var(--text-dim);
+    flex: 1;
+  }
+
+  .msg-row .val {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text);
+    min-width: 20px;
+    text-align: right;
+  }
+
+  .msg-row .bar-mini {
+    width: 40px;
+    height: 3px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 2px;
+    overflow: hidden;
+    margin-left: 4px;
+  }
+
+  .msg-row .bar-mini-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.5s ease;
+  }
+
+  /* ─── Module Totals ─── */
+  .totals-row {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+    margin-bottom: 24px;
+  }
+
+  .total-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .total-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    flex-shrink: 0;
+  }
+
+  .total-info .total-val {
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+  }
+
+  .total-info .total-lbl {
+    font-size: 9px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    margin-top: 1px;
+  }
+
+  /* ─── Item List ─── */
+  .item-section { margin-top: 4px; }
+
+  .item-section h3 {
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .item-section h3 .count {
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--text-muted);
+    background: rgba(255, 255, 255, 0.04);
+    padding: 2px 7px;
+    border-radius: 8px;
+  }
+
+  .item-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .item-row {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    transition: all 0.2s ease;
+  }
+
+  .item-row:hover {
+    border-color: var(--border-light);
+    background: var(--surface-raised);
+  }
+
+  .item-idx {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-muted);
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 5px;
+    flex-shrink: 0;
+  }
+
+  .item-content {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .item-title {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text);
+    margin-bottom: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .item-desc {
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+
+  .item-badge {
+    font-size: 9px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 5px;
+    flex-shrink: 0;
+    white-space: nowrap;
+    letter-spacing: 0.2px;
+  }
+
+  /* ─── Keyboard Hint ─── */
+  .kbd-hint {
+    position: fixed;
+    bottom: 12px;
+    right: 18px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    font-size: 9px;
+    color: var(--text-muted);
+    opacity: 0.5;
+    transition: opacity 0.3s ease;
+  }
+
+  .kbd-hint:hover { opacity: 0.8; }
+
+  .kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 4px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    font-size: 8px;
+    font-weight: 600;
+    color: var(--text-dim);
+    background: var(--surface);
+  }
+
+  /* ─── Transitions ─── */
+  .fade-in {
+    animation: fadeIn 0.3s ease forwards;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .slide-up {
+    animation: slideUp 0.35s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  }
+
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── Ring Strip ── -->
+<div class="ring-strip">
+  <div class="ring-wrap">
+    <svg class="ring-svg" viewBox="0 0 50 50">
+      <circle class="ring-track" cx="25" cy="25" r="20"/>
+      <circle class="ring-fill" id="ringFill" cx="25" cy="25" r="20"/>
+    </svg>
+    <div class="ring-pct" id="ringPct">0%</div>
+    <div class="ring-endpoint glow" id="ringEndpoint"></div>
+  </div>
+  <div class="strip-divider"></div>
+  <div class="module-dots" id="moduleDots"></div>
+</div>
+
+<!-- ── Module Panel ── -->
+<div class="module-panel" id="modulePanel"></div>
+
+<!-- ── Particle Canvas ── -->
+<canvas class="particle-canvas" id="particleCanvas"></canvas>
+
+<!-- ── Main Content ── -->
+<div class="main" id="mainContent"></div>
+
+<!-- ── Keyboard Hint ── -->
+<div class="kbd-hint">
+  <span class="kbd">&uarr;</span><span class="kbd">&darr;</span> sub-modules
+  <span style="margin: 0 4px; opacity: 0.3;">|</span>
+  <span class="kbd">&larr;</span><span class="kbd">&rarr;</span> modules
+</div>
+
+<script>
+// ───────────────────────────────────────────────────────────────
+//  MOCK DATA
+// ───────────────────────────────────────────────────────────────
+const MODULES = [
+  {
+    id: 'seed',
+    label: 'Seed',
+    color: 'var(--green)',
+    colorHex: '#22c55e',
+    status: 'done',
+    subs: [
+      {
+        id: 'parse_domain',
+        label: 'Parse Domain',
+        status: 'done',
+        summary: "I parsed the research domain specification and extracted 12 key concept nodes from the provided knowledge graph seed. Each node was validated against the domain ontology to ensure semantic consistency before proceeding to graph construction.",
+        duration: 14, maxDuration: 120,
+        cost: 0.03, maxCost: 2.0,
+        msgs: { system: 2, user: 4, assistant: 4 },
+        items: null,
+      },
+      {
+        id: 'build_kg',
+        label: 'Build Knowledge Graph',
+        status: 'done',
+        summary: "I constructed the invention knowledge graph with 38 edges connecting the 12 concept nodes. I identified 4 promising research gaps where existing connections were sparse, marking them as high-potential invention targets for downstream hypothesis generation.",
+        duration: 42, maxDuration: 120,
+        cost: 0.18, maxCost: 2.0,
+        msgs: { system: 2, user: 6, assistant: 8 },
+        items: null,
+      },
+      {
+        id: 'extract_gaps',
+        label: 'Extract Research Gaps',
+        status: 'done',
+        summary: "I analyzed the knowledge graph topology and extracted 4 research gaps ranked by novelty potential. The top gap involves bridging transformer attention mechanisms with biological neural plasticity models \u2014 a connection not explored in the current literature.",
+        duration: 28, maxDuration: 120,
+        cost: 0.12, maxCost: 2.0,
+        msgs: { system: 2, user: 4, assistant: 6 },
+        items: null,
+      },
+      {
+        id: 'gen_seed_hypos',
+        label: 'Generate Seed Hypotheses',
+        status: 'done',
+        summary: "I generated 6 seed hypotheses from the identified research gaps. Each hypothesis is grounded in at least 2 knowledge graph nodes and includes a falsifiability criterion. Initial novelty scores range from 5.8 to 7.2 across the pool.",
+        duration: 55, maxDuration: 120,
+        cost: 0.31, maxCost: 2.0,
+        msgs: { system: 2, user: 8, assistant: 10 },
+        items: [
+          { title: 'Plasticity-Attention Bridge Hypothesis', desc: 'Novelty: 7.2 | Feasibility: High', badge: 'Top', badgeColor: 'var(--green)' },
+          { title: 'Sparse Activation Transfer Conjecture', desc: 'Novelty: 6.9 | Feasibility: Medium', badge: 'Seed', badgeColor: 'var(--text-muted)' },
+          { title: 'Hierarchical Memory Consolidation', desc: 'Novelty: 6.5 | Feasibility: High', badge: 'Seed', badgeColor: 'var(--text-muted)' },
+          { title: 'Cross-Modal Binding via Phase Sync', desc: 'Novelty: 6.4 | Feasibility: Medium', badge: 'Seed', badgeColor: 'var(--text-muted)' },
+          { title: 'Neuro-Symbolic Grounding Framework', desc: 'Novelty: 6.1 | Feasibility: Low', badge: 'Seed', badgeColor: 'var(--text-muted)' },
+          { title: 'Predictive Coding Compression Scheme', desc: 'Novelty: 5.8 | Feasibility: High', badge: 'Seed', badgeColor: 'var(--text-muted)' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'hypo',
+    label: 'Hypothesis',
+    color: 'var(--purple)',
+    colorHex: '#a78bfa',
+    status: 'done',
+    subs: [
+      {
+        id: 'init_hypo_pool',
+        label: 'Initialize Pool',
+        status: 'done',
+        summary: "I initialized the hypothesis pool with the 6 seed hypotheses and configured the iterative refinement loop. The scoring rubric weights novelty at 40%, feasibility at 30%, and impact at 30%. Pool baseline average: 6.2.",
+        duration: 8, maxDuration: 90,
+        cost: 0.02, maxCost: 1.5,
+        msgs: { system: 1, user: 2, assistant: 2 },
+        items: null,
+      },
+      {
+        id: 'review_hypo_r1',
+        label: 'Review Round 1',
+        status: 'done',
+        summary: "I reviewed all 6 hypotheses against the domain literature and identified 3 with sufficient novelty for refinement. I flagged the Neuro-Symbolic Grounding Framework for elimination due to significant overlap with existing work by Chen et al. (2024). Pool average moved from 6.2 to 6.8.",
+        duration: 67, maxDuration: 90,
+        cost: 0.42, maxCost: 1.5,
+        msgs: { system: 2, user: 10, assistant: 12 },
+        items: null,
+      },
+      {
+        id: 'refine_hypo_r1',
+        label: 'Refine Round 1',
+        status: 'done',
+        summary: "I refined the top 3 hypotheses by strengthening their theoretical grounding and sharpening each falsifiability criterion. The Plasticity-Attention Bridge was significantly improved with a concrete experimental protocol including 4 ablation conditions.",
+        duration: 78, maxDuration: 90,
+        cost: 0.55, maxCost: 1.5,
+        msgs: { system: 2, user: 12, assistant: 14 },
+        items: null,
+      },
+      {
+        id: 'review_hypo_r2',
+        label: 'Review Round 2',
+        status: 'done',
+        summary: "I conducted the second review pass and elevated 2 hypotheses to the finalist pool. The Plasticity-Attention Bridge scored 8.1 and the Sparse Activation Transfer scored 7.6. Both demonstrate clear novelty over the existing literature baseline.",
+        duration: 52, maxDuration: 90,
+        cost: 0.38, maxCost: 1.5,
+        msgs: { system: 2, user: 8, assistant: 10 },
+        items: null,
+      },
+      {
+        id: 'refine_hypo_r2',
+        label: 'Refine Round 2',
+        status: 'done',
+        summary: "I performed final refinement on both finalist hypotheses. I added mathematical formalization to the Plasticity-Attention Bridge and expanded the Sparse Activation Transfer with comparative baselines. Final scores: 8.4 and 8.0 respectively.",
+        duration: 85, maxDuration: 90,
+        cost: 0.61, maxCost: 1.5,
+        msgs: { system: 2, user: 14, assistant: 16 },
+        items: null,
+      },
+      {
+        id: 'select_hypo',
+        label: 'Select Winner',
+        status: 'done',
+        summary: "I selected the Plasticity-Attention Bridge Hypothesis as the winning candidate with a final score of 8.4, up from 6.2 at initialization. It demonstrates a novel connection between biological synaptic plasticity rules and transformer self-attention weight updates.",
+        duration: 12, maxDuration: 90,
+        cost: 0.05, maxCost: 1.5,
+        msgs: { system: 1, user: 4, assistant: 4 },
+        items: [
+          { title: 'Plasticity-Attention Bridge', desc: 'Score: 6.2 \u2192 8.4 | Winner', badge: '8.4', badgeColor: 'var(--green)' },
+          { title: 'Sparse Activation Transfer', desc: 'Score: 6.9 \u2192 8.0 | Runner-up', badge: '8.0', badgeColor: 'var(--purple)' },
+          { title: 'Hierarchical Memory Consolidation', desc: 'Score: 6.5 \u2192 7.1 | Eliminated R2', badge: '7.1', badgeColor: 'var(--text-muted)' },
+          { title: 'Cross-Modal Binding Phase Sync', desc: 'Score: 6.4 \u2192 6.6 | Eliminated R1', badge: '6.6', badgeColor: 'var(--text-muted)' },
+          { title: 'Neuro-Symbolic Grounding', desc: 'Score: 6.1 \u2192 5.9 | Eliminated R1', badge: '5.9', badgeColor: 'var(--text-muted)' },
+          { title: 'Predictive Coding Compression', desc: 'Score: 5.8 \u2192 6.0 | Eliminated R1', badge: '6.0', badgeColor: 'var(--text-muted)' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'invention',
+    label: 'Invention',
+    color: 'var(--blue)',
+    colorHex: '#3b82f6',
+    status: 'done',
+    subs: [
+      {
+        id: 'gen_strategy',
+        label: 'Generate Strategy',
+        status: 'done',
+        summary: "I generated the invention strategy by decomposing the Plasticity-Attention Bridge into 3 research threads: (1) theoretical formalization of plasticity-attention equivalence, (2) computational experiments on synthetic tasks, and (3) empirical validation on standard benchmarks.",
+        duration: 45, maxDuration: 150,
+        cost: 0.28, maxCost: 3.0,
+        msgs: { system: 2, user: 6, assistant: 8 },
+        items: null,
+      },
+      {
+        id: 'gen_plan',
+        label: 'Generate Plan',
+        status: 'done',
+        summary: "I produced a detailed 5-section paper plan with concrete experiment specifications. Section 3 (Methodology) includes 4 sub-experiments covering attention weight dynamics, plasticity rule comparisons, scaling behavior, and transfer learning performance.",
+        duration: 62, maxDuration: 150,
+        cost: 0.45, maxCost: 3.0,
+        msgs: { system: 2, user: 10, assistant: 12 },
+        items: null,
+      },
+      {
+        id: 'gen_paper_text',
+        label: 'Generate Paper',
+        status: 'done',
+        summary: "I drafted the full paper text across all 5 sections totaling approximately 6,200 words. I ensured each claim is traceable to either a theoretical derivation or an experimental protocol. The Related Work section cites 24 relevant papers with proper attribution.",
+        duration: 180, maxDuration: 150,
+        cost: 1.82, maxCost: 3.0,
+        msgs: { system: 4, user: 22, assistant: 28 },
+        items: null,
+      },
+      {
+        id: 'review_paper',
+        label: 'Review Paper',
+        status: 'done',
+        summary: "I reviewed the generated paper with a simulated 3-reviewer panel. Average score: 6.8/10. Key feedback: strengthen Section 3.2 baseline comparisons, add confidence intervals to Table 1, and expand the limitations discussion into a full subsection.",
+        duration: 95, maxDuration: 150,
+        cost: 0.72, maxCost: 3.0,
+        msgs: { system: 3, user: 14, assistant: 18 },
+        items: null,
+      },
+      {
+        id: 'revise_paper',
+        label: 'Revise Paper',
+        status: 'done',
+        summary: "I applied all reviewer feedback and revised the paper. I added 3 new baselines in Section 3.2, computed confidence intervals for all tables, and expanded limitations to a full subsection. Post-revision simulated reviewer score: 7.9/10.",
+        duration: 120, maxDuration: 150,
+        cost: 1.15, maxCost: 3.0,
+        msgs: { system: 3, user: 18, assistant: 22 },
+        items: null,
+      },
+      {
+        id: 'gen_artifacts',
+        label: 'Generate Artifacts',
+        status: 'done',
+        summary: "I generated 3 of 5 planned artifacts: (1) PyTorch reference implementation of PlasticAttention, (2) Hebbian training script with bio-inspired weight updates, and (3) evaluation harness for synthetic recall tasks. Two artifacts remain pending for Paper Repo phase.",
+        duration: 145, maxDuration: 150,
+        cost: 1.35, maxCost: 3.0,
+        msgs: { system: 4, user: 20, assistant: 24 },
+        items: [
+          { title: 'PlasticAttention Module (PyTorch)', desc: '248 lines | Core attention with plasticity rules', badge: 'Done', badgeColor: 'var(--green)' },
+          { title: 'Hebbian Training Script', desc: '186 lines | Bio-inspired weight update loop', badge: 'Done', badgeColor: 'var(--green)' },
+          { title: 'Synthetic Recall Eval Harness', desc: '312 lines | 4 synthetic recall benchmarks', badge: 'Done', badgeColor: 'var(--green)' },
+          { title: 'Benchmark Runner (GLUE/SuperGLUE)', desc: 'Full benchmark evaluation suite', badge: 'Pending', badgeColor: 'var(--orange)' },
+          { title: 'Results Visualization Notebook', desc: 'Plots, tables, and analysis notebook', badge: 'Pending', badgeColor: 'var(--orange)' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'paper',
+    label: 'Paper Repo',
+    color: 'var(--orange)',
+    colorHex: '#f59e0b',
+    status: 'pending',
+    subs: [
+      {
+        id: 'scaffold_repo',
+        label: 'Scaffold Repository',
+        status: 'pending',
+        summary: "I will create the paper repository structure with LaTeX source, figures directory, code directory, and CI configuration for automated PDF builds on every push to main.",
+        duration: 0, maxDuration: 60,
+        cost: 0.0, maxCost: 1.0,
+        msgs: { system: 0, user: 0, assistant: 0 },
+        items: null,
+      },
+      {
+        id: 'gen_artifact_demos',
+        label: 'Generate Demos',
+        status: 'pending',
+        summary: "I will produce runnable demo scripts for each artifact, including a minimal training example that converges in under 60 seconds and an inference demo with pre-computed weights.",
+        duration: 0, maxDuration: 60,
+        cost: 0.0, maxCost: 1.0,
+        msgs: { system: 0, user: 0, assistant: 0 },
+        items: null,
+      },
+      {
+        id: 'gen_visualizations',
+        label: 'Generate Visualizations',
+        status: 'pending',
+        summary: "I will generate all paper figures: 3 results plots (accuracy curves, attention heatmaps, plasticity dynamics) and 1 architecture diagram using matplotlib and tikz for LaTeX integration.",
+        duration: 0, maxDuration: 60,
+        cost: 0.0, maxCost: 1.0,
+        msgs: { system: 0, user: 0, assistant: 0 },
+        items: null,
+      },
+      {
+        id: 'gen_full_paper',
+        label: 'Compile Paper',
+        status: 'pending',
+        summary: "I will compile the final LaTeX document, integrate all figures and tables, verify all cross-references and citation keys, and produce the camera-ready PDF with proper NeurIPS formatting.",
+        duration: 0, maxDuration: 60,
+        cost: 0.0, maxCost: 1.0,
+        msgs: { system: 0, user: 0, assistant: 0 },
+        items: null,
+      },
+      {
+        id: 'final_review',
+        label: 'Final QA Review',
+        status: 'pending',
+        summary: "I will perform a final quality assurance pass: verify citation formatting, confirm all figures render at publication resolution, validate code reproducibility with a clean environment, and ensure the README covers setup and reproduction steps.",
+        duration: 0, maxDuration: 60,
+        cost: 0.0, maxCost: 1.0,
+        msgs: { system: 0, user: 0, assistant: 0 },
+        items: null,
+      },
+    ],
+  },
+];
+
+// ───────────────────────────────────────────────────────────────
+//  STATE
+// ───────────────────────────────────────────────────────────────
+let activeModule = 0;
+let activeSub = 0;
+let particles = [];
+let animFrame = 0;
+
+// ───────────────────────────────────────────────────────────────
+//  INITIALIZATION
+// ───────────────────────────────────────────────────────────────
+function init() {
+  renderDots();
+  renderPanel();
+  renderMain();
+  updateRing();
+  initParticleCanvas();
+  requestAnimationFrame(particleLoop);
+}
+
+// ───────────────────────────────────────────────────────────────
+//  RING (progress ring in top of strip)
+// ───────────────────────────────────────────────────────────────
+function updateRing() {
+  const mod = MODULES[activeModule];
+  const circumference = 2 * Math.PI * 20;
+  const fill = document.getElementById('ringFill');
+  const pct = document.getElementById('ringPct');
+  const endpoint = document.getElementById('ringEndpoint');
+
+  const totalSubs = MODULES.reduce((s, m) => s + m.subs.length, 0);
+  const doneSubs = MODULES.reduce((s, m) => s + m.subs.filter(sub => sub.status === 'done').length, 0);
+  const overallPct = doneSubs / totalSubs;
+
+  fill.style.stroke = mod.colorHex;
+  fill.style.strokeDasharray = circumference;
+  fill.style.strokeDashoffset = circumference * (1 - overallPct);
+  pct.textContent = Math.round(overallPct * 100) + '%';
+
+  // Position the glowing endpoint at the arc tip
+  const angle = -Math.PI / 2 + 2 * Math.PI * overallPct;
+  const cx = 25 + 20 * Math.cos(angle);
+  const cy = 25 + 20 * Math.sin(angle);
+  endpoint.style.left = (cx - 3) + 'px';
+  endpoint.style.top = (cy - 3) + 'px';
+  endpoint.style.background = mod.colorHex;
+  endpoint.style.color = mod.colorHex;
+}
+
+// ───────────────────────────────────────────────────────────────
+//  MODULE DOTS (ring strip, below ring)
+// ───────────────────────────────────────────────────────────────
+function renderDots() {
+  const container = document.getElementById('moduleDots');
+  container.innerHTML = '';
+  MODULES.forEach((mod, i) => {
+    const dot = document.createElement('div');
+    dot.className = 'mod-dot' + (i === activeModule ? ' active pulse' : '');
+    dot.style.background = mod.colorHex;
+    dot.style.color = mod.colorHex;
+    dot.setAttribute('data-label', mod.label);
+    dot.addEventListener('click', () => {
+      activeModule = i;
+      activeSub = 0;
+      refresh();
+    });
+    container.appendChild(dot);
+  });
+}
+
+// ───────────────────────────────────────────────────────────────
+//  MODULE PANEL (sidebar cards + sub-modules)
+// ───────────────────────────────────────────────────────────────
+function renderPanel() {
+  const panel = document.getElementById('modulePanel');
+  panel.innerHTML = '<div class="panel-title">Pipeline Modules</div>';
+
+  MODULES.forEach((mod, mi) => {
+    const card = document.createElement('div');
+    card.className = 'mod-card' + (mi === activeModule ? ' active' : '');
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('.sub-item')) return;
+      activeModule = mi;
+      activeSub = 0;
+      refresh();
+    });
+
+    const doneCt = mod.subs.filter(s => s.status === 'done').length;
+    const totalCt = mod.subs.length;
+    const pctDone = (doneCt / totalCt) * 100;
+
+    card.innerHTML = `
+      <div class="mod-card-header">
+        <div class="mod-card-dot" style="background:${mod.colorHex}"></div>
+        <div class="mod-card-label">${mod.label}</div>
+      </div>
+      <div class="mod-card-meta">${doneCt}/${totalCt} steps</div>
+      <div class="mod-card-bar">
+        <div class="mod-card-bar-fill" style="width:${pctDone}%;background:${mod.colorHex}"></div>
+      </div>
+    `;
+
+    // Sub-module list
+    const subList = document.createElement('div');
+    subList.className = 'sub-list';
+
+    mod.subs.forEach((sub, si) => {
+      const item = document.createElement('div');
+      const isActive = mi === activeModule && si === activeSub;
+      item.className = 'sub-item'
+        + (isActive ? ' active' : '')
+        + (sub.status === 'done' ? ' done' : '');
+
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        activeModule = mi;
+        activeSub = si;
+        refresh();
+      });
+
+      const statusCls = sub.status === 'done' ? 'done'
+        : sub.status === 'running' ? 'running' : 'pending';
+      const statusTxt = sub.status === 'done' ? '\u2713'
+        : sub.status === 'pending' ? '\u00b7\u00b7\u00b7' : '\u25b6';
+
+      item.innerHTML = `
+        <div class="sub-dot"></div>
+        <div class="sub-label">${sub.label}</div>
+        <div class="sub-status ${statusCls}">${statusTxt}</div>
+      `;
+      subList.appendChild(item);
+    });
+
+    card.appendChild(subList);
+    panel.appendChild(card);
+  });
+}
+
+// ───────────────────────────────────────────────────────────────
+//  MAIN CONTENT (dashboard for selected sub-module)
+// ───────────────────────────────────────────────────────────────
+function renderMain() {
+  const main = document.getElementById('mainContent');
+  const mod = MODULES[activeModule];
+  const sub = mod.subs[activeSub];
+  const totalMsgs = sub.msgs.system + sub.msgs.user + sub.msgs.assistant;
+  const maxMsg = Math.max(sub.msgs.system, sub.msgs.user, sub.msgs.assistant, 1);
+
+  // Module-level totals for the summary strip
+  const modTotalDuration = mod.subs.reduce((s, sb) => s + sb.duration, 0);
+  const modTotalCost = mod.subs.reduce((s, sb) => s + sb.cost, 0);
+  const modTotalMsgs = mod.subs.reduce((s, sb) => s + sb.msgs.system + sb.msgs.user + sb.msgs.assistant, 0);
+  const modDoneSubs = mod.subs.filter(sb => sb.status === 'done').length;
+
+  let html = '';
+
+  // ── Header ──
+  html += `
+    <div class="main-header fade-in">
+      <div class="breadcrumb">
+        <span class="mod-name">${mod.label}</span>
+        <span class="sep">\u203a</span>
+        <span class="sub-name">${sub.label}</span>
+      </div>
+      <h1>
+        ${sub.label}
+        <span class="status-pill ${sub.status}">
+          <span class="pill-dot"></span>
+          ${sub.status === 'done' ? 'Complete' : sub.status === 'running' ? 'Running' : 'Pending'}
+        </span>
+      </h1>
+    </div>
+  `;
+
+  // ── Step timeline ──
+  html += '<div class="step-timeline slide-up">';
+  mod.subs.forEach((s, si) => {
+    const cls = s.status === 'done' ? 'done' : (si === activeSub ? 'active' : 'pending');
+    html += `
+      <div class="step-node ${cls}" onclick="activeSub=${si};refresh();">
+        <div class="step-circle">${si + 1}</div>
+        <div class="step-lbl">${s.label}</div>
+      </div>
+    `;
+    if (si < mod.subs.length - 1) {
+      const lineCls = s.status === 'done' ? 'done' : '';
+      html += `<div class="step-line ${lineCls}"></div>`;
+    }
+  });
+  html += '</div>';
+
+  // ── Summary card ──
+  html += `
+    <div class="summary-card slide-up" style="animation-delay:0.05s">
+      <style>.summary-card::before{background:${mod.colorHex}!important}</style>
+      <div class="label">Agent Summary</div>
+      <div class="text">"${sub.summary}"</div>
+    </div>
+  `;
+
+  // ── Module totals strip ──
+  html += `
+    <div class="totals-row slide-up" style="animation-delay:0.1s">
+      <div class="total-card">
+        <div class="total-icon" style="background:${mod.colorHex}18;color:${mod.colorHex}">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M8 4v4l2.5 1.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="total-info">
+          <div class="total-val" style="color:${mod.colorHex}">${modTotalDuration > 0 ? formatDuration(modTotalDuration) : '--'}</div>
+          <div class="total-lbl">Module Duration</div>
+        </div>
+      </div>
+      <div class="total-card">
+        <div class="total-icon" style="background:${mod.colorHex}18;color:${mod.colorHex}">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+            <path d="M8 2v12M4 6l4-4 4 4M5 10h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div class="total-info">
+          <div class="total-val" style="color:${mod.colorHex}">${modTotalCost > 0 ? '$' + modTotalCost.toFixed(2) : '--'}</div>
+          <div class="total-lbl">Module Cost</div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // ── Stat cards ──
+  html += `
+    <div class="stat-row slide-up" style="animation-delay:0.15s">
+      <div class="stat-card">
+        <div class="stat-label">Step Duration</div>
+        <div class="stat-value" style="color:${sub.duration > 0 ? mod.colorHex : 'var(--text-muted)'}">
+          ${sub.duration > 0 ? sub.duration + 's' : '--'}
+        </div>
+        <div class="stat-bar-track">
+          <div class="stat-bar-fill" style="width:${(sub.duration / sub.maxDuration) * 100}%;background:${mod.colorHex}"></div>
+        </div>
+        <div class="stat-bar-labels">
+          <span>0s</span>
+          <span>${sub.maxDuration}s budget</span>
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-label">Step Cost</div>
+        <div class="stat-value" style="color:${sub.cost > 0 ? mod.colorHex : 'var(--text-muted)'}">
+          ${sub.cost > 0 ? '$' + sub.cost.toFixed(2) : '--'}
+        </div>
+        <div class="stat-bar-track">
+          <div class="stat-bar-fill" style="width:${(sub.cost / sub.maxCost) * 100}%;background:${mod.colorHex}"></div>
+        </div>
+        <div class="stat-bar-labels">
+          <span>$0</span>
+          <span>$${sub.maxCost.toFixed(2)} budget</span>
+        </div>
+      </div>
+
+      <div class="stat-card">
+        <div class="stat-label">Messages</div>
+        <div class="stat-value" style="color:${totalMsgs > 0 ? mod.colorHex : 'var(--text-muted)'}">
+          ${totalMsgs > 0 ? totalMsgs : '--'}
+        </div>
+        <div class="msg-breakdown">
+          ${msgRow('System', sub.msgs.system, maxMsg, totalMsgs, 'var(--text-muted)')}
+          ${msgRow('User', sub.msgs.user, maxMsg, totalMsgs, 'var(--blue)')}
+          ${msgRow('Assistant', sub.msgs.assistant, maxMsg, totalMsgs, 'var(--green)')}
+        </div>
+      </div>
+    </div>
+  `;
+
+  // ── Item list ──
+  if (sub.items && sub.items.length > 0) {
+    html += `
+      <div class="item-section slide-up" style="animation-delay:0.2s">
+        <h3>Items <span class="count">${sub.items.length}</span></h3>
+        <div class="item-list">
+          ${sub.items.map((item, i) => `
+            <div class="item-row">
+              <div class="item-idx">${i + 1}</div>
+              <div class="item-content">
+                <div class="item-title">${item.title}</div>
+                <div class="item-desc">${item.desc}</div>
+              </div>
+              <div class="item-badge" style="color:${item.badgeColor};background:${item.badgeColor}18">${item.badge}</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+  }
+
+  main.innerHTML = html;
+  main.scrollTop = 0;
+}
+
+function msgRow(label, count, maxCount, total, color) {
+  if (total === 0) {
+    return `
+      <div class="msg-row">
+        <div class="dot" style="background:${color}"></div>
+        <div class="lbl">${label}</div>
+        <div class="val">--</div>
+      </div>`;
+  }
+  const pct = (count / maxCount) * 100;
+  return `
+    <div class="msg-row">
+      <div class="dot" style="background:${color}"></div>
+      <div class="lbl">${label}</div>
+      <div class="val">${count}</div>
+      <div class="bar-mini">
+        <div class="bar-mini-fill" style="width:${pct}%;background:${color}"></div>
+      </div>
+    </div>`;
+}
+
+function formatDuration(seconds) {
+  if (seconds < 60) return seconds + 's';
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return m + 'm ' + (s > 0 ? s + 's' : '');
+}
+
+// ───────────────────────────────────────────────────────────────
+//  REFRESH ALL
+// ───────────────────────────────────────────────────────────────
+function refresh() {
+  renderDots();
+  renderPanel();
+  renderMain();
+  updateRing();
+}
+
+// ───────────────────────────────────────────────────────────────
+//  PARTICLE SYSTEM
+// ───────────────────────────────────────────────────────────────
+let canvas, ctx, canvasW, canvasH;
+
+function initParticleCanvas() {
+  canvas = document.getElementById('particleCanvas');
+  ctx = canvas.getContext('2d');
+  resizeCanvas();
+  window.addEventListener('resize', resizeCanvas);
+}
+
+function resizeCanvas() {
+  const pw = parseInt(
+    getComputedStyle(document.documentElement)
+      .getPropertyValue('--module-panel')
+  );
+  canvas.width = pw;
+  canvas.height = window.innerHeight;
+  canvasW = canvas.width;
+  canvasH = canvas.height;
+}
+
+function getActiveCardCenter() {
+  const cards = document.querySelectorAll('.mod-card');
+  if (!cards[activeModule]) return null;
+  const panelRect = document.getElementById('modulePanel').getBoundingClientRect();
+  const cardRect = cards[activeModule].getBoundingClientRect();
+  return {
+    x: cardRect.left - panelRect.left + cardRect.width / 2,
+    y: cardRect.top - panelRect.top + 24,
+  };
+}
+
+function getActiveSubCenter() {
+  const cards = document.querySelectorAll('.mod-card');
+  if (!cards[activeModule]) return null;
+  const subs = cards[activeModule].querySelectorAll('.sub-item');
+  if (!subs[activeSub]) return null;
+  const panelRect = document.getElementById('modulePanel').getBoundingClientRect();
+  const subRect = subs[activeSub].getBoundingClientRect();
+  return {
+    x: subRect.left - panelRect.left + 12,
+    y: subRect.top - panelRect.top + subRect.height / 2,
+  };
+}
+
+function spawnParticle() {
+  const from = getActiveCardCenter();
+  const to = getActiveSubCenter();
+  if (!from || !to) return;
+
+  const mod = MODULES[activeModule];
+  particles.push({
+    x: from.x + (Math.random() - 0.5) * 16,
+    y: from.y,
+    tx: to.x + (Math.random() - 0.5) * 4,
+    ty: to.y,
+    progress: 0,
+    speed: 0.007 + Math.random() * 0.013,
+    size: 1.2 + Math.random() * 1.8,
+    color: mod.colorHex,
+    alpha: 0.6 + Math.random() * 0.4,
+  });
+}
+
+function particleLoop() {
+  animFrame++;
+  ctx.clearRect(0, 0, canvasW, canvasH);
+
+  // Spawn particles at a steady rate
+  if (animFrame % 2 === 0) spawnParticle();
+  if (animFrame % 5 === 0) spawnParticle();
+
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.progress += p.speed;
+
+    if (p.progress >= 1) {
+      particles.splice(i, 1);
+      continue;
+    }
+
+    const t = p.progress;
+    const ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+
+    // Curved path
+    const midX = (p.x + p.tx) / 2 + 12;
+    const midY = (p.y + p.ty) / 2;
+
+    const ax = lerp(p.x, midX, ease);
+    const ay = lerp(p.y, midY, ease);
+    const bx = lerp(midX, p.tx, ease);
+    const by = lerp(midY, p.ty, ease);
+    const px = lerp(ax, bx, ease);
+    const py = lerp(ay, by, ease);
+
+    // Fade in/out
+    let alpha = p.alpha;
+    if (t < 0.12) alpha *= t / 0.12;
+    if (t > 0.82) alpha *= (1 - t) / 0.18;
+
+    // Core dot
+    ctx.globalAlpha = alpha;
+    ctx.beginPath();
+    ctx.arc(px, py, p.size, 0, Math.PI * 2);
+    ctx.fillStyle = p.color;
+    ctx.fill();
+
+    // Soft glow
+    ctx.globalAlpha = alpha * 0.25;
+    const grad = ctx.createRadialGradient(px, py, 0, px, py, p.size * 3);
+    grad.addColorStop(0, p.color);
+    grad.addColorStop(1, 'transparent');
+    ctx.beginPath();
+    ctx.arc(px, py, p.size * 3, 0, Math.PI * 2);
+    ctx.fillStyle = grad;
+    ctx.fill();
+  }
+
+  ctx.globalAlpha = 1;
+  requestAnimationFrame(particleLoop);
+}
+
+function lerp(a, b, t) {
+  return a + (b - a) * t;
+}
+
+// ───────────────────────────────────────────────────────────────
+//  KEYBOARD NAVIGATION
+// ───────────────────────────────────────────────────────────────
+document.addEventListener('keydown', (e) => {
+  const mod = MODULES[activeModule];
+
+  switch (e.key) {
+    case 'ArrowDown':
+      e.preventDefault();
+      if (activeSub < mod.subs.length - 1) {
+        activeSub++;
+        refresh();
+      }
+      break;
+
+    case 'ArrowUp':
+      e.preventDefault();
+      if (activeSub > 0) {
+        activeSub--;
+        refresh();
+      }
+      break;
+
+    case 'ArrowRight':
+      e.preventDefault();
+      if (activeModule < MODULES.length - 1) {
+        activeModule++;
+        activeSub = 0;
+        refresh();
+      }
+      break;
+
+    case 'ArrowLeft':
+      e.preventDefault();
+      if (activeModule > 0) {
+        activeModule--;
+        activeSub = 0;
+        refresh();
+      }
+      break;
+  }
+});
+
+// ───────────────────────────────────────────────────────────────
+//  START
+// ───────────────────────────────────────────────────────────────
+init();
+</script>
+</body>
+</html>

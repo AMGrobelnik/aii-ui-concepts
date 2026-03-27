@@ -1,0 +1,938 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Simple View</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #0a0a0f;
+    color: #e0e0e8;
+    font-family: 'Inter', system-ui, sans-serif;
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  /* ── Left Sidebar ── */
+  .sidebar {
+    width: 160px;
+    min-width: 160px;
+    height: 100vh;
+    position: sticky;
+    top: 0;
+    background: #0e0e16;
+    border-right: 1px solid #1a1a28;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 28px 12px 20px;
+    gap: 24px;
+    z-index: 10;
+  }
+
+  /* Ring container */
+  .ring-wrap {
+    position: relative;
+    width: 110px;
+    height: 110px;
+  }
+  .ring-wrap svg { width: 110px; height: 110px; }
+  .ring-bg {
+    fill: none;
+    stroke: #1a1a28;
+    stroke-width: 7;
+  }
+  .ring-fill {
+    fill: none;
+    stroke-width: 7;
+    stroke-linecap: round;
+    stroke: url(#ringGrad);
+    filter: url(#ringGlow);
+    transition: stroke-dasharray 0.6s ease, stroke-dashoffset 0.6s ease;
+  }
+  .ring-center {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+  }
+  .ring-pct { font-size: 22px; font-weight: 700; color: #fff; }
+  .ring-label { font-size: 9px; color: #888; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.6px; }
+
+  /* Ring arc highlight segment */
+  .ring-segment {
+    fill: none;
+    stroke-width: 7;
+    stroke-linecap: round;
+    opacity: 0;
+    transition: opacity 0.4s ease, stroke-dasharray 0.4s ease, stroke-dashoffset 0.4s ease;
+  }
+  .ring-segment.visible { opacity: 0.35; }
+
+  /* Endpoint dot on ring */
+  .ring-endpoint {
+    fill: #7c6aff;
+    filter: url(#ringGlow);
+    transition: cx 0.6s ease, cy 0.6s ease;
+  }
+
+  /* Module legend */
+  .legend { width: 100%; display: flex; flex-direction: column; gap: 6px; }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.25s ease;
+    font-size: 11.5px;
+    user-select: none;
+  }
+  .legend-item:hover { background: #16162a; }
+  .legend-item.selected { background: #1a1a36; }
+  .legend-icon {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .legend-name { flex: 1; color: #c0c0cc; font-weight: 500; }
+  .legend-item.selected .legend-name { color: #fff; }
+  .legend-stat { color: #666; font-size: 10px; font-weight: 400; }
+
+  /* ── Main Area ── */
+  .main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── Top Dot Strips (sticky) ── */
+  .dot-strips {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: #0a0a0f;
+    border-bottom: 1px solid #1a1a28;
+    padding: 0 32px;
+  }
+
+  /* Row 1 — Module dots */
+  .row1 {
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    position: relative;
+  }
+  .mod-node-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+    position: relative;
+    z-index: 2;
+    user-select: none;
+  }
+  .mod-node {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 600;
+    color: #fff;
+    position: relative;
+    transition: box-shadow 0.3s ease, transform 0.3s ease;
+  }
+  .mod-node.done { background: var(--clr); }
+  .mod-node.active {
+    background: var(--clr);
+    animation: pulseGlow 2s ease-in-out infinite;
+  }
+  .mod-node.pending {
+    background: transparent;
+    border: 2px solid #333;
+    color: #555;
+  }
+  .mod-node.selected-ring {
+    box-shadow: 0 0 0 3px #0a0a0f, 0 0 0 5px rgba(255,255,255,0.7);
+  }
+  .mod-name {
+    font-size: 9px;
+    color: #666;
+    margin-top: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    transition: color 0.3s ease;
+    white-space: nowrap;
+  }
+  .mod-node-wrap.sel .mod-name { color: #bbb; }
+
+  /* Connector lines between module nodes */
+  .mod-connector {
+    width: 60px;
+    height: 2px;
+    position: relative;
+    z-index: 1;
+    margin: 0 4px;
+    margin-bottom: 14px;
+    border-radius: 1px;
+    overflow: hidden;
+  }
+  .mod-connector-bg {
+    position: absolute;
+    inset: 0;
+    background: #1a1a28;
+    border-radius: 1px;
+  }
+  .mod-connector-fill {
+    position: absolute;
+    top: 0; left: 0;
+    height: 100%;
+    border-radius: 1px;
+    transition: width 0.4s ease;
+  }
+  .mod-connector-fill.full { width: 100%; }
+  .mod-connector-fill.partial {
+    width: 50%;
+    animation: connectorPulse 1.5s ease-in-out infinite;
+  }
+  .mod-connector-fill.empty { width: 0; }
+
+  /* Row 2 — Sub-module dots */
+  .row2 {
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    position: relative;
+    overflow: hidden;
+  }
+  .row2-inner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    transition: opacity 0.25s ease, transform 0.25s ease;
+  }
+  .row2-inner.entering {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  .sub-node-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+    position: relative;
+    z-index: 2;
+    user-select: none;
+  }
+  .sub-node {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 8px;
+    font-weight: 600;
+    color: #fff;
+    transition: box-shadow 0.3s ease, transform 0.3s ease, width 0.3s ease, height 0.3s ease;
+  }
+  .sub-node.done { background: var(--clr); opacity: 0.85; }
+  .sub-node.active {
+    background: var(--clr);
+    box-shadow: 0 0 10px var(--clr);
+  }
+  .sub-node.pending {
+    background: transparent;
+    border: 1.5px solid #333;
+    color: #555;
+  }
+  .sub-node.sel {
+    width: 22px;
+    height: 22px;
+    box-shadow: 0 0 0 2px #0a0a0f, 0 0 0 4px rgba(255,255,255,0.65);
+  }
+  .sub-name {
+    font-size: 8px;
+    color: #555;
+    margin-top: 3px;
+    white-space: nowrap;
+    transition: color 0.3s ease;
+  }
+  .sub-node-wrap.sel .sub-name { color: #bbb; }
+
+  .sub-connector {
+    width: 32px;
+    height: 1.5px;
+    background: #1a1a28;
+    margin: 0 2px;
+    margin-bottom: 12px;
+    border-radius: 1px;
+    z-index: 1;
+  }
+
+  /* ── Content Area ── */
+  .content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 28px 40px 40px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .content-inner {
+    max-width: 700px;
+    width: 100%;
+  }
+
+  .content-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 6px;
+  }
+  .content-subtitle {
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 16px;
+  }
+  .content-summary {
+    font-size: 13.5px;
+    color: #aaa;
+    line-height: 1.6;
+    margin-bottom: 24px;
+  }
+
+  /* Artifact / detail cards */
+  .card-list { display: flex; flex-direction: column; gap: 6px; width: 100%; }
+  .card {
+    background: #111119;
+    border: 1px solid #1a1a28;
+    border-radius: 10px;
+    overflow: hidden;
+    transition: border-color 0.25s ease;
+  }
+  .card:hover { border-color: #2a2a40; }
+  .card-header {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    gap: 10px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .card-icon {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    flex-shrink: 0;
+  }
+  .card-icon.done { background: #1a3a2a; color: #4ade80; }
+  .card-icon.running { background: #1a2a3a; color: #60a5fa; animation: pulseGlow 2s ease-in-out infinite; }
+  .card-icon.pending-icon { background: #1a1a22; color: #555; }
+  .card-title { flex: 1; font-size: 13px; font-weight: 500; color: #ddd; }
+  .card-meta { font-size: 11px; color: #666; display: flex; gap: 12px; }
+  .card-meta span { white-space: nowrap; }
+  .card-chevron {
+    color: #444;
+    font-size: 12px;
+    transition: transform 0.25s ease;
+    width: 16px;
+    text-align: center;
+  }
+  .card.open .card-chevron { transform: rotate(90deg); }
+  .card-body {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease, padding 0.3s ease;
+  }
+  .card.open .card-body {
+    max-height: 200px;
+    padding: 0 16px 14px 46px;
+  }
+  .card-body-text {
+    font-size: 12px;
+    color: #888;
+    line-height: 1.6;
+  }
+
+  /* Footer */
+  .footer {
+    padding: 14px 40px;
+    border-top: 1px solid #1a1a28;
+    display: flex;
+    gap: 24px;
+    font-size: 11px;
+    color: #555;
+  }
+  .footer span { display: flex; align-items: center; gap: 5px; }
+
+  /* ── Animations ── */
+  @keyframes pulseGlow {
+    0%, 100% { box-shadow: 0 0 8px var(--clr, #7c6aff); }
+    50% { box-shadow: 0 0 18px var(--clr, #7c6aff); }
+  }
+  @keyframes connectorPulse {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; }
+  }
+
+  /* Scrollbar */
+  .content::-webkit-scrollbar { width: 5px; }
+  .content::-webkit-scrollbar-track { background: transparent; }
+  .content::-webkit-scrollbar-thumb { background: #222; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<!-- ── SVG Defs ── -->
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#4ade80"/>
+      <stop offset="50%" stop-color="#a855f7"/>
+      <stop offset="100%" stop-color="#3b82f6"/>
+    </linearGradient>
+    <filter id="ringGlow">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="connGrad1" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#4ade80"/>
+      <stop offset="100%" stop-color="#a855f7"/>
+    </linearGradient>
+    <linearGradient id="connGrad2" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#a855f7"/>
+      <stop offset="100%" stop-color="#3b82f6"/>
+    </linearGradient>
+    <linearGradient id="connGrad3" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#555"/>
+    </linearGradient>
+  </defs>
+</svg>
+
+<!-- ── Sidebar ── -->
+<aside class="sidebar">
+  <div class="ring-wrap">
+    <svg viewBox="0 0 110 110">
+      <circle class="ring-bg" cx="55" cy="55" r="46"/>
+      <!-- Segment highlight for selected module -->
+      <circle class="ring-segment" id="ringSegment" cx="55" cy="55" r="46"
+        stroke="url(#ringGrad)" transform="rotate(-90 55 55)"/>
+      <circle class="ring-fill" id="ringFill" cx="55" cy="55" r="46"
+        stroke-dasharray="289.03" stroke-dashoffset="101.16"
+        transform="rotate(-90 55 55)"/>
+      <circle class="ring-endpoint" id="ringEndpoint" cx="55" cy="9" r="4"/>
+    </svg>
+    <div class="ring-center">
+      <span class="ring-pct" id="ringPct">65%</span>
+      <span class="ring-label">Pipeline Progress</span>
+    </div>
+  </div>
+
+  <div class="legend" id="legend"></div>
+</aside>
+
+<!-- ── Main ── -->
+<div class="main">
+  <div class="dot-strips">
+    <div class="row1" id="row1"></div>
+    <div class="row2"><div class="row2-inner" id="row2"></div></div>
+  </div>
+  <div class="content">
+    <div class="content-inner" id="contentInner"></div>
+  </div>
+  <div class="footer">
+    <span><b>Elapsed</b>&nbsp; 38m 12s</span>
+    <span><b>Cost</b>&nbsp; $5.41</span>
+    <span><b>Tokens</b>&nbsp; 1.2M in / 340K out</span>
+    <span style="margin-left:auto;color:#444">Arrow keys to navigate</span>
+  </div>
+</div>
+
+<script>
+// ── Data Model ──
+const COLORS = { seed: '#4ade80', hypo: '#a855f7', invention: '#3b82f6', paper: '#555' };
+
+const MODULES = [
+  {
+    id: 'seed', name: 'Seed', color: COLORS.seed, status: 'done',
+    label: '\\u2713', legendStat: '\\u2713 4/4',
+    subs: [
+      { id: 'mine', name: 'Mine', status: 'done' },
+      { id: 'kg', name: 'KG', status: 'done' },
+      { id: 'gaps', name: 'Gaps', status: 'done' },
+      { id: 'seeds', name: 'Seeds', status: 'done' },
+    ],
+  },
+  {
+    id: 'hypo', name: 'Hypothesis', color: COLORS.hypo, status: 'done',
+    label: '8.4', legendStat: '\\u2713 6/6',
+    subs: [
+      { id: 'gen1', name: 'Gen 1', status: 'done' },
+      { id: 'rev1', name: 'Rev 1', status: 'done' },
+      { id: 'gen2', name: 'Gen 2', status: 'done' },
+      { id: 'rev2', name: 'Rev 2', status: 'done' },
+      { id: 'gen3', name: 'Gen 3', status: 'done' },
+      { id: 'rev3', name: 'Rev 3', status: 'done' },
+    ],
+  },
+  {
+    id: 'invention', name: 'Invention', color: COLORS.invention, status: 'active',
+    label: '3/5', legendStat: '\\u25b6 3/6',
+    subs: [
+      { id: 'strategy', name: 'Strategy', status: 'done' },
+      { id: 'plan', name: 'Plan', status: 'done' },
+      { id: 'artifacts', name: 'Artifacts', status: 'active' },
+      { id: 'paper_draft', name: 'Paper Draft', status: 'pending' },
+      { id: 'review', name: 'Review', status: 'pending' },
+      { id: 'update', name: 'Update', status: 'pending' },
+    ],
+  },
+  {
+    id: 'paper', name: 'Paper', color: COLORS.paper, status: 'pending',
+    label: '\\u25cb', legendStat: '\\u25cb 0/5',
+    subs: [
+      { id: 'compile', name: 'Compile', status: 'pending' },
+      { id: 'demos', name: 'Demos', status: 'pending' },
+      { id: 'viz', name: 'Viz', status: 'pending' },
+      { id: 'full_paper', name: 'Full Paper', status: 'pending' },
+      { id: 'repo', name: 'Repo', status: 'pending' },
+    ],
+  },
+];
+
+// Content for each sub-step
+const CONTENT = {
+  // Seed
+  mine: {
+    title: 'Mine Papers',
+    subtitle: 'Seed Phase',
+    summary: 'Collected 2,847 papers from Semantic Scholar across 4 research domains. Filtered to 312 high-relevance candidates based on citation velocity and recency.',
+    cards: [
+      { title: 'Query Expansion', status: 'done', meta: ['312 papers', '2m 08s', '$0.42'], detail: 'Expanded initial 8 seed queries to 34 using LLM-generated synonyms and related terms. Semantic Scholar API returned 2,847 results across domains.' },
+      { title: 'Relevance Filter', status: 'done', meta: ['89% precision', '1m 44s', '$0.38'], detail: 'Two-pass filtering: citation velocity threshold (>5/yr) then LLM relevance scoring. 312 papers retained.' },
+    ]
+  },
+  kg: {
+    title: 'Build Knowledge Graph',
+    subtitle: 'Seed Phase',
+    summary: 'Extracted 1,204 entities and 3,891 relationships from filtered papers. Graph density: 0.026.',
+    cards: [
+      { title: 'Entity Extraction', status: 'done', meta: ['1,204 entities', '3m 12s', '$0.87'], detail: 'Named entity recognition on abstracts and conclusions. Methods, datasets, metrics, and findings extracted.' },
+      { title: 'Relation Linking', status: 'done', meta: ['3,891 edges', '2m 50s', '$0.71'], detail: 'Co-occurrence and LLM-based relation classification. Typed edges: uses, improves, contradicts, extends.' },
+    ]
+  },
+  gaps: {
+    title: 'Identify Gaps',
+    subtitle: 'Seed Phase',
+    summary: 'Found 18 research gaps using structural hole analysis on the knowledge graph. Top gap: cross-lingual contrastive learning lacks code-switching augmentation.',
+    cards: [
+      { title: 'Structural Holes', status: 'done', meta: ['18 gaps', '1m 55s', '$0.52'], detail: 'Burt structural hole analysis on KG. Identified weakly-connected subgraph pairs where bridging research is missing.' },
+      { title: 'Gap Scoring', status: 'done', meta: ['ranked', '1m 20s', '$0.34'], detail: 'Scored gaps by novelty potential, feasibility, and expected impact. Top 5 gaps forwarded to seed generation.' },
+    ]
+  },
+  seeds: {
+    title: 'Generate Seeds',
+    subtitle: 'Seed Phase',
+    summary: 'Generated 6 seed hypotheses from top research gaps. Each seed includes a core claim, required evidence, and falsification criteria.',
+    cards: [
+      { title: 'Seed Generation', status: 'done', meta: ['6 seeds', '2m 30s', '$0.68'], detail: 'LLM-generated seed hypotheses from top 5 gaps. Each seed structured with claim, evidence requirements, and falsification criteria.' },
+      { title: 'Dedup & Merge', status: 'done', meta: ['6 unique', '0m 45s', '$0.18'], detail: 'Semantic similarity check across seeds. No duplicates found. All 6 seeds passed novelty threshold.' },
+    ]
+  },
+  // Hypothesis
+  gen1: {
+    title: 'Generate Hypotheses (Round 1)',
+    subtitle: 'Hypothesis Loop, Iteration 1',
+    summary: 'Expanded 6 seeds into 12 detailed hypotheses with experimental designs. Average confidence: 6.2/10.',
+    cards: [
+      { title: 'Hypothesis Expansion', status: 'done', meta: ['12 hypotheses', '4m 10s', '$1.12'], detail: 'Each seed expanded into 2 hypothesis variants with different experimental approaches and expected outcomes.' },
+    ]
+  },
+  rev1: {
+    title: 'Review Hypotheses (Round 1)',
+    subtitle: 'Hypothesis Loop, Iteration 1',
+    summary: 'Reviewed 12 hypotheses. 4 rejected (unfalsifiable or redundant), 8 advanced. Mean score: 6.8/10.',
+    cards: [
+      { title: 'LLM Review', status: 'done', meta: ['8 advanced', '3m 22s', '$0.94'], detail: 'Multi-criteria review: novelty, feasibility, falsifiability, impact. 4 hypotheses rejected for lacking clear falsification criteria.' },
+    ]
+  },
+  gen2: {
+    title: 'Generate Hypotheses (Round 2)',
+    subtitle: 'Hypothesis Loop, Iteration 2',
+    summary: 'Refined 8 hypotheses incorporating review feedback. Added experimental controls and baseline comparisons.',
+    cards: [
+      { title: 'Refinement', status: 'done', meta: ['8 hypotheses', '3m 45s', '$1.02'], detail: 'Addressed reviewer feedback: added control experiments, clarified metrics, specified baselines for comparison.' },
+    ]
+  },
+  rev2: {
+    title: 'Review Hypotheses (Round 2)',
+    subtitle: 'Hypothesis Loop, Iteration 2',
+    summary: 'Second review pass. 3 more rejected. 5 hypotheses remain, mean score: 7.9/10.',
+    cards: [
+      { title: 'LLM Review', status: 'done', meta: ['5 advanced', '2m 58s', '$0.81'], detail: 'Stricter review criteria. 3 hypotheses dropped for insufficient novelty over existing work. Remaining 5 show strong differentiation.' },
+    ]
+  },
+  gen3: {
+    title: 'Generate Hypotheses (Round 3)',
+    subtitle: 'Hypothesis Loop, Iteration 3',
+    summary: 'Final refinement of top 5 hypotheses. Selected best candidate: contrastive alignment with code-switching augmentation. Score: 8.4/10.',
+    cards: [
+      { title: 'Final Polish', status: 'done', meta: ['5 finalized', '3m 15s', '$0.88'], detail: 'Polished experimental designs, added ablation study plans, specified evaluation datasets and metrics.' },
+    ]
+  },
+  rev3: {
+    title: 'Review Hypotheses (Round 3)',
+    subtitle: 'Hypothesis Loop, Iteration 3',
+    summary: 'Final review complete. Top hypothesis selected with 8.4/10 score. Ready for invention loop.',
+    cards: [
+      { title: 'Final Selection', status: 'done', meta: ['1 selected', '2m 10s', '$0.56'], detail: 'Contrastive alignment with code-switching augmentation selected as primary hypothesis. Backup: multilingual bridging via shared subword spaces.' },
+    ]
+  },
+  // Invention
+  strategy: {
+    title: 'Generate Strategy',
+    subtitle: 'Invention Loop, Iteration 2',
+    summary: 'Contrastive alignment with code-switching augmentation. Added ablation experiments to address reviewer feedback.',
+    cards: [
+      { title: 'Strategy Definition', status: 'done', meta: ['finalized', '3m 08s', '$0.84'], detail: 'Core approach: contrastive learning on code-switched parallel sentences. Augmentation creates synthetic bilingual examples by mixing tokens from aligned pairs.' },
+      { title: 'Ablation Plan', status: 'done', meta: ['4 conditions', '1m 45s', '$0.46'], detail: 'Four ablation conditions: no augmentation, random mixing, syntax-aware mixing, full code-switching. Each evaluated on 3 language pairs.' },
+    ]
+  },
+  plan: {
+    title: 'Generate Plan',
+    subtitle: 'Invention Loop, Iteration 2',
+    summary: 'Detailed research plan with 5 artifacts, estimated 15min runtime, $5.80 budget.',
+    cards: [
+      { title: 'Artifact Schedule', status: 'done', meta: ['5 artifacts', '2m 20s', '$0.62'], detail: 'Ordered: baseline, multilingual pairs, convergence proof, ablation study, cross-lingual evaluation. Dependencies mapped.' },
+      { title: 'Resource Estimation', status: 'done', meta: ['$5.80 budget', '0m 55s', '$0.24'], detail: 'Token budget allocated per artifact. Total estimated: 1.8M input tokens, 520K output tokens across all artifacts.' },
+    ]
+  },
+  artifacts: {
+    title: 'Generate Artifacts',
+    subtitle: 'Invention Loop, Iteration 2',
+    summary: '3 of 5 research artifacts complete. Baseline shows 17.5% accuracy improvement. Ablation study running.',
+    cards: [
+      { title: 'Contrastive Baseline', status: 'done', meta: ['acc: 0.847 (+17.5%)', '4m 32s', '$2.14'], detail: 'Trained contrastive model on EN-DE parallel corpus. 17.5% accuracy improvement over mBERT baseline on cross-lingual transfer benchmark. Learning rate: 2e-5, batch size: 64.' },
+      { title: 'Multilingual Pairs', status: 'done', meta: ['2,400 examples', '3m 15s', '$1.02'], detail: 'Generated 2,400 code-switched examples across EN-DE, EN-FR, EN-ZH pairs. Syntax-aware mixing preserves grammaticality in 94% of cases.' },
+      { title: 'Convergence Proof', status: 'done', meta: ['verified (Lean 4)', '2m 41s', '$0.89'], detail: 'Formal proof that contrastive loss with code-switching augmentation converges under mild assumptions. Verified in Lean 4 proof assistant.' },
+      { title: 'Ablation Study', status: 'running', meta: ['running...', '1m 20s', '$1.36'], detail: 'Currently evaluating syntax-aware mixing condition on EN-FR pair. 2 of 12 conditions complete.' },
+      { title: 'Cross-lingual Eval', status: 'pending', meta: ['pending', '--', '--'], detail: 'Will evaluate final model on XNLI, XQuAD, and MLQA benchmarks across 8 languages.' },
+    ]
+  },
+  paper_draft: {
+    title: 'Paper Draft',
+    subtitle: 'Invention Loop, Iteration 2',
+    summary: 'Awaiting artifact completion before drafting paper sections.',
+    cards: [
+      { title: 'Draft Generation', status: 'pending', meta: ['pending', '--', '--'], detail: 'Will generate Introduction, Methods, Results, and Discussion sections based on completed artifacts.' },
+    ]
+  },
+  review: {
+    title: 'Review Paper',
+    subtitle: 'Invention Loop, Iteration 2',
+    summary: 'Pending paper draft completion.',
+    cards: [
+      { title: 'Self-Review', status: 'pending', meta: ['pending', '--', '--'], detail: 'LLM-based review simulating 3 reviewer perspectives: methodology, novelty, and presentation quality.' },
+    ]
+  },
+  update: {
+    title: 'Update Paper',
+    subtitle: 'Invention Loop, Iteration 2',
+    summary: 'Pending review completion.',
+    cards: [
+      { title: 'Revision', status: 'pending', meta: ['pending', '--', '--'], detail: 'Address reviewer feedback and update paper sections. May trigger additional artifact generation if needed.' },
+    ]
+  },
+  // Paper
+  compile: {
+    title: 'Compile Paper',
+    subtitle: 'Paper Generation',
+    summary: 'Pending invention loop completion.',
+    cards: [
+      { title: 'LaTeX Compilation', status: 'pending', meta: ['pending', '--', '--'], detail: 'Compile all sections into final LaTeX document with proper formatting, citations, and cross-references.' },
+    ]
+  },
+  demos: {
+    title: 'Generate Demos',
+    subtitle: 'Paper Generation',
+    summary: 'Pending.',
+    cards: [
+      { title: 'Interactive Demos', status: 'pending', meta: ['pending', '--', '--'], detail: 'Generate Python demo scripts for key results. Interactive visualization of contrastive learning dynamics.' },
+    ]
+  },
+  viz: {
+    title: 'Generate Visualizations',
+    subtitle: 'Paper Generation',
+    summary: 'Pending.',
+    cards: [
+      { title: 'Figures', status: 'pending', meta: ['pending', '--', '--'], detail: 'Generate publication-quality figures: training curves, ablation heatmap, cross-lingual transfer matrix, t-SNE embedding plot.' },
+    ]
+  },
+  full_paper: {
+    title: 'Full Paper Assembly',
+    subtitle: 'Paper Generation',
+    summary: 'Pending.',
+    cards: [
+      { title: 'Assembly', status: 'pending', meta: ['pending', '--', '--'], detail: 'Combine text, figures, tables, and appendices into final camera-ready PDF.' },
+    ]
+  },
+  repo: {
+    title: 'Generate Repository',
+    subtitle: 'Paper Generation',
+    summary: 'Pending.',
+    cards: [
+      { title: 'Code Repository', status: 'pending', meta: ['pending', '--', '--'], detail: 'Package all code, data scripts, and configs into a reproducible GitHub repository with README and CI.' },
+    ]
+  },
+};
+
+// ── State ──
+let selMod = 2;   // Invention
+let selSub = 2;   // Artifacts
+
+// ── Ring helpers ──
+const CIRC = 2 * Math.PI * 46; // ~289.03
+const TOTAL_STEPS = MODULES.reduce((s, m) => s + m.subs.length, 0); // 21
+
+function getProgress() {
+  let done = 0;
+  MODULES.forEach(m => m.subs.forEach(s => { if (s.status === 'done') done++; }));
+  return done / TOTAL_STEPS;
+}
+
+function updateRing() {
+  const pct = getProgress();
+  const offset = CIRC * (1 - pct);
+  document.getElementById('ringFill').setAttribute('stroke-dashoffset', offset);
+  document.getElementById('ringPct').textContent = Math.round(pct * 100) + '%';
+
+  // Endpoint dot position
+  const angle = -Math.PI / 2 + 2 * Math.PI * pct;
+  const ex = 55 + 46 * Math.cos(angle);
+  const ey = 55 + 46 * Math.sin(angle);
+  const ep = document.getElementById('ringEndpoint');
+  ep.setAttribute('cx', ex);
+  ep.setAttribute('cy', ey);
+
+  // Segment highlight for selected module
+  updateRingSegment();
+}
+
+function updateRingSegment() {
+  const seg = document.getElementById('ringSegment');
+  // Calculate where this module's arc starts and its length
+  let before = 0;
+  for (let i = 0; i < selMod; i++) before += MODULES[i].subs.length;
+  const modSteps = MODULES[selMod].subs.length;
+  const startFrac = before / TOTAL_STEPS;
+  const lenFrac = modSteps / TOTAL_STEPS;
+
+  const dashLen = CIRC * lenFrac;
+  const gapLen = CIRC - dashLen;
+  const dashOffset = -CIRC * startFrac;
+
+  seg.setAttribute('stroke-dasharray', `${dashLen} ${gapLen}`);
+  seg.setAttribute('stroke-dashoffset', dashOffset);
+  seg.classList.add('visible');
+}
+
+// ── Legend ──
+function renderLegend() {
+  const el = document.getElementById('legend');
+  el.innerHTML = MODULES.map((m, i) => `
+    <div class="legend-item ${i === selMod ? 'selected' : ''}" data-mod="${i}">
+      <div class="legend-icon" style="background:${m.color}"></div>
+      <span class="legend-name">${m.name}</span>
+      <span class="legend-stat">${m.legendStat}</span>
+    </div>
+  `).join('');
+  el.querySelectorAll('.legend-item').forEach(item => {
+    item.addEventListener('click', () => selectModule(+item.dataset.mod));
+  });
+}
+
+// ── Row 1 — Module Dots ──
+function renderRow1() {
+  const el = document.getElementById('row1');
+  let html = '';
+  MODULES.forEach((m, i) => {
+    if (i > 0) {
+      const gradId = `connGrad${i}`;
+      const prevDone = MODULES[i-1].status === 'done';
+      const curActive = m.status !== 'pending';
+      const fillClass = prevDone && curActive ? 'full' : (prevDone ? 'partial' : 'empty');
+      html += `<div class="mod-connector">
+        <div class="mod-connector-bg"></div>
+        <div class="mod-connector-fill ${fillClass}" style="background:url(#${gradId});background:linear-gradient(90deg,${MODULES[i-1].color},${m.color})"></div>
+      </div>`;
+    }
+    const stCls = m.status === 'done' ? 'done' : (m.status === 'active' ? 'active' : 'pending');
+    const selCls = i === selMod ? 'selected-ring' : '';
+    const wrapSel = i === selMod ? 'sel' : '';
+    html += `<div class="mod-node-wrap ${wrapSel}" data-mod="${i}">
+      <div class="mod-node ${stCls} ${selCls}" style="--clr:${m.color}">${m.label}</div>
+      <span class="mod-name">${m.name}</span>
+    </div>`;
+  });
+  el.innerHTML = html;
+  el.querySelectorAll('.mod-node-wrap').forEach(w => {
+    w.addEventListener('click', () => selectModule(+w.dataset.mod));
+  });
+}
+
+// ── Row 2 — Sub-module Dots ──
+function renderRow2(animate) {
+  const el = document.getElementById('row2');
+  const mod = MODULES[selMod];
+
+  if (animate) {
+    el.classList.add('entering');
+    setTimeout(() => {
+      buildRow2Inner(el, mod);
+      el.classList.remove('entering');
+    }, 150);
+  } else {
+    buildRow2Inner(el, mod);
+  }
+}
+
+function buildRow2Inner(el, mod) {
+  let html = '';
+  mod.subs.forEach((s, i) => {
+    if (i > 0) {
+      html += `<div class="sub-connector"></div>`;
+    }
+    const stCls = s.status === 'done' ? 'done' : (s.status === 'active' ? 'active' : 'pending');
+    const selCls = i === selSub ? 'sel' : '';
+    const wrapSel = i === selSub ? 'sel' : '';
+    const icon = s.status === 'done' ? '\\u2713' : (s.status === 'active' ? '\\u25b6' : '');
+    html += `<div class="sub-node-wrap ${wrapSel}" data-sub="${i}">
+      <div class="sub-node ${stCls} ${selCls}" style="--clr:${mod.color}">${icon}</div>
+      <span class="sub-name">${s.name}</span>
+    </div>`;
+  });
+  el.innerHTML = html;
+  el.querySelectorAll('.sub-node-wrap').forEach(w => {
+    w.addEventListener('click', () => selectSub(+w.dataset.sub));
+  });
+}
+
+// ── Content ──
+function renderContent() {
+  const mod = MODULES[selMod];
+  const sub = mod.subs[selSub];
+  const data = CONTENT[sub.id];
+  if (!data) {
+    document.getElementById('contentInner').innerHTML = `<div class="content-title">${sub.name}</div><div class="content-summary" style="margin-top:12px">No data available.</div>`;
+    return;
+  }
+
+  let html = `
+    <div class="content-title">${data.title}</div>
+    <div class="content-subtitle">${data.subtitle}</div>
+    <div class="content-summary">${data.summary}</div>
+    <div class="card-list">
+  `;
+
+  data.cards.forEach((c, i) => {
+    const iconCls = c.status === 'done' ? 'done' : (c.status === 'running' ? 'running' : 'pending-icon');
+    const iconChar = c.status === 'done' ? '\u2713' : (c.status === 'running' ? '\u25b6' : '\u25cb');
+    html += `
+      <div class="card" data-card="${i}">
+        <div class="card-header">
+          <div class="card-icon ${iconCls}">${iconChar}</div>
+          <span class="card-title">${c.title}</span>
+          <div class="card-meta">
+            ${c.meta.map(m => `<span>${m}</span>`).join('')}
+          </div>
+          <span class="card-chevron">\u25b8</span>
+        </div>
+        <div class="card-body">
+          <div class="card-body-text">${c.detail}</div>
+        </div>
+      </div>
+    `;
+  });
+
+  html += '</div>';
+  document.getElementById('contentInner').innerHTML = html;
+
+  // Card expand/collapse
+  document.querySelectorAll('.card').forEach(card => {
+    card.querySelector('.card-header').addEventListener('click', () => {
+      card.classList.toggle('open');
+    });
+  });
+}
+
+// ── Selection Logic ──
+function selectModule(idx) {
+  selMod = Math.max(0, Math.min(MODULES.length - 1, idx));
+  // Find the active or first sub
+  const mod = MODULES[selMod];
+  const activeIdx = mod.subs.findIndex(s => s.status === 'active');
+  selSub = activeIdx >= 0 ? activeIdx : 0;
+  renderAll(true);
+}
+
+function selectSub(idx) {
+  const mod = MODULES[selMod];
+  selSub = Math.max(0, Math.min(mod.subs.length - 1, idx));
+  renderAll(false);
+}
+
+function renderAll(animateRow2) {
+  renderLegend();
+  renderRow1();
+  renderRow2(animateRow2);
+  renderContent();
+  updateRing();
+}
+
+// ── Keyboard Navigation ──
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowLeft') {
+    e.preventDefault();
+    selectSub(selSub - 1);
+  } else if (e.key === 'ArrowRight') {
+    e.preventDefault();
+    selectSub(selSub + 1);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    selectModule(selMod - 1);
+  } else if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    selectModule(selMod + 1);
+  }
+});
+
+// ── Init ──
+renderAll(false);
+</script>
+</body>
+</html>

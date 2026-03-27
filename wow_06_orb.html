@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Living Orb</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #050510;
+    font-family: 'Inter', sans-serif;
+    color: #fff;
+    overflow: hidden;
+    width: 100vw;
+    height: 100vh;
+    cursor: default;
+  }
+
+  canvas#orbCanvas {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    z-index: 1;
+  }
+
+  /* --- Radial background glow --- */
+  #bgGlow {
+    position: fixed;
+    top: 50%; left: 50%;
+    width: 900px; height: 900px;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(60,100,255,0.08) 0%, transparent 70%);
+    z-index: 0;
+    pointer-events: none;
+    transition: background 2s ease;
+  }
+
+  /* --- Satellite nodes --- */
+  .satellite {
+    position: fixed;
+    z-index: 10;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    transition: transform 0.3s ease, filter 0.3s ease;
+  }
+  .satellite:hover { transform: scale(1.12); }
+
+  .sat-dot {
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    position: relative;
+    transition: box-shadow 0.6s ease, opacity 0.6s ease;
+  }
+  .sat-dot::after {
+    content: '';
+    position: absolute;
+    inset: 3px;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.35);
+  }
+
+  .sat-label {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    opacity: 0.7;
+    white-space: nowrap;
+    transition: opacity 0.3s;
+  }
+  .satellite:hover .sat-label { opacity: 1; }
+
+  .satellite.completed .sat-dot { opacity: 1; }
+  .satellite.active .sat-dot { animation: satPulse 2s ease-in-out infinite; }
+  .satellite.pending .sat-dot { opacity: 0.3; }
+
+  @keyframes satPulse {
+    0%, 100% { box-shadow: 0 0 15px var(--sat-color), 0 0 30px var(--sat-color); }
+    50% { box-shadow: 0 0 25px var(--sat-color), 0 0 50px var(--sat-color), 0 0 70px var(--sat-color); }
+  }
+
+  /* --- Orbiting text --- */
+  #orbitContainer {
+    position: fixed;
+    top: 50%; left: 50%;
+    width: 0; height: 0;
+    z-index: 8;
+    pointer-events: none;
+  }
+
+  .orbit-ring {
+    position: absolute;
+    top: 0; left: 0;
+    transform-origin: 0 0;
+  }
+
+  .orbit-text {
+    position: absolute;
+    white-space: nowrap;
+    font-weight: 400;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+  }
+
+  .orbit-stage {
+    font-size: 12px;
+    color: rgba(255,255,255,0.55);
+  }
+
+  .orbit-stats {
+    font-size: 11px;
+    color: rgba(255,255,255,0.35);
+  }
+
+  /* --- Summary card --- */
+  #summaryCard {
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%) scale(0.85);
+    z-index: 20;
+    background: rgba(10, 10, 30, 0.92);
+    border: 1px solid rgba(100, 140, 255, 0.2);
+    border-radius: 20px;
+    padding: 36px 44px;
+    min-width: 340px;
+    opacity: 0;
+    pointer-events: none;
+    backdrop-filter: blur(20px);
+    transition: opacity 0.4s ease, transform 0.4s ease;
+  }
+  #summaryCard.visible {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translate(-50%, -50%) scale(1);
+  }
+
+  #summaryCard h2 {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    letter-spacing: 0.5px;
+  }
+  #summaryCard .card-sub {
+    font-size: 12px;
+    opacity: 0.5;
+    margin-bottom: 20px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  #summaryCard .card-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    font-size: 13px;
+  }
+  #summaryCard .card-row .label { opacity: 0.5; }
+  #summaryCard .card-row .value { font-weight: 500; }
+  #summaryCard .card-close {
+    position: absolute;
+    top: 14px; right: 18px;
+    font-size: 18px;
+    opacity: 0.3;
+    cursor: pointer;
+    transition: opacity 0.2s;
+    background: none; border: none; color: #fff;
+  }
+  #summaryCard .card-close:hover { opacity: 0.8; }
+
+  /* --- Title watermark --- */
+  #titleWatermark {
+    position: fixed;
+    bottom: 28px; left: 50%;
+    transform: translateX(-50%);
+    z-index: 5;
+    font-size: 11px;
+    font-weight: 400;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    opacity: 0.15;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+
+<div id="bgGlow"></div>
+<canvas id="orbCanvas"></canvas>
+
+<!-- Satellite: top (Seed Hypotheses) -->
+<div class="satellite completed" id="sat-seed" data-module="seed"
+     style="top: calc(50% - 230px); left: 50%; transform: translateX(-50%); --sat-color: #7c4dff;">
+  <div class="sat-dot" style="background: #7c4dff; box-shadow: 0 0 15px #7c4dff;"></div>
+  <span class="sat-label">Seed Hypotheses</span>
+</div>
+
+<!-- Satellite: right (Hypothesis Loop) -->
+<div class="satellite completed" id="sat-hypo" data-module="hypo"
+     style="top: 50%; right: calc(50% - 300px); transform: translateY(-50%); --sat-color: #00e676;">
+  <div class="sat-dot" style="background: #00e676; box-shadow: 0 0 15px #00e676;"></div>
+  <span class="sat-label">Hypothesis Loop</span>
+</div>
+
+<!-- Satellite: bottom (Invention Loop) — active -->
+<div class="satellite active" id="sat-inv" data-module="invention"
+     style="bottom: calc(50% - 240px); left: 50%; transform: translateX(-50%); flex-direction: column-reverse; --sat-color: #448aff;">
+  <div class="sat-dot" style="background: #448aff; box-shadow: 0 0 20px #448aff, 0 0 40px #448aff;"></div>
+  <span class="sat-label">Invention Loop</span>
+</div>
+
+<!-- Satellite: left (Paper Generation) — pending -->
+<div class="satellite pending" id="sat-paper" data-module="paper"
+     style="top: 50%; left: calc(50% - 300px); transform: translateY(-50%); --sat-color: #ff9100;">
+  <div class="sat-dot" style="background: #ff9100; box-shadow: 0 0 8px rgba(255,145,0,0.3);"></div>
+  <span class="sat-label">Paper Generation</span>
+</div>
+
+<div id="orbitContainer"></div>
+
+<div id="summaryCard">
+  <button class="card-close" onclick="closeSummary()">&times;</button>
+  <h2 id="cardTitle">Invention Loop</h2>
+  <div class="card-sub" id="cardSub">Currently Active</div>
+  <div class="card-row"><span class="label">Stage</span><span class="value" id="cardStage">Generating Artifacts</span></div>
+  <div class="card-row"><span class="label">Iteration</span><span class="value" id="cardIter">2 / 3</span></div>
+  <div class="card-row"><span class="label">Artifacts</span><span class="value" id="cardArt">3 / 5</span></div>
+  <div class="card-row"><span class="label">Cost</span><span class="value" id="cardCost">$12.47</span></div>
+  <div class="card-row"><span class="label">Elapsed</span><span class="value" id="cardTime">02:34:17</span></div>
+  <div class="card-row" style="border: none;"><span class="label">Model</span><span class="value" id="cardModel">Claude Opus 4</span></div>
+</div>
+
+<div id="titleWatermark">AI Inventor</div>
+
+<script>
+// ============================================================
+//  CONFIG & STATE
+// ============================================================
+const MODULES = {
+  seed:      { label: 'Seed Hypotheses',  color: [124, 77,255], status: 'completed' },
+  hypo:      { label: 'Hypothesis Loop',  color: [0, 230,118],  status: 'completed' },
+  invention: { label: 'Invention Loop',   color: [68,138,255],  status: 'active'    },
+  paper:     { label: 'Paper Generation', color: [255,145,  0], status: 'pending'   },
+};
+
+const SUMMARIES = {
+  seed:      { title:'Seed Hypotheses',  sub:'Completed', stage:'Domain Parsing', iter:'1 / 1', art:'12 seeds', cost:'$2.13', time:'00:18:42', model:'Claude Opus 4' },
+  hypo:      { title:'Hypothesis Loop',  sub:'Completed', stage:'Review Complete', iter:'3 / 3', art:'5 hypotheses', cost:'$4.89', time:'00:47:31', model:'Claude Opus 4' },
+  invention: { title:'Invention Loop',   sub:'Currently Active', stage:'Generating Artifacts', iter:'2 / 3', art:'3 / 5', cost:'$12.47', time:'02:34:17', model:'Claude Opus 4' },
+  paper:     { title:'Paper Generation',  sub:'Pending',   stage:'Waiting', iter:'--', art:'--', cost:'--', time:'--', model:'--' },
+};
+
+let activeModule = 'invention';
+let mouse = { x: 0, y: 0 };
+let cardVisible = false;
+
+// ============================================================
+//  CANVAS SETUP
+// ============================================================
+const canvas = document.getElementById('orbCanvas');
+const ctx = canvas.getContext('2d');
+let W, H, cx, cy;
+
+function resize() {
+  W = canvas.width  = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  cx = W / 2;
+  cy = H / 2;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ============================================================
+//  SIMPLEX NOISE (compact 2D)
+// ============================================================
+const perm = new Uint8Array(512);
+const grad = [[1,1],[-1,1],[1,-1],[-1,-1],[1,0],[-1,0],[0,1],[0,-1]];
+(function seedNoise() {
+  const p = new Uint8Array(256);
+  for (let i = 0; i < 256; i++) p[i] = i;
+  for (let i = 255; i > 0; i--) { const j = Math.floor(Math.random() * (i+1)); [p[i],p[j]] = [p[j],p[i]]; }
+  for (let i = 0; i < 512; i++) perm[i] = p[i & 255];
+})();
+
+function noise2D(x, y) {
+  const F2 = 0.5 * (Math.sqrt(3) - 1);
+  const G2 = (3 - Math.sqrt(3)) / 6;
+  const s = (x + y) * F2;
+  const i = Math.floor(x + s), j = Math.floor(y + s);
+  const t = (i + j) * G2;
+  const X0 = i - t, Y0 = j - t;
+  const x0 = x - X0, y0 = y - Y0;
+  const i1 = x0 > y0 ? 1 : 0, j1 = x0 > y0 ? 0 : 1;
+  const x1 = x0 - i1 + G2, y1 = y0 - j1 + G2;
+  const x2 = x0 - 1 + 2*G2, y2 = y0 - 1 + 2*G2;
+  const ii = i & 255, jj = j & 255;
+  function dot(gi, dx, dy) { const g = grad[gi % 8]; return g[0]*dx + g[1]*dy; }
+  let n0=0, n1=0, n2=0;
+  let t0 = 0.5 - x0*x0 - y0*y0;
+  if (t0 > 0) { t0 *= t0; n0 = t0*t0 * dot(perm[ii+perm[jj]], x0, y0); }
+  let t1 = 0.5 - x1*x1 - y1*y1;
+  if (t1 > 0) { t1 *= t1; n1 = t1*t1 * dot(perm[ii+i1+perm[jj+j1]], x1, y1); }
+  let t2 = 0.5 - x2*x2 - y2*y2;
+  if (t2 > 0) { t2 *= t2; n2 = t2*t2 * dot(perm[ii+1+perm[jj+1]], x2, y2); }
+  return 70 * (n0 + n1 + n2);
+}
+
+// ============================================================
+//  ORB PARAMETERS
+// ============================================================
+const ORB_RADIUS   = 130;
+const ORB_POINTS   = 180;
+const NOISE_SCALE  = 0.0025;
+const NOISE_AMP    = 28;
+const MORPH_SPEED  = 0.0004;
+const PULSE_SPEED  = 0.0008;
+const PULSE_RANGE  = 0.06;
+
+let orbColor     = { r: 68, g: 138, b: 255 };
+let orbColorTarget = { ...orbColor };
+let sparkParticles = [];
+let beamParticles  = [];
+let ambientParticles = [];
+
+// ============================================================
+//  PARTICLE SYSTEMS
+// ============================================================
+function spawnSpark() {
+  const angle = Math.random() * Math.PI * 2;
+  const r = ORB_RADIUS + 10 + Math.random() * 15;
+  sparkParticles.push({
+    x: cx + Math.cos(angle) * r,
+    y: cy + Math.sin(angle) * r,
+    vx: Math.cos(angle) * (0.6 + Math.random() * 1.2),
+    vy: Math.sin(angle) * (0.6 + Math.random() * 1.2),
+    life: 1,
+    decay: 0.008 + Math.random() * 0.015,
+    size: 1.5 + Math.random() * 2.5,
+  });
+}
+
+function spawnBeamParticle(sx, sy, status) {
+  if (status === 'pending') return;
+  const speed = status === 'active' ? 0.012 : 0.008;
+  beamParticles.push({
+    sx, sy,
+    t: 0,
+    speed: speed + Math.random() * 0.006,
+    size: 1 + Math.random() * 2,
+    life: 1,
+  });
+}
+
+function initAmbient() {
+  for (let i = 0; i < 60; i++) {
+    ambientParticles.push({
+      x: Math.random() * W,
+      y: Math.random() * H,
+      vx: (Math.random() - 0.5) * 0.15,
+      vy: (Math.random() - 0.5) * 0.15,
+      size: Math.random() * 1.5 + 0.3,
+      alpha: Math.random() * 0.15 + 0.03,
+    });
+  }
+}
+initAmbient();
+
+// ============================================================
+//  SATELLITE POSITIONS
+// ============================================================
+function getSatPos(mod) {
+  const offsets = {
+    seed:      { x: 0,    y: -210 },
+    hypo:      { x: 260,  y: 0    },
+    invention: { x: 0,    y: 220  },
+    paper:     { x: -260, y: 0    },
+  };
+  return { x: cx + offsets[mod].x, y: cy + offsets[mod].y };
+}
+
+// ============================================================
+//  ORBITING TEXT
+// ============================================================
+let orbitAngle1 = 0;
+let orbitAngle2 = Math.PI;
+const orbitR1 = 200;
+const orbitR2 = 220;
+
+// ============================================================
+//  DRAW FUNCTIONS
+// ============================================================
+function lerpColor(a, b, t) {
+  return { r: a.r + (b.r - a.r)*t, g: a.g + (b.g - a.g)*t, b: a.b + (b.b - a.b)*t };
+}
+
+function rgbStr(c, a) {
+  return `rgba(${Math.round(c.r)},${Math.round(c.g)},${Math.round(c.b)},${a || 1})`;
+}
+
+function drawOrb(time) {
+  // Lerp color
+  orbColor.r += (orbColorTarget.r - orbColor.r) * 0.015;
+  orbColor.g += (orbColorTarget.g - orbColor.g) * 0.015;
+  orbColor.b += (orbColorTarget.b - orbColor.b) * 0.015;
+
+  const pulse = 1 + Math.sin(time * PULSE_SPEED) * PULSE_RANGE;
+  const baseR = ORB_RADIUS * pulse;
+
+  // Mouse attraction offset
+  const dx = mouse.x - cx;
+  const dy = mouse.y - cy;
+  const dist = Math.sqrt(dx*dx + dy*dy);
+  const attraction = Math.max(0, 1 - dist / 500) * 12;
+  const mx = dx / (dist || 1) * attraction;
+  const my = dy / (dist || 1) * attraction;
+
+  // Outer glow layers
+  for (let g = 4; g >= 0; g--) {
+    const glowR = baseR + 30 + g * 25;
+    const alpha = 0.02 - g * 0.003;
+    const grad = ctx.createRadialGradient(cx + mx, cy + my, baseR * 0.3, cx + mx, cy + my, glowR);
+    grad.addColorStop(0, rgbStr(orbColor, alpha + 0.03));
+    grad.addColorStop(0.5, rgbStr(orbColor, alpha));
+    grad.addColorStop(1, 'transparent');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(cx + mx, cy + my, glowR, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Build blob path with noise displacement
+  const points = [];
+  for (let i = 0; i < ORB_POINTS; i++) {
+    const angle = (i / ORB_POINTS) * Math.PI * 2;
+    const nx = Math.cos(angle) * NOISE_SCALE * 800 + time * MORPH_SPEED;
+    const ny = Math.sin(angle) * NOISE_SCALE * 800 + time * MORPH_SPEED * 0.7;
+    const n = noise2D(nx, ny);
+
+    // Second octave for more detail
+    const n2 = noise2D(nx * 2.2 + 100, ny * 2.2 + 100) * 0.4;
+
+    const disp = (n + n2) * NOISE_AMP;
+
+    // Mouse distortion
+    const px = Math.cos(angle), py = Math.sin(angle);
+    const mdx = mouse.x - (cx + px * baseR);
+    const mdy = mouse.y - (cy + py * baseR);
+    const mDist = Math.sqrt(mdx*mdx + mdy*mdy);
+    const mInfluence = Math.max(0, 1 - mDist / 250) * 18;
+
+    const r = baseR + disp + mInfluence;
+    points.push({
+      x: cx + mx + Math.cos(angle) * r,
+      y: cy + my + Math.sin(angle) * r,
+    });
+  }
+
+  // Draw filled orb with gradient
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, points[0].y);
+  for (let i = 1; i <= ORB_POINTS; i++) {
+    const p0 = points[(i - 1) % ORB_POINTS];
+    const p1 = points[i % ORB_POINTS];
+    const cpx = (p0.x + p1.x) / 2;
+    const cpy = (p0.y + p1.y) / 2;
+    ctx.quadraticCurveTo(p0.x, p0.y, cpx, cpy);
+  }
+  ctx.closePath();
+
+  // Multi-layer gradient fill
+  const innerGrad = ctx.createRadialGradient(
+    cx + mx - 30, cy + my - 30, 10,
+    cx + mx, cy + my, baseR + 20
+  );
+  const bright = rgbStr({ r: orbColor.r * 1.3, g: orbColor.g * 1.3, b: orbColor.b * 1.3 }, 1);
+  innerGrad.addColorStop(0, bright);
+  innerGrad.addColorStop(0.4, rgbStr(orbColor, 0.95));
+  innerGrad.addColorStop(0.75, rgbStr({ r: orbColor.r * 0.5, g: orbColor.g * 0.5, b: orbColor.b * 0.5 }, 0.9));
+  innerGrad.addColorStop(1, rgbStr({ r: orbColor.r * 0.2, g: orbColor.g * 0.2, b: orbColor.b * 0.2 }, 0.85));
+  ctx.fillStyle = innerGrad;
+  ctx.fill();
+
+  // Specular highlight
+  const specGrad = ctx.createRadialGradient(
+    cx + mx - 35, cy + my - 40, 5,
+    cx + mx - 20, cy + my - 25, 80
+  );
+  specGrad.addColorStop(0, 'rgba(255,255,255,0.22)');
+  specGrad.addColorStop(0.5, 'rgba(255,255,255,0.04)');
+  specGrad.addColorStop(1, 'transparent');
+  ctx.fillStyle = specGrad;
+  ctx.fill();
+
+  // Edge glow
+  ctx.strokeStyle = rgbStr(orbColor, 0.25);
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawBeams(time) {
+  const moduleKeys = Object.keys(MODULES);
+  for (const key of moduleKeys) {
+    const mod = MODULES[key];
+    const pos = getSatPos(key);
+    const status = mod.status;
+
+    // Draw beam line
+    ctx.beginPath();
+    ctx.moveTo(pos.x, pos.y);
+    ctx.lineTo(cx, cy);
+
+    if (status === 'completed') {
+      const grad = ctx.createLinearGradient(pos.x, pos.y, cx, cy);
+      const c = `rgba(${mod.color[0]},${mod.color[1]},${mod.color[2]}`;
+      grad.addColorStop(0, c + ',0.35)');
+      grad.addColorStop(0.5, c + ',0.15)');
+      grad.addColorStop(1, c + ',0.05)');
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    } else if (status === 'active') {
+      const pulse = 0.2 + Math.sin(time * 0.002) * 0.15;
+      const grad = ctx.createLinearGradient(pos.x, pos.y, cx, cy);
+      const c = `rgba(${mod.color[0]},${mod.color[1]},${mod.color[2]}`;
+      grad.addColorStop(0, c + `,${pulse + 0.2})`);
+      grad.addColorStop(0.5, c + `,${pulse + 0.1})`);
+      grad.addColorStop(1, c + ',0.05)');
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    } else {
+      ctx.setLineDash([4, 8]);
+      ctx.strokeStyle = `rgba(${mod.color[0]},${mod.color[1]},${mod.color[2]},0.1)`;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // Spawn beam particles periodically
+    if (Math.random() < (status === 'active' ? 0.08 : status === 'completed' ? 0.02 : 0)) {
+      spawnBeamParticle(pos.x, pos.y, status);
+    }
+  }
+}
+
+function drawBeamParticles() {
+  for (let i = beamParticles.length - 1; i >= 0; i--) {
+    const p = beamParticles[i];
+    p.t += p.speed;
+    if (p.t >= 1) { beamParticles.splice(i, 1); continue; }
+
+    const x = p.sx + (cx - p.sx) * p.t;
+    const y = p.sy + (cy - p.sy) * p.t;
+    const alpha = Math.sin(p.t * Math.PI) * 0.7;
+
+    ctx.beginPath();
+    ctx.arc(x, y, p.size, 0, Math.PI * 2);
+    ctx.fillStyle = rgbStr(orbColor, alpha);
+    ctx.fill();
+  }
+}
+
+function drawSparks() {
+  for (let i = sparkParticles.length - 1; i >= 0; i--) {
+    const p = sparkParticles[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    p.life -= p.decay;
+    if (p.life <= 0) { sparkParticles.splice(i, 1); continue; }
+
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+    const glow = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.size * p.life * 3);
+    glow.addColorStop(0, rgbStr(orbColor, p.life * 0.8));
+    glow.addColorStop(0.4, rgbStr(orbColor, p.life * 0.3));
+    glow.addColorStop(1, 'transparent');
+    ctx.fillStyle = glow;
+    ctx.fill();
+  }
+}
+
+function drawAmbient() {
+  for (const p of ambientParticles) {
+    p.x += p.vx;
+    p.y += p.vy;
+    if (p.x < 0) p.x = W;
+    if (p.x > W) p.x = 0;
+    if (p.y < 0) p.y = H;
+    if (p.y > H) p.y = 0;
+
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(180,200,255,${p.alpha})`;
+    ctx.fill();
+  }
+}
+
+function drawOrbitText(time) {
+  orbitAngle1 = time * 0.00015;
+  orbitAngle2 = time * -0.0001 + Math.PI * 0.7;
+
+  // Stage text
+  const stageText = 'Invention Loop  \u2022  Iteration 2  \u2022  Generating Artifacts';
+  const sx = cx + Math.cos(orbitAngle1) * orbitR1;
+  const sy = cy + Math.sin(orbitAngle1) * orbitR1;
+
+  ctx.save();
+  ctx.font = '500 11px Inter';
+  ctx.fillStyle = 'rgba(255,255,255,0.35)';
+  ctx.letterSpacing = '1.5px';
+  ctx.textAlign = 'center';
+  ctx.fillText(stageText, sx, sy);
+  ctx.restore();
+
+  // Stats text
+  const statsText = '3/5 artifacts  \u2022  $12.47  \u2022  02:34:17';
+  const tx = cx + Math.cos(orbitAngle2) * orbitR2;
+  const ty = cy + Math.sin(orbitAngle2) * orbitR2;
+
+  ctx.save();
+  ctx.font = '400 10px Inter';
+  ctx.fillStyle = 'rgba(255,255,255,0.2)';
+  ctx.textAlign = 'center';
+  ctx.fillText(statsText, tx, ty);
+  ctx.restore();
+}
+
+// ============================================================
+//  MAIN LOOP
+// ============================================================
+let lastSparkTime = 0;
+
+function draw(time) {
+  ctx.clearRect(0, 0, W, H);
+
+  drawAmbient();
+  drawBeams(time);
+  drawBeamParticles();
+  drawOrb(time);
+  drawSparks();
+  drawOrbitText(time);
+
+  // Emit sparks periodically
+  if (time - lastSparkTime > 120) {
+    if (Math.random() < 0.35) spawnSpark();
+    lastSparkTime = time;
+  }
+
+  requestAnimationFrame(draw);
+}
+
+requestAnimationFrame(draw);
+
+// ============================================================
+//  MOUSE TRACKING
+// ============================================================
+document.addEventListener('mousemove', (e) => {
+  mouse.x = e.clientX;
+  mouse.y = e.clientY;
+});
+
+// ============================================================
+//  ORB CLICK — summary card
+// ============================================================
+canvas.addEventListener('click', (e) => {
+  const dx = e.clientX - cx;
+  const dy = e.clientY - cy;
+  const dist = Math.sqrt(dx*dx + dy*dy);
+
+  if (dist < ORB_RADIUS + 40) {
+    showSummary(activeModule);
+  } else if (cardVisible) {
+    closeSummary();
+  }
+});
+
+function showSummary(mod) {
+  const s = SUMMARIES[mod];
+  document.getElementById('cardTitle').textContent = s.title;
+  document.getElementById('cardSub').textContent   = s.sub;
+  document.getElementById('cardStage').textContent  = s.stage;
+  document.getElementById('cardIter').textContent   = s.iter;
+  document.getElementById('cardArt').textContent    = s.art;
+  document.getElementById('cardCost').textContent   = s.cost;
+  document.getElementById('cardTime').textContent   = s.time;
+  document.getElementById('cardModel').textContent  = s.model;
+
+  const card = document.getElementById('summaryCard');
+  card.style.borderColor = rgbStr(orbColor, 0.3);
+  card.classList.add('visible');
+  cardVisible = true;
+}
+
+function closeSummary() {
+  document.getElementById('summaryCard').classList.remove('visible');
+  cardVisible = false;
+}
+
+// ============================================================
+//  SATELLITE CLICK — switch module
+// ============================================================
+document.querySelectorAll('.satellite').forEach(el => {
+  el.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const mod = el.dataset.module;
+    activeModule = mod;
+
+    const c = MODULES[mod].color;
+    orbColorTarget = { r: c[0], g: c[1], b: c[2] };
+
+    // Update background glow
+    document.getElementById('bgGlow').style.background =
+      `radial-gradient(circle, rgba(${c[0]},${c[1]},${c[2]},0.08) 0%, transparent 70%)`;
+
+    // Burst of sparks on switch
+    for (let i = 0; i < 15; i++) spawnSpark();
+
+    showSummary(mod);
+  });
+});
+
+// ============================================================
+//  KEYBOARD CLOSE
+// ============================================================
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeSummary();
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,1426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor -- The Chosen Design</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* ================================================================
+     ROOT & RESET
+     ================================================================ */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:       #0f1117;
+    --surface:  #161922;
+    --surface2: #1e2230;
+    --surface3: #262b3a;
+    --border:   #2a2f3e;
+    --text:     #e2e4eb;
+    --text-dim: #7c829a;
+    --text-muted: #4e5470;
+    --green:    #34d399;
+    --purple:   #a78bfa;
+    --blue:     #60a5fa;
+    --orange:   #fb923c;
+    --gray:     #4a4f64;
+    --green-raw:  52, 211, 153;
+    --purple-raw: 167, 139, 250;
+    --blue-raw:   96, 165, 250;
+    --orange-raw: 251, 146, 60;
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ================================================================
+     LAYOUT: Ring sidebar | Module row + Sub-module row + Content
+     ================================================================ */
+  .layout {
+    display: grid;
+    grid-template-columns: 180px 1fr;
+    grid-template-rows: auto auto 1fr;
+    height: 100vh;
+  }
+
+  /* ================================================================
+     RING SIDEBAR (col 1, spans all rows)
+     ================================================================ */
+  .ring-panel {
+    grid-column: 1;
+    grid-row: 1 / 4;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 28px 14px;
+    border-right: 1px solid var(--border);
+    background: var(--surface);
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+    z-index: 20;
+  }
+  .ring-panel::-webkit-scrollbar { width: 0; }
+
+  .ring-container {
+    position: relative;
+    width: 130px;
+    height: 130px;
+    margin-bottom: 8px;
+    flex-shrink: 0;
+  }
+  .ring-svg {
+    width: 130px;
+    height: 130px;
+    transform: rotate(-90deg);
+  }
+  .ring-track { fill: none; stroke: var(--border); stroke-width: 7; }
+  .ring-progress {
+    fill: none;
+    stroke-width: 7;
+    stroke-linecap: round;
+    stroke-dasharray: 326.7;
+    stroke-dashoffset: 326.7;
+    transition: stroke-dashoffset 1.4s cubic-bezier(0.4, 0, 0.2, 1);
+    filter: drop-shadow(0 0 8px rgba(96,165,250,0.35));
+  }
+  .ring-highlight {
+    fill: none;
+    stroke-width: 11;
+    stroke-linecap: round;
+    opacity: 0;
+    transition: opacity 0.4s, stroke-dashoffset 0.6s cubic-bezier(0.4,0,0.2,1);
+  }
+  .ring-highlight.visible { opacity: 0.22; }
+  .ring-endpoint {
+    position: absolute;
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: var(--blue);
+    box-shadow: 0 0 10px rgba(var(--blue-raw),.55), 0 0 22px rgba(var(--blue-raw),.3);
+    transition: all 1.4s cubic-bezier(0.4,0,0.2,1);
+    pointer-events: none;
+  }
+  .ring-center-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%,-50%);
+    text-align: center;
+  }
+  .ring-percent {
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    background: linear-gradient(135deg, var(--green), var(--purple), var(--blue));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .ring-label {
+    font-size: 10px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    text-align: center;
+    margin-bottom: 22px;
+    flex-shrink: 0;
+  }
+
+  /* Legend items with sub-modules */
+  .legend {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+  .legend-module {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 11.5px;
+    color: var(--text-dim);
+    user-select: none;
+  }
+  .legend-module:hover { background: var(--surface2); color: var(--text); }
+  .legend-module.active { background: var(--surface2); color: var(--text); font-weight: 600; }
+  .legend-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    transition: box-shadow 0.3s;
+  }
+  .legend-module.active .legend-dot {
+    box-shadow: 0 0 6px 1px var(--mod-color);
+  }
+  .legend-count {
+    margin-left: auto;
+    font-size: 10px;
+    font-weight: 600;
+    opacity: 0.5;
+  }
+
+  /* Sub-module items in sidebar */
+  .legend-subs {
+    overflow: hidden;
+    max-height: 0;
+    transition: max-height 0.35s ease, opacity 0.25s;
+    opacity: 0;
+  }
+  .legend-subs.open {
+    max-height: 500px;
+    opacity: 1;
+  }
+  .legend-sub {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 10px 5px 28px;
+    font-size: 10.5px;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all 0.2s;
+    position: relative;
+    user-select: none;
+  }
+  .legend-sub:hover {
+    background: var(--surface3);
+    color: var(--text-dim);
+  }
+  .legend-sub.active {
+    color: var(--text);
+    background: var(--surface3);
+  }
+  .legend-sub-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .legend-sub-dot.completed { background: var(--mod-color); opacity: 0.8; }
+  .legend-sub-dot.active {
+    background: var(--mod-color);
+    box-shadow: 0 0 6px var(--mod-color);
+    animation: subDotPulse 2s ease-in-out infinite;
+  }
+  .legend-sub-dot.pending { background: var(--gray); opacity: 0.4; }
+  @keyframes subDotPulse {
+    0%, 100% { box-shadow: 0 0 4px var(--mod-color); }
+    50% { box-shadow: 0 0 10px var(--mod-color); }
+  }
+  .legend-sub-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .legend-sub-status {
+    font-size: 9px;
+    opacity: 0.5;
+    flex-shrink: 0;
+  }
+
+  /* ── Sidebar stats ── */
+  .sidebar-stats {
+    width: 100%;
+    margin-top: auto;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .sidebar-stat {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+  .sidebar-stat-val {
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  /* ================================================================
+     HOVER PREVIEW TOOLTIP (glassmorphism)
+     ================================================================ */
+  .hover-preview {
+    position: fixed;
+    width: 280px;
+    padding: 14px 16px;
+    background: rgba(22, 26, 40, 0.85);
+    backdrop-filter: blur(20px) saturate(1.3);
+    -webkit-backdrop-filter: blur(20px) saturate(1.3);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    box-shadow:
+      0 16px 48px rgba(0,0,0,0.5),
+      0 4px 16px rgba(0,0,0,0.3),
+      inset 0 1px 0 rgba(255,255,255,0.04);
+    z-index: 1000;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateY(4px);
+    transition: opacity 0.18s ease, transform 0.18s ease;
+  }
+  .hover-preview.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .preview-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .preview-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .preview-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    flex: 1;
+  }
+  .preview-badge {
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 2px 7px;
+    border-radius: 4px;
+    flex-shrink: 0;
+  }
+  .preview-badge.completed { background: rgba(var(--green-raw), 0.15); color: var(--green); }
+  .preview-badge.active { background: rgba(var(--blue-raw), 0.15); color: var(--blue); }
+  .preview-badge.pending { background: rgba(74,79,100,0.25); color: var(--gray); }
+  .preview-summary {
+    font-size: 11.5px;
+    line-height: 1.55;
+    color: var(--text-dim);
+    margin-bottom: 10px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .preview-footer {
+    display: flex;
+    gap: 12px;
+    font-size: 10px;
+    color: var(--text-muted);
+    padding-top: 8px;
+    border-top: 1px solid rgba(255,255,255,0.05);
+  }
+  .preview-footer span {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  /* ================================================================
+     MODULE ROW (row 1)
+     ================================================================ */
+  .module-row {
+    grid-column: 2;
+    grid-row: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px 28px 14px;
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    position: sticky;
+    top: 0;
+    z-index: 12;
+  }
+  .mod-node {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    transition: all 0.3s;
+  }
+  .mod-node .node-circle {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    border: 2px solid transparent;
+    transition: all 0.3s;
+    position: relative;
+  }
+  .mod-node.completed .node-circle {
+    border-color: var(--color);
+    background: color-mix(in srgb, var(--color) 14%, transparent);
+  }
+  .mod-node.active .node-circle {
+    border-color: var(--color);
+    background: color-mix(in srgb, var(--color) 18%, transparent);
+    animation: nodePulse 2.5s ease-in-out infinite;
+  }
+  .mod-node.pending .node-circle {
+    border-color: var(--gray);
+    background: transparent;
+    opacity: 0.45;
+  }
+  .mod-node.selected .node-circle {
+    transform: scale(1.15);
+    box-shadow: 0 0 16px var(--color), 0 0 36px color-mix(in srgb, var(--color) 35%, transparent);
+  }
+  .mod-node .node-label {
+    font-size: 10px;
+    color: var(--text-dim);
+    transition: color 0.3s;
+  }
+  .mod-node.selected .node-label { color: var(--text); font-weight: 600; }
+  @keyframes nodePulse {
+    0%, 100% { box-shadow: 0 0 8px var(--color); }
+    50% { box-shadow: 0 0 22px var(--color), 0 0 40px color-mix(in srgb, var(--color) 25%, transparent); }
+  }
+
+  /* Module connectors with particle flow */
+  .mod-connector {
+    width: 48px;
+    height: 2px;
+    border-radius: 1px;
+    position: relative;
+    overflow: hidden;
+    margin: 0 6px;
+    align-self: flex-start;
+    margin-top: 19px;
+  }
+  .mod-connector.done {
+    background: linear-gradient(90deg, var(--from), var(--to));
+  }
+  .mod-connector.pending {
+    background: var(--gray);
+    opacity: 0.25;
+  }
+  .mod-connector.active {
+    background: linear-gradient(90deg, var(--from), var(--to));
+  }
+  .mod-connector.active::after {
+    content: '';
+    position: absolute;
+    top: -1px;
+    width: 14px;
+    height: 4px;
+    border-radius: 2px;
+    background: white;
+    opacity: 0.5;
+    animation: flowDot 1.6s linear infinite;
+  }
+  .mod-connector.active::before {
+    content: '';
+    position: absolute;
+    top: -1px;
+    width: 8px;
+    height: 4px;
+    border-radius: 2px;
+    background: white;
+    opacity: 0.3;
+    animation: flowDot 1.6s linear infinite 0.8s;
+  }
+  @keyframes flowDot {
+    from { left: -14px; }
+    to { left: calc(100% + 14px); }
+  }
+
+  /* ================================================================
+     SUB-MODULE ROW (row 2)
+     ================================================================ */
+  .sub-row {
+    grid-column: 2;
+    grid-row: 2;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 28px;
+    gap: 6px;
+    border-bottom: 1px solid var(--border);
+    background: color-mix(in srgb, var(--surface) 85%, var(--bg));
+    position: sticky;
+    top: 68px;
+    z-index: 11;
+    max-height: 56px;
+    overflow: hidden;
+    transition: max-height 0.35s ease, padding 0.35s ease, opacity 0.3s;
+    opacity: 1;
+  }
+  .sub-row.collapsed {
+    max-height: 0;
+    padding: 0 28px;
+    opacity: 0;
+    border-bottom: none;
+  }
+  .sub-dot-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .sub-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    transition: all 0.3s;
+    position: relative;
+  }
+  .sub-dot.completed {
+    background: var(--color);
+    border-color: var(--color);
+    opacity: 0.8;
+  }
+  .sub-dot.active {
+    background: color-mix(in srgb, var(--color) 30%, transparent);
+    border-color: var(--color);
+    box-shadow: 0 0 8px var(--color);
+    animation: subPulse 2s ease-in-out infinite;
+  }
+  .sub-dot.pending {
+    border-color: var(--gray);
+    opacity: 0.35;
+  }
+  .sub-dot.selected {
+    transform: scale(1.35);
+    box-shadow: 0 0 12px var(--color), 0 0 26px color-mix(in srgb, var(--color) 40%, transparent);
+  }
+  .sub-dot-label {
+    font-size: 9px;
+    color: var(--text-dim);
+    white-space: nowrap;
+    transition: color 0.3s;
+  }
+  .sub-dot-wrapper.sel .sub-dot-label { color: var(--text); font-weight: 500; }
+  .sub-connector {
+    width: 16px;
+    height: 1px;
+    background: var(--border);
+    flex-shrink: 0;
+  }
+  @keyframes subPulse {
+    0%, 100% { box-shadow: 0 0 6px var(--color); }
+    50% { box-shadow: 0 0 14px var(--color); }
+  }
+
+  /* ================================================================
+     CONTENT AREA (row 3)
+     ================================================================ */
+  .content {
+    grid-column: 2;
+    grid-row: 3;
+    padding: 24px 32px;
+    overflow-y: auto;
+    position: relative;
+  }
+  .content::-webkit-scrollbar { width: 5px; }
+  .content::-webkit-scrollbar-track { background: transparent; }
+  .content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .content-inner { max-width: 760px; }
+
+  .breadcrumb {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    margin-bottom: 10px;
+    border: 1px solid;
+  }
+  .section-title {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+    margin-bottom: 6px;
+  }
+  .first-person-summary {
+    font-size: 14px;
+    color: var(--text-dim);
+    line-height: 1.7;
+    margin-bottom: 24px;
+    max-width: 680px;
+    font-style: italic;
+  }
+  .first-person-summary::before {
+    content: '"';
+    font-size: 22px;
+    font-weight: 300;
+    opacity: 0.4;
+    margin-right: 2px;
+  }
+
+  /* Stat cards row */
+  .stat-cards {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+  .stat-card {
+    flex: 1;
+    min-width: 120px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    transition: border-color 0.3s, box-shadow 0.3s;
+  }
+  .stat-card:hover {
+    border-color: color-mix(in srgb, var(--accent, var(--blue)) 30%, var(--border));
+    box-shadow: 0 2px 12px rgba(0,0,0,0.2);
+  }
+  .stat-card-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+  }
+  .stat-card-value {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .stat-card-sub {
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-top: 2px;
+  }
+
+  /* Item list / expandable rows */
+  .item-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .item-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    transition: all 0.3s;
+  }
+  .item-card:hover { border-color: #363d52; }
+  .item-card.expanded { box-shadow: 0 4px 20px rgba(0,0,0,0.25); }
+  .item-hdr {
+    display: flex;
+    align-items: center;
+    padding: 13px 16px;
+    cursor: pointer;
+    gap: 12px;
+    transition: background 0.2s;
+  }
+  .item-hdr:hover { background: var(--surface2); }
+  .item-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .item-name {
+    font-size: 13px;
+    font-weight: 600;
+    flex: 1;
+  }
+  .item-meta {
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .item-chev {
+    width: 16px;
+    height: 16px;
+    color: var(--text-dim);
+    transition: transform 0.3s;
+    flex-shrink: 0;
+  }
+  .item-card.expanded .item-chev { transform: rotate(180deg); }
+  .item-body {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.35s ease;
+  }
+  .item-card.expanded .item-body { max-height: 350px; }
+  .item-detail {
+    padding: 0 16px 14px 36px;
+    font-size: 12.5px;
+    color: var(--text-dim);
+    line-height: 1.65;
+  }
+
+  /* Footer & Nav */
+  .content-footer {
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .footer-status {
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .nav-hint {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .key {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    height: 22px;
+    padding: 0 5px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 10px;
+    color: var(--text);
+  }
+
+  /* ================================================================
+     PARTICLE CANVAS (ambient bg)
+     ================================================================ */
+  #particleCanvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.4;
+  }
+
+  /* ================================================================
+     GLOW ACCENTS
+     ================================================================ */
+  .ambient-glow {
+    position: fixed;
+    width: 400px;
+    height: 400px;
+    border-radius: 50%;
+    filter: blur(120px);
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0;
+    transition: opacity 1.5s ease, background 1.5s ease;
+  }
+  .ambient-glow.visible { opacity: 1; }
+  .glow-1 { top: -100px; right: -100px; }
+  .glow-2 { bottom: -150px; left: 150px; }
+
+  /* ================================================================
+     ANIMATIONS
+     ================================================================ */
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .fade-in {
+    animation: fadeIn 0.4s ease forwards;
+    opacity: 0;
+  }
+
+  @keyframes shimmer {
+    0% { background-position: -200% center; }
+    100% { background-position: 200% center; }
+  }
+
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<!-- Particle canvas -->
+<canvas id="particleCanvas"></canvas>
+
+<!-- Ambient glow blobs -->
+<div class="ambient-glow glow-1" id="glow1"></div>
+<div class="ambient-glow glow-2" id="glow2"></div>
+
+<!-- Hover preview tooltip -->
+<div class="hover-preview" id="hoverPreview">
+  <div class="preview-header">
+    <div class="preview-dot" id="prevDot"></div>
+    <div class="preview-name" id="prevName"></div>
+    <div class="preview-badge" id="prevBadge"></div>
+  </div>
+  <div class="preview-summary" id="prevSummary"></div>
+  <div class="preview-footer">
+    <span id="prevDuration"></span>
+    <span id="prevCost"></span>
+  </div>
+</div>
+
+<div class="layout">
+
+  <!-- ══════════════════════════════════════════════════════════════
+       RING SIDEBAR
+       ══════════════════════════════════════════════════════════════ -->
+  <div class="ring-panel">
+    <div class="ring-container">
+      <svg class="ring-svg" viewBox="0 0 130 130">
+        <defs>
+          <linearGradient id="rg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%"   stop-color="var(--green)"/>
+            <stop offset="40%"  stop-color="var(--purple)"/>
+            <stop offset="70%"  stop-color="var(--blue)"/>
+            <stop offset="100%" stop-color="var(--gray)"/>
+          </linearGradient>
+        </defs>
+        <circle class="ring-track" cx="65" cy="65" r="52"/>
+        <circle class="ring-progress" cx="65" cy="65" r="52" stroke="url(#rg)"/>
+        <circle class="ring-highlight" cx="65" cy="65" r="52"/>
+      </svg>
+      <div class="ring-endpoint" id="ep"></div>
+      <div class="ring-center-text">
+        <div class="ring-percent" id="pct">0%</div>
+      </div>
+    </div>
+    <div class="ring-label">Pipeline Progress</div>
+
+    <div class="legend" id="legend"></div>
+
+    <div class="sidebar-stats">
+      <div class="sidebar-stat">
+        <span>Runtime</span>
+        <span class="sidebar-stat-val">1h 42m</span>
+      </div>
+      <div class="sidebar-stat">
+        <span>Total Cost</span>
+        <span class="sidebar-stat-val">$18.73</span>
+      </div>
+      <div class="sidebar-stat">
+        <span>LLM Calls</span>
+        <span class="sidebar-stat-val">247</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Module dot row -->
+  <div class="module-row" id="modRow"></div>
+
+  <!-- Sub-module dot row -->
+  <div class="sub-row" id="subRow"></div>
+
+  <!-- Content area -->
+  <div class="content">
+    <div class="content-inner" id="contentInner"></div>
+  </div>
+
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────
+// DATA (same mock data, first-person summaries, durations, costs)
+// ─────────────────────────────────────────────────────────────────
+const CIRC = 2 * Math.PI * 52; // ~326.7
+
+const MODULES = [
+  {
+    id: 'seed', name: 'Seed Hypothesis', short: 'Seed',
+    color: 'var(--green)', raw: '#34d399', rawRgb: '52,211,153',
+    status: 'completed', metric: '\u2713', weight: 10,
+    fpSummary: 'I mined 847 papers from OpenAlex and assembled a knowledge graph of 2,341 triples. After scanning for blind spots, I identified 12 promising research gaps and selected 5 seed topics that align with the research direction you specified.',
+    duration: '12m 18s', cost: '$2.41',
+    steps: [
+      { name: 'Mine Papers', status: 'completed', metric: '847 papers', duration: '4m 22s', cost: '$0.87',
+        fpSummary: 'I queried OpenAlex across the computational linguistics domain and extracted 847 papers. I filtered for recency and citation impact, keeping only those from the last 5 years with at least 10 citations.',
+        detail: 'Extracted papers from OpenAlex API. Filtered by domain: computational linguistics, timeframe: 2021-2025, min citations: 10. Output: 847 papers with full metadata.' },
+      { name: 'Build KG', status: 'completed', metric: '2,341 triples', duration: '3m 45s', cost: '$0.68',
+        fpSummary: 'I ran NER and relation extraction across all 847 abstracts to build a knowledge graph. The result is 2,341 triples connecting concepts, methods, and findings across the corpus.',
+        detail: 'Constructed knowledge graph using NER + relation extraction. 2,341 triples connecting 1,204 concept nodes, 689 method nodes, and 448 finding nodes.' },
+      { name: 'Find Gaps', status: 'completed', metric: '12 gaps', duration: '2m 38s', cost: '$0.52',
+        fpSummary: 'I performed blind-spot analysis on the knowledge graph, searching for unexplored intersections between well-established subfields. I found 12 distinct research gaps worth investigating.',
+        detail: 'Blind spot analysis identified 12 unexplored intersections. Used subgraph density analysis + embedding distance from literature centroid. Threshold: z-score > 1.8.' },
+      { name: 'Select Seeds', status: 'completed', metric: '5 topics', duration: '1m 33s', cost: '$0.34',
+        fpSummary: 'I matched the 12 gaps against your research direction using BM25 ranking and selected the top 5 seed topics. Each one has strong novelty potential and feasible scope.',
+        detail: 'BM25-matched against research direction. Round-robin agent assignment for diversity. Final 5 seeds span cross-lingual transfer, code-switching, and contrastive learning.' },
+    ]
+  },
+  {
+    id: 'hypo', name: 'Hypothesis Loop', short: 'Hypothesis',
+    color: 'var(--purple)', raw: '#a78bfa', rawRgb: '167,139,250',
+    status: 'completed', metric: '8.4', weight: 25,
+    fpSummary: 'I refined the hypothesis across 3 iterations of generation and adversarial review. The score climbed from 6.2 to 8.4 out of 10. The final hypothesis is "Cross-lingual Contrastive Pre-training with Synthetic Code-Switching" -- tight, novel, and ready for experimentation.',
+    duration: '28m 14s', cost: '$5.89',
+    steps: [
+      { name: 'Gen Hypo 1', status: 'completed', metric: 'Score 6.2', duration: '6m 12s', cost: '$1.24',
+        fpSummary: 'I generated 8 initial hypotheses across 3 different models. The best candidate focused on cross-lingual transfer via synthetic code-switching, but it had significant gaps in methodology and baselines.',
+        detail: 'Generated 8 hypotheses via Claude, GPT-4, and Gemini. Best: cross-lingual transfer via code-switching. Score: 6.2/10. 3 major issues flagged by reviewer.' },
+      { name: 'Review 1', status: 'completed', metric: '3 major', duration: '3m 44s', cost: '$0.78',
+        fpSummary: 'My adversarial reviewer tore into the first draft. Three major issues: weak baselines that would not survive peer review, unclear methodology for the code-switching mechanism, and missing related work on contrastive pre-training.',
+        detail: 'Adversarial review flagged: (1) weak baselines, (2) unclear code-switching mechanism, (3) missing contrastive pre-training literature. Confidence: 2/5.' },
+      { name: 'Gen Hypo 2', status: 'completed', metric: 'Score 7.8', duration: '5m 30s', cost: '$1.12',
+        fpSummary: 'I addressed all three major issues and narrowed from 8 to 4 candidate hypotheses. Adding the contrastive pre-training angle was the key insight -- it gave the approach a strong theoretical foundation.',
+        detail: 'Refined to 4 hypotheses. Added contrastive pre-training framework. Score: 7.8/10. 1 major issue remaining: convergence analysis.' },
+      { name: 'Review 2', status: 'completed', metric: '1 major', duration: '3m 18s', cost: '$0.71',
+        fpSummary: 'Second review was much tighter. Only one major issue remained: the hypothesis needs a convergence analysis to show the contrastive objective will actually converge. Two minor items: strengthen baselines further and tighten the abstract.',
+        detail: 'Needs convergence analysis for contrastive objective. Minor: strengthen SOTA baselines, tighten abstract wording. Confidence: 3/5.' },
+      { name: 'Gen Hypo 3', status: 'completed', metric: 'Score 8.4', duration: '5m 48s', cost: '$1.20',
+        fpSummary: 'Final refinement. I narrowed the scope to 8 language families to make the evaluation feasible and added a formal convergence analysis. The hypothesis is now clean and well-scoped.',
+        detail: 'Narrowed to 8 language families. Added convergence analysis using Lyapunov stability. Score: 8.4/10. Ready for experimental validation.' },
+      { name: 'Review 3', status: 'completed', metric: '0 major', duration: '3m 42s', cost: '$0.84',
+        fpSummary: 'The third review came back clean. Zero major issues, only 2 minor suggestions. Score: 8.4/10, confidence: 4/5. The hypothesis is approved for research.',
+        detail: 'Score 8.4/10. Confidence 4/5. 0 major issues, 2 minor suggestions (notation consistency, expand related work section). Approved.' },
+    ]
+  },
+  {
+    id: 'inv', name: 'Invention Loop', short: 'Invention',
+    color: 'var(--blue)', raw: '#60a5fa', rawRgb: '96,165,250',
+    status: 'active', metric: '3/5', weight: 40,
+    fpSummary: 'I am in iteration 2 of 3, generating artifacts to validate the hypothesis. The contrastive baseline already shows a 17.5% accuracy improvement, which is very promising. The ablation study is running now to isolate the contribution of each component.',
+    duration: '42m 07s', cost: '$8.92',
+    steps: [
+      { name: 'Strategy', status: 'completed', metric: 'Selected', duration: '4m 10s', cost: '$0.92',
+        fpSummary: 'I selected contrastive alignment with code-switching augmentation as the primary strategy. Based on reviewer feedback, I also added ablation experiments to isolate the contribution of each component.',
+        detail: 'Strategy: contrastive alignment + code-switching augmentation. Added ablation experiments per Review 2 feedback. Resource allocation: 60% compute to main experiment, 20% ablation, 20% evaluation.' },
+      { name: 'Plan', status: 'completed', metric: '5 planned', duration: '3m 22s', cost: '$0.74',
+        fpSummary: 'I planned 5 artifacts: 2 experiments (main baseline + ablation), 1 synthetic dataset, 1 evaluation suite, and 1 formal proof. I assigned compute profiles to each based on expected resource needs.',
+        detail: '5 artifacts: Contrastive Baseline (GPU), Multilingual Pairs (CPU), Convergence Proof (symbolic), Ablation Study (GPU), Cross-lingual Eval (CPU). Total estimated time: ~25 min.' },
+      { name: 'Artifacts', status: 'active', metric: '3/5', duration: '28m 35s', cost: '$5.41',
+        fpSummary: 'Three artifacts are complete: the contrastive baseline hit 0.847 accuracy (+17.5% over SOTA), I generated 2,400 multilingual training pairs, and the convergence proof is verified in Lean 4. The ablation study is currently running.',
+        detail: '3 complete, 1 running, 1 pending. Contrastive Baseline: acc 0.847 (+17.5%). Multilingual Pairs: 2,400 examples. Convergence Proof: Lean 4 verified.',
+        children: [
+          { name: 'Contrastive Baseline', status: 'completed', metric: 'acc: 0.847 (+17.5%)', duration: '8m 32s', cost: '$2.14',
+            fpSummary: 'The main experiment is done. The contrastive baseline achieves 0.847 accuracy on the cross-lingual benchmark, which is a 17.5% improvement over the previous SOTA. The gains are consistent across all 8 language families.' },
+          { name: 'Multilingual Pairs', status: 'completed', metric: '2,400 examples', duration: '6m 15s', cost: '$1.02',
+            fpSummary: 'I generated 2,400 synthetic code-switching pairs across 8 language families. Quality validation shows 94.2% grammatical correctness and 91.8% semantic preservation.' },
+          { name: 'Convergence Proof', status: 'completed', metric: 'Verified (Lean 4)', duration: '5m 41s', cost: '$0.89',
+            fpSummary: 'I formalized the convergence proof in Lean 4. The contrastive objective provably converges under mild assumptions using Lyapunov stability theory. All 12 lemmas verified.' },
+          { name: 'Ablation Study', status: 'active', metric: 'Running...', duration: '8m 07s', cost: '$1.36',
+            fpSummary: 'Currently running the ablation study. Removing the code-switching component drops accuracy by 11.2%, and removing contrastive alignment drops it by 8.7%. Still computing interaction effects.' },
+          { name: 'Cross-lingual Eval', status: 'pending', metric: 'Pending', duration: '--', cost: '--',
+            fpSummary: 'Waiting for the ablation to finish before running the full cross-lingual evaluation across all 8 language families with 3 metrics: accuracy, F1, and BLEU.' },
+        ]
+      },
+      { name: 'Paper Draft', status: 'pending', metric: '--', duration: '--', cost: '--',
+        fpSummary: 'Waiting for artifacts. I will synthesize the paper from all experimental results, weaving the narrative around the contrastive code-switching approach.',
+        detail: 'Will generate paper draft once all artifacts are complete.' },
+      { name: 'Review', status: 'pending', metric: '--', duration: '--', cost: '--',
+        fpSummary: 'Adversarial review of the paper draft will check for logical gaps, missing comparisons, and presentation quality.',
+        detail: 'Adversarial review of paper draft against top-venue standards.' },
+      { name: 'Update Hypo', status: 'pending', metric: '--', duration: '--', cost: '--',
+        fpSummary: 'If the review surfaces issues, I will refine the hypothesis and loop back. Otherwise, the invention phase concludes.',
+        detail: 'Refine hypothesis based on experimental findings if needed.' },
+    ]
+  },
+  {
+    id: 'paper', name: 'Paper & Repository', short: 'Paper',
+    color: 'var(--orange)', raw: '#fb923c', rawRgb: '251,146,60',
+    status: 'pending', metric: '\u25CB', weight: 25,
+    fpSummary: 'I am waiting for the Invention Loop to finish. Once it does, I will generate interactive demos, create visualizations, compile the full LaTeX paper, and deploy everything to a GitHub repository.',
+    duration: '--', cost: '--',
+    steps: [
+      { name: 'Gen Repo', status: 'pending', metric: '--', duration: '--', cost: '--',
+        fpSummary: 'I will initialize the GitHub repository with proper structure: src/, data/, figures/, and paper/ directories. README with reproduction instructions.',
+        detail: 'Initialize GitHub repository with standard ML paper structure.' },
+      { name: 'Demos + Viz', status: 'pending', metric: '--', duration: '--', cost: '--',
+        fpSummary: 'I will generate interactive Python demos for each artifact and create publication-quality matplotlib visualizations for the paper figures.',
+        detail: 'Generate artifact demos (Streamlit/Gradio) and figure visualizations (matplotlib/tikz).' },
+      { name: 'Full Paper', status: 'pending', metric: '--', duration: '--', cost: '--',
+        fpSummary: 'I will compile the LaTeX paper with all sections: abstract, introduction, related work, method, experiments, results, analysis, conclusion, and appendices.',
+        detail: 'Compile LaTeX paper with all sections, figures, tables, and bibliography.' },
+      { name: 'Deploy Source', status: 'pending', metric: '--', duration: '--', cost: '--',
+        fpSummary: 'I will push all code, data, and configuration to the GitHub repo with proper CI/CD and a Dockerfile for easy reproduction.',
+        detail: 'Push code, data, and Dockerfile to GitHub. Set up CI with pytest.' },
+      { name: 'Deploy Paper', status: 'pending', metric: '--', duration: '--', cost: '--',
+        fpSummary: 'Final step: upload the compiled PDF to arXiv-ready format and deploy a project page with embedded demos.',
+        detail: 'Upload compiled PDF and deploy project page.' },
+    ]
+  }
+];
+
+let selMod = 2;
+let selStep = 2;
+
+// ─────────────────────────────────────────────────────────────────
+// PROGRESS CALCULATION
+// ─────────────────────────────────────────────────────────────────
+function calcProgress() {
+  let total = 0, done = 0;
+  MODULES.forEach(m => {
+    const w = m.weight / m.steps.length;
+    m.steps.forEach(s => {
+      total += w;
+      if (s.status === 'completed') done += w;
+      else if (s.status === 'active') done += w * 0.5;
+    });
+  });
+  return Math.round(done / total * 100);
+}
+
+// ─────────────────────────────────────────────────────────────────
+// RING
+// ─────────────────────────────────────────────────────────────────
+function updateRing(pct) {
+  const ring = document.querySelector('.ring-progress');
+  ring.style.strokeDashoffset = CIRC - (pct / 100) * CIRC;
+
+  const el = document.getElementById('pct');
+  let cur = 0;
+  const step = pct / 35;
+  const iv = setInterval(() => {
+    cur += step;
+    if (cur >= pct) { cur = pct; clearInterval(iv); }
+    el.textContent = Math.round(cur) + '%';
+  }, 25);
+
+  const ang = (pct / 100) * 360 - 90;
+  const rad = ang * Math.PI / 180;
+  const ep = document.getElementById('ep');
+  ep.style.left = (65 + 52 * Math.cos(rad) - 5.5) + 'px';
+  ep.style.top = (65 + 52 * Math.sin(rad) - 5.5) + 'px';
+}
+
+function highlightArc(mi) {
+  const hl = document.querySelector('.ring-highlight');
+  if (mi < 0) { hl.classList.remove('visible'); return; }
+  let off = 0;
+  for (let i = 0; i < mi; i++) off += (MODULES[i].weight / 100) * CIRC;
+  const len = (MODULES[mi].weight / 100) * CIRC;
+  hl.style.stroke = MODULES[mi].color;
+  hl.style.strokeDasharray = `${len} ${CIRC}`;
+  hl.style.strokeDashoffset = -off;
+  hl.classList.add('visible');
+}
+
+// ─────────────────────────────────────────────────────────────────
+// AMBIENT GLOW
+// ─────────────────────────────────────────────────────────────────
+function updateGlow() {
+  const m = MODULES[selMod];
+  const g1 = document.getElementById('glow1');
+  const g2 = document.getElementById('glow2');
+  g1.style.background = `radial-gradient(circle, rgba(${m.rawRgb}, 0.06) 0%, transparent 70%)`;
+  g2.style.background = `radial-gradient(circle, rgba(${m.rawRgb}, 0.04) 0%, transparent 70%)`;
+  g1.classList.add('visible');
+  g2.classList.add('visible');
+}
+
+// ─────────────────────────────────────────────────────────────────
+// LEGEND (sidebar, with sub-modules + hover previews)
+// ─────────────────────────────────────────────────────────────────
+let hoverTimer = null;
+const preview = document.getElementById('hoverPreview');
+
+function showPreview(step, modRaw, modRawRgb, rect) {
+  document.getElementById('prevDot').style.background = modRaw;
+  document.getElementById('prevName').textContent = step.name;
+
+  const badge = document.getElementById('prevBadge');
+  badge.textContent = step.status === 'completed' ? 'Done' : step.status === 'active' ? 'Running' : 'Pending';
+  badge.className = 'preview-badge ' + step.status;
+
+  // First sentence of first-person summary
+  const sentences = (step.fpSummary || '').split(/(?<=\.)\s+/);
+  document.getElementById('prevSummary').textContent = sentences[0] || 'No details yet.';
+
+  document.getElementById('prevDuration').innerHTML = '<svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5V8l2.5 1.5"/></svg> ' + (step.duration || '--');
+  document.getElementById('prevCost').innerHTML = '<svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v12M5 4.5h5a2 2 0 010 4H5.5M5.5 8.5h5a2 2 0 010 4H5"/></svg> ' + (step.cost || '--');
+
+  // Position: to the right of the legend item
+  const pw = 280;
+  let left = rect.right + 10;
+  let top = rect.top - 10;
+
+  // Keep within viewport
+  if (left + pw > window.innerWidth - 10) {
+    left = rect.left - pw - 10;
+  }
+  if (top + 140 > window.innerHeight) {
+    top = window.innerHeight - 150;
+  }
+  if (top < 10) top = 10;
+
+  preview.style.left = left + 'px';
+  preview.style.top = top + 'px';
+  preview.classList.add('visible');
+}
+
+function hidePreview() {
+  clearTimeout(hoverTimer);
+  preview.classList.remove('visible');
+}
+
+function buildLegend() {
+  const el = document.getElementById('legend');
+  el.innerHTML = '';
+  MODULES.forEach((m, mi) => {
+    const done = m.steps.filter(s => s.status === 'completed').length;
+
+    // Module header
+    const modEl = document.createElement('div');
+    modEl.className = 'legend-module' + (mi === selMod ? ' active' : '');
+    modEl.style.setProperty('--mod-color', m.raw);
+    modEl.innerHTML = `
+      <span class="legend-dot" style="background:${m.color}"></span>
+      <span>${m.short}</span>
+      <span class="legend-count">${done}/${m.steps.length}</span>`;
+    modEl.onclick = () => selectModule(mi);
+    el.appendChild(modEl);
+
+    // Sub-module list
+    const subsEl = document.createElement('div');
+    subsEl.className = 'legend-subs' + (mi === selMod ? ' open' : '');
+    subsEl.style.setProperty('--mod-color', m.raw);
+
+    m.steps.forEach((s, si) => {
+      const sub = document.createElement('div');
+      sub.className = 'legend-sub' + (mi === selMod && si === selStep ? ' active' : '');
+      sub.style.setProperty('--mod-color', m.raw);
+      sub.innerHTML = `
+        <span class="legend-sub-dot ${s.status}" style="--mod-color:${m.raw}"></span>
+        <span class="legend-sub-name">${s.name}</span>
+        <span class="legend-sub-status">${s.metric}</span>`;
+      sub.onclick = (e) => {
+        e.stopPropagation();
+        hidePreview();
+        selMod = mi;
+        selStep = si;
+        updateAll();
+      };
+
+      // HOVER PREVIEW
+      sub.addEventListener('mouseenter', (e) => {
+        clearTimeout(hoverTimer);
+        hoverTimer = setTimeout(() => {
+          showPreview(s, m.raw, m.rawRgb, sub.getBoundingClientRect());
+        }, 200);
+      });
+      sub.addEventListener('mouseleave', () => {
+        hidePreview();
+      });
+
+      subsEl.appendChild(sub);
+    });
+
+    el.appendChild(subsEl);
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────
+// MODULE ROW
+// ─────────────────────────────────────────────────────────────────
+function buildModuleRow() {
+  const row = document.getElementById('modRow');
+  row.innerHTML = '';
+  MODULES.forEach((m, i) => {
+    if (i > 0) {
+      const conn = document.createElement('div');
+      conn.className = 'mod-connector';
+      const prev = MODULES[i - 1];
+      if (prev.status === 'completed' && (m.status === 'completed' || m.status === 'active')) {
+        conn.classList.add(m.status === 'active' ? 'active' : 'done');
+        conn.style.setProperty('--from', prev.raw);
+        conn.style.setProperty('--to', m.raw);
+      } else {
+        conn.classList.add('pending');
+      }
+      row.appendChild(conn);
+    }
+    const node = document.createElement('div');
+    node.className = `mod-node ${m.status}`;
+    node.style.setProperty('--color', m.raw);
+    if (i === selMod) node.classList.add('selected');
+    node.innerHTML = `<div class="node-circle">${m.metric}</div><div class="node-label">${m.short}</div>`;
+    node.onclick = () => selectModule(i);
+    row.appendChild(node);
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────
+// SUB-MODULE ROW
+// ─────────────────────────────────────────────────────────────────
+function buildSubRow() {
+  const row = document.getElementById('subRow');
+  row.innerHTML = '';
+  const m = MODULES[selMod];
+  if (!m.steps.length) { row.classList.add('collapsed'); return; }
+  row.classList.remove('collapsed');
+
+  m.steps.forEach((s, i) => {
+    if (i > 0) {
+      const c = document.createElement('div');
+      c.className = 'sub-connector';
+      row.appendChild(c);
+    }
+    const w = document.createElement('div');
+    w.className = 'sub-dot-wrapper' + (i === selStep ? ' sel' : '');
+    w.style.setProperty('--color', m.raw);
+
+    const dot = document.createElement('div');
+    dot.className = `sub-dot ${s.status}`;
+    dot.style.setProperty('--color', m.raw);
+    if (i === selStep) dot.classList.add('selected');
+
+    const lbl = document.createElement('div');
+    lbl.className = 'sub-dot-label';
+    lbl.textContent = s.name;
+
+    w.appendChild(dot);
+    w.appendChild(lbl);
+    w.onclick = () => selectStep(i);
+    row.appendChild(w);
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────
+// CONTENT RENDER
+// ─────────────────────────────────────────────────────────────────
+function renderContent() {
+  const m = MODULES[selMod];
+  const s = m.steps[selStep];
+  const el = document.getElementById('contentInner');
+
+  const icon = s.status === 'completed' ? '\u2713' : s.status === 'active' ? '\u25B6' : '\u25CB';
+
+  let html = `<div class="fade-in">
+    <div class="breadcrumb" style="border-color:${m.color};color:${m.raw};background:${m.raw}12">
+      ${icon} ${m.short} / ${s.name}
+    </div>
+    <div class="section-title">${s.name}</div>
+    <div class="first-person-summary">${s.fpSummary}</div>`;
+
+  // Stat cards
+  html += `<div class="stat-cards">
+    <div class="stat-card" style="--accent:${m.raw}">
+      <div class="stat-card-label">Status</div>
+      <div class="stat-card-value" style="color:${s.status === 'completed' ? 'var(--green)' : s.status === 'active' ? 'var(--blue)' : 'var(--text-dim)'}">${s.status === 'completed' ? 'Complete' : s.status === 'active' ? 'Running' : 'Pending'}</div>
+    </div>
+    <div class="stat-card" style="--accent:${m.raw}">
+      <div class="stat-card-label">Metric</div>
+      <div class="stat-card-value">${s.metric}</div>
+    </div>
+    <div class="stat-card" style="--accent:${m.raw}">
+      <div class="stat-card-label">Duration</div>
+      <div class="stat-card-value">${s.duration}</div>
+    </div>
+    <div class="stat-card" style="--accent:${m.raw}">
+      <div class="stat-card-label">Cost</div>
+      <div class="stat-card-value">${s.cost}</div>
+    </div>
+  </div>`;
+
+  // Item list
+  if (s.children) {
+    html += '<div class="item-list">';
+    s.children.forEach((c, ci) => {
+      const cColor = c.status !== 'pending' ? m.raw : 'var(--gray)';
+      const glow = c.status === 'active' ? `box-shadow:0 0 6px ${m.raw}` : '';
+      const cIcon = c.status === 'completed' ? '\u2713' : c.status === 'active' ? '\u25B6' : '\u25CB';
+      html += `<div class="item-card fade-in" style="animation-delay:${ci * 0.06}s">
+        <div class="item-hdr" onclick="this.parentElement.classList.toggle('expanded')">
+          <div class="item-dot" style="background:${cColor};${glow}"></div>
+          <div class="item-name">${cIcon} ${c.name}</div>
+          <div class="item-meta">${c.metric}</div>
+          <svg class="item-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+        <div class="item-body">
+          <div class="item-detail">
+            <p style="margin-bottom:6px;color:var(--text);font-style:italic;opacity:0.8">${c.fpSummary}</p>
+            <span style="font-size:10px;color:var(--text-muted)">${c.duration} &middot; ${c.cost}</span>
+          </div>
+        </div>
+      </div>`;
+    });
+    html += '</div>';
+  } else if (s.detail) {
+    html += `<div class="item-list">
+      <div class="item-card expanded fade-in">
+        <div class="item-hdr" onclick="this.parentElement.classList.toggle('expanded')">
+          <div class="item-dot" style="background:${m.raw}"></div>
+          <div class="item-name">Details</div>
+          <div class="item-meta">${s.metric}</div>
+          <svg class="item-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+        <div class="item-body"><div class="item-detail">${s.detail}</div></div>
+      </div>
+    </div>`;
+  }
+
+  // Footer
+  const mDone = m.steps.filter(st => st.status === 'completed').length;
+  const mTotal = m.steps.length;
+  html += `<div class="content-footer">
+    <div class="footer-status">
+      ${m.status === 'completed' ? '\u2713 Module Complete' : m.status === 'active' ? '\u25B6 Running -- ' + m.duration + ' &middot; ' + m.cost : '\u25CB Pending'} &middot; ${mDone}/${mTotal} steps
+    </div>
+    <div class="nav-hint">
+      <span class="key">\u2190</span><span class="key">\u2192</span> Steps
+      <span style="margin:0 4px;opacity:0.3">|</span>
+      <span class="key">\u2191</span><span class="key">\u2193</span> Modules
+    </div>
+  </div></div>`;
+
+  el.innerHTML = html;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// SELECTION LOGIC
+// ─────────────────────────────────────────────────────────────────
+function selectModule(i) {
+  selMod = i;
+  const m = MODULES[i];
+  selStep = 0;
+  for (let j = 0; j < m.steps.length; j++) {
+    if (m.steps[j].status === 'active') { selStep = j; break; }
+    if (m.steps[j].status !== 'completed') { selStep = j; break; }
+  }
+  updateAll();
+}
+
+function selectStep(i) {
+  selStep = Math.max(0, Math.min(i, MODULES[selMod].steps.length - 1));
+  updateAll();
+}
+
+function updateAll() {
+  highlightArc(selMod);
+  updateGlow();
+  buildModuleRow();
+  buildSubRow();
+  buildLegend();
+  renderContent();
+}
+
+// ─────────────────────────────────────────────────────────────────
+// KEYBOARD NAVIGATION
+// ─────────────────────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowUp')    { e.preventDefault(); selectModule(Math.max(0, selMod - 1)); }
+  if (e.key === 'ArrowDown')  { e.preventDefault(); selectModule(Math.min(MODULES.length - 1, selMod + 1)); }
+  if (e.key === 'ArrowLeft')  { e.preventDefault(); selectStep(selStep - 1); }
+  if (e.key === 'ArrowRight') { e.preventDefault(); selectStep(selStep + 1); }
+});
+
+// ─────────────────────────────────────────────────────────────────
+// PARTICLE SYSTEM
+// ─────────────────────────────────────────────────────────────────
+const canvas = document.getElementById('particleCanvas');
+const ctx = canvas.getContext('2d');
+let particles = [];
+const PARTICLE_COUNT = 60;
+
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+
+function createParticle() {
+  const m = MODULES[selMod];
+  const rgb = m.rawRgb;
+  return {
+    x: Math.random() * canvas.width,
+    y: Math.random() * canvas.height,
+    vx: (Math.random() - 0.5) * 0.3,
+    vy: (Math.random() - 0.5) * 0.3,
+    r: Math.random() * 1.5 + 0.5,
+    alpha: Math.random() * 0.4 + 0.1,
+    rgb: rgb,
+    life: Math.random() * 200 + 100,
+    maxLife: 300,
+  };
+}
+
+function initParticles() {
+  particles = [];
+  for (let i = 0; i < PARTICLE_COUNT; i++) {
+    particles.push(createParticle());
+  }
+}
+
+function drawParticles() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  particles.forEach((p, i) => {
+    p.x += p.vx;
+    p.y += p.vy;
+    p.life--;
+
+    if (p.life <= 0 || p.x < -10 || p.x > canvas.width + 10 || p.y < -10 || p.y > canvas.height + 10) {
+      particles[i] = createParticle();
+      return;
+    }
+
+    const fadeIn = Math.min(1, (p.maxLife - p.life) / 30);
+    const fadeOut = Math.min(1, p.life / 30);
+    const alpha = p.alpha * fadeIn * fadeOut;
+
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(${p.rgb}, ${alpha})`;
+    ctx.fill();
+  });
+
+  // Draw faint connections between close particles
+  for (let i = 0; i < particles.length; i++) {
+    for (let j = i + 1; j < particles.length; j++) {
+      const dx = particles[i].x - particles[j].x;
+      const dy = particles[i].y - particles[j].y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 100) {
+        const a = (1 - dist / 100) * 0.08;
+        ctx.beginPath();
+        ctx.moveTo(particles[i].x, particles[i].y);
+        ctx.lineTo(particles[j].x, particles[j].y);
+        ctx.strokeStyle = `rgba(${particles[i].rgb}, ${a})`;
+        ctx.lineWidth = 0.5;
+        ctx.stroke();
+      }
+    }
+  }
+
+  requestAnimationFrame(drawParticles);
+}
+
+window.addEventListener('resize', resizeCanvas);
+
+// ─────────────────────────────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────────────────────────────
+resizeCanvas();
+initParticles();
+drawParticles();
+buildLegend();
+buildModuleRow();
+requestAnimationFrame(() => setTimeout(() => updateRing(calcProgress()), 250));
+selectModule(selMod);
+</script>
+</body>
+</html>

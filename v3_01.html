@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Pipeline View</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#1a1d23;--surface:#22262e;--surface-hover:#2a2f38;
+    --border:#2e3440;--text:#e2e4e9;--text-muted:#8b919a;
+    --green:#22c55e;--purple:#a78bfa;--blue:#3b82f6;
+    --orange:#f59e0b;--red:#ef4444;--sidebar:#1e2128;
+    --font:-apple-system,BlinkMacSystemFont,'Inter','Segoe UI',sans-serif;
+  }
+  html,body{height:100%;font-family:var(--font);background:var(--bg);color:var(--text);overflow:hidden}
+
+  /* ── layout ── */
+  .app{display:flex;height:100vh}
+  .sidebar{width:160px;min-width:160px;background:var(--sidebar);border-right:1px solid var(--border);display:flex;flex-direction:column;align-items:center;padding:24px 12px 16px;gap:20px;overflow-y:auto}
+  .main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+  .rows-area{padding:28px 32px 0;flex-shrink:0;position:relative}
+  .content-area{flex:1;overflow-y:auto;padding:20px 32px 32px;max-width:700px}
+
+  /* ── progress ring (sidebar) ── */
+  .progress-ring-wrap{text-align:center}
+  .progress-ring-wrap svg{filter:drop-shadow(0 0 8px rgba(59,130,246,.25))}
+  .ring-center{font-size:22px;font-weight:700;fill:#e2e4e9}
+  .ring-label{font-size:11px;color:var(--text-muted);margin-top:6px;letter-spacing:.4px;text-transform:uppercase}
+
+  /* ── sidebar legend ── */
+  .legend{width:100%;display:flex;flex-direction:column;gap:4px}
+  .legend-item{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer;font-size:12px;color:var(--text-muted);transition:all .15s}
+  .legend-item:hover,.legend-item.active{background:var(--surface);color:var(--text)}
+  .legend-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+  /* ── row 1 — module rings ── */
+  .row1{display:flex;align-items:center;justify-content:center;gap:0;position:relative;z-index:2}
+  .module-node{display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;position:relative;z-index:2;transition:transform .2s}
+  .module-node:hover{transform:scale(1.08)}
+  .module-node.selected{transform:scale(1.12)}
+  .module-ring-wrap{position:relative;width:56px;height:56px}
+  .module-ring-wrap svg{width:56px;height:56px;filter:drop-shadow(0 0 4px rgba(0,0,0,.3))}
+  .module-node.selected .module-ring-wrap svg{filter:drop-shadow(0 0 10px var(--glow-color))}
+  .module-metric{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--text)}
+  .module-label{font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.3px;white-space:nowrap}
+  .connector-space{width:72px;height:2px;flex-shrink:0}
+
+  /* ── canvas overlay for particles ── */
+  #particleCanvas{position:absolute;top:0;left:0;width:100%;height:100%;z-index:1;pointer-events:none}
+
+  /* ── row 2 — sub-step dots ── */
+  .row2-wrap{margin-top:20px;min-height:36px;display:flex;align-items:center;justify-content:center;gap:0;position:relative}
+  .sub-dot{width:12px;height:12px;border-radius:50%;cursor:pointer;transition:all .2s;position:relative;z-index:2;flex-shrink:0}
+  .sub-dot:hover{transform:scale(1.3)}
+  .sub-dot.active{box-shadow:0 0 8px 2px var(--dot-color);transform:scale(1.25)}
+  .sub-dot.selected{box-shadow:0 0 10px 3px var(--dot-color);transform:scale(1.35)}
+  .sub-connector{width:20px;height:2px;flex-shrink:0;position:relative;z-index:1}
+  .sub-connector-line{width:100%;height:1px;background:var(--border)}
+
+  /* ── content cards ── */
+  .content-title{font-size:20px;font-weight:600;margin-bottom:4px}
+  .content-summary{font-size:13px;color:var(--text-muted);margin-bottom:20px;line-height:1.5}
+  .detail-card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:8px;cursor:pointer;transition:all .15s}
+  .detail-card:hover{background:var(--surface-hover);box-shadow:0 2px 8px rgba(0,0,0,.2);transform:translateY(-1px)}
+  .detail-card.expanded{background:var(--surface-hover)}
+  .card-header{display:flex;align-items:center;justify-content:space-between}
+  .card-name{font-size:13px;font-weight:500}
+  .card-status{font-size:11px;padding:2px 8px;border-radius:4px;font-weight:500}
+  .card-status.done{background:rgba(34,197,94,.12);color:var(--green)}
+  .card-status.running{background:rgba(59,130,246,.12);color:var(--blue)}
+  .card-status.pending{background:rgba(245,158,11,.12);color:var(--orange)}
+  .card-body{margin-top:10px;font-size:12px;color:var(--text-muted);line-height:1.6;border-top:1px solid var(--border);padding-top:10px}
+  .metric-row{display:flex;justify-content:space-between;padding:3px 0}
+  .metric-label{color:var(--text-muted)}
+  .metric-val{color:var(--text);font-weight:500;font-variant-numeric:tabular-nums}
+
+  /* ── keyboard hint ── */
+  .kbd-hint{position:fixed;bottom:12px;right:16px;font-size:10px;color:var(--text-muted);opacity:.5}
+  kbd{background:var(--surface);border:1px solid var(--border);border-radius:3px;padding:1px 5px;font-family:inherit;font-size:10px}
+
+  /* ── pulse animation for active ring endpoint ── */
+  @keyframes pulse-glow{0%,100%{opacity:.6}50%{opacity:1}}
+  .pulse-dot{animation:pulse-glow 1.5s ease-in-out infinite}
+
+  /* ── slide transition for row2 ── */
+  .row2-wrap{transition:opacity .2s}
+  .row2-wrap.sliding{opacity:0}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ─── Sidebar ─── -->
+  <div class="sidebar">
+    <div class="progress-ring-wrap">
+      <svg viewBox="0 0 120 120" width="110" height="110">
+        <defs>
+          <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#3b82f6"/>
+            <stop offset="100%" stop-color="#22c55e"/>
+          </linearGradient>
+        </defs>
+        <circle cx="60" cy="60" r="50" fill="none" stroke="#2e3440" stroke-width="6"/>
+        <circle id="progressArc" cx="60" cy="60" r="50" fill="none" stroke="url(#ringGrad)" stroke-width="6"
+          stroke-linecap="round" stroke-dasharray="314.16" stroke-dashoffset="109.96"
+          transform="rotate(-90 60 60)"/>
+        <circle id="progressTip" cx="60" cy="10" r="4" fill="#22c55e" opacity=".7" class="pulse-dot"/>
+        <text x="60" y="64" text-anchor="middle" class="ring-center">65%</text>
+      </svg>
+      <div class="ring-label">Pipeline Progress</div>
+    </div>
+    <div class="legend" id="legend"></div>
+  </div>
+
+  <!-- ─── Main ─── -->
+  <div class="main">
+    <div class="rows-area" id="rowsArea">
+      <canvas id="particleCanvas"></canvas>
+      <div class="row1" id="row1"></div>
+      <div class="row2-wrap" id="row2"></div>
+    </div>
+    <div class="content-area" id="contentArea"></div>
+  </div>
+</div>
+
+<div class="kbd-hint"><kbd>&uarr;</kbd><kbd>&darr;</kbd> modules &nbsp; <kbd>&larr;</kbd><kbd>&rarr;</kbd> steps</div>
+
+<script>
+// ──────────────────────────────────────────
+//  DATA
+// ──────────────────────────────────────────
+const MODULES = [
+  {
+    id:'seed', name:'Seed', color:'#22c55e', pct:100, metric:'✓',
+    steps:[
+      {name:'Mine Papers', status:'done', summary:'Crawled arxiv & semantic scholar.', detail:'847 papers collected across 12 domains. Filtered to 310 relevant.'},
+      {name:'Build KG', status:'done', summary:'Constructed knowledge graph from extracted entities.', detail:'2,841 nodes, 6,203 edges. Entity resolution merged 418 duplicates.'},
+      {name:'Find Gaps', status:'done', summary:'Identified research gaps via structural hole analysis.', detail:'12 significant gaps found. Top gap: cross-modal transfer in low-resource settings.'},
+      {name:'Select Seeds', status:'done', summary:'Ranked and selected seed hypotheses.', detail:'4 seeds selected from 12 gaps. Diversity score: 0.87.'}
+    ],
+    summary:'847 papers processed, 12 research gaps identified.'
+  },
+  {
+    id:'hypo', name:'Hypothesis', color:'#a78bfa', pct:100, metric:'8.4',
+    steps:[
+      {name:'Gen Round 1', status:'done', summary:'Generated initial hypothesis batch.', detail:'Score: 6.2 avg. 8 hypotheses generated.'},
+      {name:'Review Round 1', status:'done', summary:'Expert LLM review with feedback.', detail:'3 rejected, 5 refined. Key issue: insufficient novelty.'},
+      {name:'Gen Round 2', status:'done', summary:'Refined hypotheses with review feedback.', detail:'Score: 7.8 avg. 5 hypotheses carried forward.'},
+      {name:'Review Round 2', status:'done', summary:'Second review pass — tighter criteria.', detail:'2 rejected, 3 refined. Novelty improved significantly.'},
+      {name:'Gen Round 3', status:'done', summary:'Final hypothesis refinement.', detail:'Score: 8.4 avg. Top hypothesis: "Adaptive Geometry-Aware Pruning".'},
+      {name:'Review Round 3', status:'done', summary:'Final review — all passed threshold.', detail:'3 hypotheses above 8.0. Best: 8.9.'}
+    ],
+    summary:'3 review rounds. Score progression: 6.2 → 7.8 → 8.4.'
+  },
+  {
+    id:'invention', name:'Invention', color:'#3b82f6', pct:50, metric:'3/5',
+    steps:[
+      {name:'Strategy', status:'done', summary:'Selected experimental strategy for hypothesis.', detail:'Approach: ablation study + synthetic baseline comparison.'},
+      {name:'Plan', status:'done', summary:'Generated detailed research plan.', detail:'5 experiments planned. Estimated compute: 12 GPU-hours.'},
+      {name:'Artifacts', status:'running', summary:'Generating experimental artifacts.', detail:'3 of 5 complete.',
+        artifacts:[
+          {name:'Baseline Model', status:'done', metric:'Acc 0.847'},
+          {name:'Dataset Prep', status:'done', metric:'2,400 samples'},
+          {name:'Proof of Concept', status:'done', metric:'Verified'},
+          {name:'Ablation Study', status:'running', metric:'Running...'},
+          {name:'Eval Harness', status:'pending', metric:'Pending'}
+        ]
+      },
+      {name:'Paper Text', status:'pending', summary:'Draft paper sections from results.', detail:'Waiting for artifacts.'},
+      {name:'Review', status:'pending', summary:'Automated review of paper draft.', detail:'Not started.'},
+      {name:'Update', status:'pending', summary:'Incorporate review feedback.', detail:'Not started.'}
+    ],
+    summary:'Iteration 2 — strategy and plan complete, artifacts 3/5.'
+  },
+  {
+    id:'paper', name:'Paper', color:'#f59e0b', pct:0, metric:'○',
+    steps:[
+      {name:'Compile Sections', status:'pending', summary:'Assemble paper sections into unified draft.', detail:'Waiting for invention loop.'},
+      {name:'Gen Visualizations', status:'pending', summary:'Generate figures, tables, diagrams.', detail:'Not started.'},
+      {name:'Gen Full Paper', status:'pending', summary:'Produce final formatted paper.', detail:'Not started.'},
+      {name:'Build Repo', status:'pending', summary:'Package code and data artifacts.', detail:'Not started.'},
+      {name:'Final Review', status:'pending', summary:'Quality check on complete deliverable.', detail:'Not started.'}
+    ],
+    summary:'5 steps pending. Waiting for invention loop to complete.'
+  }
+];
+
+let selectedModule = 2;
+let selectedStep = 2;
+
+// ──────────────────────────────────────────
+//  RENDERING
+// ──────────────────────────────────────────
+
+function renderLegend() {
+  const el = document.getElementById('legend');
+  el.innerHTML = MODULES.map((m, i) =>
+    `<div class="legend-item ${i===selectedModule?'active':''}" data-idx="${i}">
+      <span class="legend-dot" style="background:${m.color}"></span>${m.name}
+    </div>`
+  ).join('');
+  el.querySelectorAll('.legend-item').forEach(li => {
+    li.addEventListener('click', () => { selectModule(+li.dataset.idx); });
+  });
+}
+
+function miniRingSVG(pct, color, metric, active) {
+  const r = 17, circ = 2 * Math.PI * r;
+  const offset = circ - (circ * pct / 100);
+  const glowId = 'glow' + Math.random().toString(36).slice(2,6);
+  return `<svg viewBox="0 0 44 44" width="56" height="56">
+    <defs>
+      <linearGradient id="${glowId}" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="${color}" stop-opacity=".9"/>
+        <stop offset="100%" stop-color="${color}" stop-opacity=".5"/>
+      </linearGradient>
+    </defs>
+    <circle cx="22" cy="22" r="${r}" fill="none" stroke="#2e3440" stroke-width="3"/>
+    <circle cx="22" cy="22" r="${r}" fill="none" stroke="url(#${glowId})" stroke-width="3"
+      stroke-linecap="round" stroke-dasharray="${circ}" stroke-dashoffset="${offset}"
+      transform="rotate(-90 22 22)"/>
+    ${active ? `<circle cx="22" cy="${22-r}" r="2.5" fill="${color}" class="pulse-dot"/>` : ''}
+  </svg>`;
+}
+
+function renderRow1() {
+  const el = document.getElementById('row1');
+  let html = '';
+  MODULES.forEach((m, i) => {
+    if (i > 0) html += '<div class="connector-space" data-conn="' + (i-1) + '"></div>';
+    const isActive = (m.pct > 0 && m.pct < 100);
+    html += `<div class="module-node ${i===selectedModule?'selected':''}" data-idx="${i}"
+      style="--glow-color:${m.color}">
+      <div class="module-ring-wrap">${miniRingSVG(m.pct, m.color, m.metric, isActive)}
+        <div class="module-metric">${m.metric}</div>
+      </div>
+      <div class="module-label">${m.name}</div>
+    </div>`;
+  });
+  el.innerHTML = html;
+  el.querySelectorAll('.module-node').forEach(n => {
+    n.addEventListener('click', () => { selectModule(+n.dataset.idx); });
+  });
+}
+
+function renderRow2() {
+  const wrap = document.getElementById('row2');
+  wrap.classList.add('sliding');
+  setTimeout(() => {
+    const m = MODULES[selectedModule];
+    let html = '';
+    m.steps.forEach((s, i) => {
+      if (i > 0) html += `<div class="sub-connector"><div class="sub-connector-line"></div></div>`;
+      const c = m.color;
+      const isDone = s.status === 'done';
+      const isRunning = s.status === 'running';
+      const opacity = isDone ? 1 : isRunning ? .85 : .35;
+      html += `<div class="sub-dot ${i===selectedStep?'selected':''} ${isRunning?'active':''}"
+        data-idx="${i}" style="--dot-color:${c};background:${c};opacity:${opacity}"
+        title="${s.name}"></div>`;
+    });
+    wrap.innerHTML = html;
+    wrap.querySelectorAll('.sub-dot').forEach(d => {
+      d.addEventListener('click', () => { selectStep(+d.dataset.idx); });
+    });
+    wrap.classList.remove('sliding');
+  }, 180);
+}
+
+function renderContent() {
+  const area = document.getElementById('contentArea');
+  const m = MODULES[selectedModule];
+  const s = m.steps[selectedStep];
+  if (!s) { area.innerHTML = ''; return; }
+
+  let html = `<div class="content-title">${m.name} — ${s.name}</div>
+    <div class="content-summary">${s.summary}</div>`;
+
+  if (s.artifacts) {
+    s.artifacts.forEach((a, i) => {
+      const cls = a.status === 'done' ? 'done' : a.status === 'running' ? 'running' : 'pending';
+      const label = a.status === 'done' ? 'Done' : a.status === 'running' ? 'Running' : 'Pending';
+      html += `<div class="detail-card" data-card="${i}">
+        <div class="card-header">
+          <span class="card-name">${a.name}</span>
+          <span class="card-status ${cls}">${label}</span>
+        </div>
+        <div class="card-body" style="display:none">
+          <div class="metric-row"><span class="metric-label">Metric</span><span class="metric-val">${a.metric}</span></div>
+        </div>
+      </div>`;
+    });
+  } else {
+    html += `<div class="detail-card expanded">
+      <div class="card-header">
+        <span class="card-name">Details</span>
+        <span class="card-status ${s.status==='done'?'done':s.status==='running'?'running':'pending'}">${s.status==='done'?'Done':s.status==='running'?'Running':'Pending'}</span>
+      </div>
+      <div class="card-body" style="display:block">${s.detail}</div>
+    </div>`;
+  }
+
+  if (selectedStep === 0 && selectedModule <= 1) {
+    html += `<div style="margin-top:12px;font-size:12px;color:var(--text-muted)">${m.summary}</div>`;
+  }
+
+  area.innerHTML = html;
+
+  area.querySelectorAll('.detail-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const body = card.querySelector('.card-body');
+      const showing = body.style.display !== 'none';
+      body.style.display = showing ? 'none' : 'block';
+      card.classList.toggle('expanded', !showing);
+    });
+  });
+}
+
+// ──────────────────────────────────────────
+//  NAVIGATION
+// ──────────────────────────────────────────
+
+function selectModule(idx) {
+  selectedModule = Math.max(0, Math.min(MODULES.length - 1, idx));
+  selectedStep = 0;
+  // Find the active / last completed step
+  const steps = MODULES[selectedModule].steps;
+  for (let i = 0; i < steps.length; i++) {
+    if (steps[i].status === 'running') { selectedStep = i; break; }
+    if (steps[i].status === 'done') selectedStep = i;
+  }
+  renderAll();
+}
+
+function selectStep(idx) {
+  const max = MODULES[selectedModule].steps.length - 1;
+  selectedStep = Math.max(0, Math.min(max, idx));
+  renderRow2();
+  renderContent();
+}
+
+function renderAll() {
+  renderLegend();
+  renderRow1();
+  renderRow2();
+  renderContent();
+  // Recalculate particle paths after DOM settles
+  requestAnimationFrame(() => { initParticles(); });
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowUp') { e.preventDefault(); selectModule(selectedModule - 1); }
+  if (e.key === 'ArrowDown') { e.preventDefault(); selectModule(selectedModule + 1); }
+  if (e.key === 'ArrowLeft') { e.preventDefault(); selectStep(selectedStep - 1); }
+  if (e.key === 'ArrowRight') { e.preventDefault(); selectStep(selectedStep + 1); }
+});
+
+// ──────────────────────────────────────────
+//  PARTICLE SYSTEM (Canvas)
+// ──────────────────────────────────────────
+
+const canvas = document.getElementById('particleCanvas');
+const ctx = canvas.getContext('2d');
+let particles = [];
+let connectorPaths = [];
+let animId = null;
+
+function resizeCanvas() {
+  const area = document.getElementById('rowsArea');
+  canvas.width = area.offsetWidth;
+  canvas.height = area.offsetHeight;
+}
+
+function hexToRGB(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+function lerpColor(c1, c2, t) {
+  const a = hexToRGB(c1), b = hexToRGB(c2);
+  return `rgb(${Math.round(a[0]+(b[0]-a[0])*t)},${Math.round(a[1]+(b[1]-a[1])*t)},${Math.round(a[2]+(b[2]-a[2])*t)})`;
+}
+
+function getNodeCenter(idx) {
+  const node = document.querySelectorAll('.module-node')[idx];
+  if (!node) return null;
+  const area = document.getElementById('rowsArea');
+  const aRect = area.getBoundingClientRect();
+  const ring = node.querySelector('.module-ring-wrap');
+  const r = ring.getBoundingClientRect();
+  return { x: r.left + r.width / 2 - aRect.left, y: r.top + r.height / 2 - aRect.top };
+}
+
+function initParticles() {
+  particles = [];
+  connectorPaths = [];
+  resizeCanvas();
+
+  for (let i = 0; i < MODULES.length - 1; i++) {
+    const fromM = MODULES[i], toM = MODULES[i + 1];
+    const a = getNodeCenter(i), b = getNodeCenter(i + 1);
+    if (!a || !b) continue;
+
+    const fromDone = fromM.pct === 100;
+    const toActive = toM.pct > 0;
+    const isActive = fromDone && toM.pct > 0 && toM.pct < 100;
+    const isCompleted = fromDone && toM.pct === 100;
+    const isPending = !fromDone || toM.pct === 0;
+
+    const path = { ax: a.x, ay: a.y, bx: b.x, by: b.y, colorFrom: fromM.color, colorTo: toM.color, isActive, isCompleted, isPending };
+    connectorPaths.push(path);
+
+    if (isPending) continue;
+
+    const count = isActive ? 5 : 3;
+    const speed = isActive ? (120 + Math.random() * 40) : (60 + Math.random() * 40);
+
+    for (let p = 0; p < count; p++) {
+      particles.push({
+        pathIdx: connectorPaths.length - 1,
+        t: Math.random(),
+        speed: speed + (Math.random() - 0.5) * 20,
+        size: isActive ? 3 : 2.5
+      });
+    }
+  }
+}
+
+function drawParticles(now) {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Draw connector lines
+  connectorPaths.forEach(p => {
+    ctx.beginPath();
+    ctx.moveTo(p.ax, p.ay);
+    ctx.lineTo(p.bx, p.by);
+    if (p.isPending) {
+      ctx.setLineDash([4, 6]);
+      ctx.strokeStyle = 'rgba(46,52,64,.6)';
+      ctx.lineWidth = 1;
+    } else {
+      ctx.setLineDash([]);
+      const grad = ctx.createLinearGradient(p.ax, p.ay, p.bx, p.by);
+      grad.addColorStop(0, p.colorFrom + '66');
+      grad.addColorStop(1, p.colorTo + '66');
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = p.isActive ? 2 : 1.5;
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+  });
+
+  // Draw + move particles
+  const dt = 1 / 60; // assume ~60fps
+  particles.forEach(p => {
+    const path = connectorPaths[p.pathIdx];
+    const dx = path.bx - path.ax, dy = path.by - path.ay;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (len === 0) return;
+
+    p.t += (p.speed * dt) / len;
+    if (p.t > 1) p.t -= 1;
+
+    const x = path.ax + dx * p.t;
+    const y = path.ay + dy * p.t;
+    const color = lerpColor(path.colorFrom, path.colorTo, p.t);
+
+    // Glow trail
+    const grd = ctx.createRadialGradient(x, y, 0, x, y, p.size * 3);
+    grd.addColorStop(0, color.replace('rgb', 'rgba').replace(')', ',.5)'));
+    grd.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = grd;
+    ctx.beginPath();
+    ctx.arc(x, y, p.size * 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Core dot
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(x, y, p.size, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  animId = requestAnimationFrame(drawParticles);
+}
+
+// ──────────────────────────────────────────
+//  PROGRESS RING TIP POSITION
+// ──────────────────────────────────────────
+
+function updateProgressTip() {
+  const pct = 0.65;
+  const angle = -Math.PI / 2 + 2 * Math.PI * pct;
+  const cx = 60 + 50 * Math.cos(angle);
+  const cy = 60 + 50 * Math.sin(angle);
+  const tip = document.getElementById('progressTip');
+  if (tip) { tip.setAttribute('cx', cx); tip.setAttribute('cy', cy); }
+}
+
+// ──────────────────────────────────────────
+//  INIT
+// ──────────────────────────────────────────
+
+updateProgressTip();
+renderAll();
+requestAnimationFrame(drawParticles);
+
+window.addEventListener('resize', () => {
+  resizeCanvas();
+  initParticles();
+});
+</script>
+</body>
+</html>

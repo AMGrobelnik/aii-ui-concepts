@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Vital Signs Monitor</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #060610;
+    --divider: rgba(255, 255, 255, 0.07);
+    --dim: rgba(255, 255, 255, 0.35);
+    --med: rgba(255, 255, 255, 0.6);
+    --bright: rgba(255, 255, 255, 0.9);
+    --green: #00e676;
+    --purple: #b388ff;
+    --blue: #40c4ff;
+    --orange: #ffab40;
+    --amber: #ffd740;
+    --red: #ff5252;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--bright);
+    font-family: 'Inter', system-ui, sans-serif;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .mono { font-family: 'Courier New', monospace; }
+
+  /* ── Header bar ── */
+  .hdr {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 28px;
+    border-bottom: 1px solid var(--divider);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.018), transparent);
+    flex-shrink: 0;
+  }
+  .hdr-l { display: flex; align-items: center; gap: 28px; }
+  .hdr-title {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+  }
+  .hdr-title span { color: var(--blue); }
+  .hdr-patient { font-size: 11px; color: var(--dim); letter-spacing: 1px; }
+  .hdr-patient strong { color: var(--med); }
+  .hdr-r {
+    display: flex;
+    align-items: center;
+    gap: 28px;
+    font-size: 11px;
+    color: var(--dim);
+    letter-spacing: 1px;
+  }
+  .rt-val { color: var(--green); font-size: 13px; font-weight: 600; }
+  .act-val { color: var(--blue); font-size: 13px; }
+
+  /* Recording indicator */
+  .rec {
+    width: 7px; height: 7px;
+    background: var(--red);
+    border-radius: 50%;
+    display: inline-block;
+    vertical-align: middle;
+    margin-right: 6px;
+    box-shadow: 0 0 6px var(--red);
+    animation: blink 1.2s ease-in-out infinite;
+  }
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.15; }
+  }
+
+  /* ── Main body ── */
+  .main { display: flex; flex: 1; min-height: 0; }
+
+  /* ── Trace channels ── */
+  .traces { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+  .ch {
+    flex: 1;
+    position: relative;
+    border-bottom: 1px solid var(--divider);
+    overflow: hidden;
+  }
+  .ch:last-child { border-bottom: none; }
+  .ch canvas { width: 100%; height: 100%; display: block; }
+
+  /* Channel labels */
+  .ch-lbl {
+    position: absolute;
+    top: 10px; left: 14px;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .led {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .led-g { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .led-p { background: var(--purple); box-shadow: 0 0 6px var(--purple); }
+  .led-b {
+    background: var(--blue);
+    box-shadow: 0 0 8px var(--blue);
+    animation: lpulse 1s ease-in-out infinite;
+  }
+  .led-off { background: rgba(255, 255, 255, 0.1); }
+  @keyframes lpulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 8px var(--blue); }
+    50% { opacity: 0.35; box-shadow: 0 0 3px var(--blue); }
+  }
+
+  .lbl { font-size: 10px; letter-spacing: 2px; text-transform: uppercase; }
+
+  /* Beep dot (flashes on each heartbeat) */
+  .beep {
+    position: absolute;
+    top: 10px; right: 14px;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    opacity: 0;
+    z-index: 2;
+  }
+  .beep.on { opacity: 1; transition: none; }
+
+  /* ── Readouts sidebar ── */
+  .rdp {
+    width: 180px;
+    flex-shrink: 0;
+    border-left: 1px solid var(--divider);
+    display: flex;
+    flex-direction: column;
+    background: rgba(255, 255, 255, 0.006);
+  }
+  .rd {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    border-bottom: 1px solid var(--divider);
+    padding: 8px 12px;
+  }
+  .rd:last-child { border-bottom: none; }
+  .rd-label {
+    font-size: 9px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .rd-val { font-weight: 700; line-height: 1; }
+  .rd-sub { font-size: 9px; margin-top: 5px; letter-spacing: 1px; }
+
+  /* Readout color themes */
+  .rd-g .rd-label, .rd-g .rd-sub { color: var(--green); opacity: 0.45; }
+  .rd-g .rd-val { color: var(--green); font-size: 38px; }
+
+  .rd-p .rd-label, .rd-p .rd-sub { color: var(--purple); opacity: 0.45; }
+  .rd-p .rd-val { color: var(--purple); font-size: 38px; }
+
+  .rd-b .rd-label, .rd-b .rd-sub { color: var(--blue); opacity: 0.5; }
+  .rd-b .rd-val {
+    color: var(--blue);
+    font-size: 38px;
+    animation: vpulse 1.4s ease-in-out infinite;
+  }
+  @keyframes vpulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.55; }
+  }
+
+  .rd-a .rd-label, .rd-a .rd-sub { color: var(--amber); opacity: 0.4; }
+  .rd-a .rd-val { color: var(--amber); font-size: 30px; }
+
+  /* ── Footer ── */
+  .ftr {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 28px;
+    border-top: 1px solid var(--divider);
+    font-size: 9px;
+    color: var(--dim);
+    letter-spacing: 1.5px;
+    flex-shrink: 0;
+  }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="hdr mono">
+  <div class="hdr-l">
+    <div class="hdr-title"><span>AI INVENTOR</span> &mdash; VITAL SIGNS MONITOR</div>
+    <div class="hdr-patient">PATIENT: <strong>ssl-low-resource-v3</strong></div>
+  </div>
+  <div class="hdr-r">
+    <div><div class="rec"></div>REC</div>
+    <div>RUNTIME <span class="rt-val" id="rt">00:00:00</span></div>
+    <div>ACTIVITY <span class="act-val" id="act">12 ops/min</span></div>
+  </div>
+</div>
+
+<!-- Body -->
+<div class="main">
+  <div class="traces">
+    <!-- CH1: Seed (complete) -->
+    <div class="ch">
+      <canvas id="c-seed"></canvas>
+      <div class="ch-lbl">
+        <div class="led led-g"></div>
+        <span class="lbl mono" style="color:var(--green);opacity:.6">SEED HYPO &mdash; COMPLETE</span>
+      </div>
+      <div class="beep" id="bp-seed" style="background:var(--green);box-shadow:0 0 10px var(--green)"></div>
+    </div>
+    <!-- CH2: Hypothesis (complete) -->
+    <div class="ch">
+      <canvas id="c-hypo"></canvas>
+      <div class="ch-lbl">
+        <div class="led led-p"></div>
+        <span class="lbl mono" style="color:var(--purple);opacity:.6">HYPO LOOP &mdash; COMPLETE &bull; 8.4/10</span>
+      </div>
+      <div class="beep" id="bp-hypo" style="background:var(--purple);box-shadow:0 0 10px var(--purple)"></div>
+    </div>
+    <!-- CH3: Invention (ACTIVE — live trace) -->
+    <div class="ch">
+      <canvas id="c-inv"></canvas>
+      <div class="ch-lbl">
+        <div class="led led-b"></div>
+        <span class="lbl mono" style="color:var(--blue)" id="inv-lbl">INV LOOP &mdash; ACTIVE &bull; ITER 2 &bull; 3/5 ART</span>
+      </div>
+      <div class="beep" id="bp-inv" style="background:var(--blue);box-shadow:0 0 12px var(--blue)"></div>
+    </div>
+    <!-- CH4: Paper (standby) -->
+    <div class="ch">
+      <canvas id="c-paper"></canvas>
+      <div class="ch-lbl">
+        <div class="led led-off"></div>
+        <span class="lbl mono" style="color:var(--orange);opacity:.3">PAPER REPO &mdash; STANDBY</span>
+      </div>
+      <div class="beep" id="bp-paper" style="background:var(--orange);box-shadow:0 0 10px var(--orange)"></div>
+    </div>
+  </div>
+
+  <!-- Numeric readouts -->
+  <div class="rdp mono">
+    <div class="rd rd-g">
+      <div class="rd-label">SEED</div>
+      <div class="rd-val">4</div>
+      <div class="rd-sub">HYPOTHESES</div>
+    </div>
+    <div class="rd rd-p">
+      <div class="rd-label">HYPO</div>
+      <div class="rd-val">8.4</div>
+      <div class="rd-sub">SCORE / 10</div>
+    </div>
+    <div class="rd rd-b">
+      <div class="rd-label">ARTIFACT</div>
+      <div class="rd-val" id="ro-art">3/5</div>
+      <div class="rd-sub">ITERATION 2</div>
+    </div>
+    <div class="rd rd-a">
+      <div class="rd-label">COST</div>
+      <div class="rd-val" id="ro-cost">$12.47</div>
+      <div class="rd-sub" id="ro-tok">847K TOK</div>
+    </div>
+  </div>
+</div>
+
+<!-- Footer -->
+<div class="ftr mono">
+  <div>SYS OK &nbsp;&bull;&nbsp; CLAUDE-OPUS-4 BACKEND &nbsp;&bull;&nbsp; 4 CHANNELS</div>
+  <div>AI INVENTOR v23 &bull; PIPELINE TELEMETRY</div>
+</div>
+
+<script>
+const DPR = window.devicePixelRatio || 1;
+const cvs = {}, cx = {};
+const CH = ['seed', 'hypo', 'inv', 'paper'];
+const COL = {
+  seed:  { r: 0,   g: 230, b: 118 },
+  hypo:  { r: 179, g: 136, b: 255 },
+  inv:   { r: 64,  g: 196, b: 255 },
+  paper: { r: 255, g: 171, b: 64  }
+};
+
+function initCanvas() {
+  CH.forEach(id => {
+    const c = document.getElementById('c-' + id);
+    const p = c.parentElement;
+    const w = p.clientWidth, h = p.clientHeight;
+    c.width = w * DPR;
+    c.height = h * DPR;
+    c.style.width = w + 'px';
+    c.style.height = h + 'px';
+    cvs[id] = c;
+    cx[id] = c.getContext('2d');
+    cx[id].scale(DPR, DPR);
+  });
+}
+
+// Grid overlay (graph paper)
+function drawGrid(c, w, h) {
+  c.save();
+  // Minor grid lines
+  c.lineWidth = 0.5;
+  c.strokeStyle = 'rgba(255,255,255,0.022)';
+  for (let x = 0; x < w; x += 20) {
+    c.beginPath(); c.moveTo(x, 0); c.lineTo(x, h); c.stroke();
+  }
+  for (let y = 0; y < h; y += 20) {
+    c.beginPath(); c.moveTo(0, y); c.lineTo(w, y); c.stroke();
+  }
+  // Major grid lines
+  c.strokeStyle = 'rgba(255,255,255,0.04)';
+  for (let x = 0; x < w; x += 100) {
+    c.beginPath(); c.moveTo(x, 0); c.lineTo(x, h); c.stroke();
+  }
+  for (let y = 0; y < h; y += 100) {
+    c.beginPath(); c.moveTo(0, y); c.lineTo(w, y); c.stroke();
+  }
+  c.restore();
+}
+
+// ECG beat shape generators — returns {dx,dy} deltas forming one heartbeat
+function ecgBeat(amp, type) {
+  const a = amp;
+  if (type === 'qrs') {
+    // Full QRS complex: P-wave, QRS spike, T-wave
+    return [
+      { dx: 3, dy: 0 },
+      // P wave
+      { dx: 4, dy: -0.08 * a }, { dx: 4, dy: -0.14 * a },
+      { dx: 4, dy: -0.08 * a }, { dx: 3, dy: 0 },
+      // PR segment
+      { dx: 5, dy: 0 },
+      // Q dip
+      { dx: 2, dy: 0.08 * a },
+      // R spike
+      { dx: 3, dy: -0.85 * a },
+      // S dip
+      { dx: 3, dy: 0.95 * a }, { dx: 2, dy: 0.15 * a },
+      // Return to baseline
+      { dx: 3, dy: -0.25 * a },
+      // ST segment
+      { dx: 6, dy: 0 },
+      // T wave
+      { dx: 5, dy: -0.18 * a }, { dx: 6, dy: -0.25 * a },
+      { dx: 6, dy: -0.18 * a }, { dx: 5, dy: 0 },
+      // Trailing baseline
+      { dx: 8, dy: 0 }
+    ];
+  }
+  // Simple spike
+  return [
+    { dx: 3, dy: 0 }, { dx: 3, dy: -0.12 * a }, { dx: 2, dy: 0.06 * a },
+    { dx: 2, dy: -0.7 * a }, { dx: 3, dy: 0.82 * a }, { dx: 2, dy: 0.12 * a },
+    { dx: 3, dy: -0.18 * a }, { dx: 8, dy: 0 }
+  ];
+}
+
+// Convert beat deltas to absolute coordinates
+function beatPts(beat, x0, baseline, height) {
+  const pts = [];
+  let x = x0, y = baseline;
+  for (const d of beat) {
+    x += d.dx;
+    y += d.dy * height;
+    pts.push({ x, y });
+  }
+  return pts;
+}
+
+// Baseline noise segment
+function noise(x0, x1, baseline, intensity) {
+  const pts = [];
+  for (let x = x0; x <= x1; x += 2) {
+    pts.push({ x, y: baseline + (Math.random() - 0.5) * intensity });
+  }
+  return pts;
+}
+
+// Static trace builders
+function buildSeed(w, h) {
+  const bl = h * 0.5, pts = [];
+  let x = 0;
+  // 4 completed heartbeats then flatline
+  for (let i = 0; i < 4; i++) {
+    const gap = w * 0.12 + Math.random() * w * 0.04;
+    pts.push(...noise(x, x + gap, bl, 0.4));
+    x += gap;
+    const bp = beatPts(ecgBeat(0.55 + i * 0.03, 'simple'), x, bl, h);
+    pts.push(...bp);
+    x = bp[bp.length - 1].x;
+  }
+  // Flatline to end
+  pts.push(...noise(x, w + 20, bl, 0.3));
+  return pts;
+}
+
+function buildHypo(w, h) {
+  const bl = h * 0.5, pts = [];
+  let x = 0;
+  // 6 beats: 3 pairs (gen+review), amplitude increases 6.2->7.8->8.4
+  const amps = [0.42, 0.45, 0.55, 0.60, 0.70, 0.75];
+  for (let i = 0; i < 6; i++) {
+    const gap = w * 0.07 + Math.random() * w * 0.03;
+    pts.push(...noise(x, x + gap, bl, 0.5));
+    x += gap;
+    const bp = beatPts(ecgBeat(amps[i], 'simple'), x, bl, h);
+    pts.push(...bp);
+    x = bp[bp.length - 1].x;
+  }
+  pts.push(...noise(x, w + 20, bl, 0.3));
+  return pts;
+}
+
+// Draw a completed (static) trace
+function drawStatic(c, pts, col, w, h) {
+  c.clearRect(0, 0, w, h);
+  drawGrid(c, w, h);
+  if (pts.length < 2) return;
+  const { r, g, b } = col;
+  c.save();
+  c.shadowColor = `rgba(${r},${g},${b},0.5)`;
+  c.shadowBlur = 8;
+  c.strokeStyle = `rgba(${r},${g},${b},0.85)`;
+  c.lineWidth = 1.8;
+  c.lineJoin = 'round';
+  c.lineCap = 'round';
+  c.beginPath();
+  c.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length; i++) c.lineTo(pts[i].x, pts[i].y);
+  c.stroke();
+  c.restore();
+}
+
+// Live invention channel (real-time sweep)
+const inv = {
+  buf: null,        // circular y-value buffer (one per pixel column)
+  wp: 0,            // write position (sweep head)
+  w: 0, h: 0,      // dimensions
+  bl: 0,            // baseline y
+  phase: 'noise',   // 'noise' | 'beat'
+  ncd: 0,           // noise countdown until next beat
+  bp: [],           // current beat y-values (flattened to per-pixel)
+  bi: 0,            // beat index
+  spd: 1.8,         // pixels per frame
+  accX: 0           // fractional pixel accumulator
+};
+
+function initInv() {
+  const w = cvs.inv.width / DPR, h = cvs.inv.height / DPR;
+  inv.w = Math.ceil(w);
+  inv.h = h;
+  inv.bl = h * 0.5;
+  inv.buf = new Float64Array(inv.w).fill(inv.bl);
+  inv.wp = 0;
+
+  // Pre-fill: 3 completed beats on left side
+  let x = 0;
+  for (let b = 0; b < 3; b++) {
+    const gap = Math.floor(inv.w * 0.1 + Math.random() * inv.w * 0.04);
+    for (let i = 0; i < gap && x < inv.w; i++, x++) {
+      inv.buf[x] = inv.bl + (Math.random() - 0.5) * 0.6;
+    }
+    const beat = ecgBeat(0.65, 'qrs');
+    const bps = beatPts(beat, 0, inv.bl, h);
+    let px = 0;
+    for (const bp of bps) {
+      const cols = Math.max(1, Math.round(bp.x - px));
+      const sy = x > 0 ? inv.buf[x - 1] : inv.bl;
+      for (let c = 0; c < cols && x < inv.w; c++, x++) {
+        inv.buf[x] = sy + (bp.y - sy) * ((c + 1) / cols);
+      }
+      px = bp.x;
+    }
+  }
+  // Fill noise to ~55% of width
+  const noiseEnd = Math.floor(inv.w * 0.55);
+  while (x < noiseEnd) {
+    inv.buf[x] = inv.bl + (Math.random() - 0.5) * 0.6;
+    x++;
+  }
+  inv.wp = x;
+  inv.phase = 'noise';
+  inv.ncd = 60 + Math.floor(Math.random() * 40);
+}
+
+function tickInv() {
+  inv.accX += inv.spd;
+  while (inv.accX >= 1) {
+    inv.accX--;
+    if (inv.phase === 'noise') {
+      inv.buf[inv.wp] = inv.bl + (Math.random() - 0.5) * 0.7;
+      if (--inv.ncd <= 0) {
+        // Begin new heartbeat
+        inv.phase = 'beat';
+        const beat = ecgBeat(0.6 + Math.random() * 0.15, 'qrs');
+        const bps = beatPts(beat, 0, inv.bl, inv.h);
+        inv.bp = [];
+        let px = 0, py = inv.bl;
+        for (const bp of bps) {
+          const n = Math.max(1, Math.round(bp.x - px));
+          for (let c = 0; c < n; c++) {
+            inv.bp.push(py + (bp.y - py) * ((c + 1) / n));
+          }
+          px = bp.x; py = bp.y;
+        }
+        inv.bi = 0;
+        flash(document.getElementById('bp-inv'));
+      }
+    } else {
+      // Drawing beat samples
+      inv.buf[inv.wp] = inv.bp[inv.bi] || inv.bl;
+      if (++inv.bi >= inv.bp.length) {
+        inv.phase = 'noise';
+        inv.ncd = 80 + Math.floor(Math.random() * 60);
+      }
+    }
+    inv.wp = (inv.wp + 1) % inv.w;
+  }
+}
+
+function drawInv() {
+  const c = cx.inv, w = inv.w, h = inv.h;
+  const { r, g, b } = COL.inv;
+  const GAP = 30;   // blank sweep gap width
+  const FADE = 16;  // fade-in zone width
+
+  c.clearRect(0, 0, w, h);
+  drawGrid(c, w, h);
+  c.save();
+
+  // 1) Fade-in zone (trace emerging from gap)
+  for (let i = 0; i < FADE; i++) {
+    const idx  = (inv.wp + GAP + i) % w;
+    const idx0 = (inv.wp + GAP + Math.max(0, i - 1)) % w;
+    const alpha = (i / FADE) * 0.85;
+    c.strokeStyle = `rgba(${r},${g},${b},${alpha})`;
+    c.shadowColor = `rgba(${r},${g},${b},${alpha * 0.6})`;
+    c.shadowBlur = 10 * (i / FADE);
+    c.lineWidth = 1.8;
+    c.beginPath();
+    c.moveTo(Math.max(0, i - 1), inv.buf[idx0]);
+    c.lineTo(i, inv.buf[idx]);
+    c.stroke();
+  }
+
+  // 2) Main trace body
+  c.shadowColor = `rgba(${r},${g},${b},0.55)`;
+  c.shadowBlur = 10;
+  c.strokeStyle = `rgba(${r},${g},${b},0.85)`;
+  c.lineWidth = 1.8;
+  c.lineJoin = 'round';
+  c.lineCap = 'round';
+  c.beginPath();
+  let started = false;
+  for (let i = FADE; i < w; i++) {
+    const idx = (inv.wp + GAP + i) % w;
+    if (!started) { c.moveTo(i, inv.buf[idx]); started = true; }
+    else c.lineTo(i, inv.buf[idx]);
+  }
+  c.stroke();
+
+  // 3) Bright cursor dot at the drawing edge
+  const newestIdx = (inv.wp - 1 + w) % w;
+  const screenX = (newestIdx - inv.wp - GAP + 2 * w) % w;
+  const cursorY = inv.buf[newestIdx];
+
+  // Inner bright dot
+  c.shadowColor = `rgba(${r},${g},${b},1)`;
+  c.shadowBlur = 20;
+  c.fillStyle = 'rgba(255,255,255,0.95)';
+  c.beginPath();
+  c.arc(screenX, cursorY, 3, 0, Math.PI * 2);
+  c.fill();
+
+  // Outer glow ring
+  c.shadowBlur = 0;
+  c.strokeStyle = `rgba(${r},${g},${b},0.5)`;
+  c.lineWidth = 1.5;
+  c.beginPath();
+  c.arc(screenX, cursorY, 7, 0, Math.PI * 2);
+  c.stroke();
+
+  c.restore();
+}
+
+// Paper channel (standby noise)
+let paperPts = [], paperTick = 0;
+
+function drawPaper() {
+  const c = cx.paper;
+  const w = cvs.paper.width / DPR, h = cvs.paper.height / DPR;
+  const bl = h * 0.5;
+  const { r, g, b } = COL.paper;
+
+  if (--paperTick <= 0) {
+    paperPts = [];
+    for (let x = 0; x <= w; x += 2) {
+      let y = bl + (Math.random() - 0.5) * 0.6;
+      // Occasional tiny noise blip
+      if (Math.random() < 0.003) y += (Math.random() - 0.5) * h * 0.07;
+      paperPts.push({ x, y });
+    }
+    paperTick = 40 + Math.floor(Math.random() * 30);
+  }
+
+  c.clearRect(0, 0, w, h);
+  drawGrid(c, w, h);
+  if (paperPts.length < 2) return;
+
+  c.save();
+  c.shadowColor = `rgba(${r},${g},${b},0.25)`;
+  c.shadowBlur = 4;
+  c.strokeStyle = `rgba(${r},${g},${b},0.25)`;
+  c.lineWidth = 1.2;
+  c.lineJoin = 'round';
+  c.beginPath();
+  c.moveTo(paperPts[0].x, paperPts[0].y);
+  for (let i = 1; i < paperPts.length; i++) c.lineTo(paperPts[i].x, paperPts[i].y);
+  c.stroke();
+  c.restore();
+}
+
+function flash(el) {
+  if (!el) return;
+  el.classList.add('on');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('on'), 120);
+}
+
+// Runtime clock (starts at 02:34:17)
+const t0 = Date.now() - (2 * 3600 + 34 * 60 + 17) * 1000;
+
+function updateClock() {
+  const s = Math.floor((Date.now() - t0) / 1000);
+  const hh = String(Math.floor(s / 3600)).padStart(2, '0');
+  const mm = String(Math.floor((s % 3600) / 60)).padStart(2, '0');
+  const ss = String(s % 60).padStart(2, '0');
+  document.getElementById('rt').textContent = hh + ':' + mm + ':' + ss;
+}
+
+let cost = 12.47;
+
+function updateCost() {
+  cost += 0.001 + Math.random() * 0.002;
+  document.getElementById('ro-cost').textContent = '$' + cost.toFixed(2);
+  const tok = 847 + Math.floor((cost - 12.47) * 28);
+  document.getElementById('ro-tok').textContent = tok + 'K TOK';
+}
+
+function updateActivity() {
+  const ops = 10 + Math.floor(Math.random() * 6);
+  document.getElementById('act').textContent = ops + ' ops/min';
+}
+
+// Main render loop
+let frame = 0;
+
+function render() {
+  frame++;
+
+  // Live invention trace: every frame
+  tickInv();
+  drawInv();
+
+  // Paper noise: every 3rd frame
+  if (frame % 3 === 0) drawPaper();
+
+  // Slow-updating counters
+  if (frame % 60 === 0) { updateClock(); updateCost(); }
+  if (frame % 180 === 0) updateActivity();
+
+  requestAnimationFrame(render);
+}
+
+function drawStatics() {
+  const sw = cvs.seed.width / DPR, sh = cvs.seed.height / DPR;
+  drawStatic(cx.seed, buildSeed(sw, sh), COL.seed, sw, sh);
+  const hw = cvs.hypo.width / DPR, hh = cvs.hypo.height / DPR;
+  drawStatic(cx.hypo, buildHypo(hw, hh), COL.hypo, hw, hh);
+}
+
+function init() {
+  initCanvas();
+  drawStatics();
+  initInv();
+  paperTick = 0;
+  updateClock();
+  requestAnimationFrame(render);
+}
+
+// Resize handler
+let rzTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(rzTimer);
+  rzTimer = setTimeout(() => {
+    initCanvas();
+    drawStatics();
+    initInv();
+    paperTick = 0;
+  }, 150);
+});
+
+window.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Waveform</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #060610;
+    color: #e0e0e8;
+    font-family: 'Inter', system-ui, sans-serif;
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ---- top bar ---- */
+  .top-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 32px;
+    flex-shrink: 0;
+    z-index: 10;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .brand-icon {
+    width: 28px; height: 28px;
+    border-radius: 7px;
+    background: linear-gradient(135deg, #6c5ce7, #00b894);
+    display: grid; place-items: center;
+  }
+  .brand-icon svg { width: 16px; height: 16px; }
+  .brand-name {
+    font-weight: 600;
+    font-size: 15px;
+    letter-spacing: -0.3px;
+    color: #c8c8d8;
+  }
+  .run-stats {
+    display: flex;
+    gap: 28px;
+    font-size: 12px;
+    font-weight: 400;
+    color: #6a6a80;
+    letter-spacing: 0.3px;
+  }
+  .run-stats span { opacity: 0.85; }
+  .stat-val { color: #9090a8; font-weight: 500; }
+
+  /* ---- canvas area ---- */
+  .canvas-wrap {
+    flex: 1;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  canvas#waveform {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  /* ---- section labels (overlaid) ---- */
+  .section-labels {
+    position: absolute;
+    bottom: 80px;
+    left: 0; right: 0;
+    display: flex;
+    pointer-events: none;
+    padding: 0 40px;
+  }
+  .sec-label {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+  .sec-label .name {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+  }
+  .sec-label .detail {
+    font-size: 10px;
+    font-weight: 400;
+    color: #5a5a70;
+  }
+  .sec-seed   { width: 15%; color: #00b894; }
+  .sec-hypo   { width: 20%; color: #a29bfe; }
+  .sec-invent { width: 40%; color: #74b9ff; }
+  .sec-paper  { width: 25%; color: #ffa940; }
+
+  /* ---- current position indicator ---- */
+  .position-label {
+    position: absolute;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 12px;
+    font-weight: 500;
+    color: #74b9ff;
+    letter-spacing: 0.5px;
+    background: rgba(6, 6, 16, 0.7);
+    padding: 6px 18px;
+    border-radius: 20px;
+    border: 1px solid rgba(116, 185, 255, 0.15);
+    backdrop-filter: blur(8px);
+    white-space: nowrap;
+  }
+
+  /* ---- bottom bar (now playing) ---- */
+  .bottom-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 14px 32px;
+    flex-shrink: 0;
+    gap: 12px;
+    z-index: 10;
+  }
+  .now-playing {
+    font-size: 12px;
+    color: #5a5a70;
+    letter-spacing: 0.4px;
+  }
+  .now-playing .track {
+    color: #9090a8;
+    font-weight: 500;
+  }
+  .play-icon {
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    background: rgba(116, 185, 255, 0.12);
+    border: 1px solid rgba(116, 185, 255, 0.25);
+    display: grid; place-items: center;
+    flex-shrink: 0;
+  }
+  .play-icon svg { width: 10px; height: 10px; fill: #74b9ff; }
+
+  .elapsed {
+    font-size: 11px;
+    color: #4a4a60;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.5px;
+  }
+</style>
+</head>
+<body>
+
+<!-- top bar -->
+<div class="top-bar">
+  <div class="brand">
+    <div class="brand-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2">
+        <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+        <path d="M2 17l10 5 10-5"/>
+        <path d="M2 12l10 5 10-5"/>
+      </svg>
+    </div>
+    <span class="brand-name">AI Inventor</span>
+  </div>
+  <div class="run-stats">
+    <span>Run <span class="stat-val">ssl-low-resource-v3</span></span>
+    <span>Elapsed <span class="stat-val" id="elapsed-top">14m 32s</span></span>
+    <span>Tokens <span class="stat-val">284k</span></span>
+    <span>Cost <span class="stat-val">$2.41</span></span>
+  </div>
+</div>
+
+<!-- canvas -->
+<div class="canvas-wrap">
+  <canvas id="waveform"></canvas>
+  <div class="position-label">Invention Loop &bull; Iter 2 &bull; Gen Artifacts</div>
+  <div class="section-labels">
+    <div class="sec-label sec-seed"><span class="name">Seed</span><span class="detail">Domain scan</span></div>
+    <div class="sec-label sec-hypo"><span class="name">Hypothesis</span><span class="detail">3 iterations</span></div>
+    <div class="sec-label sec-invent"><span class="name">Invention</span><span class="detail">Active</span></div>
+    <div class="sec-label sec-paper"><span class="name">Paper</span><span class="detail">Pending</span></div>
+  </div>
+</div>
+
+<!-- bottom bar -->
+<div class="bottom-bar">
+  <div class="play-icon">
+    <svg viewBox="0 0 10 12"><polygon points="1,0 10,6 1,12"/></svg>
+  </div>
+  <span class="now-playing">Now playing: <span class="track">ssl-low-resource-v3</span></span>
+  <span class="elapsed" id="elapsed-bottom">00:14:32</span>
+</div>
+
+<script>
+// ============================================================
+//  CONFIG
+// ============================================================
+const SECTIONS = [
+  { id: 'seed',   frac: 0.15, color: [0, 184, 148], state: 'done',    label: 'Seed' },
+  { id: 'hypo',   frac: 0.20, color: [162, 155, 254], state: 'done',  label: 'Hypothesis' },
+  { id: 'invent', frac: 0.40, color: [116, 185, 255], state: 'active', label: 'Invention' },
+  { id: 'paper',  frac: 0.25, color: [255, 169, 64],  state: 'pending', label: 'Paper' },
+];
+
+const BAR_WIDTH   = 4;
+const BAR_GAP     = 2;
+const MARGIN_X    = 48;
+const MAX_AMP     = 0.42;   // fraction of half-height
+const SHIMMER_AMP = 0.015;  // subtle shimmer on done bars
+
+// ============================================================
+//  CANVAS SETUP
+// ============================================================
+const canvas = document.getElementById('waveform');
+const ctx    = canvas.getContext('2d');
+let W, H, cx, cy, totalBars, barStep;
+let bars = [];  // { x, section, baseH, phase }
+
+function resize() {
+  const dpr = window.devicePixelRatio || 1;
+  W = canvas.clientWidth;
+  H = canvas.clientHeight;
+  canvas.width  = W * dpr;
+  canvas.height = H * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  cx = W / 2;
+  cy = H / 2;
+  buildBars();
+}
+
+// ============================================================
+//  NOISE — simple value noise for organic motion
+// ============================================================
+const PERM = new Uint8Array(512);
+(function initPerm() {
+  const p = new Uint8Array(256);
+  for (let i = 0; i < 256; i++) p[i] = i;
+  for (let i = 255; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [p[i], p[j]] = [p[j], p[i]];
+  }
+  for (let i = 0; i < 512; i++) PERM[i] = p[i & 255];
+})();
+
+function fade(t) { return t * t * t * (t * (t * 6 - 15) + 10); }
+function lerp(a, b, t) { return a + t * (b - a); }
+function grad1d(hash, x) { return (hash & 1) === 0 ? x : -x; }
+
+function noise1d(x) {
+  const xi = Math.floor(x) & 255;
+  const xf = x - Math.floor(x);
+  const u  = fade(xf);
+  return lerp(grad1d(PERM[xi], xf), grad1d(PERM[xi + 1], xf - 1), u);
+}
+
+function fbm(x, octaves = 4) {
+  let val = 0, amp = 1, freq = 1, max = 0;
+  for (let i = 0; i < octaves; i++) {
+    val += noise1d(x * freq) * amp;
+    max += amp;
+    amp *= 0.5;
+    freq *= 2.1;
+  }
+  return val / max;
+}
+
+// ============================================================
+//  BUILD BARS
+// ============================================================
+function buildBars() {
+  bars = [];
+  const usable = W - MARGIN_X * 2;
+  barStep = BAR_WIDTH + BAR_GAP;
+  totalBars = Math.floor(usable / barStep);
+
+  let idx = 0;
+  for (const sec of SECTIONS) {
+    const count = Math.round(totalBars * sec.frac);
+    sec.startIdx = idx;
+    sec.endIdx   = idx + count - 1;
+    sec.startX   = MARGIN_X + idx * barStep;
+    sec.endX     = MARGIN_X + (idx + count - 1) * barStep + BAR_WIDTH;
+
+    for (let i = 0; i < count; i++) {
+      const localT = count > 1 ? i / (count - 1) : 0.5;
+      const x = MARGIN_X + (idx + i) * barStep;
+      let baseH;
+
+      if (sec.id === 'seed') {
+        // gentle sine, low amplitude
+        baseH = 0.10 + 0.06 * Math.sin(localT * Math.PI * 2.5);
+      } else if (sec.id === 'hypo') {
+        // 3 crescendos with rising peaks (6.2 -> 7.8 -> 8.4)
+        const peaks = [0.62, 0.78, 0.84];
+        const segW = 1 / 3;
+        const seg = Math.min(2, Math.floor(localT / segW));
+        const segT = (localT - seg * segW) / segW;
+        // envelope: rise then fall within each segment
+        const env = Math.sin(segT * Math.PI);
+        baseH = 0.05 + peaks[seg] * MAX_AMP * env;
+      } else if (sec.id === 'invent') {
+        // complex — high amplitude, will be animated
+        baseH = 0.15 + 0.25 * Math.abs(fbm(localT * 8, 3));
+      } else {
+        // paper — flat pending
+        baseH = 0;
+      }
+
+      bars.push({
+        x,
+        secId:  sec.id,
+        secIdx: SECTIONS.indexOf(sec),
+        localT,
+        baseH,
+        phase: Math.random() * Math.PI * 2,
+        freq:  0.8 + Math.random() * 1.4,
+      });
+      idx++;
+    }
+  }
+}
+
+// ============================================================
+//  PLAYHEAD
+// ============================================================
+let playheadT = 0;        // 0..1 within 'invent' section
+const PLAYHEAD_SPEED = 0.012;  // fraction per second
+
+function getPlayheadX() {
+  const sec = SECTIONS[2]; // invent
+  return sec.startX + playheadT * (sec.endX - sec.startX);
+}
+
+// ============================================================
+//  DRAW
+// ============================================================
+let startTime = performance.now();
+
+function draw(now) {
+  const t = (now - startTime) / 1000;
+  const dt = 1 / 60;
+
+  // advance playhead
+  playheadT += PLAYHEAD_SPEED * dt;
+  if (playheadT > 1) playheadT = 0; // loop
+
+  ctx.clearRect(0, 0, W, H);
+
+  // center line (faint)
+  ctx.save();
+  ctx.strokeStyle = 'rgba(100, 100, 140, 0.08)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(MARGIN_X, cy);
+  ctx.lineTo(W - MARGIN_X, cy);
+  ctx.stroke();
+  ctx.restore();
+
+  const phX = getPlayheadX();
+  const halfH = H * 0.38;
+
+  // ---- draw bars ----
+  for (let i = 0; i < bars.length; i++) {
+    const b = bars[i];
+    const sec = SECTIONS[b.secIdx];
+    let h;
+
+    if (sec.state === 'done') {
+      // fixed height + subtle shimmer
+      const shimmer = SHIMMER_AMP * Math.sin(t * 1.2 + b.phase * 3);
+      h = (b.baseH + shimmer) * halfH;
+    } else if (sec.state === 'active') {
+      // only bars behind the playhead are alive
+      const barCenterX = b.x + BAR_WIDTH / 2;
+      if (barCenterX <= phX + 20) {
+        // animated — multiple sine waves + noise
+        const n1 = Math.sin(t * b.freq * 2.0 + b.phase) * 0.35;
+        const n2 = Math.sin(t * b.freq * 3.7 + b.phase * 1.7) * 0.25;
+        const n3 = fbm(b.localT * 4 + t * 0.6, 3) * 0.40;
+        const combined = 0.12 + Math.abs(n1 + n2 + n3) * 0.55;
+        // proximity to playhead — boost bars near it
+        const dist = Math.abs(barCenterX - phX);
+        const proximity = Math.max(0, 1 - dist / 120);
+        h = (combined + proximity * 0.15) * halfH;
+      } else {
+        // ahead of playhead — faint dotted placeholder
+        h = 0;
+      }
+    } else {
+      // pending — no bars
+      h = 0;
+    }
+
+    if (h > 1) {
+      const [r, g, b_] = sec.color;
+
+      // glow layers
+      const glow = ctx.createLinearGradient(b.x, cy - h, b.x, cy + h);
+      const alpha = sec.state === 'active' ? 0.85 : 0.60;
+      glow.addColorStop(0,   `rgba(${r},${g},${b_},0.02)`);
+      glow.addColorStop(0.2, `rgba(${r},${g},${b_},${alpha * 0.6})`);
+      glow.addColorStop(0.5, `rgba(${r},${g},${b_},${alpha})`);
+      glow.addColorStop(0.8, `rgba(${r},${g},${b_},${alpha * 0.6})`);
+      glow.addColorStop(1,   `rgba(${r},${g},${b_},0.02)`);
+
+      // mirror: bar goes up AND down from center
+      const barH = Math.max(1, h);
+      ctx.fillStyle = glow;
+
+      // slight rounding via roundRect
+      const radius = Math.min(2, BAR_WIDTH / 2);
+      roundRect(ctx, b.x, cy - barH, BAR_WIDTH, barH * 2, radius);
+      ctx.fill();
+
+      // bright core for active bars near playhead
+      if (sec.state === 'active') {
+        const dist = Math.abs((b.x + BAR_WIDTH / 2) - phX);
+        if (dist < 80) {
+          const intensity = (1 - dist / 80) * 0.35;
+          ctx.fillStyle = `rgba(${r},${g},${b_},${intensity})`;
+          roundRect(ctx, b.x - 1, cy - barH * 0.7, BAR_WIDTH + 2, barH * 1.4, radius);
+          ctx.fill();
+        }
+      }
+    }
+  }
+
+  // ---- pending section: dotted line ----
+  const paperSec = SECTIONS[3];
+  ctx.save();
+  ctx.setLineDash([4, 8]);
+  ctx.strokeStyle = `rgba(${paperSec.color.join(',')}, 0.12)`;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(paperSec.startX, cy);
+  ctx.lineTo(W - MARGIN_X, cy);
+  ctx.stroke();
+  ctx.restore();
+
+  // ---- score markers on hypothesis ----
+  drawScoreMarkers(t);
+
+  // ---- playhead ----
+  drawPlayhead(phX, t);
+
+  // ---- section dividers ----
+  drawSectionDividers();
+
+  // ---- sub-module labels along center ----
+  drawSubLabels(t);
+
+  // ---- faint reflection fade ----
+  drawReflection();
+
+  requestAnimationFrame(draw);
+}
+
+// ============================================================
+//  SCORE MARKERS (hypothesis peaks)
+// ============================================================
+function drawScoreMarkers(t) {
+  const sec = SECTIONS[1]; // hypo
+  const scores = ['6.2', '7.8', '8.4'];
+  const count = sec.endIdx - sec.startIdx + 1;
+  const segW = count / 3;
+
+  for (let i = 0; i < 3; i++) {
+    const peakIdx = sec.startIdx + Math.floor(segW * i + segW * 0.5);
+    if (peakIdx >= bars.length) continue;
+    const b = bars[peakIdx];
+    const peakH = b.baseH * H * 0.38;
+
+    ctx.save();
+    ctx.font = '500 9px Inter';
+    ctx.fillStyle = `rgba(${sec.color.join(',')}, 0.55)`;
+    ctx.textAlign = 'center';
+    ctx.fillText(scores[i], b.x + BAR_WIDTH / 2, cy - peakH - 8);
+    ctx.restore();
+  }
+}
+
+// ============================================================
+//  PLAYHEAD
+// ============================================================
+function drawPlayhead(x, t) {
+  const halfH = H * 0.34;
+
+  // outer glow
+  const glowW = 40;
+  const grad = ctx.createLinearGradient(x - glowW, 0, x + glowW, 0);
+  grad.addColorStop(0,   'rgba(116, 185, 255, 0)');
+  grad.addColorStop(0.4, 'rgba(116, 185, 255, 0.04)');
+  grad.addColorStop(0.5, 'rgba(116, 185, 255, 0.10)');
+  grad.addColorStop(0.6, 'rgba(116, 185, 255, 0.04)');
+  grad.addColorStop(1,   'rgba(116, 185, 255, 0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(x - glowW, cy - halfH, glowW * 2, halfH * 2);
+
+  // main line
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.70)';
+  ctx.lineWidth = 1.5;
+  ctx.shadowColor = 'rgba(116, 185, 255, 0.6)';
+  ctx.shadowBlur = 12;
+  ctx.beginPath();
+  ctx.moveTo(x, cy - halfH);
+  ctx.lineTo(x, cy + halfH);
+  ctx.stroke();
+  ctx.restore();
+
+  // pulsing dot at center
+  const pulse = 3 + Math.sin(t * 3) * 1.5;
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(x, cy, pulse, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+  ctx.shadowColor = '#74b9ff';
+  ctx.shadowBlur = 16;
+  ctx.fill();
+  ctx.restore();
+}
+
+// ============================================================
+//  SUB-MODULE LABELS
+// ============================================================
+function drawSubLabels(t) {
+  const sec = SECTIONS[2]; // invent
+  const subs = [
+    { t: 0.08, text: 'Strategy' },
+    { t: 0.28, text: 'Plan' },
+    { t: 0.50, text: 'Paper Text' },
+    { t: 0.72, text: 'Artifacts' },
+    { t: 0.90, text: 'Review' },
+  ];
+
+  ctx.save();
+  ctx.font = '400 9px Inter';
+  ctx.textAlign = 'center';
+
+  for (const sub of subs) {
+    const x = sec.startX + sub.t * (sec.endX - sec.startX);
+    const phX = getPlayheadX();
+    const isPast = x < phX - 10;
+    const isNear = Math.abs(x - phX) < 50;
+
+    let alpha = isPast ? 0.25 : 0.10;
+    if (isNear) alpha = 0.50 + 0.15 * Math.sin(t * 2);
+
+    ctx.fillStyle = `rgba(116, 185, 255, ${alpha})`;
+    ctx.fillText(sub.text, x, cy + H * 0.30);
+
+    // tiny tick
+    ctx.strokeStyle = `rgba(116, 185, 255, ${alpha * 0.5})`;
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(x, cy + H * 0.24);
+    ctx.lineTo(x, cy + H * 0.26);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// ============================================================
+//  ROUNDED RECT HELPER
+// ============================================================
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+  ctx.lineTo(x + r, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+// ============================================================
+//  SECTION DIVIDERS — faint vertical lines between zones
+// ============================================================
+function drawSectionDividers() {
+  const halfH = H * 0.36;
+  ctx.save();
+  for (let i = 1; i < SECTIONS.length; i++) {
+    const x = SECTIONS[i].startX - barStep / 2;
+    const grad = ctx.createLinearGradient(0, cy - halfH, 0, cy + halfH);
+    grad.addColorStop(0, 'rgba(100,100,140,0)');
+    grad.addColorStop(0.3, 'rgba(100,100,140,0.06)');
+    grad.addColorStop(0.5, 'rgba(100,100,140,0.10)');
+    grad.addColorStop(0.7, 'rgba(100,100,140,0.06)');
+    grad.addColorStop(1, 'rgba(100,100,140,0)');
+    ctx.strokeStyle = grad;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([2, 6]);
+    ctx.beginPath();
+    ctx.moveTo(x, cy - halfH);
+    ctx.lineTo(x, cy + halfH);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// ============================================================
+//  REFLECTION — faint mirror glow beneath the waveform
+// ============================================================
+function drawReflection() {
+  // soft gradient overlay below the center line to simulate reflection
+  const reflH = H * 0.18;
+  const grad = ctx.createLinearGradient(0, cy, 0, cy + reflH);
+  grad.addColorStop(0, 'rgba(6,6,16,0)');
+  grad.addColorStop(0.4, 'rgba(6,6,16,0.55)');
+  grad.addColorStop(1, 'rgba(6,6,16,0.92)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, cy + H * 0.10, W, reflH);
+}
+
+// ============================================================
+//  ELAPSED TIMER
+// ============================================================
+let baseSeconds = 14 * 60 + 32;
+setInterval(() => {
+  baseSeconds++;
+  const m = Math.floor(baseSeconds / 60);
+  const s = baseSeconds % 60;
+  document.getElementById('elapsed-top').textContent =
+    `${m}m ${String(s).padStart(2, '0')}s`;
+  document.getElementById('elapsed-bottom').textContent =
+    `00:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}, 1000);
+
+// ============================================================
+//  INIT
+// ============================================================
+window.addEventListener('resize', resize);
+resize();
+requestAnimationFrame(draw);
+</script>
+</body>
+</html>

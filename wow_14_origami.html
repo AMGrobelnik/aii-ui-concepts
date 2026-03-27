@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Paper Origami Unfold</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #08080f;
+    --paper: #fafaf5;
+    --paper-back: #f0efe8;
+    --crease: #d8d5c8;
+    --green: #34d399;
+    --purple: #a78bfa;
+    --blue: #60a5fa;
+    --orange: #fb923c;
+    --glow-green: rgba(52, 211, 153, 0.3);
+    --glow-purple: rgba(167, 139, 250, 0.3);
+    --glow-blue: rgba(96, 165, 250, 0.4);
+    --glow-orange: rgba(251, 146, 60, 0.3);
+  }
+
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: var(--bg);
+    color: #e2e2e8;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  /* -- Spotlight behind paper -- */
+  .spotlight {
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 900px; height: 900px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255,255,245,0.04) 0%, transparent 70%);
+    pointer-events: none;
+    transition: opacity 0.8s;
+  }
+
+  /* -- Stage label -- */
+  .stage-label {
+    position: fixed;
+    top: 48px;
+    left: 50%;
+    transform: translateX(-50%);
+    text-align: center;
+    z-index: 10;
+    transition: opacity 0.5s;
+  }
+  .stage-label .stage-name {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    opacity: 0.5;
+    margin-bottom: 6px;
+  }
+  .stage-label .stage-title {
+    font-size: 20px;
+    font-weight: 300;
+    letter-spacing: 0.5px;
+    transition: color 0.6s;
+  }
+
+  /* -- Origami scene -- */
+  .scene {
+    perspective: 1200px;
+    width: 520px;
+    height: 620px;
+    position: relative;
+    cursor: pointer;
+  }
+
+  /* -- Paper texture mixin via pseudo -- */
+  .paper-face {
+    background: var(--paper);
+    background-image:
+      url("data:image/svg+xml,%3Csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100' height='100' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+    color: #1a1a2e;
+  }
+  .paper-back-face {
+    background: var(--paper-back);
+    background-image:
+      url("data:image/svg+xml,%3Csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100' height='100' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+  }
+
+  /* -- Base paper (always present, grows via clip-path) -- */
+  .paper-base {
+    position: absolute;
+    inset: 0;
+    transform-style: preserve-3d;
+    transition: transform 1.4s cubic-bezier(0.23, 1, 0.32, 1);
+  }
+
+  /* -- Individual fold panels -- */
+  .fold {
+    position: absolute;
+    transform-style: preserve-3d;
+    transition: transform 1.6s cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  .fold .front, .fold .back {
+    position: absolute;
+    inset: 0;
+    backface-visibility: hidden;
+    border-radius: 2px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    padding: 24px;
+  }
+  .fold .back {
+    transform: rotateY(180deg);
+  }
+
+  /* -- Crease lines -- */
+  .crease {
+    position: absolute;
+    background: var(--crease);
+    z-index: 5;
+    transition: opacity 0.8s;
+  }
+  .crease-h { height: 1px; left: 0; right: 0; }
+  .crease-v { width: 1px; top: 0; bottom: 0; }
+
+  /* -- Fold edge glow -- */
+  .fold-edge-glow {
+    position: absolute;
+    z-index: 6;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.8s;
+  }
+
+  /* -- Stage 1: Seed diamond -- */
+  .seed-core {
+    position: absolute;
+    width: 200px; height: 200px;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%) rotate(45deg);
+    transform-style: preserve-3d;
+    z-index: 10;
+    transition: all 1.6s cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  .seed-core .front {
+    transform: rotate(-45deg);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 30px;
+  }
+  .seed-core .front, .seed-core .back {
+    position: absolute;
+    inset: 0;
+    backface-visibility: hidden;
+    border-radius: 3px;
+  }
+  .seed-core .back { transform: rotateY(180deg); }
+  .seed-title {
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    color: #1a1a2e;
+    margin-bottom: 16px;
+  }
+  .seed-stats {
+    font-size: 11px;
+    color: #555;
+    line-height: 1.8;
+  }
+  .seed-edge {
+    position: absolute;
+    inset: -2px;
+    border: 2px solid var(--green);
+    border-radius: 5px;
+    opacity: 0.6;
+    box-shadow: 0 0 20px var(--glow-green), inset 0 0 20px var(--glow-green);
+    transition: opacity 0.6s;
+  }
+
+  /* -- Stage 2: Hypothesis triangle folds -- */
+  .hypo-fold-left {
+    width: 260px; height: 310px;
+    top: 155px; left: 0;
+    transform-origin: right center;
+    z-index: 8;
+  }
+  .hypo-fold-right {
+    width: 260px; height: 310px;
+    top: 155px; right: 0;
+    transform-origin: left center;
+    z-index: 8;
+  }
+
+  /* -- Stage 3: Invention folds -- */
+  .inv-fold-top {
+    width: 520px; height: 155px;
+    top: 0; left: 0;
+    transform-origin: bottom center;
+    z-index: 7;
+  }
+  .inv-fold-bottom {
+    width: 520px; height: 155px;
+    bottom: 0; left: 0;
+    transform-origin: top center;
+    z-index: 7;
+  }
+
+  /* -- Stage 4: Full paper corner fold -- */
+  .paper-corner {
+    width: 140px; height: 140px;
+    top: 0; right: 0;
+    transform-origin: bottom left;
+    z-index: 9;
+  }
+
+  /* -- Content within folds -- */
+  .fold-content {
+    opacity: 0;
+    transition: opacity 0.8s 0.6s;
+  }
+  .fold-content.visible { opacity: 1; }
+
+  .content-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #1a1a2e;
+    margin-bottom: 8px;
+    line-height: 1.4;
+  }
+  .content-subtitle {
+    font-size: 11px;
+    color: #666;
+    line-height: 1.6;
+  }
+  .content-score {
+    display: inline-block;
+    font-size: 18px;
+    font-weight: 700;
+    padding: 4px 12px;
+    border-radius: 6px;
+    margin-top: 10px;
+  }
+  .content-metric {
+    font-size: 11px;
+    color: #888;
+    margin-top: 4px;
+  }
+
+  /* -- Full paper (stage 4) content -- */
+  .full-paper {
+    position: absolute;
+    inset: 0;
+    border-radius: 3px;
+    padding: 40px 36px;
+    display: flex;
+    flex-direction: column;
+    opacity: 0;
+    transition: opacity 0.8s 0.4s;
+    z-index: 1;
+  }
+  .full-paper.visible { opacity: 1; }
+  .full-paper .fp-title {
+    font-size: 17px;
+    font-weight: 700;
+    color: #1a1a2e;
+    text-align: center;
+    margin-bottom: 6px;
+    line-height: 1.35;
+  }
+  .full-paper .fp-authors {
+    font-size: 10px;
+    color: #888;
+    text-align: center;
+    margin-bottom: 20px;
+    letter-spacing: 0.5px;
+  }
+  .full-paper .fp-abstract-label {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #aaa;
+    margin-bottom: 6px;
+  }
+  .full-paper .fp-abstract {
+    font-size: 11px;
+    color: #444;
+    line-height: 1.65;
+    margin-bottom: 20px;
+  }
+  .full-paper .fp-figure {
+    flex: 1;
+    background: linear-gradient(135deg, #f0efea 0%, #e8e7e0 100%);
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    color: #aaa;
+    letter-spacing: 1px;
+    border: 1px solid #e0dfd8;
+    margin-bottom: 16px;
+    min-height: 120px;
+  }
+  .full-paper .fp-sections {
+    display: flex;
+    gap: 12px;
+  }
+  .full-paper .fp-section {
+    flex: 1;
+    height: 50px;
+    border-radius: 3px;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent 0px,
+      transparent 6px,
+      #ddd 6px,
+      #ddd 7px
+    );
+    opacity: 0.5;
+  }
+
+  /* -- Ghost outline for stage 4 preview -- */
+  .ghost-outline {
+    position: absolute;
+    inset: 0;
+    border: 1px dashed rgba(251, 146, 60, 0.15);
+    border-radius: 3px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 1s;
+  }
+
+  /* -- Shadow under paper -- */
+  .paper-shadow {
+    position: absolute;
+    bottom: -30px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 300px;
+    height: 40px;
+    background: radial-gradient(ellipse, rgba(0,0,0,0.35) 0%, transparent 70%);
+    border-radius: 50%;
+    transition: all 1.6s cubic-bezier(0.23, 1, 0.32, 1);
+    z-index: 0;
+  }
+
+  /* -- Navigation dots -- */
+  .nav {
+    position: fixed;
+    bottom: 44px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    z-index: 20;
+  }
+  .nav-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.15);
+    cursor: pointer;
+    transition: all 0.4s;
+    position: relative;
+  }
+  .nav-dot.active {
+    background: rgba(255,255,255,0.7);
+    transform: scale(1.3);
+  }
+  .nav-dot::after {
+    content: attr(data-label);
+    position: absolute;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 9px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+    color: rgba(255,255,255,0.4);
+  }
+  .nav-dot:hover::after { opacity: 1; }
+
+  /* -- Arrow hints -- */
+  .arrow-hint {
+    position: fixed;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 22px;
+    color: rgba(255,255,255,0.1);
+    cursor: pointer;
+    transition: color 0.3s;
+    z-index: 20;
+    padding: 20px;
+  }
+  .arrow-hint:hover { color: rgba(255,255,255,0.3); }
+  .arrow-left { left: 30px; }
+  .arrow-right { right: 30px; }
+
+  /* -- Progress bar (for stage 3 auto-animation) -- */
+  .progress-bar {
+    position: fixed;
+    bottom: 76px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 120px;
+    height: 2px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 1px;
+    overflow: hidden;
+    opacity: 0;
+    transition: opacity 0.6s;
+  }
+  .progress-bar.visible { opacity: 1; }
+  .progress-bar .fill {
+    height: 100%;
+    width: 0%;
+    background: var(--blue);
+    border-radius: 1px;
+    transition: width 0.1s linear;
+  }
+
+  /* -- Peek labels (stage 1) -- */
+  .peek-label {
+    position: absolute;
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 1px;
+    color: rgba(255,255,255,0.25);
+    transition: opacity 0.8s;
+    pointer-events: none;
+  }
+
+  /* -- Accent border on active fold -- */
+  .accent-border {
+    position: absolute;
+    inset: -1px;
+    border-radius: 4px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.8s;
+  }
+
+  /* -- Slow breathing for stage 3 -- */
+  @keyframes breathe {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 0.9; }
+  }
+  .breathing { animation: breathe 3s ease-in-out infinite; }
+
+  /* -- Subtle float -- */
+  @keyframes float {
+    0%, 100% { transform: translate(-50%, -50%) rotate(45deg) translateY(0); }
+    50% { transform: translate(-50%, -50%) rotate(45deg) translateY(-4px); }
+  }
+</style>
+</head>
+<body>
+
+<div class="spotlight"></div>
+
+<div class="stage-label">
+  <div class="stage-name" id="stageName">Stage 1 of 4</div>
+  <div class="stage-title" id="stageTitle">Seed</div>
+</div>
+
+<div class="scene" id="scene">
+  <!-- Paper shadow -->
+  <div class="paper-shadow" id="paperShadow"></div>
+
+  <!-- Ghost outline for final paper -->
+  <div class="ghost-outline" id="ghostOutline"></div>
+
+  <!-- Full paper content (revealed at stage 4) -->
+  <div class="full-paper paper-face" id="fullPaper">
+    <div class="fp-title">Cross-lingual Contrastive Pre-training<br>with Structural Knowledge Graphs</div>
+    <div class="fp-authors">AI Inventor System &mdash; Autonomous Research Generation</div>
+    <div class="fp-abstract-label">Abstract</div>
+    <div class="fp-abstract">
+      We propose a novel framework for cross-lingual representation learning that leverages
+      structural knowledge graphs as alignment anchors during contrastive pre-training. Our approach
+      achieves state-of-the-art results on multilingual benchmarks while requiring 43% fewer
+      parallel training pairs than existing methods.
+    </div>
+    <div class="fp-figure">[ Figure 1 &mdash; Architecture Overview ]</div>
+    <div class="fp-sections">
+      <div class="fp-section"></div>
+      <div class="fp-section"></div>
+      <div class="fp-section"></div>
+    </div>
+  </div>
+
+  <!-- Stage 2: Side folds (hypothesis) -->
+  <div class="fold hypo-fold-left" id="hypoLeft">
+    <div class="front paper-face">
+      <div class="fold-content" id="hypoLeftContent">
+        <div class="content-subtitle" style="margin-bottom: auto;">Hypothesis Evaluation</div>
+        <div class="content-score" style="background: rgba(167,139,250,0.12); color: #7c3aed;">8.4 / 10</div>
+        <div class="content-metric">Novelty: 9.1 &middot; Feasibility: 7.8</div>
+      </div>
+      <div class="accent-border" id="hypoLeftAccent" style="border: 2px solid var(--purple); box-shadow: 0 0 24px var(--glow-purple);"></div>
+    </div>
+    <div class="back paper-back-face"></div>
+  </div>
+
+  <div class="fold hypo-fold-right" id="hypoRight">
+    <div class="front paper-face">
+      <div class="fold-content" id="hypoRightContent">
+        <div class="content-title" style="font-size: 13px;">Cross-lingual Contrastive Pre-training with Structural Knowledge Graphs</div>
+        <div class="content-subtitle" style="margin-top: 8px;">
+          Bridges the gap between monolingual KG embeddings
+          and multilingual LM representations through a novel
+          contrastive alignment objective.
+        </div>
+      </div>
+      <div class="accent-border" id="hypoRightAccent" style="border: 2px solid var(--purple); box-shadow: 0 0 24px var(--glow-purple);"></div>
+    </div>
+    <div class="back paper-back-face"></div>
+  </div>
+
+  <!-- Stage 3: Top/bottom folds (invention) -->
+  <div class="fold inv-fold-top" id="invTop">
+    <div class="front paper-face">
+      <div class="fold-content" id="invTopContent">
+        <div class="content-subtitle" style="letter-spacing: 1.5px; text-transform: uppercase; font-size: 9px; margin-bottom: 10px;">Artifacts Generated</div>
+        <div style="display: flex; gap: 16px; font-size: 11px; color: #555;">
+          <div><strong style="font-size: 20px; color: #1a1a2e;">3</strong><br>Models</div>
+          <div><strong style="font-size: 20px; color: #1a1a2e;">7</strong><br>Figures</div>
+          <div><strong style="font-size: 20px; color: #1a1a2e;">2</strong><br>Tables</div>
+          <div><strong style="font-size: 20px; color: #1a1a2e;">1</strong><br>Demo</div>
+        </div>
+      </div>
+      <div class="accent-border" id="invTopAccent" style="border: 2px solid var(--blue); box-shadow: 0 0 24px var(--glow-blue);"></div>
+    </div>
+    <div class="back paper-back-face"></div>
+  </div>
+
+  <div class="fold inv-fold-bottom" id="invBottom">
+    <div class="front paper-face">
+      <div class="fold-content" id="invBottomContent">
+        <div style="display: flex; gap: 20px; align-items: center;">
+          <div style="flex: 1;">
+            <div class="content-subtitle" style="letter-spacing: 1.5px; text-transform: uppercase; font-size: 9px; margin-bottom: 8px;">Partial Paper Draft</div>
+            <div style="font-size: 10px; color: #888; line-height: 1.7;">
+              Sections 1-3 complete<br>
+              Section 4 in progress...<br>
+              Figures rendered: 5 of 7
+            </div>
+          </div>
+          <div style="width: 70px; height: 70px; border-radius: 50%; border: 3px solid var(--blue); display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 700; color: var(--blue);">68%</div>
+        </div>
+      </div>
+      <div class="accent-border" id="invBottomAccent" style="border: 2px solid var(--blue); box-shadow: 0 0 24px var(--glow-blue);"></div>
+    </div>
+    <div class="back paper-back-face"></div>
+  </div>
+
+  <!-- Paper corner fold (stage 4 reveal) -->
+  <div class="fold paper-corner" id="paperCorner">
+    <div class="front paper-face" style="padding: 0;">
+      <div class="accent-border" id="cornerAccent" style="border: 2px solid var(--orange); box-shadow: 0 0 24px var(--glow-orange);"></div>
+    </div>
+    <div class="back paper-back-face" style="padding: 0;"></div>
+  </div>
+
+  <!-- Stage 1: Seed diamond (on top of everything) -->
+  <div class="seed-core paper-face" id="seedCore">
+    <div class="front paper-face">
+      <div class="seed-title">Research Seed</div>
+      <div class="seed-stats">
+        847 papers scanned<br>
+        12 knowledge gaps<br>
+        3 seed hypotheses
+      </div>
+    </div>
+    <div class="back paper-back-face"></div>
+    <div class="seed-edge" id="seedEdge"></div>
+  </div>
+
+  <!-- Peek labels around diamond -->
+  <div class="peek-label" id="peekLeft" style="top: 50%; left: 80px; transform: translateY(-50%);">847 papers</div>
+  <div class="peek-label" id="peekRight" style="top: 50%; right: 80px; transform: translateY(-50%);">12 gaps</div>
+  <div class="peek-label" id="peekTop" style="top: 140px; left: 50%; transform: translateX(-50%);">NLP + KG</div>
+  <div class="peek-label" id="peekBottom" style="bottom: 140px; left: 50%; transform: translateX(-50%);">contrastive</div>
+
+  <!-- Crease lines -->
+  <div class="crease crease-h" id="creaseH" style="top: 50%; opacity: 0;"></div>
+  <div class="crease crease-v" id="creaseV" style="left: 50%; opacity: 0;"></div>
+</div>
+
+<!-- Navigation -->
+<div class="arrow-hint arrow-left" id="arrowLeft">&#8592;</div>
+<div class="arrow-hint arrow-right" id="arrowRight">&#8594;</div>
+
+<div class="progress-bar" id="progressBar">
+  <div class="fill" id="progressFill"></div>
+</div>
+
+<div class="nav" id="nav">
+  <div class="nav-dot active" data-label="Seed" data-stage="0"></div>
+  <div class="nav-dot" data-label="Hypothesis" data-stage="1"></div>
+  <div class="nav-dot" data-label="Invention" data-stage="2"></div>
+  <div class="nav-dot" data-label="Paper" data-stage="3"></div>
+</div>
+
+<script>
+(function() {
+  const stages = [
+    { name: 'Stage 1 of 4', title: 'Seed', color: 'var(--green)' },
+    { name: 'Stage 2 of 4', title: 'Hypothesis', color: 'var(--purple)' },
+    { name: 'Stage 3 of 4', title: 'Invention', color: 'var(--blue)' },
+    { name: 'Stage 4 of 4', title: 'Paper', color: 'var(--orange)' },
+  ];
+
+  let current = 0;
+  let autoAnimFrame = null;
+  let autoProgress = 0;
+
+  const $ = id => document.getElementById(id);
+  const dots = document.querySelectorAll('.nav-dot');
+
+  function setStage(idx) {
+    if (idx < 0 || idx > 3) return;
+    current = idx;
+
+    // Update header
+    $('stageName').textContent = stages[idx].name;
+    $('stageTitle').textContent = stages[idx].title;
+    $('stageTitle').style.color = stages[idx].color;
+
+    // Update dots
+    dots.forEach((d, i) => d.classList.toggle('active', i === idx));
+
+    // Cancel stage-3 auto-animation
+    if (autoAnimFrame) { cancelAnimationFrame(autoAnimFrame); autoAnimFrame = null; }
+    autoProgress = 0;
+    $('progressFill').style.width = '0%';
+    $('progressBar').classList.remove('visible');
+
+    applyVisuals(idx);
+  }
+
+  function applyVisuals(stage) {
+    const seedCore = $('seedCore');
+    const hypoLeft = $('hypoLeft');
+    const hypoRight = $('hypoRight');
+    const invTop = $('invTop');
+    const invBottom = $('invBottom');
+    const paperCorner = $('paperCorner');
+    const shadow = $('paperShadow');
+
+    // Peek labels
+    const peekOpacity = stage === 0 ? '1' : '0';
+    ['peekLeft','peekRight','peekTop','peekBottom'].forEach(id => $(id).style.opacity = peekOpacity);
+
+    // Seed edge glow
+    $('seedEdge').style.opacity = stage === 0 ? '0.6' : '0';
+
+    // Creases
+    $('creaseH').style.opacity = stage >= 2 ? '0.5' : '0';
+    $('creaseV').style.opacity = stage >= 1 ? '0.5' : '0';
+
+    // Ghost outline
+    $('ghostOutline').style.opacity = (stage === 2) ? '1' : '0';
+
+    // === Stage 0: Everything folded tight ===
+    if (stage === 0) {
+      seedCore.style.transform = 'translate(-50%, -50%) rotate(45deg)';
+      seedCore.style.width = '200px'; seedCore.style.height = '200px';
+      seedCore.style.opacity = '1';
+      seedCore.style.zIndex = '10';
+
+      hypoLeft.style.transform = 'rotateY(180deg)';
+      hypoRight.style.transform = 'rotateY(-180deg)';
+      invTop.style.transform = 'rotateX(-180deg)';
+      invBottom.style.transform = 'rotateX(180deg)';
+      paperCorner.style.transform = 'rotate(-90deg) rotateX(180deg)';
+
+      shadow.style.width = '200px';
+      shadow.style.bottom = '-30px';
+
+      setContentVis(false, false, false, false);
+      setAccentVis(false, false, false, false);
+      $('fullPaper').classList.remove('visible');
+    }
+
+    // === Stage 1: Hypothesis — side folds open ===
+    if (stage === 1) {
+      seedCore.style.transform = 'translate(-50%, -50%) rotate(45deg) scale(0.7)';
+      seedCore.style.opacity = '0.3';
+      seedCore.style.zIndex = '4';
+
+      hypoLeft.style.transform = 'rotateY(0deg)';
+      hypoRight.style.transform = 'rotateY(0deg)';
+      invTop.style.transform = 'rotateX(-180deg)';
+      invBottom.style.transform = 'rotateX(180deg)';
+      paperCorner.style.transform = 'rotate(-90deg) rotateX(180deg)';
+
+      shadow.style.width = '420px';
+      shadow.style.bottom = '-25px';
+
+      setContentVis(true, false, false, false);
+      setAccentVis(true, false, false, false);
+      $('fullPaper').classList.remove('visible');
+    }
+
+    // === Stage 2: Invention — top/bottom folds open, CURRENT stage ===
+    if (stage === 2) {
+      seedCore.style.transform = 'translate(-50%, -50%) rotate(45deg) scale(0)';
+      seedCore.style.opacity = '0';
+      seedCore.style.zIndex = '1';
+
+      hypoLeft.style.transform = 'rotateY(0deg)';
+      hypoRight.style.transform = 'rotateY(0deg)';
+      invTop.style.transform = 'rotateX(0deg)';
+      invBottom.style.transform = 'rotateX(0deg)';
+      paperCorner.style.transform = 'rotate(-90deg) rotateX(180deg)';
+
+      shadow.style.width = '480px';
+      shadow.style.bottom = '-20px';
+
+      setContentVis(true, true, false, false);
+      setAccentVis(false, true, false, false);
+      $('fullPaper').classList.remove('visible');
+
+      // Start auto-animation for this stage
+      startAutoAnim();
+    }
+
+    // === Stage 3: Paper — fully unfolded ===
+    if (stage === 3) {
+      seedCore.style.transform = 'translate(-50%, -50%) rotate(45deg) scale(0)';
+      seedCore.style.opacity = '0';
+      seedCore.style.zIndex = '1';
+
+      hypoLeft.style.transform = 'rotateY(0deg)';
+      hypoRight.style.transform = 'rotateY(0deg)';
+      invTop.style.transform = 'rotateX(0deg)';
+      invBottom.style.transform = 'rotateX(0deg)';
+      paperCorner.style.transform = 'rotate(0deg) rotateX(0deg)';
+
+      shadow.style.width = '500px';
+      shadow.style.bottom = '-15px';
+
+      setContentVis(false, false, false, false);
+      setAccentVis(false, false, false, true);
+
+      // Delay to let corner unfold first, then fade folds out and show full paper
+      setTimeout(() => {
+        hypoLeft.style.transform = 'rotateY(0deg) scale(0.98)';
+        hypoRight.style.transform = 'rotateY(0deg) scale(0.98)';
+        invTop.style.transform = 'rotateX(0deg) scale(0.98)';
+        invBottom.style.transform = 'rotateX(0deg) scale(0.98)';
+        [hypoLeft, hypoRight, invTop, invBottom].forEach(el => {
+          el.style.opacity = '0';
+          el.style.transition = 'transform 1.2s ease, opacity 1.2s ease';
+        });
+        paperCorner.style.opacity = '0';
+        paperCorner.style.transition = 'transform 1.6s cubic-bezier(0.23,1,0.32,1), opacity 1.2s ease 0.3s';
+        $('fullPaper').classList.add('visible');
+      }, 800);
+
+      // Restore fold transitions for future navigation
+      setTimeout(() => {
+        [hypoLeft, hypoRight, invTop, invBottom, paperCorner].forEach(el => {
+          el.style.transition = 'transform 1.6s cubic-bezier(0.23, 1, 0.32, 1)';
+        });
+      }, 2500);
+    }
+
+    // Reset opacities when leaving stage 3
+    if (stage !== 3) {
+      [hypoLeft, hypoRight, invTop, invBottom, paperCorner].forEach(el => {
+        el.style.opacity = '1';
+        el.style.transition = 'transform 1.6s cubic-bezier(0.23, 1, 0.32, 1)';
+      });
+    }
+  }
+
+  function setContentVis(hypo, inv, corner, full) {
+    $('hypoLeftContent').classList.toggle('visible', hypo);
+    $('hypoRightContent').classList.toggle('visible', hypo);
+    $('invTopContent').classList.toggle('visible', inv);
+    $('invBottomContent').classList.toggle('visible', inv);
+  }
+
+  function setAccentVis(hypo, inv, corner, paper) {
+    $('hypoLeftAccent').style.opacity = hypo ? '1' : '0';
+    $('hypoRightAccent').style.opacity = hypo ? '1' : '0';
+    $('invTopAccent').style.opacity = inv ? '1' : '0';
+    $('invBottomAccent').style.opacity = inv ? '1' : '0';
+    $('cornerAccent').style.opacity = paper ? '1' : '0';
+  }
+
+  // Stage 3: auto-advancing animation (slow unfold of corner)
+  function startAutoAnim() {
+    $('progressBar').classList.add('visible');
+    autoProgress = 0;
+    const duration = 12000; // 12 seconds for full auto
+    let start = null;
+
+    function tick(ts) {
+      if (!start) start = ts;
+      const elapsed = ts - start;
+      autoProgress = Math.min(elapsed / duration, 1);
+      $('progressFill').style.width = (autoProgress * 100) + '%';
+
+      // Slowly unfold the corner as a teaser
+      const cornerAngle = -180 + (autoProgress * 80); // goes from -180 to -100
+      $('paperCorner').style.transform = `rotate(-90deg) rotateX(${cornerAngle}deg)`;
+
+      // Pulsing glow on corner
+      const glowIntensity = 0.3 + Math.sin(elapsed / 500) * 0.15;
+      $('cornerAccent').style.opacity = glowIntensity.toString();
+
+      if (autoProgress < 1 && current === 2) {
+        autoAnimFrame = requestAnimationFrame(tick);
+      }
+    }
+    autoAnimFrame = requestAnimationFrame(tick);
+  }
+
+  // Event handlers
+  $('scene').addEventListener('click', () => setStage(current + 1));
+  $('arrowLeft').addEventListener('click', (e) => { e.stopPropagation(); setStage(current - 1); });
+  $('arrowRight').addEventListener('click', (e) => { e.stopPropagation(); setStage(current + 1); });
+
+  dots.forEach(dot => {
+    dot.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setStage(parseInt(dot.dataset.stage));
+    });
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === ' ') setStage(current + 1);
+    if (e.key === 'ArrowLeft') setStage(current - 1);
+  });
+
+  // Initialize
+  setStage(0);
+})();
+</script>
+</body>
+</html>

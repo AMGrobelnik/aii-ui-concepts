@@ -1,0 +1,1014 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Stacked Cards View</title>
+<style>
+  /* ── Reset & Base ──────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg-deep:    #0b0d14;
+    --bg-surface: #12151f;
+    --bg-card:    rgba(22, 26, 40, 0.82);
+    --glass-border: rgba(255, 255, 255, 0.06);
+    --text-main:  #e2e4eb;
+    --text-dim:   #6b7089;
+    --text-muted: #444a62;
+
+    --green:   #34d399;
+    --green-bg: rgba(52, 211, 153, 0.10);
+    --purple:  #a78bfa;
+    --purple-bg: rgba(167, 139, 250, 0.10);
+    --blue:    #60a5fa;
+    --blue-bg: rgba(96, 165, 250, 0.12);
+    --orange:  #fb923c;
+    --orange-bg: rgba(251, 146, 60, 0.08);
+
+    --card-w: 140px;
+    --card-h: 70px;
+    --card-r: 10px;
+    --overlap: 30px;
+    --raise: -4px;
+
+    --transition-fast: 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-med:  0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  html { font-size: 15px; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg-deep);
+    color: var(--text-main);
+    min-height: 100vh;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Ambient background glow ───────────────────────────── */
+  body::before {
+    content: '';
+    position: fixed;
+    top: -40%; left: -20%;
+    width: 140%; height: 140%;
+    background:
+      radial-gradient(ellipse 600px 400px at 20% 15%, rgba(96, 165, 250, 0.04) 0%, transparent 70%),
+      radial-gradient(ellipse 500px 350px at 80% 20%, rgba(167, 139, 250, 0.035) 0%, transparent 70%),
+      radial-gradient(ellipse 400px 400px at 50% 80%, rgba(52, 211, 153, 0.025) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── Layout shell ──────────────────────────────────────── */
+  .app {
+    position: relative;
+    z-index: 1;
+    max-width: 820px;
+    margin: 0 auto;
+    padding: 24px 28px 60px;
+  }
+
+  /* ── Top strip: the card fan ───────────────────────────── */
+  .top-strip {
+    height: 90px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    margin-bottom: 32px;
+  }
+
+  .card-fan {
+    display: flex;
+    align-items: flex-end;
+    position: relative;
+    height: 78px;
+    /* push cards together via negative margin */
+  }
+
+  /* ── Individual stage card ─────────────────────────────── */
+  .stage-card {
+    width: var(--card-w);
+    height: var(--card-h);
+    border-radius: var(--card-r);
+    background: var(--bg-card);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border: 1px solid var(--glass-border);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    position: relative;
+    transition:
+      transform var(--transition-med),
+      box-shadow var(--transition-med),
+      z-index 0s,
+      border-color var(--transition-fast),
+      background var(--transition-fast);
+    user-select: none;
+    flex-shrink: 0;
+  }
+
+  /* Overlap: every card after the first tucks leftward */
+  .stage-card + .stage-card {
+    margin-left: calc(-1 * var(--overlap));
+  }
+
+  /* Slight organic rotation per card */
+  .stage-card:nth-child(1) { transform: rotate(-1.8deg); z-index: 1; }
+  .stage-card:nth-child(2) { transform: rotate(-0.6deg); z-index: 2; }
+  .stage-card:nth-child(3) { transform: rotate(0.5deg);  z-index: 3; }
+  .stage-card:nth-child(4) { transform: rotate(1.6deg);  z-index: 4; }
+
+  /* ── Accent stripe at top of each card ─────────────────── */
+  .stage-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 12px; right: 12px;
+    height: 2.5px;
+    border-radius: 0 0 3px 3px;
+    opacity: 0.7;
+    transition: opacity var(--transition-fast);
+  }
+
+  /* Colour themes */
+  .stage-card[data-stage="seed"]::before       { background: var(--green); }
+  .stage-card[data-stage="hypothesis"]::before  { background: var(--purple); }
+  .stage-card[data-stage="invention"]::before   { background: var(--blue); }
+  .stage-card[data-stage="paper"]::before       { background: var(--orange); }
+
+  .stage-card[data-stage="seed"]       { --accent: var(--green);  --accent-bg: var(--green-bg); }
+  .stage-card[data-stage="hypothesis"] { --accent: var(--purple); --accent-bg: var(--purple-bg); }
+  .stage-card[data-stage="invention"]  { --accent: var(--blue);   --accent-bg: var(--blue-bg); }
+  .stage-card[data-stage="paper"]      { --accent: var(--orange); --accent-bg: var(--orange-bg); }
+
+  /* ── Card inner text ───────────────────────────────────── */
+  .card-label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    transition: color var(--transition-fast);
+  }
+
+  .card-status {
+    font-size: 0.82rem;
+    font-weight: 500;
+    margin-top: 3px;
+    color: var(--text-muted);
+    transition: color var(--transition-fast);
+  }
+
+  /* ── Dim state (paper) ─────────────────────────────────── */
+  .stage-card.is-dim {
+    opacity: 0.45;
+  }
+
+  /* ── Hover: raise card above siblings ──────────────────── */
+  .stage-card:hover {
+    z-index: 10 !important;
+    transform: translateY(var(--raise)) rotate(0deg) scale(1.04) !important;
+    box-shadow:
+      0 8px 24px rgba(0, 0, 0, 0.45),
+      0 2px 8px rgba(0, 0, 0, 0.3);
+    border-color: rgba(255, 255, 255, 0.10);
+  }
+
+  .stage-card:hover::before { opacity: 1; }
+  .stage-card:hover .card-label  { color: var(--text-main); }
+  .stage-card:hover .card-status { color: var(--accent); }
+
+  /* ── Active / selected card ────────────────────────────── */
+  .stage-card.is-active {
+    z-index: 20 !important;
+    transform: translateY(calc(var(--raise) - 2px)) rotate(0deg) scale(1.07) !important;
+    background: rgba(22, 26, 40, 0.95);
+    border-color: rgba(255, 255, 255, 0.12);
+    box-shadow:
+      0 12px 36px rgba(0, 0, 0, 0.55),
+      0 4px 12px rgba(0, 0, 0, 0.35),
+      0 0 0 1px var(--accent, transparent);
+  }
+
+  .stage-card.is-active::before { opacity: 1; height: 3px; }
+  .stage-card.is-active .card-label  { color: var(--accent); }
+  .stage-card.is-active .card-status { color: var(--text-main); }
+
+  .stage-card.is-active.is-dim { opacity: 1; }
+
+  /* Focus ring for keyboard nav */
+  .stage-card:focus-visible {
+    outline: 2px solid var(--accent, var(--blue));
+    outline-offset: 3px;
+  }
+
+  /* ── Keyboard hint ─────────────────────────────────────── */
+  .nav-hint {
+    text-align: center;
+    margin-top: 6px;
+    margin-bottom: 4px;
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    opacity: 0.5;
+  }
+
+  .nav-hint kbd {
+    display: inline-block;
+    padding: 1px 6px;
+    margin: 0 2px;
+    font-size: 0.66rem;
+    font-family: inherit;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 4px;
+    color: var(--text-dim);
+  }
+
+  /* ── Content area ──────────────────────────────────────── */
+  .content-area {
+    margin-top: 12px;
+  }
+
+  /* Stage section (one per stage) */
+  .stage-section {
+    display: none;
+    animation: fadeSlideIn 0.32s ease-out;
+  }
+
+  .stage-section.is-visible { display: block; }
+
+  @keyframes fadeSlideIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── Section header ────────────────────────────────────── */
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  }
+
+  .section-icon {
+    width: 36px; height: 36px;
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.05rem;
+    flex-shrink: 0;
+  }
+
+  .section-title {
+    font-size: 1.15rem;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  .section-subtitle {
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    margin-top: 1px;
+  }
+
+  /* colour helpers */
+  .accent-green  { background: var(--green-bg);  color: var(--green); }
+  .accent-purple { background: var(--purple-bg); color: var(--purple); }
+  .accent-blue   { background: var(--blue-bg);   color: var(--blue); }
+  .accent-orange { background: var(--orange-bg); color: var(--orange); }
+
+  .text-green  { color: var(--green); }
+  .text-purple { color: var(--purple); }
+  .text-blue   { color: var(--blue); }
+  .text-orange { color: var(--orange); }
+
+  /* ── Content card (glass panel) ────────────────────────── */
+  .panel {
+    background: var(--bg-card);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    margin-bottom: 12px;
+    overflow: hidden;
+    transition: border-color var(--transition-fast);
+  }
+
+  .panel:hover { border-color: rgba(255, 255, 255, 0.09); }
+
+  /* ── Expandable panel ──────────────────────────────────── */
+  .panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 18px;
+    cursor: pointer;
+    user-select: none;
+    transition: background var(--transition-fast);
+  }
+
+  .panel-header:hover { background: rgba(255, 255, 255, 0.02); }
+
+  .panel-header-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .panel-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .panel-title {
+    font-size: 0.88rem;
+    font-weight: 550;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .panel-badge {
+    font-size: 0.68rem;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 6px;
+    white-space: nowrap;
+  }
+
+  .badge-done   { background: var(--green-bg);  color: var(--green); }
+  .badge-active { background: var(--blue-bg);   color: var(--blue); }
+  .badge-wait   { background: rgba(255,255,255,0.04); color: var(--text-muted); }
+
+  .panel-chevron {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    transition: transform var(--transition-fast);
+    margin-left: 8px;
+    flex-shrink: 0;
+  }
+
+  .panel.is-open .panel-chevron { transform: rotate(90deg); }
+
+  .panel-body {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.35s ease-out;
+  }
+
+  .panel.is-open .panel-body { max-height: 600px; }
+
+  .panel-content {
+    padding: 0 18px 16px;
+    font-size: 0.82rem;
+    line-height: 1.65;
+    color: var(--text-dim);
+  }
+
+  /* ── Metric row ────────────────────────────────────────── */
+  .metric-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+  }
+
+  .metric {
+    flex: 1;
+    min-width: 110px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    border-radius: 9px;
+    padding: 12px 14px;
+    text-align: center;
+  }
+
+  .metric-value {
+    font-size: 1.3rem;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+  }
+
+  .metric-label {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    margin-top: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  /* ── Progress bar ──────────────────────────────────────── */
+  .progress-track {
+    height: 5px;
+    border-radius: 5px;
+    background: rgba(255, 255, 255, 0.04);
+    margin: 10px 0;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    border-radius: 5px;
+    transition: width 0.6s ease-out;
+  }
+
+  .fill-green  { background: linear-gradient(90deg, var(--green), #6ee7b7); }
+  .fill-purple { background: linear-gradient(90deg, var(--purple), #c4b5fd); }
+  .fill-blue   { background: linear-gradient(90deg, var(--blue), #93c5fd); }
+  .fill-orange { background: linear-gradient(90deg, var(--orange), #fdba74); }
+
+  /* ── Tag / chip ────────────────────────────────────────── */
+  .tag-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .tag {
+    font-size: 0.7rem;
+    padding: 3px 9px;
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    color: var(--text-dim);
+  }
+
+  /* ── Inline list ───────────────────────────────────────── */
+  .detail-list {
+    list-style: none;
+    padding: 0;
+  }
+
+  .detail-list li {
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.8rem;
+  }
+
+  .detail-list li:last-child { border-bottom: none; }
+
+  .detail-key { color: var(--text-dim); }
+  .detail-val { color: var(--text-main); font-weight: 500; font-variant-numeric: tabular-nums; }
+
+  /* ── Score pill (used in hypothesis) ───────────────────── */
+  .score-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: 8px;
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+
+  .score-pill .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+  }
+
+  /* ── Empty / placeholder state ─────────────────────────── */
+  .empty-state {
+    text-align: center;
+    padding: 48px 20px;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+  }
+
+  .empty-state .empty-icon {
+    font-size: 2rem;
+    margin-bottom: 12px;
+    opacity: 0.3;
+  }
+
+  /* ── Responsive tweaks ─────────────────────────────────── */
+  @media (max-width: 600px) {
+    .app { padding: 16px 14px 40px; }
+    :root { --card-w: 115px; --card-h: 60px; --overlap: 24px; }
+    .card-label  { font-size: 0.66rem; }
+    .card-status { font-size: 0.74rem; }
+    .section-title { font-size: 1rem; }
+    .metric-row { gap: 8px; }
+    .metric { min-width: 80px; padding: 10px; }
+    .metric-value { font-size: 1.1rem; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ═══════════ TOP STRIP: STACKED CARD FAN ═══════════ -->
+  <div class="top-strip">
+    <div class="card-fan" id="cardFan">
+
+      <div class="stage-card" data-stage="seed" data-index="0" tabindex="0">
+        <span class="card-label">Seed</span>
+        <span class="card-status">&#10003;</span>
+      </div>
+
+      <div class="stage-card" data-stage="hypothesis" data-index="1" tabindex="0">
+        <span class="card-label">Hypo</span>
+        <span class="card-status">&#10003; 8.4</span>
+      </div>
+
+      <div class="stage-card is-active" data-stage="invention" data-index="2" tabindex="0">
+        <span class="card-label">Invention</span>
+        <span class="card-status">&#9654; 3/5</span>
+      </div>
+
+      <div class="stage-card is-dim" data-stage="paper" data-index="3" tabindex="0">
+        <span class="card-label">Paper</span>
+        <span class="card-status">&#9675;</span>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="nav-hint"><kbd>&larr;</kbd> <kbd>&rarr;</kbd> navigate stages</div>
+
+  <!-- ═══════════ CONTENT AREA ═══════════════════════════ -->
+  <div class="content-area" id="contentArea">
+
+    <!-- ── SEED ────────────────────────────────────────── -->
+    <div class="stage-section" data-section="seed">
+      <div class="section-header">
+        <div class="section-icon accent-green">&#9672;</div>
+        <div>
+          <div class="section-title text-green">Seed Exploration</div>
+          <div class="section-subtitle">Knowledge graph traversal &amp; topic seeding</div>
+        </div>
+      </div>
+
+      <div class="metric-row">
+        <div class="metric">
+          <div class="metric-value text-green">847</div>
+          <div class="metric-label">Papers Scanned</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value text-green">12</div>
+          <div class="metric-label">Seed Topics</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value text-green">3.2k</div>
+          <div class="metric-label">KG Nodes</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header" onclick="togglePanel(this)">
+          <div class="panel-header-left">
+            <div class="panel-dot" style="background:var(--green)"></div>
+            <span class="panel-title">Topic Clusters</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="panel-badge badge-done">Complete</span>
+            <span class="panel-chevron">&#9654;</span>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="panel-content">
+            <p>Identified 12 high-potential seed topics from knowledge graph traversal across 847 source papers.</p>
+            <div class="tag-row">
+              <span class="tag">neural architecture</span>
+              <span class="tag">self-supervised</span>
+              <span class="tag">graph reasoning</span>
+              <span class="tag">causal inference</span>
+              <span class="tag">sparse attention</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header" onclick="togglePanel(this)">
+          <div class="panel-header-left">
+            <div class="panel-dot" style="background:var(--green)"></div>
+            <span class="panel-title">Citation Network Analysis</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="panel-badge badge-done">Complete</span>
+            <span class="panel-chevron">&#9654;</span>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="panel-content">
+            <ul class="detail-list">
+              <li><span class="detail-key">Avg citations/paper</span><span class="detail-val">23.4</span></li>
+              <li><span class="detail-key">Max graph depth</span><span class="detail-val">7 hops</span></li>
+              <li><span class="detail-key">Connected components</span><span class="detail-val">4</span></li>
+              <li><span class="detail-key">Bridge papers found</span><span class="detail-val">18</span></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header" onclick="togglePanel(this)">
+          <div class="panel-header-left">
+            <div class="panel-dot" style="background:var(--green)"></div>
+            <span class="panel-title">Gap Detection</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="panel-badge badge-done">Complete</span>
+            <span class="panel-chevron">&#9654;</span>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="panel-content">
+            <p>Cross-domain gap analysis surfaced 6 underexplored intersections between established research areas. Highest-signal gap: causal reasoning applied to sparse attention mechanisms.</p>
+            <div class="progress-track">
+              <div class="progress-fill fill-green" style="width:100%"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── HYPOTHESIS ──────────────────────────────────── -->
+    <div class="stage-section" data-section="hypothesis">
+      <div class="section-header">
+        <div class="section-icon accent-purple">&#9830;</div>
+        <div>
+          <div class="section-title text-purple">Hypothesis Generation</div>
+          <div class="section-subtitle">Iterative refinement with review scoring</div>
+        </div>
+      </div>
+
+      <div class="metric-row">
+        <div class="metric">
+          <div class="metric-value text-purple">8.4</div>
+          <div class="metric-label">Final Score</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value text-purple">4</div>
+          <div class="metric-label">Iterations</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value text-purple">6</div>
+          <div class="metric-label">Candidates</div>
+        </div>
+      </div>
+
+      <div class="panel is-open">
+        <div class="panel-header" onclick="togglePanel(this)">
+          <div class="panel-header-left">
+            <div class="panel-dot" style="background:var(--purple)"></div>
+            <span class="panel-title">Winning Hypothesis</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="score-pill" style="background:var(--purple-bg);color:var(--purple)">
+              <span class="dot" style="background:var(--purple)"></span>8.4
+            </span>
+            <span class="panel-chevron">&#9654;</span>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="panel-content">
+            <p><strong>Causal Sparse Attention (CSA):</strong> A modified transformer attention mechanism that leverages causal graph structure to dynamically prune attention weights, reducing compute by ~40% while preserving reasoning quality on structured tasks.</p>
+            <div class="tag-row" style="margin-top:12px">
+              <span class="tag">novelty: high</span>
+              <span class="tag">feasibility: medium-high</span>
+              <span class="tag">impact: significant</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header" onclick="togglePanel(this)">
+          <div class="panel-header-left">
+            <div class="panel-dot" style="background:var(--purple);opacity:0.5"></div>
+            <span class="panel-title">Review Loop History</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="panel-badge badge-done">4 rounds</span>
+            <span class="panel-chevron">&#9654;</span>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="panel-content">
+            <ul class="detail-list">
+              <li><span class="detail-key">Round 1</span><span class="detail-val">6.1 &rarr; rejected</span></li>
+              <li><span class="detail-key">Round 2</span><span class="detail-val">7.0 &rarr; refine</span></li>
+              <li><span class="detail-key">Round 3</span><span class="detail-val">7.8 &rarr; refine</span></li>
+              <li><span class="detail-key">Round 4</span><span class="detail-val">8.4 &rarr; accepted</span></li>
+            </ul>
+            <div class="progress-track">
+              <div class="progress-fill fill-purple" style="width:100%"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header" onclick="togglePanel(this)">
+          <div class="panel-header-left">
+            <div class="panel-dot" style="background:var(--purple);opacity:0.5"></div>
+            <span class="panel-title">Rejected Candidates</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="panel-badge badge-wait">5 discarded</span>
+            <span class="panel-chevron">&#9654;</span>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="panel-content">
+            <ul class="detail-list">
+              <li><span class="detail-key">Adaptive graph pooling</span><span class="detail-val">5.2</span></li>
+              <li><span class="detail-key">Meta-learned loss shaping</span><span class="detail-val">6.8</span></li>
+              <li><span class="detail-key">Neuro-symbolic KG embed</span><span class="detail-val">5.9</span></li>
+              <li><span class="detail-key">Contrastive causal repr.</span><span class="detail-val">7.1</span></li>
+              <li><span class="detail-key">Hierarchical slot attention</span><span class="detail-val">6.3</span></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── INVENTION ───────────────────────────────────── -->
+    <div class="stage-section is-visible" data-section="invention">
+      <div class="section-header">
+        <div class="section-icon accent-blue">&#9881;</div>
+        <div>
+          <div class="section-title text-blue">Invention Loop</div>
+          <div class="section-subtitle">Plan, draft, review &mdash; iteration 3 of 5</div>
+        </div>
+      </div>
+
+      <div class="metric-row">
+        <div class="metric">
+          <div class="metric-value text-blue">3/5</div>
+          <div class="metric-label">Iteration</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value text-blue">7.6</div>
+          <div class="metric-label">Draft Score</div>
+        </div>
+        <div class="metric">
+          <div class="metric-value text-blue">2.4k</div>
+          <div class="metric-label">Tokens/step</div>
+        </div>
+      </div>
+
+      <div class="panel is-open">
+        <div class="panel-header" onclick="togglePanel(this)">
+          <div class="panel-header-left">
+            <div class="panel-dot" style="background:var(--blue)"></div>
+            <span class="panel-title">Current Draft — Strategy</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="panel-badge badge-active">In Progress</span>
+            <span class="panel-chevron">&#9654;</span>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="panel-content">
+            <p>The CSA module replaces standard scaled dot-product attention with a two-phase approach: (1) causal discovery via a lightweight DAG estimator, then (2) attention masking guided by the inferred graph. This reduces the O(n&sup2;) attention to O(n&middot;k) where k is the average causal neighborhood size.</p>
+            <div class="progress-track">
+              <div class="progress-fill fill-blue" style="width:60%"></div>
+            </div>
+            <p style="margin-top:8px;font-size:0.76rem;color:var(--text-muted)">60% through current iteration</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header" onclick="togglePanel(this)">
+          <div class="panel-header-left">
+            <div class="panel-dot" style="background:var(--blue);opacity:0.5"></div>
+            <span class="panel-title">Plan Generation</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="panel-badge badge-done">Complete</span>
+            <span class="panel-chevron">&#9654;</span>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="panel-content">
+            <ul class="detail-list">
+              <li><span class="detail-key">Sections planned</span><span class="detail-val">7</span></li>
+              <li><span class="detail-key">Figures proposed</span><span class="detail-val">4</span></li>
+              <li><span class="detail-key">Baselines identified</span><span class="detail-val">3</span></li>
+              <li><span class="detail-key">Ablation studies</span><span class="detail-val">2</span></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header" onclick="togglePanel(this)">
+          <div class="panel-header-left">
+            <div class="panel-dot" style="background:var(--blue);opacity:0.5"></div>
+            <span class="panel-title">Paper Text Draft</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="panel-badge badge-active">Drafting</span>
+            <span class="panel-chevron">&#9654;</span>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="panel-content">
+            <ul class="detail-list">
+              <li><span class="detail-key">Abstract</span><span class="detail-val">&#10003; final</span></li>
+              <li><span class="detail-key">Introduction</span><span class="detail-val">&#10003; final</span></li>
+              <li><span class="detail-key">Method</span><span class="detail-val">&#9654; drafting</span></li>
+              <li><span class="detail-key">Experiments</span><span class="detail-val">&#9675; pending</span></li>
+              <li><span class="detail-key">Conclusion</span><span class="detail-val">&#9675; pending</span></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header" onclick="togglePanel(this)">
+          <div class="panel-header-left">
+            <div class="panel-dot" style="background:var(--blue);opacity:0.3"></div>
+            <span class="panel-title">Review Feedback (Round 2)</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="panel-badge badge-done">Applied</span>
+            <span class="panel-chevron">&#9654;</span>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="panel-content">
+            <p>Reviewer requested stronger motivation for causal masking vs. learned sparsity. Added comparison with top-k attention baselines in Section 3.2. Score improved from 6.9 to 7.6.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── PAPER ───────────────────────────────────────── -->
+    <div class="stage-section" data-section="paper">
+      <div class="section-header">
+        <div class="section-icon accent-orange">&#9733;</div>
+        <div>
+          <div class="section-title text-orange">Paper Generation</div>
+          <div class="section-subtitle">Final assembly, figures &amp; repository</div>
+        </div>
+      </div>
+
+      <div class="empty-state">
+        <div class="empty-icon">&#9675;</div>
+        <p>Waiting for invention loop to complete.</p>
+        <p style="margin-top:8px;font-size:0.76rem;color:var(--text-muted)">
+          Paper generation begins after the invention loop reaches a passing review score.
+        </p>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header" onclick="togglePanel(this)">
+          <div class="panel-header-left">
+            <div class="panel-dot" style="background:var(--orange);opacity:0.3"></div>
+            <span class="panel-title">Artifact Demos</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="panel-badge badge-wait">Pending</span>
+            <span class="panel-chevron">&#9654;</span>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="panel-content">
+            <p style="color:var(--text-muted)">Python demo scripts and interactive notebooks will be generated once the paper text is finalized.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header" onclick="togglePanel(this)">
+          <div class="panel-header-left">
+            <div class="panel-dot" style="background:var(--orange);opacity:0.3"></div>
+            <span class="panel-title">Visualizations</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="panel-badge badge-wait">Pending</span>
+            <span class="panel-chevron">&#9654;</span>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="panel-content">
+            <p style="color:var(--text-muted)">Architecture diagrams and result plots will be generated from structured data after the method section is complete.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header" onclick="togglePanel(this)">
+          <div class="panel-header-left">
+            <div class="panel-dot" style="background:var(--orange);opacity:0.3"></div>
+            <span class="panel-title">Full Paper Assembly</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span class="panel-badge badge-wait">Pending</span>
+            <span class="panel-chevron">&#9654;</span>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="panel-content">
+            <p style="color:var(--text-muted)">LaTeX compilation and final PDF output. Includes bibliography, appendices, and supplementary materials.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /content-area -->
+</div><!-- /app -->
+
+<script>
+(function () {
+  'use strict';
+
+  /* ── State ─────────────────────────────────────────────── */
+  const stages  = ['seed', 'hypothesis', 'invention', 'paper'];
+  let activeIdx = 2; // invention starts active
+
+  const cards    = Array.from(document.querySelectorAll('.stage-card'));
+  const sections = Array.from(document.querySelectorAll('.stage-section'));
+
+  /* ── Base transforms (rotation per card) ───────────────── */
+  const baseRotations = [-1.8, -0.6, 0.5, 1.6];
+  const baseZIndices  = [1, 2, 3, 4];
+
+  /* ── Activate a stage by index ─────────────────────────── */
+  function activate(idx) {
+    if (idx < 0 || idx >= stages.length) return;
+    activeIdx = idx;
+
+    cards.forEach(function (card, i) {
+      const isActive = i === idx;
+      card.classList.toggle('is-active', isActive);
+
+      /* Reset z-index: active card always on top */
+      if (isActive) {
+        card.style.zIndex = '20';
+      } else {
+        card.style.zIndex = String(baseZIndices[i]);
+      }
+    });
+
+    sections.forEach(function (sec) {
+      const match = sec.getAttribute('data-section') === stages[idx];
+      sec.classList.toggle('is-visible', match);
+    });
+  }
+
+  /* ── Card click ────────────────────────────────────────── */
+  cards.forEach(function (card, i) {
+    card.addEventListener('click', function () { activate(i); });
+  });
+
+  /* ── Keyboard navigation ───────────────────────────────── */
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      activate(Math.min(activeIdx + 1, stages.length - 1));
+      cards[activeIdx].focus();
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      activate(Math.max(activeIdx - 1, 0));
+      cards[activeIdx].focus();
+    }
+  });
+
+  /* ── Panel expand / collapse ───────────────────────────── */
+  window.togglePanel = function (header) {
+    var panel = header.closest('.panel');
+    panel.classList.toggle('is-open');
+  };
+
+  /* ── Hover z-index management ──────────────────────────── */
+  cards.forEach(function (card, i) {
+    card.addEventListener('mouseenter', function () {
+      if (i !== activeIdx) {
+        card.style.zIndex = '15';
+      }
+    });
+    card.addEventListener('mouseleave', function () {
+      if (i !== activeIdx) {
+        card.style.zIndex = String(baseZIndices[i]);
+      }
+    });
+  });
+
+  /* ── Initial state ─────────────────────────────────────── */
+  activate(activeIdx);
+
+})();
+</script>
+
+</body>
+</html>

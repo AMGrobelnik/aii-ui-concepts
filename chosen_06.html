@@ -1,0 +1,1154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor -- Rich Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0f1117;
+    --surface: #161922;
+    --surface-raised: #1c1f2e;
+    --surface-hover: #22263a;
+    --border: #1e2235;
+    --border-light: #2a2f48;
+    --text: #e2e5ee;
+    --text-dim: #7a82a0;
+    --text-muted: #454b64;
+    --green: #34d399;
+    --green-dim: rgba(52,211,153,0.12);
+    --purple: #a78bfa;
+    --purple-dim: rgba(167,139,250,0.12);
+    --blue: #60a5fa;
+    --blue-dim: rgba(96,165,250,0.12);
+    --amber: #fbbf24;
+    --amber-dim: rgba(251,191,36,0.12);
+    --red: #f87171;
+    --red-dim: rgba(248,113,113,0.12);
+    --cyan: #22d3ee;
+    --cyan-dim: rgba(34,211,238,0.10);
+    --gray-ring: #2a2e40;
+    --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  html, body {
+    height: 100%; background: var(--bg); color: var(--text);
+    font-family: 'Inter', system-ui, sans-serif; font-size: 14px;
+    line-height: 1.5; overflow: hidden;
+  }
+  body { display: flex; }
+
+  /* ================================================================
+     SIDEBAR
+     ================================================================ */
+  .sidebar {
+    width: 280px; min-width: 280px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    height: 100vh; overflow: hidden;
+    position: relative;
+  }
+
+  .sidebar-header {
+    padding: 20px 20px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .brand {
+    font-weight: 700; font-size: 15px;
+    background: linear-gradient(135deg, #a78bfa, #60a5fa);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    letter-spacing: 0.3px;
+  }
+  .run-label {
+    font-size: 11px; color: var(--text-muted);
+    margin-top: 4px; display: flex; align-items: center; gap: 6px;
+  }
+  .run-label .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--blue); animation: pulse-dot 2s infinite; }
+  @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+  /* Ring gauge in sidebar */
+  .ring-container {
+    display: flex; justify-content: center;
+    padding: 20px 16px 12px; position: relative;
+  }
+  .ring-svg-main { overflow: visible; }
+
+  /* Module cards */
+  .module-list {
+    flex: 1; overflow-y: auto; padding: 4px 12px 12px;
+    scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+  }
+  .module-list::-webkit-scrollbar { width: 4px; }
+  .module-list::-webkit-scrollbar-track { background: transparent; }
+  .module-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .module-card {
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: 10px; padding: 12px 14px;
+    margin-bottom: 6px; cursor: pointer;
+    transition: all 200ms var(--ease);
+    position: relative; overflow: hidden;
+  }
+  .module-card:hover { background: var(--surface-hover); border-color: var(--border-light); }
+  .module-card.selected { border-color: var(--blue); box-shadow: 0 0 20px rgba(96,165,250,0.08); }
+  .module-card.selected::before {
+    content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+    width: 3px; border-radius: 10px 0 0 10px;
+  }
+  .module-card.selected[data-color="green"]::before { background: var(--green); }
+  .module-card.selected[data-color="purple"]::before { background: var(--purple); }
+  .module-card.selected[data-color="blue"]::before { background: var(--blue); }
+  .module-card.selected[data-color="gray"]::before { background: var(--text-muted); }
+
+  .mc-top { display: flex; align-items: center; justify-content: space-between; }
+  .mc-name { font-weight: 600; font-size: 13px; }
+  .mc-badge {
+    font-size: 10px; font-weight: 600; padding: 2px 8px;
+    border-radius: 8px; letter-spacing: 0.3px; text-transform: uppercase;
+  }
+  .mc-badge.completed { background: var(--green-dim); color: var(--green); }
+  .mc-badge.running   { background: var(--blue-dim);  color: var(--blue); }
+  .mc-badge.pending   { background: rgba(100,110,140,0.10); color: var(--text-muted); }
+
+  .mc-bar { height: 3px; background: var(--border); border-radius: 2px; margin-top: 8px; overflow: hidden; }
+  .mc-bar-fill { height: 100%; border-radius: 2px; transition: width 800ms var(--ease); }
+
+  /* Sub-modules */
+  .sub-modules {
+    max-height: 0; overflow: hidden; opacity: 0;
+    transition: max-height 350ms var(--ease), opacity 300ms var(--ease), margin 300ms var(--ease);
+  }
+  .module-card.selected .sub-modules { max-height: 600px; opacity: 1; margin-top: 10px; }
+
+  .sub-mod {
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 10px; border-radius: 6px;
+    cursor: pointer; transition: all 150ms var(--ease);
+    font-size: 12px; margin-bottom: 2px;
+  }
+  .sub-mod:hover { background: rgba(255,255,255,0.04); }
+  .sub-mod.active { background: rgba(96,165,250,0.08); }
+  .sub-mod-icon {
+    width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+  }
+  .sub-mod-icon.completed { background: var(--green); box-shadow: 0 0 6px rgba(52,211,153,0.4); }
+  .sub-mod-icon.running   { background: var(--blue); box-shadow: 0 0 6px rgba(96,165,250,0.4); animation: pulse-dot 1.5s infinite; }
+  .sub-mod-icon.pending   { background: var(--text-muted); }
+  .sub-mod-name { flex: 1; font-weight: 500; }
+  .sub-mod-time { color: var(--text-muted); font-size: 11px; }
+
+  /* Particle canvas */
+  .particle-canvas {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 0;
+  }
+
+  /* Sidebar footer */
+  .sidebar-footer {
+    padding: 10px 16px; border-top: 1px solid var(--border);
+    font-size: 11px; color: var(--text-muted);
+    display: flex; justify-content: space-between;
+  }
+  .sidebar-footer .timer { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  /* ================================================================
+     MAIN CONTENT
+     ================================================================ */
+  .main-content {
+    flex: 1; overflow-y: auto; padding: 28px 36px;
+    scroll-behavior: smooth;
+  }
+  .main-content::-webkit-scrollbar { width: 6px; }
+  .main-content::-webkit-scrollbar-track { background: transparent; }
+  .main-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* Dashboard header */
+  .dash-header {
+    display: flex; align-items: center; gap: 14px;
+    margin-bottom: 24px; animation: fadeUp 400ms var(--ease);
+  }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .dash-icon {
+    width: 44px; height: 44px; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; flex-shrink: 0;
+  }
+  .dash-title { font-size: 20px; font-weight: 700; letter-spacing: -0.3px; }
+  .dash-subtitle {
+    font-size: 13px; color: var(--text-dim); margin-top: 2px; line-height: 1.5;
+  }
+
+  /* Summary card */
+  .summary-card {
+    background: var(--surface-raised); border: 1px solid var(--border);
+    border-radius: 12px; padding: 18px 22px; margin-bottom: 20px;
+    animation: fadeUp 450ms var(--ease);
+  }
+  .summary-text {
+    font-size: 13px; color: var(--text-dim); line-height: 1.7;
+    font-style: italic;
+  }
+  .summary-text::before { content: '"'; font-size: 22px; color: var(--purple); line-height: 0; vertical-align: -6px; margin-right: 2px; }
+  .summary-text::after  { content: '"'; font-size: 22px; color: var(--purple); line-height: 0; vertical-align: -6px; margin-left: 2px; }
+
+  /* ================================================================
+     STAT CARDS (4-column grid)
+     ================================================================ */
+  .stat-grid {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 14px; margin-bottom: 20px;
+    animation: fadeUp 500ms var(--ease);
+  }
+  .stat-card {
+    background: var(--surface-raised); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px 18px;
+    transition: border-color 200ms var(--ease);
+  }
+  .stat-card:hover { border-color: var(--border-light); }
+  .sc-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .sc-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); }
+  .sc-value { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .sc-pct {
+    font-size: 11px; font-weight: 600; padding: 2px 6px;
+    border-radius: 4px; margin-left: 8px;
+  }
+
+  /* Bar containers */
+  .bar-track {
+    height: 8px; background: rgba(255,255,255,0.04);
+    border-radius: 4px; overflow: hidden; margin-top: 8px;
+  }
+  .bar-fill {
+    height: 100%; border-radius: 4px;
+    transition: width 1s var(--ease);
+  }
+
+  /* Stacked bar (messages) */
+  .stacked-bar {
+    display: flex; height: 8px; border-radius: 4px; overflow: hidden;
+    margin-top: 8px; background: rgba(255,255,255,0.04);
+  }
+  .stacked-seg {
+    height: 100%; transition: width 800ms var(--ease);
+    min-width: 2px;
+  }
+
+  /* Legend for stacked bar */
+  .bar-legend {
+    display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px;
+  }
+  .legend-item {
+    display: flex; align-items: center; gap: 4px;
+    font-size: 10px; color: var(--text-dim);
+  }
+  .legend-dot {
+    width: 6px; height: 6px; border-radius: 2px; flex-shrink: 0;
+  }
+
+  /* Dual bar (tokens) */
+  .dual-bar-wrap { margin-top: 8px; }
+  .dual-bar-row {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 4px;
+  }
+  .dual-bar-label { font-size: 10px; color: var(--text-muted); width: 24px; text-align: right; }
+  .dual-bar-track {
+    flex: 1; height: 6px; background: rgba(255,255,255,0.04);
+    border-radius: 3px; overflow: hidden;
+  }
+  .dual-bar-fill { height: 100%; border-radius: 3px; transition: width 800ms var(--ease); }
+  .dual-bar-val { font-size: 10px; color: var(--text-dim); min-width: 36px; font-variant-numeric: tabular-nums; }
+
+  /* ================================================================
+     MINI TIMELINE (Gantt-like)
+     ================================================================ */
+  .mini-timeline {
+    background: var(--surface-raised); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px 20px; margin-bottom: 20px;
+    animation: fadeUp 550ms var(--ease);
+  }
+  .mt-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 10px; }
+  .mt-track {
+    position: relative; height: 20px;
+    background: rgba(255,255,255,0.03);
+    border-radius: 6px; overflow: hidden;
+  }
+  .mt-segment {
+    position: absolute; top: 2px; bottom: 2px;
+    border-radius: 4px; transition: left 600ms var(--ease), width 600ms var(--ease);
+  }
+  .mt-ticks {
+    display: flex; justify-content: space-between; margin-top: 6px;
+    font-size: 10px; color: var(--text-muted); font-variant-numeric: tabular-nums;
+  }
+  .mt-caption {
+    font-size: 11px; color: var(--text-dim); margin-top: 8px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .mt-caption .marker {
+    display: inline-block; width: 12px; height: 4px; border-radius: 2px;
+  }
+
+  /* ================================================================
+     ACTIVITY BREAKDOWN TABLE
+     ================================================================ */
+  .activity-breakdown {
+    background: var(--surface-raised); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px 20px;
+    animation: fadeUp 600ms var(--ease); margin-bottom: 20px;
+  }
+  .ab-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 12px; }
+  .ab-grid {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 0;
+  }
+  .ab-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,0.03);
+    font-size: 13px;
+  }
+  .ab-row:nth-child(odd) { background: rgba(255,255,255,0.015); border-radius: 4px 0 0 4px; }
+  .ab-row:nth-child(even) { border-radius: 0 4px 4px 0; }
+  .ab-metric { color: var(--text-dim); }
+  .ab-value { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  /* ================================================================
+     PLACEHOLDER / WELCOME
+     ================================================================ */
+  .welcome-panel {
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    height: 100%; color: var(--text-muted);
+    text-align: center; padding: 40px;
+  }
+  .welcome-panel .big-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.4; }
+  .welcome-panel .hint { font-size: 13px; max-width: 300px; line-height: 1.6; }
+
+  /* ================================================================
+     UTILITY
+     ================================================================ */
+  .tag-green  { color: var(--green); }
+  .tag-blue   { color: var(--blue); }
+  .tag-purple { color: var(--purple); }
+  .tag-amber  { color: var(--amber); }
+  .tag-red    { color: var(--red); }
+  .tag-cyan   { color: var(--cyan); }
+  .tag-dim    { color: var(--text-muted); }
+</style>
+</head>
+<body>
+
+<!-- Hidden SVG definitions -->
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <filter id="glow-green" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feFlood flood-color="#34d399" flood-opacity="0.5" result="color"/>
+      <feComposite in="color" in2="blur" operator="in" result="shadow"/>
+      <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow-purple" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feFlood flood-color="#a78bfa" flood-opacity="0.5" result="color"/>
+      <feComposite in="color" in2="blur" operator="in" result="shadow"/>
+      <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow-blue" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feFlood flood-color="#60a5fa" flood-opacity="0.5" result="color"/>
+      <feComposite in="color" in2="blur" operator="in" result="shadow"/>
+      <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow-blue-bright" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
+      <feFlood flood-color="#60a5fa" flood-opacity="0.7" result="color"/>
+      <feComposite in="color" in2="blur" operator="in" result="shadow"/>
+      <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="grad-green" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#34d399"/><stop offset="100%" stop-color="#6ee7b7"/>
+    </linearGradient>
+    <linearGradient id="grad-purple" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8b5cf6"/><stop offset="100%" stop-color="#c4b5fd"/>
+    </linearGradient>
+    <linearGradient id="grad-blue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3b82f6"/><stop offset="100%" stop-color="#93c5fd"/>
+    </linearGradient>
+    <linearGradient id="grad-gray" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3a3f55"/><stop offset="100%" stop-color="#2a2e40"/>
+    </linearGradient>
+  </defs>
+</svg>
+
+<!-- ================================================================
+     SIDEBAR
+     ================================================================ -->
+<aside class="sidebar">
+  <canvas class="particle-canvas" id="particleCanvas"></canvas>
+
+  <div class="sidebar-header">
+    <div class="brand">AI Inventor</div>
+    <div class="run-label"><span class="dot"></span> ssl-low-resource-v3</div>
+  </div>
+
+  <!-- Central ring gauge -->
+  <div class="ring-container" id="ringContainer"></div>
+
+  <!-- Module cards with sub-modules -->
+  <div class="module-list" id="moduleList"></div>
+
+  <div class="sidebar-footer">
+    <span>Cost <b class="tag-amber">$12.47</b></span>
+    <span class="timer" id="timerDisplay">02:34:17</span>
+  </div>
+</aside>
+
+<!-- ================================================================
+     MAIN CONTENT
+     ================================================================ -->
+<main class="main-content" id="mainContent">
+  <div class="welcome-panel" id="welcomePanel">
+    <div class="big-icon">&#9881;</div>
+    <div class="hint">Select a sub-module from the sidebar to view detailed execution stats and activity breakdown.</div>
+  </div>
+  <div id="dashboardContent" style="display:none;"></div>
+</main>
+
+<script>
+/* ==================================================================
+   DATA
+   ================================================================== */
+const TOTAL_DURATION_MIN = 42;
+const TOTAL_COST = 12.47;
+const TOTAL_TOKENS_IN = 847000;
+const TOTAL_TOKENS_OUT = 234000;
+const TOTAL_MESSAGES = 156;
+
+const MODULES = [
+  {
+    name: 'Seed Hypothesis', status: 'completed', pct: 1.0,
+    color: 'green', gradient: 'url(#grad-green)', glow: 'url(#glow-green)',
+    centerText: '\u2713',
+    subs: [
+      {
+        id: 'mine_papers', name: 'Mine Papers', status: 'completed',
+        time: '4m 12s', cost: '$0.42', durationMin: 4.2, startMin: 0,
+        summary: 'I scraped 847 papers from Semantic Scholar and ArXiv, filtering for low-resource NLP and contrastive learning domains. Extracted titles, abstracts, citation graphs, and methodology sections for knowledge graph construction.',
+        messages: { agent: 8, tool: 24, status: 6, error: 0 },
+        tokensIn: 45000, tokensOut: 12000,
+        llmCalls: 3, toolUses: 24, retries: 0, avgResponse: 2.1,
+      },
+      {
+        id: 'build_kg', name: 'Build KG', status: 'completed',
+        time: '6m 45s', cost: '$0.88', durationMin: 6.75, startMin: 4.2,
+        summary: 'I constructed a knowledge graph with 2,341 triples from the mined papers. Entity resolution merged duplicate concepts, and edge weights encode citation frequency and co-occurrence strength.',
+        messages: { agent: 12, tool: 36, status: 8, error: 1 },
+        tokensIn: 68000, tokensOut: 19000,
+        llmCalls: 6, toolUses: 36, retries: 1, avgResponse: 2.8,
+      },
+      {
+        id: 'find_gaps', name: 'Find Gaps', status: 'completed',
+        time: '3m 22s', cost: '$0.51', durationMin: 3.37, startMin: 10.95,
+        summary: 'I identified 12 research gaps by analyzing sparse regions of the knowledge graph and cross-referencing with recent survey papers. Gaps were ranked by novelty potential and feasibility.',
+        messages: { agent: 6, tool: 14, status: 4, error: 0 },
+        tokensIn: 38000, tokensOut: 11000,
+        llmCalls: 4, toolUses: 14, retries: 0, avgResponse: 3.4,
+      },
+      {
+        id: 'select_seeds', name: 'Select Seeds', status: 'completed',
+        time: '2m 08s', cost: '$0.34', durationMin: 2.13, startMin: 14.32,
+        summary: 'I selected the top 5 seed hypotheses from the 12 gaps based on a composite score of novelty, feasibility, and potential impact. Each seed was expanded into a structured hypothesis template.',
+        messages: { agent: 4, tool: 8, status: 3, error: 0 },
+        tokensIn: 22000, tokensOut: 8000,
+        llmCalls: 2, toolUses: 8, retries: 0, avgResponse: 1.9,
+      },
+    ],
+  },
+  {
+    name: 'Hypothesis Loop', status: 'completed', pct: 1.0,
+    color: 'purple', gradient: 'url(#grad-purple)', glow: 'url(#glow-purple)',
+    centerText: '8.4',
+    subs: [
+      {
+        id: 'gen_hypo_1', name: 'Gen Hypo (Iter 1)', status: 'completed',
+        time: '6m 12s', cost: '$0.97', durationMin: 6.2, startMin: 16.45,
+        summary: 'I generated the initial hypothesis targeting contrastive pre-training with multilingual transfer for low-resource languages. Score 6.2/10 -- weak on experimental design specifics.',
+        messages: { agent: 10, tool: 18, status: 5, error: 0 },
+        tokensIn: 72000, tokensOut: 21000,
+        llmCalls: 5, toolUses: 18, retries: 0, avgResponse: 3.6,
+      },
+      {
+        id: 'review_hypo_1', name: 'Review (Iter 1)', status: 'completed',
+        time: '3m 45s', cost: '$0.62', durationMin: 3.75, startMin: 22.65,
+        summary: 'I reviewed the hypothesis and found it needed stronger baselines and ablation coverage. Verdict: Revise. Key concern was missing formal convergence analysis.',
+        messages: { agent: 6, tool: 10, status: 4, error: 0 },
+        tokensIn: 48000, tokensOut: 14000,
+        llmCalls: 3, toolUses: 10, retries: 0, avgResponse: 2.9,
+      },
+      {
+        id: 'gen_hypo_2', name: 'Gen Hypo (Iter 2)', status: 'completed',
+        time: '5m 48s', cost: '$0.91', durationMin: 5.8, startMin: 26.4,
+        summary: 'I refined the hypothesis incorporating feedback on ablation coverage and baseline comparisons. Added SimCLR and MoCo as baselines. Score improved to 7.8/10.',
+        messages: { agent: 8, tool: 15, status: 5, error: 0 },
+        tokensIn: 64000, tokensOut: 18000,
+        llmCalls: 4, toolUses: 15, retries: 0, avgResponse: 3.2,
+      },
+      {
+        id: 'review_hypo_2', name: 'Review (Iter 2)', status: 'completed',
+        time: '4m 02s', cost: '$0.68', durationMin: 4.03, startMin: 32.2,
+        summary: 'I reviewed the revised hypothesis. Stronger design but still needed formal convergence proof. Verdict: Revise with minor corrections for one more iteration.',
+        messages: { agent: 7, tool: 11, status: 4, error: 0 },
+        tokensIn: 51000, tokensOut: 15000,
+        llmCalls: 3, toolUses: 11, retries: 1, avgResponse: 3.0,
+      },
+      {
+        id: 'gen_hypo_3', name: 'Gen Hypo (Iter 3)', status: 'completed',
+        time: '4m 33s', cost: '$0.84', durationMin: 4.55, startMin: 36.23,
+        summary: 'I produced the final hypothesis with strengthened experimental design and formal convergence guarantees via Lean 4 proof sketch. Score: 8.4/10 -- accepted.',
+        messages: { agent: 9, tool: 16, status: 5, error: 0 },
+        tokensIn: 58000, tokensOut: 17000,
+        llmCalls: 4, toolUses: 16, retries: 0, avgResponse: 2.7,
+      },
+      {
+        id: 'review_hypo_3', name: 'Review (Iter 3)', status: 'completed',
+        time: '3m 10s', cost: '$0.55', durationMin: 3.17, startMin: 40.78,
+        summary: 'I accepted the hypothesis. Strong experimental design, clear novelty, adequate baselines, and convergence guarantees. Final score: 8.4/10.',
+        messages: { agent: 5, tool: 8, status: 3, error: 0 },
+        tokensIn: 42000, tokensOut: 12000,
+        llmCalls: 2, toolUses: 8, retries: 0, avgResponse: 2.4,
+      },
+    ],
+  },
+  {
+    name: 'Invention Loop', status: 'active', pct: 0.6,
+    color: 'blue', gradient: 'url(#grad-blue)', glow: 'url(#glow-blue)',
+    centerText: '3/5',
+    subs: [
+      {
+        id: 'gen_strat', name: 'Gen Strategy', status: 'completed',
+        time: '2m 58s', cost: '$0.96', durationMin: 2.97, startMin: 28,
+        summary: 'I generated the experimental strategy, defining evaluation axes, computational constraints, and artifact dependency graph. Selected contrastive + multilingual approach with 3 ablation dimensions.',
+        messages: { agent: 6, tool: 12, status: 4, error: 0 },
+        tokensIn: 52000, tokensOut: 16000,
+        llmCalls: 3, toolUses: 12, retries: 0, avgResponse: 2.6,
+      },
+      {
+        id: 'gen_plan', name: 'Gen Plan', status: 'completed',
+        time: '3m 47s', cost: '$1.31', durationMin: 3.78, startMin: 30.97,
+        summary: 'I produced a detailed execution plan with 5 artifacts, ordering by dependencies. Each artifact has specified inputs, expected outputs, and success criteria.',
+        messages: { agent: 8, tool: 16, status: 5, error: 0 },
+        tokensIn: 61000, tokensOut: 19000,
+        llmCalls: 4, toolUses: 16, retries: 0, avgResponse: 3.1,
+      },
+      {
+        id: 'gen_art', name: 'Gen Artifacts', status: 'running',
+        time: '12m 08s', cost: '$5.41', durationMin: 12.13, startMin: 34.75,
+        summary: 'I am generating experimental artifacts. 3 of 5 complete: Contrastive Baseline (acc 0.847), Multilingual Pairs Dataset (2,400 examples), and Convergence Proof (Lean 4). Ablation study in progress.',
+        messages: { agent: 22, tool: 48, status: 14, error: 2 },
+        tokensIn: 184000, tokensOut: 52000,
+        llmCalls: 12, toolUses: 48, retries: 3, avgResponse: 4.2,
+      },
+      {
+        id: 'gen_paper', name: 'Gen Paper Text', status: 'pending',
+        time: '---', cost: '---', durationMin: 0, startMin: 0,
+        summary: 'Waiting to generate paper sections from completed artifacts and hypothesis.',
+        messages: { agent: 0, tool: 0, status: 0, error: 0 },
+        tokensIn: 0, tokensOut: 0,
+        llmCalls: 0, toolUses: 0, retries: 0, avgResponse: 0,
+      },
+      {
+        id: 'review_paper', name: 'Review Paper', status: 'pending',
+        time: '---', cost: '---', durationMin: 0, startMin: 0,
+        summary: 'Waiting to review generated paper for quality and completeness.',
+        messages: { agent: 0, tool: 0, status: 0, error: 0 },
+        tokensIn: 0, tokensOut: 0,
+        llmCalls: 0, toolUses: 0, retries: 0, avgResponse: 0,
+      },
+    ],
+  },
+  {
+    name: 'Paper & Repo', status: 'pending', pct: 0,
+    color: 'gray', gradient: 'url(#grad-gray)', glow: null,
+    centerText: '\u25CB',
+    subs: [
+      {
+        id: 'init_repo', name: 'Initialize Repo', status: 'pending',
+        time: '---', cost: '---', durationMin: 0, startMin: 0,
+        summary: 'Will scaffold the paper repository with template structure.',
+        messages: { agent: 0, tool: 0, status: 0, error: 0 },
+        tokensIn: 0, tokensOut: 0,
+        llmCalls: 0, toolUses: 0, retries: 0, avgResponse: 0,
+      },
+      {
+        id: 'gen_demos', name: 'Gen Demos + Viz', status: 'pending',
+        time: '---', cost: '---', durationMin: 0, startMin: 0,
+        summary: 'Will generate interactive demos and visualizations from artifacts.',
+        messages: { agent: 0, tool: 0, status: 0, error: 0 },
+        tokensIn: 0, tokensOut: 0,
+        llmCalls: 0, toolUses: 0, retries: 0, avgResponse: 0,
+      },
+      {
+        id: 'gen_full_paper', name: 'Gen Full Paper', status: 'pending',
+        time: '---', cost: '---', durationMin: 0, startMin: 0,
+        summary: 'Will compile all sections into the final LaTeX paper.',
+        messages: { agent: 0, tool: 0, status: 0, error: 0 },
+        tokensIn: 0, tokensOut: 0,
+        llmCalls: 0, toolUses: 0, retries: 0, avgResponse: 0,
+      },
+      {
+        id: 'deploy', name: 'Deploy', status: 'pending',
+        time: '---', cost: '---', durationMin: 0, startMin: 0,
+        summary: 'Will deploy paper PDF and source repository to GitHub.',
+        messages: { agent: 0, tool: 0, status: 0, error: 0 },
+        tokensIn: 0, tokensOut: 0,
+        llmCalls: 0, toolUses: 0, retries: 0, avgResponse: 0,
+      },
+    ],
+  },
+];
+
+/* ==================================================================
+   COLOR HELPERS
+   ================================================================== */
+function colorVar(c) {
+  return { green: '#34d399', purple: '#a78bfa', blue: '#60a5fa', gray: '#454b64', amber: '#fbbf24', red: '#f87171', cyan: '#22d3ee' }[c] || '#fff';
+}
+function colorVarDim(c) {
+  return { green: 'rgba(52,211,153,0.12)', purple: 'rgba(167,139,250,0.12)', blue: 'rgba(96,165,250,0.12)', gray: 'rgba(100,110,140,0.10)' }[c] || 'rgba(255,255,255,0.05)';
+}
+
+/* ==================================================================
+   RING GAUGE (sidebar central)
+   ================================================================== */
+const R = 42, STROKE = 6, CX = 56, CY = 56, CIRC = 2 * Math.PI * R;
+
+function renderRingGauge() {
+  const container = document.getElementById('ringContainer');
+  container.innerHTML = '';
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 0 112 112');
+  svg.setAttribute('width', '112');
+  svg.setAttribute('height', '112');
+  svg.classList.add('ring-svg-main');
+  svg.style.overflow = 'visible';
+
+  // Concentric rings for each module (outer to inner)
+  const ringData = [
+    { mod: MODULES[0], r: 50, sw: 5 },
+    { mod: MODULES[1], r: 42, sw: 5 },
+    { mod: MODULES[2], r: 34, sw: 5 },
+    { mod: MODULES[3], r: 26, sw: 5 },
+  ];
+
+  ringData.forEach(({ mod, r, sw }) => {
+    const circ = 2 * Math.PI * r;
+
+    // Track
+    const track = document.createElementNS(ns, 'circle');
+    track.setAttribute('cx', CX); track.setAttribute('cy', CY); track.setAttribute('r', r);
+    track.setAttribute('fill', 'none');
+    track.setAttribute('stroke', mod.status === 'pending' ? 'var(--gray-ring)' : 'rgba(255,255,255,0.04)');
+    track.setAttribute('stroke-width', sw);
+    if (mod.status === 'pending') {
+      track.setAttribute('stroke-dasharray', '5 3');
+      track.setAttribute('opacity', '0.5');
+    }
+    svg.appendChild(track);
+
+    // Arc fill
+    if (mod.pct > 0) {
+      const arc = document.createElementNS(ns, 'circle');
+      arc.setAttribute('cx', CX); arc.setAttribute('cy', CY); arc.setAttribute('r', r);
+      arc.setAttribute('fill', 'none');
+      arc.setAttribute('stroke', mod.gradient);
+      arc.setAttribute('stroke-width', sw);
+      arc.setAttribute('stroke-linecap', 'round');
+      arc.setAttribute('stroke-dasharray', circ);
+      arc.setAttribute('stroke-dashoffset', circ);
+      arc.setAttribute('transform', `rotate(-90 ${CX} ${CY})`);
+      arc.classList.add('ring-arc');
+      arc.dataset.circ = circ;
+      arc.dataset.pct = mod.pct;
+      if (mod.glow) arc.setAttribute('filter', mod.glow);
+      svg.appendChild(arc);
+
+      // Glow dot for active ring
+      if (mod.status === 'active') {
+        const dot = document.createElementNS(ns, 'circle');
+        dot.setAttribute('r', '3');
+        dot.setAttribute('fill', colorVar(mod.color));
+        dot.setAttribute('filter', 'url(#glow-blue-bright)');
+        dot.classList.add('ring-dot');
+        dot.dataset.r = r;
+        dot.dataset.pct = mod.pct;
+        svg.appendChild(dot);
+      }
+    }
+  });
+
+  // Center text -- overall progress
+  const pctDone = MODULES.filter(m => m.status === 'completed').length;
+  const total = MODULES.length;
+  const txt = document.createElementNS(ns, 'text');
+  txt.setAttribute('x', CX); txt.setAttribute('y', CY - 4);
+  txt.setAttribute('text-anchor', 'middle'); txt.setAttribute('dominant-baseline', 'central');
+  txt.setAttribute('fill', 'var(--text)'); txt.setAttribute('font-family', 'Inter, system-ui, sans-serif');
+  txt.setAttribute('font-weight', '700'); txt.setAttribute('font-size', '16');
+  txt.textContent = `${pctDone}/${total}`;
+  svg.appendChild(txt);
+
+  const sub = document.createElementNS(ns, 'text');
+  sub.setAttribute('x', CX); sub.setAttribute('y', CY + 14);
+  sub.setAttribute('text-anchor', 'middle'); sub.setAttribute('dominant-baseline', 'central');
+  sub.setAttribute('fill', 'var(--text-muted)'); sub.setAttribute('font-family', 'Inter, system-ui, sans-serif');
+  sub.setAttribute('font-size', '9');
+  sub.textContent = 'modules';
+  svg.appendChild(sub);
+
+  container.appendChild(svg);
+
+  // Animate arcs
+  requestAnimationFrame(() => {
+    setTimeout(() => {
+      svg.querySelectorAll('.ring-arc').forEach(arc => {
+        const c = parseFloat(arc.dataset.circ);
+        const p = parseFloat(arc.dataset.pct);
+        arc.style.transition = 'stroke-dashoffset 1.2s cubic-bezier(0.4, 0, 0.2, 1)';
+        arc.setAttribute('stroke-dashoffset', c * (1 - p));
+      });
+      updateDots(svg);
+    }, 150);
+  });
+
+  // Drift animation for active rings
+  let phase = 0;
+  function drift() {
+    phase += 0.015;
+    svg.querySelectorAll('.ring-arc').forEach(arc => {
+      const mod = MODULES.find(m => m.status === 'active');
+      if (!mod) return;
+      // Only drift the active ring
+      const basePct = parseFloat(arc.dataset.pct);
+      if (basePct < 1 && basePct > 0) {
+        const d = Math.sin(phase) * 0.02;
+        const c = parseFloat(arc.dataset.circ);
+        arc.setAttribute('stroke-dashoffset', c * (1 - (basePct + d)));
+      }
+    });
+    svg.querySelectorAll('.ring-dot').forEach(dot => {
+      const basePct = parseFloat(dot.dataset.pct);
+      const r = parseFloat(dot.dataset.r);
+      const d = Math.sin(phase) * 0.02;
+      const angle = -90 + ((basePct + d) * 360);
+      const rad = (angle * Math.PI) / 180;
+      dot.setAttribute('cx', CX + r * Math.cos(rad));
+      dot.setAttribute('cy', CY + r * Math.sin(rad));
+      dot.setAttribute('opacity', 0.7 + 0.3 * Math.sin(phase * 3));
+    });
+    requestAnimationFrame(drift);
+  }
+  requestAnimationFrame(drift);
+}
+
+function updateDots(svg) {
+  svg.querySelectorAll('.ring-dot').forEach(dot => {
+    const pct = parseFloat(dot.dataset.pct);
+    const r = parseFloat(dot.dataset.r);
+    const angle = -90 + (pct * 360);
+    const rad = (angle * Math.PI) / 180;
+    dot.setAttribute('cx', CX + r * Math.cos(rad));
+    dot.setAttribute('cy', CY + r * Math.sin(rad));
+  });
+}
+
+/* ==================================================================
+   PARTICLE FLOW
+   ================================================================== */
+function initParticles() {
+  const canvas = document.getElementById('particleCanvas');
+  const sidebar = canvas.parentElement;
+  const ctx = canvas.getContext('2d');
+  let particles = [];
+  const MAX = 30;
+
+  function resize() {
+    canvas.width = sidebar.offsetWidth;
+    canvas.height = sidebar.offsetHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  function spawn() {
+    if (particles.length >= MAX) return;
+    particles.push({
+      x: Math.random() * canvas.width,
+      y: canvas.height + 5,
+      vx: (Math.random() - 0.5) * 0.3,
+      vy: -(0.3 + Math.random() * 0.5),
+      r: 1 + Math.random() * 1.5,
+      alpha: 0.15 + Math.random() * 0.2,
+      color: ['#34d399', '#a78bfa', '#60a5fa'][Math.floor(Math.random() * 3)],
+    });
+  }
+
+  function animate() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      p.alpha -= 0.001;
+      if (p.y < -10 || p.alpha <= 0) { particles.splice(i, 1); continue; }
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = p.color;
+      ctx.globalAlpha = p.alpha;
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    if (Math.random() < 0.15) spawn();
+    requestAnimationFrame(animate);
+  }
+  animate();
+}
+
+/* ==================================================================
+   MODULE CARDS + SUB-MODULES
+   ================================================================== */
+let selectedModIdx = 2;
+let selectedSubIdx = 2; // gen_art in Invention Loop
+
+function renderModuleList() {
+  const list = document.getElementById('moduleList');
+  list.innerHTML = '';
+
+  MODULES.forEach((mod, mi) => {
+    const card = document.createElement('div');
+    card.className = `module-card${mi === selectedModIdx ? ' selected' : ''}`;
+    card.dataset.color = mod.color;
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('.sub-mod')) return;
+      if (selectedModIdx === mi) return;
+      selectedModIdx = mi;
+      selectedSubIdx = -1;
+      renderModuleList();
+      showWelcome();
+    });
+
+    const badgeCls = mod.status === 'completed' ? 'completed' : mod.status === 'active' ? 'running' : 'pending';
+    const badgeText = mod.status === 'completed' ? 'Done' : mod.status === 'active' ? 'Running' : 'Pending';
+
+    card.innerHTML = `
+      <div class="mc-top">
+        <div class="mc-name">${mod.name}</div>
+        <div class="mc-badge ${badgeCls}">${badgeText}</div>
+      </div>
+      <div class="mc-bar"><div class="mc-bar-fill" style="width:${mod.pct * 100}%;background:${colorVar(mod.color)}"></div></div>
+    `;
+
+    // Sub-modules
+    const subsDiv = document.createElement('div');
+    subsDiv.className = 'sub-modules';
+
+    mod.subs.forEach((sub, si) => {
+      const subEl = document.createElement('div');
+      subEl.className = `sub-mod${mi === selectedModIdx && si === selectedSubIdx ? ' active' : ''}`;
+      subEl.innerHTML = `
+        <div class="sub-mod-icon ${sub.status}"></div>
+        <div class="sub-mod-name">${sub.name}</div>
+        <div class="sub-mod-time">${sub.time}</div>
+      `;
+      subEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        selectedModIdx = mi;
+        selectedSubIdx = si;
+        renderModuleList();
+        renderDashboard(mod, sub);
+      });
+      subsDiv.appendChild(subEl);
+    });
+
+    card.appendChild(subsDiv);
+    list.appendChild(card);
+  });
+}
+
+/* ==================================================================
+   DASHBOARD RENDERING
+   ================================================================== */
+function showWelcome() {
+  document.getElementById('welcomePanel').style.display = 'flex';
+  document.getElementById('dashboardContent').style.display = 'none';
+}
+
+function parseCost(s) {
+  if (!s || s === '---') return 0;
+  return parseFloat(s.replace('$', ''));
+}
+
+function parseDuration(s) {
+  if (!s || s === '---') return 0;
+  const parts = s.replace('s', '').split('m ');
+  if (parts.length === 2) return parseFloat(parts[0]) + parseFloat(parts[1]) / 60;
+  return parseFloat(parts[0]);
+}
+
+function fmtK(n) {
+  if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+  return String(n);
+}
+
+function renderDashboard(mod, sub) {
+  document.getElementById('welcomePanel').style.display = 'none';
+  const container = document.getElementById('dashboardContent');
+  container.style.display = 'block';
+  container.innerHTML = '';
+
+  const isPending = sub.status === 'pending';
+
+  // -- Header
+  const iconBg = colorVarDim(mod.color);
+  const statusIcon = sub.status === 'completed' ? '\u2713' : sub.status === 'running' ? '\u25B6' : '\u25CB';
+  container.innerHTML += `
+    <div class="dash-header">
+      <div class="dash-icon" style="background:${iconBg};color:${colorVar(mod.color)}">${statusIcon}</div>
+      <div>
+        <div class="dash-title">${sub.name}</div>
+        <div class="dash-subtitle">${mod.name} &middot; ${sub.time} &middot; ${sub.cost}</div>
+      </div>
+    </div>
+  `;
+
+  // -- Summary card
+  container.innerHTML += `
+    <div class="summary-card">
+      <div class="summary-text">${sub.summary}</div>
+    </div>
+  `;
+
+  if (isPending) {
+    container.innerHTML += `
+      <div style="text-align:center;padding:40px;color:var(--text-muted);font-size:13px;">
+        This sub-module has not started yet. Stats will appear once execution begins.
+      </div>
+    `;
+    return;
+  }
+
+  // -- 4 Stat Cards
+  const costVal = parseCost(sub.cost);
+  const costPct = TOTAL_COST > 0 ? ((costVal / TOTAL_COST) * 100).toFixed(1) : 0;
+  const durPct = TOTAL_DURATION_MIN > 0 ? ((sub.durationMin / TOTAL_DURATION_MIN) * 100).toFixed(1) : 0;
+  const totalMsgs = sub.messages.agent + sub.messages.tool + sub.messages.status + sub.messages.error;
+  const totalTokens = sub.tokensIn + sub.tokensOut;
+  const maxTokenSingle = Math.max(sub.tokensIn, sub.tokensOut);
+
+  container.innerHTML += `
+    <div class="stat-grid">
+      <!-- Duration -->
+      <div class="stat-card">
+        <div class="sc-top">
+          <span class="sc-label">Duration</span>
+        </div>
+        <div style="display:flex;align-items:baseline;">
+          <span class="sc-value">${sub.time}</span>
+          <span class="sc-pct" style="background:${colorVarDim(mod.color)};color:${colorVar(mod.color)}">${durPct}%</span>
+        </div>
+        <div class="bar-track">
+          <div class="bar-fill" style="width:${durPct}%;background:${colorVar(mod.color)}" id="durBar"></div>
+        </div>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:6px;">of ${TOTAL_DURATION_MIN}m total pipeline</div>
+      </div>
+
+      <!-- Cost -->
+      <div class="stat-card">
+        <div class="sc-top">
+          <span class="sc-label">Cost</span>
+        </div>
+        <div style="display:flex;align-items:baseline;">
+          <span class="sc-value tag-amber">${sub.cost}</span>
+          <span class="sc-pct" style="background:var(--amber-dim);color:var(--amber)">${costPct}%</span>
+        </div>
+        <div class="bar-track">
+          <div class="bar-fill" style="width:${costPct}%;background:var(--amber)" id="costBar"></div>
+        </div>
+        <div style="font-size:10px;color:var(--text-muted);margin-top:6px;">of $${TOTAL_COST.toFixed(2)} total</div>
+      </div>
+
+      <!-- Messages (stacked bar) -->
+      <div class="stat-card">
+        <div class="sc-top">
+          <span class="sc-label">Messages</span>
+        </div>
+        <div class="sc-value">${totalMsgs}</div>
+        <div class="stacked-bar" id="msgBar">
+          <div class="stacked-seg" style="width:${(sub.messages.agent / totalMsgs * 100)}%;background:var(--blue)"></div>
+          <div class="stacked-seg" style="width:${(sub.messages.tool / totalMsgs * 100)}%;background:var(--purple)"></div>
+          <div class="stacked-seg" style="width:${(sub.messages.status / totalMsgs * 100)}%;background:var(--green)"></div>
+          ${sub.messages.error > 0 ? `<div class="stacked-seg" style="width:${(sub.messages.error / totalMsgs * 100)}%;background:var(--red)"></div>` : ''}
+        </div>
+        <div class="bar-legend">
+          <div class="legend-item"><div class="legend-dot" style="background:var(--blue)"></div> Agent ${sub.messages.agent}</div>
+          <div class="legend-item"><div class="legend-dot" style="background:var(--purple)"></div> Tool ${sub.messages.tool}</div>
+          <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div> Status ${sub.messages.status}</div>
+          ${sub.messages.error > 0 ? `<div class="legend-item"><div class="legend-dot" style="background:var(--red)"></div> Error ${sub.messages.error}</div>` : ''}
+        </div>
+      </div>
+
+      <!-- Tokens (dual bar) -->
+      <div class="stat-card">
+        <div class="sc-top">
+          <span class="sc-label">Tokens</span>
+        </div>
+        <div class="sc-value">${fmtK(totalTokens)}</div>
+        <div class="dual-bar-wrap">
+          <div class="dual-bar-row">
+            <span class="dual-bar-label">In</span>
+            <div class="dual-bar-track">
+              <div class="dual-bar-fill" style="width:${(sub.tokensIn / maxTokenSingle * 100)}%;background:var(--cyan)" id="tokInBar"></div>
+            </div>
+            <span class="dual-bar-val tag-cyan">${fmtK(sub.tokensIn)}</span>
+          </div>
+          <div class="dual-bar-row">
+            <span class="dual-bar-label">Out</span>
+            <div class="dual-bar-track">
+              <div class="dual-bar-fill" style="width:${(sub.tokensOut / maxTokenSingle * 100)}%;background:var(--purple)" id="tokOutBar"></div>
+            </div>
+            <span class="dual-bar-val tag-purple">${fmtK(sub.tokensOut)}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // -- Mini Timeline
+  const startPct = (sub.startMin / TOTAL_DURATION_MIN * 100).toFixed(1);
+  const widthPct = (sub.durationMin / TOTAL_DURATION_MIN * 100).toFixed(1);
+  const endMin = sub.startMin + sub.durationMin;
+  const tickCount = 6;
+  let ticks = '';
+  for (let i = 0; i <= tickCount; i++) {
+    const t = Math.round(TOTAL_DURATION_MIN * i / tickCount);
+    ticks += `<span>${t}m</span>`;
+  }
+
+  container.innerHTML += `
+    <div class="mini-timeline">
+      <div class="mt-label">Timeline Position</div>
+      <div class="mt-track">
+        <div class="mt-segment" style="left:${startPct}%;width:${widthPct}%;background:linear-gradient(90deg, ${colorVar(mod.color)}cc, ${colorVar(mod.color)}66);box-shadow:0 0 12px ${colorVar(mod.color)}40;" id="tlSegment"></div>
+      </div>
+      <div class="mt-ticks">${ticks}</div>
+      <div class="mt-caption">
+        <span class="marker" style="background:${colorVar(mod.color)}"></span>
+        Started at ${sub.startMin.toFixed(0)}m, ended at ${endMin.toFixed(0)}m out of ${TOTAL_DURATION_MIN}m total
+      </div>
+    </div>
+  `;
+
+  // -- Activity Breakdown
+  container.innerHTML += `
+    <div class="activity-breakdown">
+      <div class="ab-label">Activity Breakdown</div>
+      <div class="ab-grid">
+        <div class="ab-row"><span class="ab-metric">LLM calls</span><span class="ab-value">${sub.llmCalls}</span></div>
+        <div class="ab-row"><span class="ab-metric">Tool uses</span><span class="ab-value">${sub.toolUses}</span></div>
+        <div class="ab-row"><span class="ab-metric">Retries</span><span class="ab-value ${sub.retries > 0 ? 'tag-amber' : ''}">${sub.retries}</span></div>
+        <div class="ab-row"><span class="ab-metric">Avg response</span><span class="ab-value">${sub.avgResponse.toFixed(1)}s</span></div>
+        <div class="ab-row"><span class="ab-metric">Token ratio</span><span class="ab-value">${sub.tokensOut > 0 ? (sub.tokensIn / sub.tokensOut).toFixed(1) : '---'}x</span></div>
+        <div class="ab-row"><span class="ab-metric">Msgs / min</span><span class="ab-value">${sub.durationMin > 0 ? (totalMsgs / sub.durationMin).toFixed(1) : '---'}</span></div>
+        <div class="ab-row"><span class="ab-metric">Cost / msg</span><span class="ab-value">${totalMsgs > 0 ? '$' + (costVal / totalMsgs).toFixed(3) : '---'}</span></div>
+        <div class="ab-row"><span class="ab-metric">Tokens / LLM call</span><span class="ab-value">${sub.llmCalls > 0 ? fmtK(Math.round(totalTokens / sub.llmCalls)) : '---'}</span></div>
+      </div>
+    </div>
+  `;
+
+  // Trigger bar animations with a slight delay
+  requestAnimationFrame(() => {
+    setTimeout(() => {
+      const durBar = document.getElementById('durBar');
+      const costBar = document.getElementById('costBar');
+      if (durBar) { durBar.style.width = '0%'; void durBar.offsetWidth; durBar.style.width = durPct + '%'; }
+      if (costBar) { costBar.style.width = '0%'; void costBar.offsetWidth; costBar.style.width = costPct + '%'; }
+    }, 50);
+  });
+}
+
+/* ==================================================================
+   TIMER
+   ================================================================== */
+let timerSec = 2 * 3600 + 34 * 60 + 17;
+function tickTimer() {
+  timerSec++;
+  const h = String(Math.floor(timerSec / 3600)).padStart(2, '0');
+  const m = String(Math.floor((timerSec % 3600) / 60)).padStart(2, '0');
+  const s = String(timerSec % 60).padStart(2, '0');
+  document.getElementById('timerDisplay').textContent = `${h}:${m}:${s}`;
+}
+setInterval(tickTimer, 1000);
+
+/* ==================================================================
+   KEYBOARD NAVIGATION
+   ================================================================== */
+document.addEventListener('keydown', (e) => {
+  const mod = MODULES[selectedModIdx];
+  if (!mod) return;
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    if (selectedSubIdx < mod.subs.length - 1) {
+      selectedSubIdx++;
+      renderModuleList();
+      renderDashboard(mod, mod.subs[selectedSubIdx]);
+    }
+  }
+  if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (selectedSubIdx > 0) {
+      selectedSubIdx--;
+      renderModuleList();
+      renderDashboard(mod, mod.subs[selectedSubIdx]);
+    }
+  }
+  if (e.key === 'ArrowRight') {
+    e.preventDefault();
+    if (selectedModIdx < MODULES.length - 1) {
+      selectedModIdx++;
+      selectedSubIdx = 0;
+      renderModuleList();
+      renderDashboard(MODULES[selectedModIdx], MODULES[selectedModIdx].subs[0]);
+    }
+  }
+  if (e.key === 'ArrowLeft') {
+    e.preventDefault();
+    if (selectedModIdx > 0) {
+      selectedModIdx--;
+      selectedSubIdx = 0;
+      renderModuleList();
+      renderDashboard(MODULES[selectedModIdx], MODULES[selectedModIdx].subs[0]);
+    }
+  }
+});
+
+/* ==================================================================
+   INIT
+   ================================================================== */
+renderRingGauge();
+renderModuleList();
+initParticles();
+
+// Auto-select gen_art in Invention Loop
+const initMod = MODULES[selectedModIdx];
+const initSub = initMod.subs[selectedSubIdx];
+renderDashboard(initMod, initSub);
+</script>
+</body>
+</html>

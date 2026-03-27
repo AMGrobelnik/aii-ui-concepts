@@ -1,0 +1,1572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor Pipeline - Nested Tree</title>
+<style>
+  /* ── Reset & Base ─────────────────────────────────────── */
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    /* Slate palette */
+    --slate-950: #020617;
+    --slate-900: #0f172a;
+    --slate-850: #131c31;
+    --slate-800: #1e293b;
+    --slate-700: #334155;
+    --slate-600: #475569;
+    --slate-500: #64748b;
+    --slate-400: #94a3b8;
+    --slate-300: #cbd5e1;
+    --slate-200: #e2e8f0;
+    --slate-100: #f1f5f9;
+
+    /* Accent colors */
+    --emerald-400: #34d399;
+    --emerald-500: #10b981;
+    --emerald-600: #059669;
+    --cyan-400: #22d3ee;
+    --cyan-500: #06b6d4;
+    --amber-400: #fbbf24;
+    --amber-500: #f59e0b;
+    --violet-400: #a78bfa;
+    --violet-500: #8b5cf6;
+    --rose-400: #fb7185;
+
+    /* Tree structure */
+    --connector-color: #334155;
+    --connector-active: #10b981;
+    --glow-color: rgba(16, 185, 129, 0.35);
+    --glow-strong: rgba(16, 185, 129, 0.6);
+
+    /* Font sizes */
+    --fs-root: 42px;
+    --fs-module: 36px;
+    --fs-child: 30px;
+    --fs-label: 13px;
+    --fs-badge: 11px;
+  }
+
+  body {
+    background: var(--slate-950);
+    color: var(--slate-200);
+    font-family: 'SF Mono', 'Cascadia Code', 'JetBrains Mono', 'Fira Code', monospace;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* ── Background Grid ──────────────────────────────────── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      linear-gradient(rgba(16, 185, 129, 0.015) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(16, 185, 129, 0.015) 1px, transparent 1px);
+    background-size: 48px 48px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(ellipse 800px 600px at 50% 50%, rgba(16, 185, 129, 0.04), transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── Canvas for particles ─────────────────────────────── */
+  #particle-canvas {
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  /* ── Main Container ───────────────────────────────────── */
+  .pipeline-container {
+    position: relative;
+    z-index: 2;
+    width: 720px;
+    padding: 48px 40px;
+  }
+
+  /* ── Header ───────────────────────────────────────────── */
+  .pipeline-header {
+    text-align: center;
+    margin-bottom: 44px;
+  }
+
+  .pipeline-title {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--slate-300);
+    margin-bottom: 8px;
+  }
+
+  .pipeline-subtitle {
+    font-size: 12px;
+    letter-spacing: 1.5px;
+    color: var(--slate-500);
+    text-transform: uppercase;
+  }
+
+  .header-line {
+    width: 160px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--emerald-500), transparent);
+    margin: 16px auto 0;
+    opacity: 0.5;
+  }
+
+  /* ── Tree Structure ───────────────────────────────────── */
+  .tree {
+    position: relative;
+    padding-left: 24px;
+  }
+
+  /* Vertical trunk line */
+  .tree::before {
+    content: '';
+    position: absolute;
+    left: 11px;
+    top: 0;
+    bottom: 60px;
+    width: 2px;
+    background: linear-gradient(
+      180deg,
+      var(--connector-active) 0%,
+      var(--connector-active) 58%,
+      var(--connector-color) 58%,
+      var(--connector-color) 100%
+    );
+    border-radius: 1px;
+  }
+
+  /* ── Tree Node (Level 1 — modules) ───────────────────── */
+  .tree-node {
+    position: relative;
+    margin-bottom: 4px;
+    opacity: 0;
+    transform: translateX(-12px);
+    animation: nodeSlideIn 0.5s ease-out forwards;
+  }
+
+  @keyframes nodeSlideIn {
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  /* Horizontal branch */
+  .tree-node::before {
+    content: '';
+    position: absolute;
+    left: -13px;
+    top: 20px;
+    width: 13px;
+    height: 2px;
+    background: var(--connector-color);
+    transition: background 0.4s ease;
+  }
+
+  .tree-node.completed::before,
+  .tree-node.active::before {
+    background: var(--connector-active);
+  }
+
+  /* Branch fork (vertical stub) */
+  .tree-node::after {
+    content: '';
+    position: absolute;
+    left: -13px;
+    top: 0;
+    width: 2px;
+    height: 22px;
+  }
+
+  /* ── Node Row ─────────────────────────────────────────── */
+  .node-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 8px 16px;
+    border-radius: 10px;
+    background: transparent;
+    transition: all 0.3s ease;
+    cursor: default;
+    min-height: 44px;
+  }
+
+  .node-row:hover {
+    background: rgba(30, 41, 59, 0.5);
+  }
+
+  /* ── Status Icons ─────────────────────────────────────── */
+  .status-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+    transition: all 0.3s ease;
+    position: relative;
+  }
+
+  /* Completed */
+  .status-completed {
+    background: rgba(16, 185, 129, 0.15);
+    border: 2px solid var(--emerald-500);
+    color: var(--emerald-400);
+  }
+
+  .status-completed::after {
+    content: '';
+    width: 10px;
+    height: 6px;
+    border-left: 2.5px solid var(--emerald-400);
+    border-bottom: 2.5px solid var(--emerald-400);
+    transform: rotate(-45deg) translateY(-1px);
+  }
+
+  /* Active */
+  .status-active {
+    background: rgba(16, 185, 129, 0.2);
+    border: 2px solid var(--emerald-400);
+    color: var(--emerald-400);
+    box-shadow:
+      0 0 12px var(--glow-color),
+      0 0 28px rgba(16, 185, 129, 0.15);
+    animation: activeGlow 2.5s ease-in-out infinite;
+  }
+
+  @keyframes activeGlow {
+    0%, 100% {
+      box-shadow:
+        0 0 12px var(--glow-color),
+        0 0 28px rgba(16, 185, 129, 0.15);
+    }
+    50% {
+      box-shadow:
+        0 0 20px var(--glow-strong),
+        0 0 44px rgba(16, 185, 129, 0.25);
+    }
+  }
+
+  .status-active::after {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border: 2.5px solid var(--emerald-400);
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  /* Pending */
+  .status-pending {
+    background: rgba(100, 116, 139, 0.1);
+    border: 2px solid var(--slate-600);
+    color: var(--slate-500);
+  }
+
+  .status-pending::after {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    border: 2px solid var(--slate-600);
+  }
+
+  /* Skipped */
+  .status-skipped {
+    background: rgba(100, 116, 139, 0.06);
+    border: 2px dashed var(--slate-700);
+    color: var(--slate-600);
+  }
+
+  .status-skipped::after {
+    content: '';
+    width: 10px;
+    height: 2px;
+    background: var(--slate-600);
+    border-radius: 1px;
+  }
+
+  /* ── Node Label ───────────────────────────────────────── */
+  .node-label {
+    font-size: var(--fs-module);
+    font-weight: 600;
+    letter-spacing: -0.3px;
+    transition: color 0.3s ease;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+
+  .tree-node.completed .node-label { color: var(--emerald-400); }
+  .tree-node.active .node-label { color: var(--slate-100); }
+  .tree-node.pending .node-label { color: var(--slate-500); }
+  .tree-node.skipped .node-label { color: var(--slate-600); }
+
+  /* ── Badges ───────────────────────────────────────────── */
+  .node-badge {
+    font-size: var(--fs-badge);
+    font-weight: 600;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    padding: 3px 10px;
+    border-radius: 6px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    margin-left: auto;
+  }
+
+  .badge-done {
+    background: rgba(16, 185, 129, 0.12);
+    color: var(--emerald-400);
+    border: 1px solid rgba(16, 185, 129, 0.25);
+  }
+
+  .badge-running {
+    background: rgba(16, 185, 129, 0.15);
+    color: var(--emerald-400);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    animation: badgePulse 2s ease-in-out infinite;
+  }
+
+  @keyframes badgePulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.65; }
+  }
+
+  .badge-queued {
+    background: rgba(100, 116, 139, 0.1);
+    color: var(--slate-500);
+    border: 1px solid rgba(100, 116, 139, 0.2);
+  }
+
+  .badge-skip {
+    background: rgba(100, 116, 139, 0.06);
+    color: var(--slate-600);
+    border: 1px solid rgba(100, 116, 139, 0.12);
+  }
+
+  /* ── Iteration Count ──────────────────────────────────── */
+  .iter-count {
+    font-size: 11px;
+    color: var(--slate-500);
+    letter-spacing: 0.5px;
+    margin-left: 6px;
+    opacity: 0.8;
+  }
+
+  .tree-node.active .iter-count { color: var(--slate-400); }
+
+  /* ── Children container (Level 2) ─────────────────────── */
+  .node-children {
+    position: relative;
+    margin-left: 38px;
+    padding-left: 22px;
+    margin-top: 2px;
+    margin-bottom: 2px;
+    overflow: hidden;
+    animation: childrenExpand 0.6s ease-out forwards;
+  }
+
+  @keyframes childrenExpand {
+    from {
+      max-height: 0;
+      opacity: 0;
+    }
+    to {
+      max-height: 600px;
+      opacity: 1;
+    }
+  }
+
+  /* Vertical sub-trunk */
+  .node-children::before {
+    content: '';
+    position: absolute;
+    left: 9px;
+    top: 0;
+    bottom: 18px;
+    width: 2px;
+    background: linear-gradient(
+      180deg,
+      var(--connector-active) 0%,
+      var(--connector-active) 60%,
+      var(--connector-color) 60%,
+      var(--connector-color) 100%
+    );
+    border-radius: 1px;
+  }
+
+  /* ── Child Node ───────────────────────────────────────── */
+  .child-node {
+    position: relative;
+    margin-bottom: 1px;
+    opacity: 0;
+    transform: translateX(-8px);
+    animation: childSlideIn 0.4s ease-out forwards;
+  }
+
+  @keyframes childSlideIn {
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  /* Horizontal branch for child */
+  .child-node::before {
+    content: '';
+    position: absolute;
+    left: -13px;
+    top: 17px;
+    width: 13px;
+    height: 2px;
+    background: var(--connector-color);
+    transition: background 0.4s ease;
+  }
+
+  .child-node.completed::before,
+  .child-node.active::before {
+    background: var(--connector-active);
+  }
+
+  /* ── Child Row ────────────────────────────────────────── */
+  .child-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 5px 14px;
+    border-radius: 8px;
+    background: transparent;
+    transition: all 0.3s ease;
+    cursor: default;
+    min-height: 36px;
+  }
+
+  .child-row:hover {
+    background: rgba(30, 41, 59, 0.35);
+  }
+
+  /* ── Child Status Icons (smaller) ─────────────────────── */
+  .child-status {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    flex-shrink: 0;
+    transition: all 0.3s ease;
+    position: relative;
+  }
+
+  .child-status.status-completed {
+    background: rgba(16, 185, 129, 0.12);
+    border-width: 1.5px;
+  }
+
+  .child-status.status-completed::after {
+    width: 8px;
+    height: 5px;
+    border-width: 2px;
+  }
+
+  .child-status.status-active {
+    background: rgba(16, 185, 129, 0.18);
+    border-width: 1.5px;
+    box-shadow:
+      0 0 10px rgba(16, 185, 129, 0.3),
+      0 0 24px rgba(16, 185, 129, 0.12);
+    animation: childActiveGlow 2.5s ease-in-out infinite;
+  }
+
+  @keyframes childActiveGlow {
+    0%, 100% {
+      box-shadow:
+        0 0 10px rgba(16, 185, 129, 0.3),
+        0 0 24px rgba(16, 185, 129, 0.12);
+    }
+    50% {
+      box-shadow:
+        0 0 16px rgba(16, 185, 129, 0.5),
+        0 0 36px rgba(16, 185, 129, 0.2);
+    }
+  }
+
+  .child-status.status-active::after {
+    width: 6px;
+    height: 6px;
+    border-width: 2px;
+  }
+
+  .child-status.status-pending {
+    border-width: 1.5px;
+  }
+
+  .child-status.status-pending::after {
+    width: 6px;
+    height: 6px;
+    border-width: 1.5px;
+  }
+
+  /* ── Child Label ──────────────────────────────────────── */
+  .child-label {
+    font-size: var(--fs-child);
+    font-weight: 500;
+    letter-spacing: -0.2px;
+    transition: color 0.3s ease;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+
+  .child-node.completed .child-label { color: var(--emerald-400); opacity: 0.85; }
+  .child-node.active .child-label { color: var(--slate-100); }
+  .child-node.pending .child-label { color: var(--slate-500); }
+
+  /* ── Child Badge ──────────────────────────────────────── */
+  .child-badge {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 5px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    margin-left: auto;
+  }
+
+  /* ── Last child uses corner connector ─────────────────── */
+  .child-node.last-child::before {
+    /* Same horizontal branch */
+  }
+
+  /* ── Duration / Metadata ──────────────────────────────── */
+  .node-duration {
+    font-size: 11px;
+    color: var(--slate-500);
+    letter-spacing: 0.3px;
+    margin-left: 4px;
+    opacity: 0.7;
+  }
+
+  .tree-node.active .node-duration,
+  .child-node.active .node-duration {
+    color: var(--emerald-400);
+    opacity: 0.6;
+    animation: durationPulse 2s ease-in-out infinite;
+  }
+
+  @keyframes durationPulse {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; }
+  }
+
+  /* ── Progress Indicator for active parent ──────────────── */
+  .progress-ring {
+    position: absolute;
+    right: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 32px;
+    height: 32px;
+  }
+
+  .progress-ring svg {
+    transform: rotate(-90deg);
+    width: 32px;
+    height: 32px;
+  }
+
+  .progress-ring-bg {
+    fill: none;
+    stroke: var(--slate-700);
+    stroke-width: 3;
+  }
+
+  .progress-ring-fill {
+    fill: none;
+    stroke: var(--emerald-400);
+    stroke-width: 3;
+    stroke-linecap: round;
+    stroke-dasharray: 75.4;
+    stroke-dashoffset: 75.4;
+    transition: stroke-dashoffset 0.6s ease;
+    filter: drop-shadow(0 0 4px rgba(16, 185, 129, 0.4));
+  }
+
+  /* ── Connector Glow for Active Path ───────────────────── */
+  .active-path-glow {
+    position: absolute;
+    width: 6px;
+    background: radial-gradient(ellipse, var(--glow-color), transparent);
+    pointer-events: none;
+    filter: blur(2px);
+    z-index: -1;
+  }
+
+  /* ── Elapsed Timer ────────────────────────────────────── */
+  .elapsed-timer {
+    font-size: 11px;
+    color: var(--emerald-400);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.5px;
+    opacity: 0;
+    animation: fadeIn 0.5s 1.5s ease forwards;
+  }
+
+  @keyframes fadeIn {
+    to { opacity: 0.7; }
+  }
+
+  /* ── Footer ───────────────────────────────────────────── */
+  .pipeline-footer {
+    margin-top: 36px;
+    padding-top: 20px;
+    border-top: 1px solid rgba(51, 65, 85, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .footer-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .footer-stat-value {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--slate-200);
+  }
+
+  .footer-stat-value.highlight { color: var(--emerald-400); }
+
+  .footer-stat-label {
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--slate-500);
+  }
+
+  /* ── Active Node Highlight Background ─────────────────── */
+  .tree-node.active > .node-row {
+    background: rgba(16, 185, 129, 0.06);
+    border: 1px solid rgba(16, 185, 129, 0.12);
+  }
+
+  .child-node.active > .child-row {
+    background: rgba(16, 185, 129, 0.06);
+    border: 1px solid rgba(16, 185, 129, 0.1);
+  }
+
+  /* ── Stagger Delays ───────────────────────────────────── */
+  .tree-node:nth-child(1)  { animation-delay: 0.1s; }
+  .tree-node:nth-child(2)  { animation-delay: 0.2s; }
+  .tree-node:nth-child(3)  { animation-delay: 0.3s; }
+  .tree-node:nth-child(4)  { animation-delay: 0.4s; }
+  .tree-node:nth-child(5)  { animation-delay: 0.5s; }
+  .tree-node:nth-child(6)  { animation-delay: 0.6s; }
+  .tree-node:nth-child(7)  { animation-delay: 0.7s; }
+  .tree-node:nth-child(8)  { animation-delay: 0.8s; }
+  .tree-node:nth-child(9)  { animation-delay: 0.9s; }
+  .tree-node:nth-child(10) { animation-delay: 1.0s; }
+
+  .child-node:nth-child(1) { animation-delay: 0.55s; }
+  .child-node:nth-child(2) { animation-delay: 0.65s; }
+  .child-node:nth-child(3) { animation-delay: 0.75s; }
+  .child-node:nth-child(4) { animation-delay: 0.85s; }
+  .child-node:nth-child(5) { animation-delay: 0.95s; }
+
+  /* ── Scanline (subtle) ────────────────────────────────── */
+  .scanline {
+    position: fixed;
+    left: 0;
+    width: 100%;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, rgba(16, 185, 129, 0.08), transparent);
+    z-index: 3;
+    pointer-events: none;
+    animation: scanDown 8s linear infinite;
+  }
+
+  @keyframes scanDown {
+    0%   { top: -2px; }
+    100% { top: 100vh; }
+  }
+
+  /* ── Tooltip on hover ─────────────────────────────────── */
+  .node-row[data-tooltip]:hover::after,
+  .child-row[data-tooltip]:hover::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    right: -8px;
+    top: 50%;
+    transform: translateX(100%) translateY(-50%);
+    background: var(--slate-800);
+    color: var(--slate-300);
+    font-size: 11px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    border: 1px solid var(--slate-700);
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 10;
+    animation: tooltipIn 0.2s ease;
+  }
+
+  @keyframes tooltipIn {
+    from { opacity: 0; transform: translateX(100%) translateY(-50%) translateX(4px); }
+    to   { opacity: 1; transform: translateX(100%) translateY(-50%); }
+  }
+
+  /* ── Expanded parent marker ───────────────────────────── */
+  .expand-indicator {
+    font-size: 10px;
+    color: var(--slate-500);
+    margin-left: 2px;
+    transition: transform 0.3s ease;
+  }
+
+  .tree-node.expanded .expand-indicator {
+    transform: rotate(90deg);
+  }
+
+  /* ── Count pip in badge area ──────────────────────────── */
+  .child-count {
+    font-size: 10px;
+    color: var(--slate-500);
+    background: rgba(100, 116, 139, 0.12);
+    border: 1px solid rgba(100, 116, 139, 0.18);
+    padding: 1px 7px;
+    border-radius: 10px;
+    letter-spacing: 0.3px;
+    margin-left: 6px;
+  }
+
+  .tree-node.active .child-count {
+    color: var(--emerald-400);
+    background: rgba(16, 185, 129, 0.1);
+    border-color: rgba(16, 185, 129, 0.2);
+  }
+</style>
+</head>
+<body>
+
+<canvas id="particle-canvas"></canvas>
+<div class="scanline"></div>
+
+<div class="pipeline-container">
+  <!-- Header -->
+  <div class="pipeline-header">
+    <div class="pipeline-title">Invention Pipeline</div>
+    <div class="pipeline-subtitle">Run #0247 &mdash; Nested Execution Tree</div>
+    <div class="header-line"></div>
+  </div>
+
+  <!-- Tree -->
+  <div class="tree" id="pipeline-tree">
+
+    <!-- 1. Seed Hypotheses ── completed -->
+    <div class="tree-node completed" style="animation-delay: 0.08s;">
+      <div class="node-row">
+        <div class="status-icon status-completed"></div>
+        <span class="node-label">Seed Hypotheses</span>
+        <span class="node-duration">4.2s</span>
+        <span class="node-badge badge-done">Done</span>
+      </div>
+    </div>
+
+    <!-- 2. Hypothesis Loop ── completed -->
+    <div class="tree-node completed" style="animation-delay: 0.18s;">
+      <div class="node-row">
+        <div class="status-icon status-completed"></div>
+        <span class="node-label">Hypothesis Loop</span>
+        <span class="iter-count">3/3</span>
+        <span class="node-duration">28.1s</span>
+        <span class="node-badge badge-done">Done</span>
+      </div>
+    </div>
+
+    <!-- 3. Strategy ── completed -->
+    <div class="tree-node completed" style="animation-delay: 0.28s;">
+      <div class="node-row">
+        <div class="status-icon status-completed"></div>
+        <span class="node-label">Strategy</span>
+        <span class="node-duration">6.7s</span>
+        <span class="node-badge badge-done">Done</span>
+      </div>
+    </div>
+
+    <!-- 4. Plan ── completed -->
+    <div class="tree-node completed" style="animation-delay: 0.38s;">
+      <div class="node-row">
+        <div class="status-icon status-completed"></div>
+        <span class="node-label">Plan</span>
+        <span class="node-duration">9.3s</span>
+        <span class="node-badge badge-done">Done</span>
+      </div>
+    </div>
+
+    <!-- 5. Artifacts ── active (has children) -->
+    <div class="tree-node active expanded" style="animation-delay: 0.48s;" id="artifacts-node">
+      <div class="node-row">
+        <div class="status-icon status-active"></div>
+        <span class="node-label">Artifacts</span>
+        <span class="child-count">3/5</span>
+        <span class="elapsed-timer" id="artifacts-timer">00:00</span>
+        <span class="node-badge badge-running">Running</span>
+      </div>
+
+      <!-- Artifact Children -->
+      <div class="node-children" id="artifacts-children">
+        <!-- 5a. Baseline ── completed -->
+        <div class="child-node completed" style="animation-delay: 0.56s;">
+          <div class="child-row">
+            <div class="child-status status-completed"></div>
+            <span class="child-label">Baseline</span>
+            <span class="node-duration">12.4s</span>
+            <span class="child-badge badge-done">Done</span>
+          </div>
+        </div>
+
+        <!-- 5b. Dataset ── completed -->
+        <div class="child-node completed" style="animation-delay: 0.66s;">
+          <div class="child-row">
+            <div class="child-status status-completed"></div>
+            <span class="child-label">Dataset</span>
+            <span class="node-duration">8.9s</span>
+            <span class="child-badge badge-done">Done</span>
+          </div>
+        </div>
+
+        <!-- 5c. Proof ── completed -->
+        <div class="child-node completed" style="animation-delay: 0.76s;">
+          <div class="child-row">
+            <div class="child-status status-completed"></div>
+            <span class="child-label">Proof</span>
+            <span class="node-duration">15.1s</span>
+            <span class="child-badge badge-done">Done</span>
+          </div>
+        </div>
+
+        <!-- 5d. Ablation ── ACTIVE (deepest active) -->
+        <div class="child-node active" style="animation-delay: 0.86s;" id="ablation-node">
+          <div class="child-row">
+            <div class="child-status status-active"></div>
+            <span class="child-label">Ablation</span>
+            <span class="elapsed-timer" id="ablation-timer">00:00</span>
+            <span class="child-badge badge-running">Running</span>
+          </div>
+        </div>
+
+        <!-- 5e. Eval ── pending -->
+        <div class="child-node pending last-child" style="animation-delay: 0.96s;">
+          <div class="child-row">
+            <div class="child-status status-pending"></div>
+            <span class="child-label">Eval</span>
+            <span class="child-badge badge-queued">Queued</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 6. Paper Draft ── pending -->
+    <div class="tree-node pending" style="animation-delay: 0.58s;">
+      <div class="node-row">
+        <div class="status-icon status-pending"></div>
+        <span class="node-label">Paper Draft</span>
+        <span class="node-badge badge-queued">Queued</span>
+      </div>
+    </div>
+
+    <!-- 7. Visualizations ── pending -->
+    <div class="tree-node pending" style="animation-delay: 0.68s;">
+      <div class="node-row">
+        <div class="status-icon status-pending"></div>
+        <span class="node-label">Visualizations</span>
+        <span class="node-badge badge-queued">Queued</span>
+      </div>
+    </div>
+
+    <!-- 8. Full Paper ── pending -->
+    <div class="tree-node pending" style="animation-delay: 0.78s;">
+      <div class="node-row">
+        <div class="status-icon status-pending"></div>
+        <span class="node-label">Full Paper</span>
+        <span class="node-badge badge-queued">Queued</span>
+      </div>
+    </div>
+
+    <!-- 9. Review ── skipped / pending -->
+    <div class="tree-node pending" style="animation-delay: 0.88s;">
+      <div class="node-row">
+        <div class="status-icon status-pending"></div>
+        <span class="node-label">Review</span>
+        <span class="node-badge badge-queued">Queued</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Footer -->
+  <div class="pipeline-footer">
+    <div class="footer-stat">
+      <span class="footer-stat-value">4</span>
+      <span class="footer-stat-label">Completed</span>
+    </div>
+    <div class="footer-stat">
+      <span class="footer-stat-value highlight" id="active-count">1</span>
+      <span class="footer-stat-label">Active</span>
+    </div>
+    <div class="footer-stat">
+      <span class="footer-stat-value">4</span>
+      <span class="footer-stat-label">Remaining</span>
+    </div>
+    <div class="footer-stat">
+      <span class="footer-stat-value" id="total-elapsed">01:12</span>
+      <span class="footer-stat-label">Elapsed</span>
+    </div>
+  </div>
+</div>
+
+<script>
+// ================================================================
+// Particle System — flows down the tree to the deepest active node
+// ================================================================
+(function() {
+  const canvas = document.getElementById('particle-canvas');
+  const ctx = canvas.getContext('2d');
+  let W, H;
+  let particles = [];
+  let trailSegments = [];
+  let mouseX = -1, mouseY = -1;
+  const PARTICLE_COUNT = 80;
+  const TRAIL_PARTICLE_COUNT = 50;
+
+  function resize() {
+    W = canvas.width = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // ── Compute the active path coordinates ──────────────
+  // The particle trail follows the tree connectors from root
+  // down to the deepest active item (Ablation).
+  function getPathSegments() {
+    const segments = [];
+    const tree = document.getElementById('pipeline-tree');
+    const artNode = document.getElementById('artifacts-node');
+    const ablNode = document.getElementById('ablation-node');
+
+    if (!tree || !artNode || !ablNode) return segments;
+
+    const treeRect = tree.getBoundingClientRect();
+    const artRect = artNode.querySelector('.node-row').getBoundingClientRect();
+    const ablRect = ablNode.querySelector('.child-row').getBoundingClientRect();
+
+    // Main trunk: from top of tree down to artifacts row
+    const trunkX = treeRect.left + 11;
+    const trunkTop = treeRect.top;
+    const trunkBottom = artRect.top + artRect.height / 2;
+
+    segments.push({
+      x1: trunkX, y1: trunkTop,
+      x2: trunkX, y2: trunkBottom,
+      type: 'vertical'
+    });
+
+    // Horizontal branch to artifacts
+    segments.push({
+      x1: trunkX, y1: trunkBottom,
+      x2: artRect.left, y2: trunkBottom,
+      type: 'horizontal'
+    });
+
+    // Sub-trunk from artifacts down into children
+    const childrenEl = document.getElementById('artifacts-children');
+    if (childrenEl) {
+      const childrenRect = childrenEl.getBoundingClientRect();
+      const subTrunkX = childrenRect.left + 9;
+      const subTrunkTop = childrenRect.top;
+      const subTrunkBottom = ablRect.top + ablRect.height / 2;
+
+      segments.push({
+        x1: subTrunkX, y1: artRect.bottom - 4,
+        x2: subTrunkX, y2: subTrunkBottom,
+        type: 'vertical'
+      });
+
+      // Horizontal branch to ablation
+      segments.push({
+        x1: subTrunkX, y1: subTrunkBottom,
+        x2: ablRect.left, y2: subTrunkBottom,
+        type: 'horizontal'
+      });
+    }
+
+    return segments;
+  }
+
+  // ── Trail Particle Class ─────────────────────────────
+  class TrailParticle {
+    constructor() {
+      this.reset();
+    }
+
+    reset() {
+      this.progress = Math.random() * -0.5; // stagger start
+      this.speed = 0.002 + Math.random() * 0.004;
+      this.size = 1.5 + Math.random() * 2.5;
+      this.alpha = 0;
+      this.targetAlpha = 0.3 + Math.random() * 0.5;
+      this.offsetX = (Math.random() - 0.5) * 6;
+      this.offsetY = (Math.random() - 0.5) * 6;
+      this.alive = true;
+    }
+
+    update(segments) {
+      this.progress += this.speed;
+
+      if (this.progress < 0) {
+        this.alpha = 0;
+        return;
+      }
+
+      if (this.progress > 1) {
+        this.reset();
+        return;
+      }
+
+      // Fade in/out
+      if (this.progress < 0.1) {
+        this.alpha = this.targetAlpha * (this.progress / 0.1);
+      } else if (this.progress > 0.85) {
+        this.alpha = this.targetAlpha * ((1 - this.progress) / 0.15);
+      } else {
+        this.alpha = this.targetAlpha;
+      }
+
+      // Position along path
+      const totalLen = this._totalLength(segments);
+      let dist = this.progress * totalLen;
+      let pos = this._positionAtDist(segments, dist);
+      this.x = pos.x + this.offsetX;
+      this.y = pos.y + this.offsetY;
+    }
+
+    _totalLength(segments) {
+      let len = 0;
+      for (const s of segments) {
+        len += Math.hypot(s.x2 - s.x1, s.y2 - s.y1);
+      }
+      return len;
+    }
+
+    _positionAtDist(segments, dist) {
+      let remaining = dist;
+      for (const s of segments) {
+        const segLen = Math.hypot(s.x2 - s.x1, s.y2 - s.y1);
+        if (remaining <= segLen) {
+          const t = segLen > 0 ? remaining / segLen : 0;
+          return {
+            x: s.x1 + (s.x2 - s.x1) * t,
+            y: s.y1 + (s.y2 - s.y1) * t
+          };
+        }
+        remaining -= segLen;
+      }
+      // Past end
+      const last = segments[segments.length - 1];
+      return last ? { x: last.x2, y: last.y2 } : { x: 0, y: 0 };
+    }
+
+    draw(ctx) {
+      if (this.progress < 0 || this.alpha <= 0) return;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(52, 211, 153, ${this.alpha})`;
+      ctx.fill();
+    }
+  }
+
+  // ── Ambient Particle Class ───────────────────────────
+  class AmbientParticle {
+    constructor() {
+      this.x = Math.random() * W;
+      this.y = Math.random() * H;
+      this.vx = (Math.random() - 0.5) * 0.3;
+      this.vy = (Math.random() - 0.5) * 0.3;
+      this.size = 0.5 + Math.random() * 1.5;
+      this.alpha = 0.05 + Math.random() * 0.15;
+      this.baseAlpha = this.alpha;
+      this.pulse = Math.random() * Math.PI * 2;
+      this.pulseSpeed = 0.01 + Math.random() * 0.02;
+    }
+
+    update() {
+      this.x += this.vx;
+      this.y += this.vy;
+      this.pulse += this.pulseSpeed;
+      this.alpha = this.baseAlpha * (0.5 + 0.5 * Math.sin(this.pulse));
+
+      // Mouse repulsion
+      if (mouseX >= 0 && mouseY >= 0) {
+        const dx = this.x - mouseX;
+        const dy = this.y - mouseY;
+        const dist = Math.hypot(dx, dy);
+        if (dist < 120) {
+          const force = (120 - dist) / 120 * 0.5;
+          this.vx += (dx / dist) * force;
+          this.vy += (dy / dist) * force;
+        }
+      }
+
+      // Damping
+      this.vx *= 0.99;
+      this.vy *= 0.99;
+
+      // Wrap
+      if (this.x < -10) this.x = W + 10;
+      if (this.x > W + 10) this.x = -10;
+      if (this.y < -10) this.y = H + 10;
+      if (this.y > H + 10) this.y = -10;
+    }
+
+    draw(ctx) {
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(148, 163, 184, ${this.alpha})`;
+      ctx.fill();
+    }
+  }
+
+  // ── Burst Particle (at active node) ──────────────────
+  class BurstParticle {
+    constructor(x, y) {
+      this.x = x;
+      this.y = y;
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 0.3 + Math.random() * 1.5;
+      this.vx = Math.cos(angle) * speed;
+      this.vy = Math.sin(angle) * speed;
+      this.size = 1 + Math.random() * 2;
+      this.alpha = 0.6 + Math.random() * 0.4;
+      this.decay = 0.985 + Math.random() * 0.01;
+      this.alive = true;
+    }
+
+    update() {
+      this.x += this.vx;
+      this.y += this.vy;
+      this.vx *= 0.98;
+      this.vy *= 0.98;
+      this.alpha *= this.decay;
+      this.size *= 0.998;
+      if (this.alpha < 0.01) this.alive = false;
+    }
+
+    draw(ctx) {
+      if (!this.alive) return;
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(52, 211, 153, ${this.alpha})`;
+      ctx.fill();
+    }
+  }
+
+  // ── Initialize ───────────────────────────────────────
+  // Ambient particles
+  for (let i = 0; i < PARTICLE_COUNT; i++) {
+    particles.push(new AmbientParticle());
+  }
+
+  // Trail particles
+  let trailParticles = [];
+  for (let i = 0; i < TRAIL_PARTICLE_COUNT; i++) {
+    trailParticles.push(new TrailParticle());
+  }
+
+  // Burst particles
+  let burstParticles = [];
+  let burstTimer = 0;
+
+  // Mouse tracking
+  document.addEventListener('mousemove', (e) => {
+    mouseX = e.clientX;
+    mouseY = e.clientY;
+  });
+  document.addEventListener('mouseleave', () => {
+    mouseX = -1;
+    mouseY = -1;
+  });
+
+  // ── Glow at active node ──────────────────────────────
+  function getActiveNodeCenter() {
+    const ablNode = document.getElementById('ablation-node');
+    if (!ablNode) return null;
+    const statusEl = ablNode.querySelector('.child-status');
+    if (!statusEl) return null;
+    const rect = statusEl.getBoundingClientRect();
+    return {
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2
+    };
+  }
+
+  // ── Main loop ────────────────────────────────────────
+  let pathSegments = [];
+  let pathUpdateCounter = 0;
+
+  function animate() {
+    ctx.clearRect(0, 0, W, H);
+
+    // Update path segments periodically (DOM reads are expensive)
+    pathUpdateCounter++;
+    if (pathUpdateCounter % 30 === 0) {
+      pathSegments = getPathSegments();
+    }
+
+    // Draw ambient particles
+    for (const p of particles) {
+      p.update();
+      p.draw(ctx);
+    }
+
+    // Draw trail particles along the active path
+    if (pathSegments.length > 0) {
+      for (const tp of trailParticles) {
+        tp.update(pathSegments);
+        tp.draw(ctx);
+      }
+
+      // Draw the active path glow
+      ctx.save();
+      ctx.globalAlpha = 0.06 + 0.02 * Math.sin(Date.now() * 0.002);
+      ctx.strokeStyle = '#34d399';
+      ctx.lineWidth = 4;
+      ctx.shadowColor = '#34d399';
+      ctx.shadowBlur = 12;
+      ctx.beginPath();
+      for (const s of pathSegments) {
+        ctx.moveTo(s.x1, s.y1);
+        ctx.lineTo(s.x2, s.y2);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Burst particles at the active node
+    burstTimer++;
+    if (burstTimer % 40 === 0) {
+      const center = getActiveNodeCenter();
+      if (center) {
+        for (let i = 0; i < 5; i++) {
+          burstParticles.push(new BurstParticle(center.x, center.y));
+        }
+      }
+    }
+
+    // Update & draw burst particles
+    for (let i = burstParticles.length - 1; i >= 0; i--) {
+      burstParticles[i].update();
+      burstParticles[i].draw(ctx);
+      if (!burstParticles[i].alive) {
+        burstParticles.splice(i, 1);
+      }
+    }
+
+    // Ambient glow at active node
+    const center = getActiveNodeCenter();
+    if (center) {
+      const glowRadius = 40 + 10 * Math.sin(Date.now() * 0.003);
+      const gradient = ctx.createRadialGradient(
+        center.x, center.y, 0,
+        center.x, center.y, glowRadius
+      );
+      gradient.addColorStop(0, 'rgba(52, 211, 153, 0.12)');
+      gradient.addColorStop(1, 'rgba(52, 211, 153, 0)');
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, glowRadius, 0, Math.PI * 2);
+      ctx.fillStyle = gradient;
+      ctx.fill();
+    }
+
+    requestAnimationFrame(animate);
+  }
+
+  // Start after a brief delay so DOM has settled
+  setTimeout(() => {
+    pathSegments = getPathSegments();
+    animate();
+  }, 200);
+
+})();
+
+// ================================================================
+// Elapsed Timers
+// ================================================================
+(function() {
+  const artifactsStart = Date.now() - 36400; // pretend started 36.4s ago
+  const ablationStart = Date.now() - 8200;   // pretend started 8.2s ago
+  const totalStart = Date.now() - 72000;     // 1:12 total
+
+  function pad(n) { return String(n).padStart(2, '0'); }
+
+  function formatTime(ms) {
+    const totalSec = Math.floor(ms / 1000);
+    const min = Math.floor(totalSec / 60);
+    const sec = totalSec % 60;
+    return `${pad(min)}:${pad(sec)}`;
+  }
+
+  function tick() {
+    const now = Date.now();
+
+    const artEl = document.getElementById('artifacts-timer');
+    const ablEl = document.getElementById('ablation-timer');
+    const totalEl = document.getElementById('total-elapsed');
+
+    if (artEl) artEl.textContent = formatTime(now - artifactsStart);
+    if (ablEl) ablEl.textContent = formatTime(now - ablationStart);
+    if (totalEl) totalEl.textContent = formatTime(now - totalStart);
+
+    requestAnimationFrame(tick);
+  }
+
+  tick();
+})();
+
+// ================================================================
+// Connection Lines between nodes (drawn on canvas layer)
+// ================================================================
+(function() {
+  // Subtle hover highlight for active children
+  const childRows = document.querySelectorAll('.child-row');
+  childRows.forEach(row => {
+    row.addEventListener('mouseenter', () => {
+      row.style.transition = 'background 0.15s ease';
+    });
+  });
+
+  // Node rows
+  const nodeRows = document.querySelectorAll('.node-row');
+  nodeRows.forEach(row => {
+    row.addEventListener('mouseenter', () => {
+      row.style.transition = 'background 0.15s ease';
+    });
+  });
+})();
+
+// ================================================================
+// Progress ring for the Artifacts parent node (3 of 5 = 60%)
+// ================================================================
+(function() {
+  // We inject a small SVG progress ring into the Artifacts node
+  const artNode = document.getElementById('artifacts-node');
+  if (!artNode) return;
+
+  const nodeRow = artNode.querySelector('.node-row');
+  nodeRow.style.position = 'relative';
+
+  const ring = document.createElement('div');
+  ring.className = 'progress-ring';
+  ring.innerHTML = `
+    <svg viewBox="0 0 28 28">
+      <circle class="progress-ring-bg" cx="14" cy="14" r="12"></circle>
+      <circle class="progress-ring-fill" cx="14" cy="14" r="12"
+              id="progress-fill"></circle>
+    </svg>
+  `;
+  nodeRow.appendChild(ring);
+
+  // Animate the fill to 60% (3/5)
+  const circumference = 2 * Math.PI * 12; // ~75.4
+  const fill = document.getElementById('progress-fill');
+  if (fill) {
+    fill.style.strokeDasharray = circumference;
+    fill.style.strokeDashoffset = circumference;
+    setTimeout(() => {
+      fill.style.strokeDashoffset = circumference * (1 - 0.6);
+    }, 800);
+
+    // Slowly animate toward completion
+    let currentProgress = 0.6;
+    function animateProgress() {
+      currentProgress += 0.0001;
+      if (currentProgress > 0.8) currentProgress = 0.6; // loop for demo
+      fill.style.strokeDashoffset = circumference * (1 - currentProgress);
+      requestAnimationFrame(animateProgress);
+    }
+    setTimeout(animateProgress, 2000);
+  }
+})();
+
+// ================================================================
+// Ambient connection lines between nearby ambient particles
+// ================================================================
+(function() {
+  // Re-implemented within the main canvas loop would be ideal,
+  // but for modularity we do a second pass on an overlay canvas.
+  // Actually, let's enhance the main canvas instead by
+  // hooking into the global animation. We'll draw lines in a
+  // separate function called from the main loop.
+
+  // We expose particle array to the global scope for this:
+  // (Already in the IIFE above — we'll accept no connections
+  //  for now to keep code clean. The trail + burst is enough.)
+})();
+
+// ================================================================
+// Keyboard shortcut: press 'Space' to simulate step completion
+// ================================================================
+(function() {
+  let simulationStep = 0;
+  const ablationNode = document.getElementById('ablation-node');
+  const artNode = document.getElementById('artifacts-node');
+
+  document.addEventListener('keydown', (e) => {
+    if (e.code !== 'Space') return;
+    e.preventDefault();
+
+    if (simulationStep === 0) {
+      // Complete Ablation
+      if (ablationNode) {
+        ablationNode.classList.remove('active');
+        ablationNode.classList.add('completed');
+        const status = ablationNode.querySelector('.child-status');
+        if (status) {
+          status.classList.remove('status-active');
+          status.classList.add('status-completed');
+        }
+        const badge = ablationNode.querySelector('.child-badge');
+        if (badge) {
+          badge.classList.remove('badge-running');
+          badge.classList.add('badge-done');
+          badge.textContent = 'Done';
+        }
+        const timer = ablationNode.querySelector('.elapsed-timer');
+        if (timer) {
+          timer.style.animation = 'none';
+          timer.style.opacity = '0.5';
+        }
+      }
+
+      // Activate Eval
+      const evalNode = document.querySelector('.child-node.pending.last-child');
+      if (evalNode) {
+        evalNode.classList.remove('pending');
+        evalNode.classList.add('active');
+        const status = evalNode.querySelector('.child-status');
+        if (status) {
+          status.classList.remove('status-pending');
+          status.classList.add('status-active');
+        }
+        const badge = evalNode.querySelector('.child-badge');
+        if (badge) {
+          badge.classList.remove('badge-queued');
+          badge.classList.add('badge-running');
+          badge.textContent = 'Running';
+        }
+      }
+
+      // Update child count
+      const countEl = artNode ? artNode.querySelector('.child-count') : null;
+      if (countEl) countEl.textContent = '4/5';
+
+      simulationStep++;
+    } else if (simulationStep === 1) {
+      // Complete Eval
+      const evalNode = document.querySelector('.node-children .child-node.active');
+      if (evalNode) {
+        evalNode.classList.remove('active');
+        evalNode.classList.add('completed');
+        const status = evalNode.querySelector('.child-status');
+        if (status) {
+          status.classList.remove('status-active');
+          status.classList.add('status-completed');
+        }
+        const badge = evalNode.querySelector('.child-badge');
+        if (badge) {
+          badge.classList.remove('badge-running');
+          badge.classList.add('badge-done');
+          badge.textContent = 'Done';
+        }
+      }
+
+      // Complete Artifacts parent
+      if (artNode) {
+        artNode.classList.remove('active', 'expanded');
+        artNode.classList.add('completed');
+        const status = artNode.querySelector('.status-icon');
+        if (status) {
+          status.classList.remove('status-active');
+          status.classList.add('status-completed');
+        }
+        const badge = artNode.querySelector('.node-badge');
+        if (badge) {
+          badge.classList.remove('badge-running');
+          badge.classList.add('badge-done');
+          badge.textContent = 'Done';
+        }
+        const countEl = artNode.querySelector('.child-count');
+        if (countEl) countEl.textContent = '5/5';
+        const timer = artNode.querySelector('.elapsed-timer');
+        if (timer) {
+          timer.style.animation = 'none';
+          timer.style.opacity = '0.5';
+        }
+      }
+
+      // Activate Paper Draft
+      const paperNode = document.querySelectorAll('.tree-node.pending')[0];
+      if (paperNode) {
+        paperNode.classList.remove('pending');
+        paperNode.classList.add('active');
+        const status = paperNode.querySelector('.status-icon');
+        if (status) {
+          status.classList.remove('status-pending');
+          status.classList.add('status-active');
+        }
+        const badge = paperNode.querySelector('.node-badge');
+        if (badge) {
+          badge.classList.remove('badge-queued');
+          badge.classList.add('badge-running');
+          badge.textContent = 'Running';
+        }
+      }
+
+      // Update footer
+      const activeCount = document.getElementById('active-count');
+      if (activeCount) activeCount.textContent = '1';
+      const footerCompleted = document.querySelector('.footer-stat .footer-stat-value');
+      if (footerCompleted) footerCompleted.textContent = '5';
+
+      simulationStep++;
+    }
+  });
+})();
+</script>
+
+</body>
+</html>

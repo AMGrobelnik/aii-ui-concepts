@@ -1,0 +1,1272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor - Simple View</title>
+<style>
+  /* ─── Reset & Base ─── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:          #0c0e14;
+    --surface:     #12151f;
+    --surface-2:   #181c28;
+    --border:      #1e2336;
+    --text:        #d4d8e8;
+    --text-dim:    #6b7394;
+    --text-bright: #f0f2fa;
+
+    /* Module palette */
+    --seed-color:      #34d399;
+    --seed-glow:       rgba(52, 211, 153, 0.45);
+    --hypo-color:      #a78bfa;
+    --hypo-glow:       rgba(167, 139, 250, 0.45);
+    --invention-color: #60a5fa;
+    --invention-glow:  rgba(96, 165, 250, 0.45);
+    --paper-color:     #6b7394;
+    --paper-glow:      rgba(107, 115, 148, 0.25);
+
+    --diamond-size: 32px;
+    --dot-size:     6px;
+    --dot-gap:      14px;
+    --chain-height: 80px;
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ─── Wrapper ─── */
+  .app {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 24px 32px;
+  }
+
+  /* ─── Header ─── */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 28px;
+  }
+
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .logo {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 14px;
+    color: #fff;
+    letter-spacing: -0.5px;
+  }
+
+  .header-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-bright);
+  }
+
+  .header-subtitle {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 1px;
+  }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .nav-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-dim);
+    font-size: 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+  }
+
+  .nav-btn:hover {
+    background: var(--surface-2);
+    color: var(--text);
+    border-color: #2a3050;
+  }
+
+  .nav-btn:active {
+    transform: scale(0.94);
+  }
+
+  .nav-hint {
+    font-size: 11px;
+    color: var(--text-dim);
+    opacity: 0.5;
+  }
+
+  /* ─── Diamond Chain Strip ─── */
+  .chain-strip {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px 36px;
+    margin-bottom: 24px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .chain-strip::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg,
+      transparent 5%,
+      var(--seed-color) 15%,
+      var(--hypo-color) 40%,
+      var(--invention-color) 65%,
+      transparent 90%
+    );
+    opacity: 0.25;
+  }
+
+  .chain-container {
+    display: flex;
+    align-items: center;
+    height: var(--chain-height);
+    position: relative;
+  }
+
+  /* ─── Diamond Node ─── */
+  .diamond {
+    position: relative;
+    flex-shrink: 0;
+    width: var(--diamond-size);
+    height: var(--diamond-size);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 2;
+  }
+
+  .diamond-shape {
+    width: var(--diamond-size);
+    height: var(--diamond-size);
+    transform: rotate(45deg);
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    position: relative;
+  }
+
+  .diamond-shape .icon {
+    transform: rotate(-45deg);
+    font-size: 12px;
+    font-weight: 700;
+    z-index: 2;
+  }
+
+  /* Glow halo behind diamond */
+  .diamond-glow {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    filter: blur(14px);
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  /* Module-specific diamond styles */
+  .diamond.seed .diamond-shape {
+    background: var(--seed-color);
+    box-shadow: 0 0 16px var(--seed-glow), inset 0 1px 0 rgba(255,255,255,0.2);
+  }
+  .diamond.seed .diamond-glow {
+    background: var(--seed-glow);
+  }
+
+  .diamond.hypo .diamond-shape {
+    background: var(--hypo-color);
+    box-shadow: 0 0 16px var(--hypo-glow), inset 0 1px 0 rgba(255,255,255,0.2);
+  }
+  .diamond.hypo .diamond-glow {
+    background: var(--hypo-glow);
+  }
+
+  .diamond.invention .diamond-shape {
+    background: var(--invention-color);
+    box-shadow: 0 0 18px var(--invention-glow), inset 0 1px 0 rgba(255,255,255,0.2);
+    animation: diamond-active-pulse 2.5s ease-in-out infinite;
+  }
+  .diamond.invention .diamond-glow {
+    background: var(--invention-glow);
+    animation: glow-pulse 2.5s ease-in-out infinite;
+  }
+
+  .diamond.paper .diamond-shape {
+    background: transparent;
+    border: 2px solid var(--paper-color);
+    box-shadow: 0 0 8px var(--paper-glow);
+  }
+  .diamond.paper .diamond-glow {
+    background: var(--paper-glow);
+    opacity: 0.4;
+  }
+
+  /* Diamond label below */
+  .diamond-label {
+    position: absolute;
+    bottom: -22px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    white-space: nowrap;
+    opacity: 0.7;
+  }
+
+  .diamond.seed .diamond-label       { color: var(--seed-color); }
+  .diamond.hypo .diamond-label       { color: var(--hypo-color); }
+  .diamond.invention .diamond-label  { color: var(--invention-color); }
+  .diamond.paper .diamond-label      { color: var(--paper-color); }
+
+  /* ─── Dot Chain (between diamonds) ─── */
+  .dot-chain {
+    display: flex;
+    align-items: center;
+    gap: var(--dot-gap);
+    padding: 0 16px;
+    flex-shrink: 0;
+  }
+
+  .chain-dot {
+    width: var(--dot-size);
+    height: var(--dot-size);
+    border-radius: 50%;
+    transition: all 0.3s ease;
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  /* Completed dot — filled */
+  .chain-dot.completed {
+    opacity: 0.85;
+  }
+
+  /* Pending dot — hollow ring */
+  .chain-dot.pending {
+    background: transparent !important;
+    opacity: 0.35;
+  }
+
+  /* Active dot — pulses */
+  .chain-dot.active {
+    animation: dot-pulse 1.8s ease-in-out infinite;
+  }
+
+  .chain-dot.active::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    filter: blur(6px);
+    animation: dot-glow-ring 1.8s ease-in-out infinite;
+  }
+
+  /* Per-module dot colors */
+  .dot-chain.seed .chain-dot.completed    { background: var(--seed-color); }
+  .dot-chain.seed .chain-dot.pending      { box-shadow: inset 0 0 0 1.5px var(--seed-color); }
+
+  .dot-chain.hypo .chain-dot.completed    { background: var(--hypo-color); }
+  .dot-chain.hypo .chain-dot.pending      { box-shadow: inset 0 0 0 1.5px var(--hypo-color); }
+
+  .dot-chain.invention .chain-dot.completed { background: var(--invention-color); }
+  .dot-chain.invention .chain-dot.pending   { box-shadow: inset 0 0 0 1.5px var(--invention-color); }
+  .dot-chain.invention .chain-dot.active    { background: var(--invention-color); }
+  .dot-chain.invention .chain-dot.active::after { background: var(--invention-glow); }
+
+  .dot-chain.paper .chain-dot.completed   { background: var(--paper-color); }
+  .dot-chain.paper .chain-dot.pending     { box-shadow: inset 0 0 0 1.5px var(--paper-color); }
+
+  /* Transition dots (between modules) — gradient */
+  .dot-chain.transition .chain-dot {
+    opacity: 0.3;
+  }
+
+  /* ─── Animations ─── */
+  @keyframes diamond-active-pulse {
+    0%, 100% { box-shadow: 0 0 16px var(--invention-glow), inset 0 1px 0 rgba(255,255,255,0.2); }
+    50%      { box-shadow: 0 0 28px var(--invention-glow), 0 0 48px rgba(96,165,250,0.15), inset 0 1px 0 rgba(255,255,255,0.2); }
+  }
+
+  @keyframes glow-pulse {
+    0%, 100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+    50%      { opacity: 0.6; transform: translate(-50%, -50%) scale(1.3); }
+  }
+
+  @keyframes dot-pulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50%      { transform: scale(1.6); opacity: 0.7; }
+  }
+
+  @keyframes dot-glow-ring {
+    0%, 100% { opacity: 0.5; transform: translate(-50%, -50%) scale(0.8); }
+    50%      { opacity: 0.9; transform: translate(-50%, -50%) scale(1.2); }
+  }
+
+  /* ─── Content Area ─── */
+  .content-area {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 20px;
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+
+  .panel-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .panel-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-bright);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .panel-title .badge {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 6px;
+    letter-spacing: 0.3px;
+  }
+
+  .badge.active {
+    background: rgba(96, 165, 250, 0.15);
+    color: var(--invention-color);
+    border: 1px solid rgba(96, 165, 250, 0.25);
+  }
+
+  .badge.done {
+    background: rgba(52, 211, 153, 0.12);
+    color: var(--seed-color);
+    border: 1px solid rgba(52, 211, 153, 0.2);
+  }
+
+  .panel-body {
+    padding: 20px;
+  }
+
+  /* ─── Main Panel — Active Step ─── */
+  .step-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    margin-bottom: 20px;
+  }
+
+  .step-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+    background: rgba(96, 165, 250, 0.12);
+    border: 1px solid rgba(96, 165, 250, 0.2);
+  }
+
+  .step-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-bright);
+    margin-bottom: 4px;
+  }
+
+  .step-desc {
+    font-size: 12px;
+    color: var(--text-dim);
+    line-height: 1.5;
+  }
+
+  /* Progress bar */
+  .progress-section {
+    margin-bottom: 22px;
+  }
+
+  .progress-bar-track {
+    height: 4px;
+    background: var(--surface-2);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 8px;
+  }
+
+  .progress-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    background: linear-gradient(90deg, var(--invention-color) 0%, #818cf8 100%);
+    transition: width 0.6s ease;
+    position: relative;
+  }
+
+  .progress-bar-fill::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: -2px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--invention-color);
+    box-shadow: 0 0 10px var(--invention-glow);
+  }
+
+  .progress-meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  /* Log feed */
+  .log-feed {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: 260px;
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+
+  .log-feed::-webkit-scrollbar {
+    width: 4px;
+  }
+  .log-feed::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 4px;
+  }
+
+  .log-entry {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 8px 12px;
+    border-radius: 8px;
+    background: var(--surface-2);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+
+  .log-time {
+    font-size: 10px;
+    color: var(--text-dim);
+    flex-shrink: 0;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    margin-top: 1px;
+  }
+
+  .log-msg {
+    color: var(--text);
+  }
+
+  .log-msg .highlight {
+    color: var(--invention-color);
+    font-weight: 500;
+  }
+
+  /* ─── Side Panel — Module Summary ─── */
+  .module-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .module-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: var(--surface-2);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+  }
+
+  .module-item:hover {
+    border-color: var(--border);
+  }
+
+  .module-item.active {
+    border-color: rgba(96, 165, 250, 0.3);
+    background: rgba(96, 165, 250, 0.06);
+  }
+
+  .module-diamond {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .module-diamond-inner {
+    width: 16px;
+    height: 16px;
+    transform: rotate(45deg);
+    border-radius: 2px;
+  }
+
+  .module-diamond-inner.seed       { background: var(--seed-color); }
+  .module-diamond-inner.hypo       { background: var(--hypo-color); }
+  .module-diamond-inner.invention  { background: var(--invention-color); }
+  .module-diamond-inner.paper      { background: transparent; border: 1.5px solid var(--paper-color); }
+
+  .module-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .module-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-bright);
+    margin-bottom: 2px;
+  }
+
+  .module-sub {
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+
+  .module-status {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 6px;
+    flex-shrink: 0;
+  }
+
+  .module-status.done {
+    background: rgba(52, 211, 153, 0.12);
+    color: var(--seed-color);
+  }
+
+  .module-status.running {
+    background: rgba(96, 165, 250, 0.12);
+    color: var(--invention-color);
+    animation: status-blink 2s ease-in-out infinite;
+  }
+
+  .module-status.pending {
+    background: rgba(107, 115, 148, 0.12);
+    color: var(--paper-color);
+  }
+
+  @keyframes status-blink {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.5; }
+  }
+
+  /* Iteration badges */
+  .iter-strip {
+    display: flex;
+    gap: 4px;
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--border);
+  }
+
+  .iter-badge {
+    padding: 4px 10px;
+    font-size: 10px;
+    font-weight: 600;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+
+  .iter-badge.current {
+    background: rgba(96, 165, 250, 0.1);
+    border-color: rgba(96, 165, 250, 0.3);
+    color: var(--invention-color);
+  }
+
+  .iter-badge:hover {
+    border-color: #2a3050;
+  }
+
+  /* ─── Cost footer ─── */
+  .cost-footer {
+    margin-top: 20px;
+    padding: 14px 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .cost-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+
+  .cost-value {
+    color: var(--text-bright);
+    font-weight: 600;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+  }
+
+  .cost-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+  }
+
+  /* ─── Active Module Indicator (top-right of chain strip) ─── */
+  .chain-indicator {
+    position: absolute;
+    top: 12px;
+    right: 16px;
+    font-size: 10px;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .chain-indicator .pulse-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--invention-color);
+    animation: dot-pulse 1.8s ease-in-out infinite;
+  }
+
+  /* ─── Keyboard hints ─── */
+  .kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 5px;
+    font-size: 10px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    color: var(--text-dim);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ═══ Header ═══ -->
+  <div class="header">
+    <div class="header-left">
+      <div class="logo">Ai</div>
+      <div>
+        <div class="header-title">AI Inventor</div>
+        <div class="header-subtitle">Run <span style="font-family:monospace;color:var(--text);">r-7a2f</span> &middot; Simple View</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <span class="nav-hint"><kbd class="kbd">&larr;</kbd></span>
+      <button class="nav-btn" id="nav-prev" title="Previous module">&larr;</button>
+      <button class="nav-btn" id="nav-next" title="Next module">&rarr;</button>
+      <span class="nav-hint"><kbd class="kbd">&rarr;</kbd></span>
+    </div>
+  </div>
+
+  <!-- ═══ Diamond Chain Strip ═══ -->
+  <div class="chain-strip">
+    <div class="chain-indicator">
+      <span class="pulse-dot"></span>
+      <span>Invention &middot; Step 5 of 12</span>
+    </div>
+    <div class="chain-container" id="chain">
+      <!-- JS-rendered -->
+    </div>
+  </div>
+
+  <!-- ═══ Content Area ═══ -->
+  <div class="content-area">
+
+    <!-- Main panel -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">
+          <span id="active-module-label">Generate Plan</span>
+          <span class="badge active" id="active-badge">RUNNING</span>
+        </div>
+        <span style="font-size:11px;color:var(--text-dim);" id="active-step-counter">Step 5 / 12</span>
+      </div>
+      <div class="panel-body">
+        <div class="step-header">
+          <div class="step-icon" id="step-icon-box">&#9830;</div>
+          <div>
+            <div class="step-name" id="step-name">Generate Experiment Plan</div>
+            <div class="step-desc" id="step-desc">
+              Producing a structured research plan with variables, controls, and predicted outcomes for the hypothesis under test.
+            </div>
+          </div>
+        </div>
+
+        <div class="progress-section">
+          <div class="progress-bar-track">
+            <div class="progress-bar-fill" id="progress-fill" style="width: 38%;"></div>
+          </div>
+          <div class="progress-meta">
+            <span id="progress-label">Generating plan structure...</span>
+            <span id="progress-pct">38%</span>
+          </div>
+        </div>
+
+        <div class="log-feed" id="log-feed">
+          <div class="log-entry">
+            <span class="log-time">14:32:01</span>
+            <span class="log-msg">Hypothesis <span class="highlight">H-3</span> selected for plan generation</span>
+          </div>
+          <div class="log-entry">
+            <span class="log-time">14:32:04</span>
+            <span class="log-msg">Extracting <span class="highlight">independent variables</span> from hypothesis</span>
+          </div>
+          <div class="log-entry">
+            <span class="log-time">14:32:09</span>
+            <span class="log-msg">Identified <span class="highlight">3 control parameters</span></span>
+          </div>
+          <div class="log-entry">
+            <span class="log-time">14:32:15</span>
+            <span class="log-msg">Generating measurement protocol...</span>
+          </div>
+          <div class="log-entry">
+            <span class="log-time">14:32:22</span>
+            <span class="log-msg">Plan outline ready &mdash; <span class="highlight">refining details</span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Side panel -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">Modules</div>
+        <span style="font-size:11px;color:var(--text-dim);">2 / 4 done</span>
+      </div>
+      <div class="panel-body">
+        <div class="module-list" id="module-list">
+          <!-- JS-rendered -->
+        </div>
+        <div class="iter-strip">
+          <div class="iter-badge">Iter 1</div>
+          <div class="iter-badge current">Iter 2</div>
+          <div class="iter-badge">Iter 3</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ═══ Cost Footer ═══ -->
+  <div class="cost-footer">
+    <div class="cost-item">
+      <span class="cost-dot" style="background:var(--invention-color);"></span>
+      <span>Tokens</span>
+      <span class="cost-value">1.24M</span>
+    </div>
+    <div class="cost-item">
+      <span class="cost-dot" style="background:var(--hypo-color);"></span>
+      <span>API Calls</span>
+      <span class="cost-value">47</span>
+    </div>
+    <div class="cost-item">
+      <span class="cost-dot" style="background:var(--seed-color);"></span>
+      <span>Cost</span>
+      <span class="cost-value">$3.82</span>
+    </div>
+    <div class="cost-item">
+      <span class="cost-dot" style="background:#f59e0b;"></span>
+      <span>Elapsed</span>
+      <span class="cost-value">8m 22s</span>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════
+//  Data model
+// ═══════════════════════════════════════════════════
+
+const MODULES = [
+  {
+    id: 'seed',
+    label: 'Seed',
+    color: 'var(--seed-color)',
+    glow: 'var(--seed-glow)',
+    status: 'done',        // done | active | pending
+    dots: 4,               // sub-step count between this diamond and the next
+    completedDots: 4,
+    activeDot: -1,         // -1 = none active
+    subSteps: ['Load KG', 'Fetch papers', 'Extract claims', 'Build seeds'],
+    activeStepName: '',
+    activeStepDesc: '',
+    moduleName: 'Seed Hypotheses',
+    moduleSub: '4 steps completed'
+  },
+  {
+    id: 'hypo',
+    label: 'Hypo',
+    color: 'var(--hypo-color)',
+    glow: 'var(--hypo-glow)',
+    status: 'done',
+    dots: 7,
+    completedDots: 7,
+    activeDot: -1,
+    subSteps: ['Gen hypo', 'Review #1', 'Refine', 'Review #2', 'Score', 'Rank', 'Select top-K'],
+    activeStepName: '',
+    activeStepDesc: '',
+    moduleName: 'Hypothesis Loop',
+    moduleSub: '7 steps completed'
+  },
+  {
+    id: 'invention',
+    label: 'Invention',
+    color: 'var(--invention-color)',
+    glow: 'var(--invention-glow)',
+    status: 'active',
+    dots: 12,
+    completedDots: 4,
+    activeDot: 4,          // 0-indexed: the 5th dot
+    subSteps: [
+      'Gen strategy', 'Review strategy', 'Gen plan', 'Review plan',
+      'Gen plan (detail)', 'Gen paper text', 'Review paper', 'Revise paper',
+      'Final review', 'Score', 'Rank papers', 'Select best'
+    ],
+    activeStepName: 'Generate Experiment Plan',
+    activeStepDesc: 'Producing a structured research plan with variables, controls, and predicted outcomes for the hypothesis under test.',
+    moduleName: 'Invention Loop',
+    moduleSub: 'Step 5 of 12'
+  },
+  {
+    id: 'paper',
+    label: 'Paper',
+    color: 'var(--paper-color)',
+    glow: 'var(--paper-glow)',
+    status: 'pending',
+    dots: 6,
+    completedDots: 0,
+    activeDot: -1,
+    subSteps: ['Gen artifacts', 'Gen demos', 'Gen viz', 'Gen full paper', 'Review', 'Export'],
+    activeStepName: '',
+    activeStepDesc: '',
+    moduleName: 'Paper Repo',
+    moduleSub: '6 steps queued'
+  }
+];
+
+let activeModuleIndex = 2; // Invention is active
+
+// ═══════════════════════════════════════════════════
+//  Render the diamond chain
+// ═══════════════════════════════════════════════════
+
+function renderChain() {
+  const container = document.getElementById('chain');
+  container.innerHTML = '';
+
+  MODULES.forEach((mod, mi) => {
+    // Diamond node
+    const diamond = document.createElement('div');
+    diamond.className = `diamond ${mod.id}`;
+    diamond.innerHTML = `
+      <div class="diamond-glow"></div>
+      <div class="diamond-shape">
+        <span class="icon">${
+          mod.status === 'done' ? '&#10003;' :
+          mod.status === 'active' ? '&#9654;' : '&#9675;'
+        }</span>
+      </div>
+      <span class="diamond-label">${mod.label}</span>
+    `;
+    diamond.style.cursor = 'pointer';
+    diamond.addEventListener('click', () => navigateTo(mi));
+    container.appendChild(diamond);
+
+    // Dot chain after diamond (except last)
+    if (mi < MODULES.length - 1) {
+      const chain = document.createElement('div');
+      chain.className = `dot-chain ${mod.id}`;
+
+      // The dots belong to the current module
+      for (let di = 0; di < mod.dots; di++) {
+        const dot = document.createElement('div');
+        dot.className = 'chain-dot';
+
+        if (di < mod.completedDots) {
+          dot.classList.add('completed');
+        } else if (di === mod.activeDot) {
+          dot.classList.add('active');
+        } else {
+          dot.classList.add('pending');
+        }
+
+        // Tooltip
+        if (mod.subSteps[di]) {
+          dot.title = mod.subSteps[di];
+        }
+
+        chain.appendChild(dot);
+      }
+
+      container.appendChild(chain);
+    } else {
+      // Last module also gets trailing dots (its own sub-steps)
+      const chain = document.createElement('div');
+      chain.className = `dot-chain ${mod.id}`;
+
+      for (let di = 0; di < mod.dots; di++) {
+        const dot = document.createElement('div');
+        dot.className = 'chain-dot';
+
+        if (di < mod.completedDots) {
+          dot.classList.add('completed');
+        } else if (di === mod.activeDot) {
+          dot.classList.add('active');
+        } else {
+          dot.classList.add('pending');
+        }
+
+        if (mod.subSteps[di]) {
+          dot.title = mod.subSteps[di];
+        }
+
+        chain.appendChild(dot);
+      }
+
+      container.appendChild(chain);
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════
+//  Render module list (side panel)
+// ═══════════════════════════════════════════════════
+
+function renderModuleList() {
+  const list = document.getElementById('module-list');
+  list.innerHTML = '';
+
+  MODULES.forEach((mod, mi) => {
+    const item = document.createElement('div');
+    item.className = 'module-item' + (mi === activeModuleIndex ? ' active' : '');
+    item.innerHTML = `
+      <div class="module-diamond">
+        <div class="module-diamond-inner ${mod.id}"></div>
+      </div>
+      <div class="module-info">
+        <div class="module-name">${mod.moduleName}</div>
+        <div class="module-sub">${mod.moduleSub}</div>
+      </div>
+      <div class="module-status ${mod.status === 'done' ? 'done' : mod.status === 'active' ? 'running' : 'pending'}">
+        ${mod.status === 'done' ? 'DONE' : mod.status === 'active' ? 'RUNNING' : 'QUEUED'}
+      </div>
+    `;
+    item.style.cursor = 'pointer';
+    item.addEventListener('click', () => navigateTo(mi));
+    list.appendChild(item);
+  });
+}
+
+// ═══════════════════════════════════════════════════
+//  Content descriptions per module
+// ═══════════════════════════════════════════════════
+
+const MODULE_CONTENT = {
+  seed: {
+    stepName: 'Seed Hypotheses',
+    stepDesc: 'Knowledge graph loaded, papers fetched, claims extracted. All seed hypotheses generated successfully.',
+    badge: 'DONE',
+    badgeClass: 'done',
+    icon: '&#10003;',
+    iconBg: 'rgba(52,211,153,0.12)',
+    iconBorder: 'rgba(52,211,153,0.2)',
+    progressPct: 100,
+    progressLabel: 'Completed',
+    counter: '4 / 4',
+    logs: [
+      { time: '14:28:01', msg: 'Knowledge graph loaded &mdash; <span class="highlight">342 nodes</span>' },
+      { time: '14:28:14', msg: 'Fetched <span class="highlight">24 papers</span> from Semantic Scholar' },
+      { time: '14:28:30', msg: 'Extracted <span class="highlight">67 claims</span>' },
+      { time: '14:28:45', msg: 'Generated <span class="highlight">12 seed hypotheses</span>' }
+    ]
+  },
+  hypo: {
+    stepName: 'Hypothesis Loop',
+    stepDesc: 'Generated, reviewed, refined, and ranked hypotheses. Top-K selection complete.',
+    badge: 'DONE',
+    badgeClass: 'done',
+    icon: '&#10003;',
+    iconBg: 'rgba(167,139,250,0.12)',
+    iconBorder: 'rgba(167,139,250,0.2)',
+    progressPct: 100,
+    progressLabel: 'Completed',
+    counter: '7 / 7',
+    logs: [
+      { time: '14:29:02', msg: 'Generated <span class="highlight">8 hypotheses</span> from seeds' },
+      { time: '14:29:18', msg: 'Review pass #1 &mdash; <span class="highlight">6 viable</span>' },
+      { time: '14:29:34', msg: 'Refined and re-reviewed &mdash; <span class="highlight">5 remain</span>' },
+      { time: '14:29:50', msg: 'Scored and ranked &mdash; top-3 selected' },
+      { time: '14:30:02', msg: '<span class="highlight">H-3</span> chosen for invention loop' }
+    ]
+  },
+  invention: {
+    stepName: 'Generate Experiment Plan',
+    stepDesc: 'Producing a structured research plan with variables, controls, and predicted outcomes for the hypothesis under test.',
+    badge: 'RUNNING',
+    badgeClass: 'active',
+    icon: '&#9830;',
+    iconBg: 'rgba(96,165,250,0.12)',
+    iconBorder: 'rgba(96,165,250,0.2)',
+    progressPct: 38,
+    progressLabel: 'Generating plan structure...',
+    counter: 'Step 5 / 12',
+    logs: [
+      { time: '14:32:01', msg: 'Hypothesis <span class="highlight">H-3</span> selected for plan generation' },
+      { time: '14:32:04', msg: 'Extracting <span class="highlight">independent variables</span> from hypothesis' },
+      { time: '14:32:09', msg: 'Identified <span class="highlight">3 control parameters</span>' },
+      { time: '14:32:15', msg: 'Generating measurement protocol...' },
+      { time: '14:32:22', msg: 'Plan outline ready &mdash; <span class="highlight">refining details</span>' }
+    ]
+  },
+  paper: {
+    stepName: 'Paper Repository',
+    stepDesc: 'Waiting for the invention loop to complete before generating artifacts, visualizations, and the full paper.',
+    badge: 'QUEUED',
+    badgeClass: 'active',
+    icon: '&#9675;',
+    iconBg: 'rgba(107,115,148,0.08)',
+    iconBorder: 'rgba(107,115,148,0.15)',
+    progressPct: 0,
+    progressLabel: 'Waiting...',
+    counter: '0 / 6',
+    logs: [
+      { time: '&mdash;', msg: 'Pending &mdash; waiting for upstream modules' }
+    ]
+  }
+};
+
+// ═══════════════════════════════════════════════════
+//  Navigate to a module
+// ═══════════════════════════════════════════════════
+
+function navigateTo(index) {
+  if (index < 0 || index >= MODULES.length) return;
+  activeModuleIndex = index;
+
+  const mod = MODULES[index];
+  const content = MODULE_CONTENT[mod.id];
+
+  // Update main panel
+  document.getElementById('active-module-label').textContent = content.stepName;
+  const badge = document.getElementById('active-badge');
+  badge.textContent = content.badge;
+  badge.className = 'badge ' + content.badgeClass;
+
+  document.getElementById('active-step-counter').textContent = content.counter;
+  document.getElementById('step-name').textContent = content.stepName;
+  document.getElementById('step-desc').textContent = content.stepDesc;
+  document.getElementById('step-icon-box').innerHTML = content.icon;
+  document.getElementById('step-icon-box').style.background = content.iconBg;
+  document.getElementById('step-icon-box').style.borderColor = content.iconBorder;
+
+  document.getElementById('progress-fill').style.width = content.progressPct + '%';
+  document.getElementById('progress-label').textContent = content.progressLabel;
+  document.getElementById('progress-pct').textContent = content.progressPct + '%';
+
+  // Update logs
+  const logFeed = document.getElementById('log-feed');
+  logFeed.innerHTML = content.logs.map(l =>
+    `<div class="log-entry"><span class="log-time">${l.time}</span><span class="log-msg">${l.msg}</span></div>`
+  ).join('');
+
+  // Update chain indicator
+  const indicator = document.querySelector('.chain-indicator');
+  if (mod.status === 'active') {
+    indicator.innerHTML = `<span class="pulse-dot"></span><span>${mod.label} &middot; ${content.counter}</span>`;
+  } else if (mod.status === 'done') {
+    indicator.innerHTML = `<span style="color:var(--seed-color);">&#10003;</span><span>${mod.label} &middot; Complete</span>`;
+  } else {
+    indicator.innerHTML = `<span style="color:var(--paper-color);">&#9675;</span><span>${mod.label} &middot; Queued</span>`;
+  }
+
+  // Re-render module list
+  renderModuleList();
+}
+
+// ═══════════════════════════════════════════════════
+//  Keyboard navigation
+// ═══════════════════════════════════════════════════
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowLeft') {
+    e.preventDefault();
+    navigateTo(activeModuleIndex - 1);
+  } else if (e.key === 'ArrowRight') {
+    e.preventDefault();
+    navigateTo(activeModuleIndex + 1);
+  }
+});
+
+document.getElementById('nav-prev').addEventListener('click', () => navigateTo(activeModuleIndex - 1));
+document.getElementById('nav-next').addEventListener('click', () => navigateTo(activeModuleIndex + 1));
+
+// ═══════════════════════════════════════════════════
+//  Simulated progress ticking (invention module)
+// ═══════════════════════════════════════════════════
+
+let simProgress = 38;
+let simDotIndex = 4;
+const SIM_LOG_MESSAGES = [
+  'Refining experimental variables...',
+  'Defining <span class="highlight">success criteria</span>...',
+  'Cross-referencing with literature...',
+  'Adding <span class="highlight">ablation schedule</span>...',
+  'Estimating compute requirements...',
+  'Plan section 3/5 drafted...',
+  'Incorporating reviewer feedback...',
+  'Plan section 4/5 drafted...',
+  'Running consistency checks...',
+  'Finalizing plan structure...'
+];
+let simLogIdx = 0;
+let simTimeBase = 14 * 60 + 32; // 14:32 in minutes
+
+function tickProgress() {
+  if (simProgress >= 95) return;
+
+  simProgress += Math.floor(Math.random() * 3) + 1;
+  if (simProgress > 95) simProgress = 95;
+
+  // Advance active dot occasionally
+  const newDotIdx = Math.min(Math.floor(simProgress / 8.3), 11);
+  if (newDotIdx > simDotIndex) {
+    MODULES[2].completedDots = newDotIdx;
+    MODULES[2].activeDot = newDotIdx;
+    simDotIndex = newDotIdx;
+    renderChain();
+  }
+
+  // Update main panel only if invention is active view
+  if (activeModuleIndex === 2) {
+    document.getElementById('progress-fill').style.width = simProgress + '%';
+    document.getElementById('progress-pct').textContent = simProgress + '%';
+
+    // Append a log
+    if (simLogIdx < SIM_LOG_MESSAGES.length) {
+      simTimeBase += Math.floor(Math.random() * 8) + 3;
+      const h = Math.floor(simTimeBase / 60);
+      const m = simTimeBase % 60;
+      const s = Math.floor(Math.random() * 59);
+      const timeStr = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+
+      const logFeed = document.getElementById('log-feed');
+      const entry = document.createElement('div');
+      entry.className = 'log-entry';
+      entry.innerHTML = `<span class="log-time">${timeStr}</span><span class="log-msg">${SIM_LOG_MESSAGES[simLogIdx]}</span>`;
+      logFeed.appendChild(entry);
+      logFeed.scrollTop = logFeed.scrollHeight;
+      simLogIdx++;
+    }
+
+    // Update progress label
+    if (simProgress < 50) {
+      document.getElementById('progress-label').textContent = 'Generating plan structure...';
+    } else if (simProgress < 75) {
+      document.getElementById('progress-label').textContent = 'Drafting plan sections...';
+    } else {
+      document.getElementById('progress-label').textContent = 'Finalizing plan...';
+    }
+
+    // Update counter
+    document.getElementById('active-step-counter').textContent = `Step ${Math.min(newDotIdx + 1, 12)} / 12`;
+    MODULE_CONTENT.invention.counter = `Step ${Math.min(newDotIdx + 1, 12)} / 12`;
+    MODULES[2].moduleSub = `Step ${Math.min(newDotIdx + 1, 12)} of 12`;
+    renderModuleList();
+  }
+}
+
+setInterval(tickProgress, 3500);
+
+// ═══════════════════════════════════════════════════
+//  Initial render
+// ═══════════════════════════════════════════════════
+
+renderChain();
+renderModuleList();
+
+</script>
+
+</body>
+</html>

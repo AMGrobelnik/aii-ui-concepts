@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Card Deck View</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: #0a0a0f;
+    color: #e0e0e8;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(ellipse 60% 50% at 50% 40%, rgba(80, 70, 140, 0.08) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ---------- TOP BAR ---------- */
+  .top-bar {
+    position: sticky; top: 0; z-index: 100;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 28px;
+    background: rgba(10, 10, 15, 0.85);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+  .top-bar .brand {
+    display: flex; align-items: center; gap: 10px;
+    font-weight: 700; font-size: 15px; letter-spacing: -0.3px;
+  }
+  .top-bar .brand .icon {
+    width: 28px; height: 28px; border-radius: 7px;
+    background: linear-gradient(135deg, #6c5ce7, #a855f7);
+    display: grid; place-items: center; font-size: 14px;
+  }
+  .top-bar .run-name {
+    font-size: 13px; color: #8888a0;
+    background: rgba(255,255,255,0.04); padding: 5px 12px; border-radius: 6px;
+    font-family: 'SF Mono', 'Fira Code', monospace; letter-spacing: -0.2px;
+  }
+  .top-bar .meta { display: flex; gap: 18px; font-size: 13px; color: #8888a0; }
+  .top-bar .meta span { display: flex; align-items: center; gap: 5px; }
+
+  /* ---------- MINI NAV (shown when fanned) ---------- */
+  .mini-nav {
+    display: none;
+    padding: 10px 28px;
+    gap: 8px;
+    background: rgba(10, 10, 15, 0.7);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    z-index: 90;
+    position: sticky; top: 57px;
+  }
+  .mini-nav.visible { display: flex; }
+  .mini-nav-chip {
+    padding: 6px 14px; border-radius: 8px; font-size: 12px; font-weight: 500;
+    cursor: pointer; transition: all 0.25s;
+    border: 1px solid rgba(255,255,255,0.08);
+    background: rgba(255,255,255,0.03);
+    color: #8888a0;
+  }
+  .mini-nav-chip:hover { background: rgba(255,255,255,0.06); color: #c0c0d0; }
+  .mini-nav-chip.active {
+    border-color: rgba(255,255,255,0.2);
+    background: rgba(255,255,255,0.08);
+    color: #e0e0f0;
+  }
+
+  /* ---------- MAIN AREA ---------- */
+  .main-area {
+    position: relative; z-index: 1;
+    display: flex; align-items: center; justify-content: center;
+    min-height: calc(100vh - 130px);
+    padding: 40px 28px;
+    perspective: 1200px;
+  }
+
+  /* ---------- STACKS VIEW ---------- */
+  .stacks-container {
+    display: flex; gap: 60px; align-items: flex-end;
+    transition: opacity 0.35s, transform 0.35s;
+  }
+  .stacks-container.hidden {
+    opacity: 0; transform: translateY(-20px) scale(0.96);
+    pointer-events: none; position: absolute;
+  }
+
+  /* ---------- SINGLE STACK ---------- */
+  .card-stack {
+    position: relative; cursor: pointer;
+    width: 200px; height: 280px;
+    transition: transform 0.3s;
+  }
+  .card-stack:hover { transform: translateY(-8px); }
+  .card-stack:hover .stack-card:first-child { box-shadow: 0 20px 50px rgba(0,0,0,0.6); }
+
+  .stack-card {
+    position: absolute; width: 200px; height: 280px;
+    border-radius: 12px; transition: all 0.35s;
+    backface-visibility: hidden;
+  }
+  .stack-card.bg-card {
+    background: rgba(30, 30, 40, 0.7);
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+  .stack-card.top-card {
+    display: flex; flex-direction: column; justify-content: space-between;
+    padding: 24px 20px;
+    border: 1px solid rgba(255,255,255,0.1);
+    z-index: 10;
+  }
+  .stack-card.top-card .card-label {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 1px; opacity: 0.7;
+  }
+  .stack-card.top-card .card-title {
+    font-size: 18px; font-weight: 700; line-height: 1.25;
+  }
+  .stack-card.top-card .card-summary {
+    font-size: 12px; opacity: 0.65; line-height: 1.5;
+  }
+  .stack-card.top-card .card-bottom {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 11px; opacity: 0.5;
+  }
+  .stack-card.top-card .status-dot {
+    width: 8px; height: 8px; border-radius: 50%; display: inline-block;
+  }
+
+  /* Module color themes */
+  .stack-seed .top-card {
+    background: linear-gradient(145deg, #1a3a2a, #0d2618);
+    box-shadow: 0 12px 40px rgba(16, 185, 129, 0.12);
+  }
+  .stack-seed .status-dot { background: #10b981; }
+
+  .stack-hypo .top-card {
+    background: linear-gradient(145deg, #2a1a3a, #1a0d2e);
+    box-shadow: 0 12px 40px rgba(168, 85, 247, 0.12);
+  }
+  .stack-hypo .status-dot { background: #a855f7; }
+
+  .stack-invention .top-card {
+    background: linear-gradient(145deg, #1a2a3e, #0d1a2e);
+    box-shadow: 0 12px 40px rgba(59, 130, 246, 0.15);
+  }
+  .stack-invention .status-dot { background: #3b82f6; }
+  .stack-invention .top-card {
+    animation: pulse-blue 3s ease-in-out infinite;
+  }
+  @keyframes pulse-blue {
+    0%, 100% { box-shadow: 0 12px 40px rgba(59, 130, 246, 0.15); }
+    50% { box-shadow: 0 12px 55px rgba(59, 130, 246, 0.28); }
+  }
+
+  .stack-paper .top-card {
+    background: linear-gradient(145deg, #2e2a1a, #221a0d);
+    box-shadow: 0 12px 40px rgba(245, 158, 11, 0.08);
+    opacity: 0.55;
+  }
+  .stack-paper .status-dot { background: #f59e0b; opacity: 0.5; }
+  .stack-paper .bg-card { opacity: 0.4; }
+
+  /* Stack depth label */
+  .stack-depth {
+    position: absolute; bottom: -28px; left: 50%;
+    transform: translateX(-50%); font-size: 11px;
+    color: #555; white-space: nowrap;
+  }
+
+  /* ---------- FANNED VIEW ---------- */
+  .fanned-container {
+    display: none; flex-direction: column; gap: 32px;
+    width: 100%; max-width: 1100px;
+    animation: fadeUp 0.35s ease;
+  }
+  .fanned-container.visible { display: flex; }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+
+  .fan-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 4px;
+  }
+  .fan-header h2 { font-size: 22px; font-weight: 700; }
+  .collapse-btn {
+    padding: 8px 18px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.04); color: #aaa; font-size: 13px;
+    cursor: pointer; transition: all 0.2s; font-family: inherit;
+  }
+  .collapse-btn:hover { background: rgba(255,255,255,0.08); color: #ddd; }
+
+  .iteration-row { margin-bottom: 8px; }
+  .iteration-label {
+    font-size: 12px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.8px; color: #666; margin-bottom: 10px;
+    padding-left: 2px;
+  }
+  .iteration-cards {
+    display: flex; flex-wrap: wrap; gap: 14px;
+  }
+
+  /* ---------- FLIPPABLE CARD ---------- */
+  .flip-card {
+    width: 158px; height: 220px;
+    perspective: 1000px; cursor: pointer;
+  }
+  .flip-card.large { width: 200px; height: 280px; }
+
+  .flip-inner {
+    position: relative; width: 100%; height: 100%;
+    transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    transform-style: preserve-3d;
+  }
+  .flip-card.flipped .flip-inner { transform: rotateY(180deg); }
+
+  .flip-front, .flip-back {
+    position: absolute; inset: 0;
+    border-radius: 12px;
+    backface-visibility: hidden;
+    overflow: hidden;
+  }
+
+  .flip-front {
+    display: flex; flex-direction: column;
+    justify-content: space-between;
+    padding: 18px 16px;
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+  .flip-front .fc-name {
+    font-size: 13px; font-weight: 600; line-height: 1.3;
+  }
+  .flip-front .fc-status {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 11px; opacity: 0.7;
+  }
+  .flip-front .fc-status .dot {
+    width: 7px; height: 7px; border-radius: 50%;
+  }
+  .flip-front .fc-metric {
+    font-size: 20px; font-weight: 700; opacity: 0.9;
+  }
+  .flip-front .fc-badge {
+    position: absolute; top: 12px; right: 12px;
+    padding: 3px 8px; border-radius: 6px; font-size: 10px; font-weight: 700;
+    background: rgba(255,255,255,0.15);
+  }
+
+  .flip-back {
+    transform: rotateY(180deg);
+    background: #0f1117;
+    border: 1px solid rgba(255,255,255,0.1);
+    padding: 16px 14px;
+    display: flex; flex-direction: column;
+    gap: 8px;
+    font-size: 11px;
+    overflow-y: auto;
+  }
+  .flip-back .fb-title {
+    font-size: 13px; font-weight: 700; margin-bottom: 2px;
+  }
+  .flip-back .fb-meta {
+    font-size: 10px; color: #777; line-height: 1.5;
+  }
+  .flip-back .fb-list {
+    list-style: none; display: flex; flex-direction: column; gap: 5px;
+    font-size: 11px; line-height: 1.45;
+  }
+  .flip-back .fb-list li { padding-left: 2px; }
+  .flip-back .fb-hint {
+    margin-top: auto; font-size: 10px; color: #555;
+    text-align: center; padding-top: 6px;
+  }
+
+  /* Card color variations for fanned cards */
+  .fc-green .flip-front { background: linear-gradient(145deg, #1a3a2a, #0d2618); }
+  .fc-green .dot { background: #10b981; }
+
+  .fc-purple .flip-front { background: linear-gradient(145deg, #2a1a3a, #1a0d2e); }
+  .fc-purple .dot { background: #a855f7; }
+
+  .fc-blue .flip-front { background: linear-gradient(145deg, #1a2a3e, #0d1a2e); }
+  .fc-blue .dot { background: #3b82f6; }
+
+  .fc-orange .flip-front { background: linear-gradient(145deg, #2e2a1a, #221a0d); }
+  .fc-orange .dot { background: #f59e0b; }
+
+  .fc-done .flip-front { opacity: 0.75; }
+  .fc-pending .flip-front { opacity: 0.4; }
+
+  .fc-active .flip-front {
+    animation: card-glow 2.5s ease-in-out infinite;
+  }
+  @keyframes card-glow {
+    0%, 100% { box-shadow: 0 0 15px rgba(59, 130, 246, 0.2); }
+    50% { box-shadow: 0 0 30px rgba(59, 130, 246, 0.4); }
+  }
+
+  /* ---------- BOTTOM STATS ---------- */
+  .bottom-bar {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+    display: flex; align-items: center; justify-content: center;
+    gap: 32px; padding: 10px 28px;
+    background: rgba(10, 10, 15, 0.85);
+    backdrop-filter: blur(12px);
+    border-top: 1px solid rgba(255,255,255,0.06);
+    font-size: 12px; color: #666;
+  }
+  .bottom-bar .stat { display: flex; align-items: center; gap: 6px; }
+  .bottom-bar .stat-val { color: #aaa; font-weight: 600; }
+
+  /* Card enter animation */
+  .fan-enter { animation: fanIn 0.4s ease both; }
+  @keyframes fanIn {
+    from { opacity: 0; transform: translateY(-40px) scale(0.7) rotate(-4deg); }
+    to { opacity: 1; transform: translateY(0) scale(1) rotate(0); }
+  }
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="top-bar">
+  <div class="brand">
+    <div class="icon">AI</div>
+    <span>AI Inventor</span>
+  </div>
+  <div class="run-name">ssl-low-resource-v3</div>
+  <div class="meta">
+    <span>Elapsed <b style="color:#ccc">1h 47m</b></span>
+    <span>Cost <b style="color:#ccc">$38.24</b></span>
+    <span>Steps <b style="color:#ccc">23/31</b></span>
+  </div>
+</div>
+
+<!-- MINI NAV -->
+<div class="mini-nav" id="miniNav">
+  <div class="mini-nav-chip" data-module="seed" onclick="navToStack('seed')">Seed Hypothesis</div>
+  <div class="mini-nav-chip" data-module="hypo" onclick="navToStack('hypo')">Hypothesis Loop</div>
+  <div class="mini-nav-chip" data-module="invention" onclick="navToStack('invention')">Invention Loop</div>
+  <div class="mini-nav-chip" data-module="paper" onclick="navToStack('paper')">Paper &amp; Repo</div>
+</div>
+
+<!-- MAIN AREA -->
+<div class="main-area">
+
+  <!-- STACKS VIEW -->
+  <div class="stacks-container" id="stacksView">
+
+    <!-- Stack 1: Seed Hypothesis -->
+    <div class="card-stack stack-seed" onclick="fanOut('seed')">
+      <div class="stack-card top-card">
+        <div>
+          <div class="card-label">Module 1</div>
+          <div class="card-title" style="margin-top:10px">Seed Hypothesis</div>
+        </div>
+        <div class="card-summary">Extract research gaps from literature KG and form initial hypotheses</div>
+        <div class="card-bottom">
+          <span><span class="status-dot"></span> Complete</span>
+          <span>1 step</span>
+        </div>
+      </div>
+      <div class="stack-depth">1 card</div>
+    </div>
+
+    <!-- Stack 2: Hypothesis Loop -->
+    <div class="card-stack stack-hypo" onclick="fanOut('hypo')">
+      <div class="stack-card bg-card" style="top:12px;left:12px;transform:rotate(1.5deg)"></div>
+      <div class="stack-card bg-card" style="top:8px;left:8px;transform:rotate(-0.8deg)"></div>
+      <div class="stack-card bg-card" style="top:4px;left:4px;transform:rotate(0.5deg)"></div>
+      <div class="stack-card top-card">
+        <div>
+          <div class="card-label">Module 2</div>
+          <div class="card-title" style="margin-top:10px">Hypothesis Loop</div>
+        </div>
+        <div class="card-summary">Iteratively generate, review, and refine hypotheses</div>
+        <div class="card-bottom">
+          <span><span class="status-dot"></span> Complete</span>
+          <span>6 cards</span>
+        </div>
+      </div>
+      <div class="stack-depth">6 cards &middot; 3 iterations</div>
+    </div>
+
+    <!-- Stack 3: Invention Loop -->
+    <div class="card-stack stack-invention" onclick="fanOut('invention')">
+      <div class="stack-card bg-card" style="top:24px;left:24px;transform:rotate(2deg)"></div>
+      <div class="stack-card bg-card" style="top:20px;left:20px;transform:rotate(-1.2deg)"></div>
+      <div class="stack-card bg-card" style="top:16px;left:16px;transform:rotate(1.8deg)"></div>
+      <div class="stack-card bg-card" style="top:12px;left:12px;transform:rotate(-0.5deg)"></div>
+      <div class="stack-card bg-card" style="top:8px;left:8px;transform:rotate(1deg)"></div>
+      <div class="stack-card bg-card" style="top:4px;left:4px;transform:rotate(-0.7deg)"></div>
+      <div class="stack-card top-card">
+        <div>
+          <div class="card-label">Module 3</div>
+          <div class="card-title" style="margin-top:10px">Invention Loop</div>
+        </div>
+        <div class="card-summary">Strategy, plan, artifacts, paper text, review per iteration</div>
+        <div class="card-bottom">
+          <span><span class="status-dot"></span> Running</span>
+          <span>12 cards</span>
+        </div>
+      </div>
+      <div class="stack-depth">12 cards &middot; 2 iterations</div>
+    </div>
+
+    <!-- Stack 4: Paper & Repo -->
+    <div class="card-stack stack-paper" onclick="fanOut('paper')">
+      <div class="stack-card bg-card" style="top:8px;left:8px;transform:rotate(1deg);opacity:0.4"></div>
+      <div class="stack-card bg-card" style="top:4px;left:4px;transform:rotate(-0.6deg);opacity:0.4"></div>
+      <div class="stack-card top-card">
+        <div>
+          <div class="card-label">Module 4</div>
+          <div class="card-title" style="margin-top:10px">Paper &amp; Repo</div>
+        </div>
+        <div class="card-summary">Generate final paper, visualizations, and code repository</div>
+        <div class="card-bottom">
+          <span><span class="status-dot" style="opacity:0.5"></span> Pending</span>
+          <span>5 cards</span>
+        </div>
+      </div>
+      <div class="stack-depth">5 cards &middot; pending</div>
+    </div>
+  </div>
+
+  <!-- FANNED VIEWS (one per module, toggled) -->
+
+  <!-- Seed fanned -->
+  <div class="fanned-container" id="fan-seed">
+    <div class="fan-header">
+      <h2>Seed Hypothesis</h2>
+      <button class="collapse-btn" onclick="collapse()">Collapse</button>
+    </div>
+    <div class="iteration-row">
+      <div class="iteration-label">Single Step</div>
+      <div class="iteration-cards" id="fan-seed-cards"></div>
+    </div>
+  </div>
+
+  <!-- Hypo fanned -->
+  <div class="fanned-container" id="fan-hypo">
+    <div class="fan-header">
+      <h2>Hypothesis Loop</h2>
+      <button class="collapse-btn" onclick="collapse()">Collapse</button>
+    </div>
+    <div class="iteration-row">
+      <div class="iteration-label">Iteration 1</div>
+      <div class="iteration-cards" id="fan-hypo-iter1"></div>
+    </div>
+    <div class="iteration-row">
+      <div class="iteration-label">Iteration 2</div>
+      <div class="iteration-cards" id="fan-hypo-iter2"></div>
+    </div>
+    <div class="iteration-row">
+      <div class="iteration-label">Iteration 3</div>
+      <div class="iteration-cards" id="fan-hypo-iter3"></div>
+    </div>
+  </div>
+
+  <!-- Invention fanned -->
+  <div class="fanned-container" id="fan-invention">
+    <div class="fan-header">
+      <h2>Invention Loop</h2>
+      <button class="collapse-btn" onclick="collapse()">Collapse</button>
+    </div>
+    <div class="iteration-row">
+      <div class="iteration-label">Iteration 1 &mdash; Complete</div>
+      <div class="iteration-cards" id="fan-inv-iter1"></div>
+    </div>
+    <div class="iteration-row">
+      <div class="iteration-label">Iteration 2 &mdash; In Progress</div>
+      <div class="iteration-cards" id="fan-inv-iter2"></div>
+    </div>
+    <div class="iteration-row">
+      <div class="iteration-label">Iteration 3 &mdash; Pending</div>
+      <div class="iteration-cards" id="fan-inv-iter3"></div>
+    </div>
+  </div>
+
+  <!-- Paper fanned -->
+  <div class="fanned-container" id="fan-paper">
+    <div class="fan-header">
+      <h2>Paper &amp; Repo</h2>
+      <button class="collapse-btn" onclick="collapse()">Collapse</button>
+    </div>
+    <div class="iteration-row">
+      <div class="iteration-label">Generation Steps</div>
+      <div class="iteration-cards" id="fan-paper-cards"></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- BOTTOM BAR -->
+<div class="bottom-bar">
+  <div class="stat">LLM Calls <span class="stat-val">142</span></div>
+  <div class="stat">Tokens <span class="stat-val">2.4M in / 860K out</span></div>
+  <div class="stat">Artifacts <span class="stat-val">8 generated</span></div>
+  <div class="stat">Hypotheses <span class="stat-val">3 refined</span></div>
+  <div class="stat">Papers <span class="stat-val">1 draft</span></div>
+</div>
+
+<script>
+// ── Mock Data ──────────────────────────────────────────────────────────
+const DATA = {
+  seed: [{
+    name: 'Invention KG',
+    status: 'done', statusText: 'Complete',
+    metric: '147 nodes',
+    color: 'green',
+    back: {
+      title: 'Invention Knowledge Graph',
+      meta: 'Runtime: 3m 42s | Cost: $1.20',
+      items: [
+        { icon: '\u2713', text: 'Parsed 23 seed papers' },
+        { icon: '\u2713', text: 'Extracted 147 concept nodes' },
+        { icon: '\u2713', text: 'Identified 12 research gaps' },
+        { icon: '\u2713', text: '3 initial hypotheses formed' }
+      ]
+    }
+  }],
+  hypo: {
+    iter1: [
+      { name: 'Generate Hypothesis', status: 'done', statusText: 'Complete', metric: '3 hypos', color: 'purple',
+        back: { title: 'Gen Hypothesis \u2014 Iter 1', meta: 'Runtime: 4m 15s | Cost: $2.30',
+          items: [
+            { icon: '\u2713', text: 'SSL contrastive + low-resource' },
+            { icon: '\u2713', text: 'Cross-lingual transfer via alignment' },
+            { icon: '\u2713', text: 'Data augmentation w/ back-translation' }
+          ]}},
+      { name: 'Review Hypothesis', status: 'done', statusText: 'Complete', metric: '2 passed', color: 'purple',
+        back: { title: 'Review Hypothesis \u2014 Iter 1', meta: 'Runtime: 2m 50s | Cost: $1.80',
+          items: [
+            { icon: '\u2713', text: 'Contrastive SSL: strong novelty' },
+            { icon: '\u2713', text: 'Cross-lingual: feasible, approved' },
+            { icon: '\u2717', text: 'Back-translation: insufficient novelty' }
+          ]}}
+    ],
+    iter2: [
+      { name: 'Generate Hypothesis', status: 'done', statusText: 'Complete', metric: '2 hypos', color: 'purple',
+        back: { title: 'Gen Hypothesis \u2014 Iter 2', meta: 'Runtime: 3m 38s | Cost: $2.10',
+          items: [
+            { icon: '\u2713', text: 'Refined contrastive objective' },
+            { icon: '\u2713', text: 'Added curriculum learning schedule' }
+          ]}},
+      { name: 'Review Hypothesis', status: 'done', statusText: 'Complete', metric: '2 passed', color: 'purple',
+        back: { title: 'Review Hypothesis \u2014 Iter 2', meta: 'Runtime: 2m 22s | Cost: $1.65',
+          items: [
+            { icon: '\u2713', text: 'Refined contrastive: approved' },
+            { icon: '\u2713', text: 'Curriculum schedule: approved' }
+          ]}}
+    ],
+    iter3: [
+      { name: 'Generate Hypothesis', status: 'done', statusText: 'Complete', metric: '1 hypo', color: 'purple',
+        back: { title: 'Gen Hypothesis \u2014 Iter 3', meta: 'Runtime: 2m 55s | Cost: $1.90',
+          items: [
+            { icon: '\u2713', text: 'Final hypothesis: unified SSL framework' }
+          ]}},
+      { name: 'Review Hypothesis', status: 'done', statusText: 'Complete', metric: '1 passed', color: 'purple',
+        back: { title: 'Review Hypothesis \u2014 Iter 3', meta: 'Runtime: 1m 48s | Cost: $1.20',
+          items: [
+            { icon: '\u2713', text: 'Unified framework: strong approval' },
+            { icon: '\u2713', text: 'Final hypothesis locked for invention' }
+          ]}}
+    ]
+  },
+  invention: {
+    iter1: [
+      { name: 'Gen Strategy', status: 'done', statusText: 'Complete', metric: 'Locked', color: 'blue',
+        back: { title: 'Strategy \u2014 Iteration 1', meta: 'Runtime: 5m 12s | Cost: $3.10',
+          items: [
+            { icon: '\u2713', text: 'Contrastive SSL + curriculum' },
+            { icon: '\u2713', text: 'Target: 5 low-resource langs' },
+            { icon: '\u2713', text: 'Baseline: mBERT fine-tune' }
+          ]}},
+      { name: 'Gen Plan', status: 'done', statusText: 'Complete', metric: '8 tasks', color: 'blue',
+        back: { title: 'Plan \u2014 Iteration 1', meta: 'Runtime: 3m 44s | Cost: $2.40',
+          items: [
+            { icon: '\u2713', text: 'Data pipeline for 5 languages' },
+            { icon: '\u2713', text: 'Contrastive pre-training module' },
+            { icon: '\u2713', text: 'Curriculum scheduler' },
+            { icon: '\u2713', text: 'Evaluation harness setup' }
+          ]}},
+      { name: 'Gen Artifacts', status: 'done', statusText: 'Complete', metric: '5/5', color: 'blue',
+        back: { title: 'Artifacts \u2014 Iteration 1', meta: 'Runtime: 18m 32s | Cost: $8.20',
+          items: [
+            { icon: '\u2713', text: 'Training loop implementation' },
+            { icon: '\u2713', text: 'Data loader (5 langs)' },
+            { icon: '\u2713', text: 'Contrastive loss module' },
+            { icon: '\u2713', text: 'Curriculum scheduler' },
+            { icon: '\u2713', text: 'Eval script (BLEU + F1)' }
+          ]}},
+      { name: 'Gen Paper Text', status: 'done', statusText: 'Complete', metric: '4 sections', color: 'blue',
+        back: { title: 'Paper Text \u2014 Iteration 1', meta: 'Runtime: 8m 15s | Cost: $4.60',
+          items: [
+            { icon: '\u2713', text: 'Introduction drafted' },
+            { icon: '\u2713', text: 'Methods: contrastive SSL' },
+            { icon: '\u2713', text: 'Experiment setup' },
+            { icon: '\u2713', text: 'Preliminary results' }
+          ]}},
+      { name: 'Review Paper', status: 'done', statusText: 'Complete', metric: '72/100', color: 'blue',
+        back: { title: 'Review \u2014 Iteration 1', meta: 'Runtime: 4m 30s | Cost: $2.80',
+          items: [
+            { icon: '\u2713', text: 'Novelty: 8/10' },
+            { icon: '\u2713', text: 'Soundness: 7/10' },
+            { icon: '\u2717', text: 'Ablations missing (\u22123pts)' },
+            { icon: '\u2717', text: 'Cross-lingual eval needed' }
+          ]}},
+      { name: 'Update Hypo', status: 'done', statusText: 'Complete', metric: 'Refined', color: 'blue',
+        back: { title: 'Update Hypothesis \u2014 Iter 1', meta: 'Runtime: 2m 08s | Cost: $1.40',
+          items: [
+            { icon: '\u2713', text: 'Added ablation requirement' },
+            { icon: '\u2713', text: 'Cross-lingual eval added to plan' },
+            { icon: '\u2713', text: 'Updated hypothesis locked' }
+          ]}}
+    ],
+    iter2: [
+      { name: 'Gen Strategy', status: 'done', statusText: 'Complete', metric: 'Updated', color: 'blue',
+        back: { title: 'Strategy \u2014 Iteration 2', meta: 'Runtime: 4m 02s | Cost: $2.70',
+          items: [
+            { icon: '\u2713', text: 'Added ablation study branch' },
+            { icon: '\u2713', text: 'Cross-lingual eval pipeline' },
+            { icon: '\u2713', text: 'Convergence proof target' }
+          ]}},
+      { name: 'Gen Plan', status: 'done', statusText: 'Complete', metric: '6 tasks', color: 'blue',
+        back: { title: 'Plan \u2014 Iteration 2', meta: 'Runtime: 3m 20s | Cost: $2.15',
+          items: [
+            { icon: '\u2713', text: 'Contrastive baseline ablation' },
+            { icon: '\u2713', text: 'Multilingual pair generation' },
+            { icon: '\u2713', text: 'Convergence proof' },
+            { icon: '\u2713', text: 'Ablation study' },
+            { icon: '\u2713', text: 'Cross-lingual evaluation' }
+          ]}},
+      { name: 'Gen Artifacts', status: 'running', statusText: 'Running', metric: '3/5', color: 'blue',
+        active: true,
+        back: { title: 'Artifacts \u2014 Iteration 2', meta: 'Runtime: 12m 08s | Cost: $5.41',
+          items: [
+            { icon: '\u2713', text: 'Contrastive baseline (acc 0.847)' },
+            { icon: '\u2713', text: 'Multilingual pairs (2,400 ex)' },
+            { icon: '\u2713', text: 'Convergence proof (verified)' },
+            { icon: '\u25b6', text: 'Ablation study (running)' },
+            { icon: '\u25cb', text: 'Cross-lingual eval (pending)' }
+          ]}},
+      { name: 'Gen Paper Text', status: 'pending', statusText: 'Pending', metric: '\u2014', color: 'blue',
+        back: { title: 'Paper Text \u2014 Iteration 2', meta: 'Waiting for artifacts',
+          items: [{ icon: '\u25cb', text: 'Queued after artifact generation' }]}},
+      { name: 'Review Paper', status: 'pending', statusText: 'Pending', metric: '\u2014', color: 'blue',
+        back: { title: 'Review \u2014 Iteration 2', meta: 'Waiting',
+          items: [{ icon: '\u25cb', text: 'Queued' }]}},
+      { name: 'Update Hypo', status: 'pending', statusText: 'Pending', metric: '\u2014', color: 'blue',
+        back: { title: 'Update Hypothesis \u2014 Iter 2', meta: 'Waiting',
+          items: [{ icon: '\u25cb', text: 'Queued' }]}}
+    ],
+    iter3: [
+      { name: 'Gen Strategy', status: 'pending', statusText: 'Pending', metric: '\u2014', color: 'blue',
+        back: { title: 'Strategy \u2014 Iteration 3', meta: 'Pending', items: [{ icon: '\u25cb', text: 'Queued' }]}},
+      { name: 'Gen Plan', status: 'pending', statusText: 'Pending', metric: '\u2014', color: 'blue',
+        back: { title: 'Plan \u2014 Iteration 3', meta: 'Pending', items: [{ icon: '\u25cb', text: 'Queued' }]}},
+      { name: 'Gen Artifacts', status: 'pending', statusText: 'Pending', metric: '\u2014', color: 'blue',
+        back: { title: 'Artifacts \u2014 Iteration 3', meta: 'Pending', items: [{ icon: '\u25cb', text: 'Queued' }]}},
+      { name: 'Gen Paper Text', status: 'pending', statusText: 'Pending', metric: '\u2014', color: 'blue',
+        back: { title: 'Paper Text \u2014 Iteration 3', meta: 'Pending', items: [{ icon: '\u25cb', text: 'Queued' }]}},
+      { name: 'Review Paper', status: 'pending', statusText: 'Pending', metric: '\u2014', color: 'blue',
+        back: { title: 'Review \u2014 Iteration 3', meta: 'Pending', items: [{ icon: '\u25cb', text: 'Queued' }]}},
+      { name: 'Update Hypo', status: 'pending', statusText: 'Pending', metric: '\u2014', color: 'blue',
+        back: { title: 'Update Hypothesis \u2014 Iter 3', meta: 'Pending', items: [{ icon: '\u25cb', text: 'Queued' }]}}
+    ]
+  },
+  paper: [
+    { name: 'Gen Demos', status: 'pending', statusText: 'Pending', metric: '\u2014', color: 'orange',
+      back: { title: 'Generate Demos', meta: 'Pending', items: [{ icon: '\u25cb', text: 'Queued after invention loop' }]}},
+    { name: 'Gen Viz', status: 'pending', statusText: 'Pending', metric: '\u2014', color: 'orange',
+      back: { title: 'Generate Visualizations', meta: 'Pending', items: [{ icon: '\u25cb', text: 'Queued' }]}},
+    { name: 'Gen Full Paper', status: 'pending', statusText: 'Pending', metric: '\u2014', color: 'orange',
+      back: { title: 'Generate Full Paper', meta: 'Pending', items: [{ icon: '\u25cb', text: 'LaTeX compilation queued' }]}},
+    { name: 'Gen Repo', status: 'pending', statusText: 'Pending', metric: '\u2014', color: 'orange',
+      back: { title: 'Generate Repository', meta: 'Pending', items: [{ icon: '\u25cb', text: 'Queued' }]}},
+    { name: 'Final Review', status: 'pending', statusText: 'Pending', metric: '\u2014', color: 'orange',
+      back: { title: 'Final Review', meta: 'Pending', items: [{ icon: '\u25cb', text: 'Queued' }]}}
+  ]
+};
+
+// ── State ──────────────────────────────────────────────────────────────
+let currentFan = null;
+
+// ── Card Builder ───────────────────────────────────────────────────────
+function buildCard(card, index, large) {
+  const el = document.createElement('div');
+  el.className = 'flip-card' + (large ? ' large' : '');
+  el.className += ' fc-' + card.color;
+  if (card.status === 'done') el.className += ' fc-done';
+  if (card.status === 'pending') el.className += ' fc-pending';
+  if (card.active) el.className += ' fc-active';
+  el.className += ' fan-enter';
+  el.style.animationDelay = (index * 60) + 'ms';
+
+  const badgeHTML = card.active ? '<div class="fc-badge">' + card.metric + '</div>' : '';
+
+  const itemsHTML = card.back.items.map(function(it) {
+    let cls = '';
+    if (it.icon === '\u2713') cls = 'color:#10b981';
+    else if (it.icon === '\u25b6') cls = 'color:#3b82f6';
+    else if (it.icon === '\u2717') cls = 'color:#ef4444';
+    else cls = 'color:#555';
+    return '<li><span style="' + cls + '">' + it.icon + '</span> ' + it.text + '</li>';
+  }).join('');
+
+  el.innerHTML =
+    '<div class="flip-inner">' +
+      '<div class="flip-front">' +
+        badgeHTML +
+        '<div class="fc-name">' + card.name + '</div>' +
+        '<div class="fc-metric">' + card.metric + '</div>' +
+        '<div class="fc-status"><span class="dot"></span> ' + card.statusText + '</div>' +
+      '</div>' +
+      '<div class="flip-back">' +
+        '<div class="fb-title">' + card.back.title + '</div>' +
+        '<div class="fb-meta">' + card.back.meta + '</div>' +
+        '<ul class="fb-list">' + itemsHTML + '</ul>' +
+        '<div class="fb-hint">Tap again to flip back</div>' +
+      '</div>' +
+    '</div>';
+
+  el.addEventListener('click', function(e) {
+    e.stopPropagation();
+    el.classList.toggle('flipped');
+  });
+
+  return el;
+}
+
+function populateCards(containerId, cards, large) {
+  var container = document.getElementById(containerId);
+  container.innerHTML = '';
+  cards.forEach(function(card, i) {
+    container.appendChild(buildCard(card, i, large));
+  });
+}
+
+// ── Fan Out / Collapse ─────────────────────────────────────────────────
+function fanOut(module) {
+  currentFan = module;
+
+  // Hide stacks
+  document.getElementById('stacksView').classList.add('hidden');
+
+  // Show mini nav
+  var nav = document.getElementById('miniNav');
+  nav.classList.add('visible');
+  nav.querySelectorAll('.mini-nav-chip').forEach(function(chip) {
+    chip.classList.toggle('active', chip.dataset.module === module);
+  });
+
+  // Hide all fans, then show the right one
+  document.querySelectorAll('.fanned-container').forEach(function(fc) {
+    fc.classList.remove('visible');
+  });
+
+  // Populate and show
+  if (module === 'seed') {
+    populateCards('fan-seed-cards', DATA.seed, true);
+  } else if (module === 'hypo') {
+    populateCards('fan-hypo-iter1', DATA.hypo.iter1, false);
+    populateCards('fan-hypo-iter2', DATA.hypo.iter2, false);
+    populateCards('fan-hypo-iter3', DATA.hypo.iter3, false);
+  } else if (module === 'invention') {
+    populateCards('fan-inv-iter1', DATA.invention.iter1, false);
+    populateCards('fan-inv-iter2', DATA.invention.iter2, false);
+    populateCards('fan-inv-iter3', DATA.invention.iter3, false);
+  } else if (module === 'paper') {
+    populateCards('fan-paper-cards', DATA.paper, false);
+  }
+
+  document.getElementById('fan-' + module).classList.add('visible');
+}
+
+function collapse() {
+  currentFan = null;
+  document.querySelectorAll('.fanned-container').forEach(function(fc) {
+    fc.classList.remove('visible');
+  });
+  document.getElementById('miniNav').classList.remove('visible');
+  var sv = document.getElementById('stacksView');
+  sv.classList.remove('hidden');
+}
+
+function navToStack(module) {
+  if (currentFan === module) return;
+  fanOut(module);
+}
+</script>
+</body>
+</html>

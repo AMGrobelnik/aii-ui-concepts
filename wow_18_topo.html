@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Topographic Pipeline</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0b0e14;
+    --grid: rgba(255,255,255,0.03);
+    --seed: #34d399;
+    --hypo: #a78bfa;
+    --inv: #60a5fa;
+    --paper: #fb923c;
+    --path-glow: #facc15;
+  }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: var(--bg);
+    color: #e2e8f0;
+    width: 100vw; height: 100vh;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* --- Background grid (lat/long) --- */
+  .grid-bg {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.018) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.018) 1px, transparent 1px);
+    background-size: 80px 80px;
+    pointer-events: none; z-index: 0;
+  }
+  .grid-bg::after {
+    content: '';
+    position: absolute; inset: 0;
+    background: radial-gradient(ellipse at 55% 50%, transparent 30%, var(--bg) 80%);
+  }
+
+  /* --- SVG canvas --- */
+  svg.topo { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; }
+
+  /* --- Contour styling --- */
+  .contour { fill: none; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+  .contour-seed   { stroke: var(--seed); }
+  .contour-hypo   { stroke: var(--hypo); }
+  .contour-inv    { stroke: var(--inv);  }
+  .contour-paper  { stroke: var(--paper); }
+
+  .contour-fill { stroke: none; }
+
+  .contour-pending { stroke-dasharray: 6 10; opacity: 0.15; }
+
+  /* Active contour animation: pulse + expand */
+  .contour-active {
+    animation: contourPulse 3s ease-in-out infinite alternate;
+  }
+  @keyframes contourPulse {
+    0%   { opacity: 0.5; stroke-width: 1.2; }
+    100% { opacity: 1;   stroke-width: 1.8; }
+  }
+
+  /* Growing contour: emerges outward */
+  .contour-grow {
+    stroke-dasharray: 1000;
+    stroke-dashoffset: 1000;
+    animation: contourGrow 4s ease-out forwards;
+  }
+  @keyframes contourGrow {
+    to { stroke-dashoffset: 0; }
+  }
+
+  /* --- Glowing path --- */
+  .path-complete {
+    fill: none; stroke: var(--path-glow); stroke-width: 2.5;
+    filter: url(#pathGlow);
+  }
+  .path-active {
+    fill: none; stroke: var(--path-glow); stroke-width: 2;
+    stroke-dasharray: 8 12;
+    animation: pathMove 1.2s linear infinite;
+    filter: url(#pathGlow);
+  }
+  .path-pending {
+    fill: none; stroke: var(--path-glow); stroke-width: 1;
+    stroke-dasharray: 3 14; opacity: 0.2;
+  }
+
+  @keyframes pathMove {
+    to { stroke-dashoffset: -40; }
+  }
+
+  /* Moving point on path */
+  .path-point {
+    fill: var(--path-glow);
+    filter: url(#pointGlow);
+    animation: pointPulse 1.5s ease-in-out infinite alternate;
+  }
+  @keyframes pointPulse {
+    0%   { r: 4; opacity: 0.8; }
+    100% { r: 7; opacity: 1;   }
+  }
+
+  /* --- Fog / clouds --- */
+  .fog-layer {
+    position: absolute; inset: 0; z-index: 2; pointer-events: none;
+    overflow: hidden;
+  }
+  .fog-blob {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(60px);
+    opacity: 0.06;
+    animation: fogDrift 20s ease-in-out infinite alternate;
+  }
+  .fog-blob:nth-child(1) { width: 400px; height: 200px; background: var(--seed); top: 50%; left: 5%; animation-duration: 22s; }
+  .fog-blob:nth-child(2) { width: 350px; height: 180px; background: var(--hypo); top: 35%; left: 22%; animation-duration: 18s; animation-delay: -5s; }
+  .fog-blob:nth-child(3) { width: 500px; height: 250px; background: var(--inv);  top: 40%; left: 45%; animation-duration: 25s; animation-delay: -10s; }
+  .fog-blob:nth-child(4) { width: 300px; height: 160px; background: var(--paper); top: 55%; left: 78%; animation-duration: 20s; animation-delay: -3s; }
+
+  @keyframes fogDrift {
+    0%   { transform: translate(0, 0) scale(1); }
+    50%  { transform: translate(30px, -20px) scale(1.15); }
+    100% { transform: translate(-20px, 15px) scale(0.9); }
+  }
+
+  /* --- Energy particles rising from active peak --- */
+  .particle-container { position: absolute; z-index: 3; pointer-events: none; }
+  .particle {
+    position: absolute;
+    width: 3px; height: 3px;
+    background: var(--inv);
+    border-radius: 50%;
+    opacity: 0;
+    animation: particleRise 3s ease-out infinite;
+  }
+  @keyframes particleRise {
+    0%   { transform: translateY(0) scale(1); opacity: 0; }
+    10%  { opacity: 0.8; }
+    100% { transform: translateY(-120px) scale(0); opacity: 0; }
+  }
+
+  /* --- Map labels (angled, thin) --- */
+  .map-label {
+    font-size: 11px; font-weight: 300; letter-spacing: 3px; text-transform: uppercase;
+    fill-opacity: 0.55;
+  }
+  .map-label-seed  { fill: var(--seed); }
+  .map-label-hypo  { fill: var(--hypo); }
+  .map-label-inv   { fill: var(--inv);  }
+  .map-label-paper { fill: var(--paper); }
+
+  .peak-label {
+    font-size: 9.5px; font-weight: 500; letter-spacing: 1.5px;
+    fill: #e2e8f0; fill-opacity: 0.7;
+  }
+  .peak-score {
+    font-size: 8px; font-weight: 400; fill: #94a3b8; fill-opacity: 0.6;
+  }
+
+  /* --- Altitude scale on left --- */
+  .altitude-scale {
+    position: absolute; left: 24px; top: 50%; transform: translateY(-50%);
+    z-index: 5; display: flex; flex-direction: column; align-items: flex-end; gap: 0;
+  }
+  .alt-bar {
+    width: 3px; height: 180px;
+    background: linear-gradient(to top, rgba(96,165,250,0.05), rgba(96,165,250,0.4));
+    border-radius: 2px; position: relative;
+  }
+  .alt-tick {
+    position: absolute; right: 10px;
+    font-size: 8px; font-weight: 400; color: #64748b; letter-spacing: 1px;
+    white-space: nowrap;
+  }
+
+  /* --- Cartouche (top-right info panel) --- */
+  .cartouche {
+    position: absolute; top: 28px; right: 32px; z-index: 10;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 6px; padding: 16px 22px;
+    background: rgba(11,14,20,0.85);
+    backdrop-filter: blur(12px);
+    min-width: 260px;
+  }
+  .cartouche-title {
+    font-size: 9px; font-weight: 600; letter-spacing: 3px; text-transform: uppercase;
+    color: #64748b; margin-bottom: 8px;
+  }
+  .cartouche-run {
+    font-size: 14px; font-weight: 500; color: #e2e8f0; margin-bottom: 14px;
+    font-family: 'Inter', monospace;
+  }
+  .cartouche-stats {
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .stat-row {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 10px; color: #94a3b8; letter-spacing: 0.5px;
+  }
+  .stat-val { font-weight: 600; color: #cbd5e1; font-variant-numeric: tabular-nums; }
+
+  /* --- Compass rose --- */
+  .compass {
+    position: absolute; bottom: 32px; right: 36px; z-index: 10;
+    width: 64px; height: 64px; opacity: 0.25;
+  }
+
+  /* --- Path label --- */
+  .route-label {
+    font-size: 8px; font-weight: 500; letter-spacing: 2px; text-transform: uppercase;
+    fill: var(--path-glow); fill-opacity: 0.45;
+  }
+
+  /* --- Title bottom-left --- */
+  .title-block {
+    position: absolute; bottom: 28px; left: 32px; z-index: 10;
+  }
+  .title-main {
+    font-size: 13px; font-weight: 600; letter-spacing: 4px; text-transform: uppercase;
+    color: rgba(255,255,255,0.35); margin-bottom: 4px;
+  }
+  .title-sub {
+    font-size: 9px; font-weight: 300; letter-spacing: 2px; color: #475569;
+  }
+
+  /* Peak flag marker */
+  .peak-flag {
+    animation: flagWave 2s ease-in-out infinite alternate;
+    transform-origin: bottom center;
+  }
+  @keyframes flagWave {
+    0%   { transform: rotate(-3deg); }
+    100% { transform: rotate(3deg); }
+  }
+</style>
+</head>
+<body>
+
+<div class="grid-bg"></div>
+
+<!-- Fog blobs -->
+<div class="fog-layer">
+  <div class="fog-blob"></div>
+  <div class="fog-blob"></div>
+  <div class="fog-blob"></div>
+  <div class="fog-blob"></div>
+</div>
+
+<!-- Energy particles above active invention peak -->
+<div class="particle-container" id="particles" style="left: 56%; top: 28%; width: 60px; height: 140px;"></div>
+
+<!-- Main SVG -->
+<svg class="topo" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <!-- Glow filters -->
+    <filter id="contourGlow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="2" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+    <filter id="pathGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="pointGlow" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="softGlow" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="1.5"/>
+    </filter>
+
+    <!-- Contour fill gradients -->
+    <radialGradient id="seedFill" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="var(--seed)" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="var(--seed)" stop-opacity="0.01"/>
+    </radialGradient>
+    <radialGradient id="hypoFill" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="var(--hypo)" stop-opacity="0.07"/>
+      <stop offset="100%" stop-color="var(--hypo)" stop-opacity="0.01"/>
+    </radialGradient>
+    <radialGradient id="invFill" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="var(--inv)" stop-opacity="0.09"/>
+      <stop offset="100%" stop-color="var(--inv)" stop-opacity="0.01"/>
+    </radialGradient>
+    <radialGradient id="paperFill" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="var(--paper)" stop-opacity="0.04"/>
+      <stop offset="100%" stop-color="var(--paper)" stop-opacity="0.005"/>
+    </radialGradient>
+  </defs>
+
+  <!-- ========== SEED REGION — small hill, completed ========== -->
+  <g filter="url(#contourGlow)">
+    <!-- Fills (subtle elevation shading) -->
+    <ellipse class="contour-fill" cx="180" cy="480" rx="120" ry="95" fill="url(#seedFill)"/>
+
+    <!-- Contour lines — 6 levels, outermost to peak -->
+    <ellipse class="contour contour-seed" cx="180" cy="480" rx="120" ry="95" opacity="0.25"/>
+    <ellipse class="contour contour-seed" cx="180" cy="478" rx="100" ry="78" opacity="0.3"/>
+    <ellipse class="contour contour-seed" cx="180" cy="475" rx="82" ry="63" opacity="0.4"/>
+    <ellipse class="contour contour-seed" cx="178" cy="472" rx="62" ry="48" opacity="0.5"/>
+    <ellipse class="contour contour-seed" cx="178" cy="468" rx="42" ry="32" opacity="0.65"/>
+    <ellipse class="contour contour-seed" cx="178" cy="465" rx="22" ry="16" opacity="0.8"/>
+
+    <!-- Peak marker -->
+    <circle cx="178" cy="465" r="3" fill="var(--seed)" opacity="0.7"/>
+  </g>
+
+  <!-- Seed label -->
+  <text class="map-label map-label-seed" x="140" y="590" transform="rotate(-8, 140, 590)">Seed</text>
+  <text class="peak-label" x="198" y="458">Seed Hill</text>
+  <text class="peak-score" x="198" y="470">elev 2,400</text>
+
+  <!-- ========== HYPOTHESIS REGION — medium mountain, 3 ridges ========== -->
+  <g filter="url(#contourGlow)">
+    <ellipse class="contour-fill" cx="460" cy="420" rx="180" ry="150" fill="url(#hypoFill)"/>
+
+    <!-- Ridge 1 (main peak) -->
+    <ellipse class="contour contour-hypo" cx="440" cy="410" rx="160" ry="130" opacity="0.2"/>
+    <ellipse class="contour contour-hypo" cx="440" cy="405" rx="135" ry="108" opacity="0.25"/>
+    <ellipse class="contour contour-hypo" cx="438" cy="398" rx="110" ry="88" opacity="0.3"/>
+    <ellipse class="contour contour-hypo" cx="436" cy="390" rx="88" ry="68" opacity="0.4"/>
+    <ellipse class="contour contour-hypo" cx="435" cy="382" rx="65" ry="50" opacity="0.5"/>
+    <ellipse class="contour contour-hypo" cx="434" cy="374" rx="44" ry="34" opacity="0.6"/>
+    <ellipse class="contour contour-hypo" cx="433" cy="366" rx="26" ry="20" opacity="0.75"/>
+    <ellipse class="contour contour-hypo" cx="433" cy="360" rx="12" ry="9" opacity="0.85"/>
+
+    <!-- Ridge 2 (secondary) -->
+    <ellipse class="contour contour-hypo" cx="510" cy="440" rx="70" ry="55" opacity="0.2"/>
+    <ellipse class="contour contour-hypo" cx="510" cy="436" rx="52" ry="40" opacity="0.3"/>
+    <ellipse class="contour contour-hypo" cx="510" cy="430" rx="34" ry="26" opacity="0.4"/>
+    <ellipse class="contour contour-hypo" cx="510" cy="425" rx="16" ry="12" opacity="0.55"/>
+
+    <!-- Ridge 3 (tertiary) -->
+    <ellipse class="contour contour-hypo" cx="390" cy="455" rx="55" ry="42" opacity="0.2"/>
+    <ellipse class="contour contour-hypo" cx="390" cy="450" rx="38" ry="28" opacity="0.3"/>
+    <ellipse class="contour contour-hypo" cx="390" cy="445" rx="20" ry="15" opacity="0.45"/>
+
+    <!-- Peak markers -->
+    <circle cx="433" cy="360" r="3" fill="var(--hypo)" opacity="0.7"/>
+    <circle cx="510" cy="425" r="2.5" fill="var(--hypo)" opacity="0.5"/>
+    <circle cx="390" cy="445" r="2" fill="var(--hypo)" opacity="0.4"/>
+  </g>
+
+  <!-- Hypothesis labels -->
+  <text class="map-label map-label-hypo" x="360" y="565" transform="rotate(-5, 360, 565)">Hypothesis</text>
+  <text class="peak-label" x="450" y="352">Hypo Peak</text>
+  <text class="peak-score" x="450" y="364">elev 5,800 | score 8.4</text>
+  <text class="peak-score" x="528" y="422">Ridge II</text>
+  <text class="peak-score" x="360" y="440">Ridge III</text>
+
+  <!-- ========== INVENTION REGION — LARGE mountain range (dramatic center) ========== -->
+  <g filter="url(#contourGlow)">
+    <!-- Base fill for entire range -->
+    <ellipse class="contour-fill" cx="900" cy="400" rx="300" ry="240" fill="url(#invFill)"/>
+
+    <!-- Peak A (completed — tallest) -->
+    <ellipse class="contour contour-inv" cx="840" cy="380" rx="180" ry="150" opacity="0.15"/>
+    <ellipse class="contour contour-inv" cx="840" cy="372" rx="155" ry="128" opacity="0.2"/>
+    <ellipse class="contour contour-inv" cx="838" cy="362" rx="130" ry="106" opacity="0.25"/>
+    <ellipse class="contour contour-inv" cx="836" cy="350" rx="105" ry="85" opacity="0.32"/>
+    <ellipse class="contour contour-inv" cx="835" cy="338" rx="82" ry="65" opacity="0.4"/>
+    <ellipse class="contour contour-inv" cx="834" cy="325" rx="60" ry="46" opacity="0.5"/>
+    <ellipse class="contour contour-inv" cx="833" cy="312" rx="40" ry="30" opacity="0.6"/>
+    <ellipse class="contour contour-inv" cx="833" cy="300" rx="22" ry="16" opacity="0.75"/>
+
+    <!-- Peak B (completed — medium) -->
+    <ellipse class="contour contour-inv" cx="960" cy="420" rx="100" ry="82" opacity="0.15"/>
+    <ellipse class="contour contour-inv" cx="960" cy="414" rx="80" ry="65" opacity="0.22"/>
+    <ellipse class="contour contour-inv" cx="958" cy="406" rx="62" ry="50" opacity="0.3"/>
+    <ellipse class="contour contour-inv" cx="957" cy="398" rx="44" ry="35" opacity="0.4"/>
+    <ellipse class="contour contour-inv" cx="956" cy="390" rx="28" ry="22" opacity="0.55"/>
+    <ellipse class="contour contour-inv" cx="956" cy="383" rx="14" ry="11" opacity="0.7"/>
+
+    <!-- Peak C (ACTIVE — currently rising!) -->
+    <!-- Existing base contours -->
+    <ellipse class="contour contour-inv contour-active" cx="1060" cy="430" rx="110" ry="90" opacity="0.15"/>
+    <ellipse class="contour contour-inv contour-active" cx="1060" cy="424" rx="90" ry="72" opacity="0.2"/>
+    <ellipse class="contour contour-inv contour-active" cx="1058" cy="416" rx="72" ry="56" opacity="0.28"/>
+    <ellipse class="contour contour-inv contour-active" cx="1057" cy="408" rx="54" ry="42" opacity="0.38"/>
+
+    <!-- Growing contours (new ones emerging!) -->
+    <ellipse class="contour contour-inv contour-grow" cx="1056" cy="398" rx="38" ry="29" opacity="0.5" style="animation-delay: 0.5s"/>
+    <ellipse class="contour contour-inv contour-grow" cx="1055" cy="388" rx="24" ry="18" opacity="0.65" style="animation-delay: 1.5s"/>
+    <ellipse class="contour contour-inv contour-grow" cx="1055" cy="380" rx="12" ry="9" opacity="0.8" style="animation-delay: 2.8s"/>
+
+    <!-- Peak markers -->
+    <circle cx="833" cy="300" r="3.5" fill="var(--inv)" opacity="0.8"/>
+    <circle cx="956" cy="383" r="3" fill="var(--inv)" opacity="0.6"/>
+    <!-- Active peak: animated pulsing marker -->
+    <circle cx="1055" cy="380" r="4" fill="var(--inv)" opacity="0.5" class="contour-active"/>
+
+    <!-- Highest peak flag -->
+    <g class="peak-flag" transform="translate(833, 280)">
+      <line x1="0" y1="0" x2="0" y2="20" stroke="#e2e8f0" stroke-width="1" opacity="0.5"/>
+      <polygon points="0,0 14,4 0,9" fill="var(--inv)" opacity="0.7"/>
+    </g>
+  </g>
+
+  <!-- Invention labels -->
+  <text class="map-label map-label-inv" x="800" y="580" transform="rotate(-4, 800, 580)">Invention</text>
+  <text class="peak-label" x="848" y="290">Summit A</text>
+  <text class="peak-score" x="848" y="302">elev 9,200 | score 9.1</text>
+  <text class="peak-label" x="972" y="378">Peak B</text>
+  <text class="peak-score" x="972" y="390">elev 7,100</text>
+  <text class="peak-label" x="1075" y="374">Peak C</text>
+  <text class="peak-score" x="1075" y="386">forming...</text>
+
+  <!-- ========== PAPER REGION — flat plain, pending ========== -->
+  <g filter="url(#contourGlow)">
+    <ellipse class="contour-fill" cx="1360" cy="500" rx="160" ry="120" fill="url(#paperFill)"/>
+
+    <!-- Faint base contours only -->
+    <ellipse class="contour contour-paper contour-pending" cx="1360" cy="500" rx="160" ry="120"/>
+    <ellipse class="contour contour-paper contour-pending" cx="1360" cy="498" rx="130" ry="98"/>
+    <ellipse class="contour contour-paper contour-pending" cx="1360" cy="495" rx="100" ry="75"/>
+    <ellipse class="contour contour-paper contour-pending" cx="1358" cy="492" rx="70" ry="52"/>
+    <ellipse class="contour contour-paper contour-pending" cx="1358" cy="490" rx="40" ry="30"/>
+  </g>
+
+  <!-- Paper labels -->
+  <text class="map-label map-label-paper" x="1290" y="640" transform="rotate(-6, 1290, 640)">Paper</text>
+  <text class="peak-score" x="1340" y="488" opacity="0.3">pending</text>
+
+  <!-- ========== THE GLOWING PATH ========== -->
+  <!-- Completed path: Seed through Hypothesis -->
+  <path class="path-complete" d="
+    M 60,520
+    C 100,510 140,490 178,475
+    C 220,458 280,445 340,430
+    C 380,420 410,395 433,370
+    C 450,365 480,380 520,400
+    C 560,415 600,430 640,435
+  "/>
+
+  <!-- Active path: through Invention -->
+  <path class="path-active" d="
+    M 640,435
+    C 700,440 760,420 833,310
+    C 870,340 920,380 956,388
+    C 980,395 1020,415 1055,395
+  "/>
+
+  <!-- Pending path: to Paper -->
+  <path class="path-pending" d="
+    M 1055,395
+    C 1120,420 1200,460 1280,490
+    C 1320,500 1360,500 1440,505
+    L 1540,510
+  "/>
+
+  <!-- Moving point on active path -->
+  <circle class="path-point" cx="0" cy="0" r="5">
+    <animateMotion dur="4s" repeatCount="indefinite" rotate="auto"
+      path="M 640,435 C 700,440 760,420 833,310 C 870,340 920,380 956,388 C 980,395 1020,415 1055,395"/>
+  </circle>
+
+  <!-- Route label along path -->
+  <text class="route-label" x="620" y="460">Pipeline Route</text>
+
+  <!-- ========== COMPASS ROSE (bottom-right, via SVG) ========== -->
+  <g transform="translate(1530, 830)" opacity="0.2">
+    <!-- Outer ring -->
+    <circle cx="0" cy="0" r="28" fill="none" stroke="#94a3b8" stroke-width="0.5"/>
+    <!-- Cardinal points -->
+    <polygon points="0,-26 3,-8 -3,-8" fill="#e2e8f0"/>
+    <polygon points="0,26 3,8 -3,8" fill="#64748b"/>
+    <polygon points="-26,0 -8,3 -8,-3" fill="#64748b"/>
+    <polygon points="26,0 8,3 8,-3" fill="#64748b"/>
+    <!-- Intercardinal lines -->
+    <line x1="-18" y1="-18" x2="18" y2="18" stroke="#475569" stroke-width="0.4"/>
+    <line x1="18" y1="-18" x2="-18" y2="18" stroke="#475569" stroke-width="0.4"/>
+    <!-- Labels -->
+    <text x="-2" y="-32" font-size="7" fill="#94a3b8" font-weight="500" text-anchor="middle">N</text>
+    <text x="-2" y="40" font-size="7" fill="#64748b" font-weight="400" text-anchor="middle">S</text>
+    <text x="-36" y="3" font-size="7" fill="#64748b" font-weight="400" text-anchor="middle">W</text>
+    <text x="36" y="3" font-size="7" fill="#64748b" font-weight="400" text-anchor="middle">E</text>
+    <!-- Center dot -->
+    <circle cx="0" cy="0" r="2" fill="#94a3b8"/>
+  </g>
+
+  <!-- ========== CONNECTING TERRAIN RIDGELINES (subtle) ========== -->
+  <path d="M 240,490 C 300,470 350,445 390,425" class="contour contour-seed" opacity="0.08" stroke-dasharray="4 8"/>
+  <path d="M 540,430 C 600,435 660,440 720,420" class="contour contour-hypo" opacity="0.08" stroke-dasharray="4 8"/>
+  <path d="M 1110,440 C 1160,450 1220,470 1280,490" class="contour contour-inv" opacity="0.06" stroke-dasharray="4 8"/>
+</svg>
+
+<!-- Altitude scale -->
+<div class="altitude-scale">
+  <div class="alt-bar">
+    <span class="alt-tick" style="bottom: 100%;">9,200 ft</span>
+    <span class="alt-tick" style="bottom: 75%;">7,000 ft</span>
+    <span class="alt-tick" style="bottom: 50%;">4,600 ft</span>
+    <span class="alt-tick" style="bottom: 25%;">2,400 ft</span>
+    <span class="alt-tick" style="bottom: 0%;">0 ft</span>
+  </div>
+</div>
+
+<!-- Cartouche -->
+<div class="cartouche">
+  <div class="cartouche-title">Expedition Log</div>
+  <div class="cartouche-run">ssl-low-resource-v3</div>
+  <div class="cartouche-stats">
+    <div class="stat-row">
+      <span>Summit Elevation</span>
+      <span class="stat-val">9,200 ft</span>
+    </div>
+    <div class="stat-row">
+      <span>Distance Covered</span>
+      <span class="stat-val">68%</span>
+    </div>
+    <div class="stat-row">
+      <span>Active Peaks</span>
+      <span class="stat-val">1 of 3 forming</span>
+    </div>
+    <div class="stat-row">
+      <span>Contour Levels</span>
+      <span class="stat-val">32 mapped</span>
+    </div>
+    <div class="stat-row">
+      <span>Elapsed</span>
+      <span class="stat-val">4h 12m</span>
+    </div>
+  </div>
+</div>
+
+<!-- Title block -->
+<div class="title-block">
+  <div class="title-main">AI Inventor</div>
+  <div class="title-sub">Topographic Pipeline Visualization -- Autonomous Scientific Discovery</div>
+</div>
+
+<script>
+  // Generate energy particles above the active invention peak
+  const pc = document.getElementById('particles');
+  for (let i = 0; i < 18; i++) {
+    const p = document.createElement('div');
+    p.className = 'particle';
+    p.style.left = Math.random() * 60 + 'px';
+    p.style.bottom = '0';
+    p.style.animationDelay = (Math.random() * 3).toFixed(2) + 's';
+    p.style.animationDuration = (2 + Math.random() * 2).toFixed(2) + 's';
+    const brightness = 0.4 + Math.random() * 0.6;
+    p.style.opacity = '0';
+    p.style.width = (2 + Math.random() * 2) + 'px';
+    p.style.height = p.style.width;
+    p.style.background = `rgba(96,165,250,${brightness})`;
+    pc.appendChild(p);
+  }
+
+  // Stagger the grow animations for the active peak contours
+  document.querySelectorAll('.contour-grow').forEach((el, i) => {
+    el.style.animationDelay = (0.5 + i * 1.2) + 's';
+    // After growing, keep them glowing with pulse
+    el.addEventListener('animationend', () => {
+      el.classList.remove('contour-grow');
+      el.classList.add('contour-active');
+      // Re-trigger grow periodically for continuous formation feel
+      setTimeout(() => {
+        el.style.animation = 'none';
+        el.offsetHeight; // reflow
+        el.classList.remove('contour-active');
+        el.classList.add('contour-grow');
+        el.style.animation = '';
+      }, 6000 + i * 2000);
+    });
+  });
+</script>
+</body>
+</html>

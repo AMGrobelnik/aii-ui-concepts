@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor - Simple View</title>
+<style>
+  :root {
+    --bg: #0a0a0f; --surface: #12121a; --surface2: #1a1a26;
+    --border: #2a2a3a; --text: #e0e0e8; --text-dim: #8888a0;
+    --green: #34d399; --purple: #a78bfa; --blue: #60a5fa; --gray: #4a4a5e;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    min-height: 100vh; overflow-x: hidden;
+  }
+
+  /* L-shaped grid: ring column | dot-strip row + content */
+  .layout {
+    display: grid;
+    grid-template-columns: 180px 1fr;
+    grid-template-rows: auto 1fr;
+    min-height: 100vh;
+  }
+
+  /* ── Ring Panel ── */
+  .ring-panel {
+    grid-column: 1; grid-row: 1 / 3;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 32px 16px;
+    border-right: 1px solid var(--border); background: var(--surface);
+    position: sticky; top: 0; height: 100vh;
+  }
+  .ring-container { position: relative; width: 140px; height: 140px; margin-bottom: 12px; }
+  .ring-svg { width: 140px; height: 140px; transform: rotate(-90deg); }
+  .ring-track { fill: none; stroke: var(--border); stroke-width: 8; }
+  .ring-progress {
+    fill: none; stroke-width: 8; stroke-linecap: round;
+    stroke-dasharray: 345.58; stroke-dashoffset: 345.58;
+    transition: stroke-dashoffset 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+    filter: drop-shadow(0 0 6px rgba(52, 211, 153, 0.4));
+  }
+  .ring-endpoint {
+    position: absolute; width: 12px; height: 12px; border-radius: 50%;
+    background: var(--blue);
+    box-shadow: 0 0 12px rgba(96,165,250,.5), 0 0 24px rgba(96,165,250,.5);
+    transition: all 1.2s cubic-bezier(0.4, 0, 0.2, 1); pointer-events: none;
+  }
+  .ring-center-text {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%); text-align: center;
+  }
+  .ring-percent {
+    font-size: 28px; font-weight: 700; letter-spacing: -1px;
+    background: linear-gradient(135deg, var(--green), var(--purple), var(--blue));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  }
+  .ring-title {
+    font-size: 11px; color: var(--text-dim); text-transform: uppercase;
+    letter-spacing: 1.2px; text-align: center; margin-bottom: 28px;
+  }
+
+  /* Module legend in ring panel */
+  .module-legend { width: 100%; display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+  .legend-item {
+    display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+    border-radius: 6px; cursor: pointer; transition: background 0.2s;
+    font-size: 11px; color: var(--text-dim);
+  }
+  .legend-item:hover, .legend-item.active { background: var(--surface2); color: var(--text); }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .legend-progress { margin-left: auto; font-size: 10px; font-weight: 600; opacity: 0.7; }
+
+  /* Ring arc highlight for selected module */
+  .ring-highlight {
+    fill: none; stroke-width: 12; stroke-linecap: round; opacity: 0;
+    transition: opacity 0.4s, stroke-dashoffset 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .ring-highlight.visible { opacity: 0.3; }
+
+  /* ── Dot Strip ── */
+  .dot-strip {
+    grid-column: 2; grid-row: 1;
+    display: flex; align-items: flex-end;
+    padding: 20px 28px 16px;
+    border-bottom: 1px solid var(--border); background: var(--surface);
+    overflow-x: auto; gap: 4px; position: sticky; top: 0; z-index: 10;
+  }
+  .dot-group { display: flex; flex-direction: column; align-items: center; gap: 8px; flex-shrink: 0; }
+  .dot-group-label {
+    font-size: 9px; text-transform: uppercase; letter-spacing: 1.2px;
+    color: var(--text-dim); white-space: nowrap; transition: color 0.3s;
+  }
+  .dot-group.active-group .dot-group-label { color: var(--text); }
+  .dot-row { display: flex; gap: 6px; align-items: center; }
+  .dot-separator {
+    width: 20px; height: 1px; background: var(--border);
+    margin: 0 6px; align-self: flex-end; margin-bottom: 6px;
+  }
+  .dot {
+    width: 12px; height: 12px; border-radius: 50%; cursor: pointer;
+    transition: all 0.3s; position: relative; border: 2px solid transparent;
+  }
+  .dot.completed { background: var(--green); border-color: var(--green); opacity: 0.85; }
+  .dot.completed:hover { opacity: 1; transform: scale(1.15); }
+  .dot.active {
+    border-color: currentColor;
+    animation: dotPulse 2s ease-in-out infinite;
+    box-shadow: 0 0 10px currentColor;
+  }
+  .dot.pending { background: var(--gray); border-color: var(--gray); opacity: 0.4; }
+  .dot.pending:hover { opacity: 0.6; transform: scale(1.1); }
+  .dot.selected { transform: scale(1.3); box-shadow: 0 0 16px currentColor, 0 0 32px currentColor; }
+  .dot-tooltip {
+    position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+    background: var(--surface2); color: var(--text); padding: 4px 8px;
+    border-radius: 4px; font-size: 10px; white-space: nowrap;
+    pointer-events: none; opacity: 0; transition: opacity 0.2s;
+    border: 1px solid var(--border); z-index: 20;
+  }
+  .dot:hover .dot-tooltip { opacity: 1; }
+
+  @keyframes dotPulse {
+    0%, 100% { box-shadow: 0 0 8px currentColor; }
+    50% { box-shadow: 0 0 18px currentColor, 0 0 30px currentColor; }
+  }
+
+  /* ── Content Area ── */
+  .content-area {
+    grid-column: 2; grid-row: 2;
+    padding: 28px 32px; overflow-y: auto; max-height: calc(100vh - 80px);
+  }
+  .content-header { margin-bottom: 24px; }
+  .content-step-tag {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 12px; border-radius: 20px;
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.8px; margin-bottom: 10px; border: 1px solid;
+  }
+  .content-title { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 8px; }
+  .content-summary { font-size: 14px; color: var(--text-dim); line-height: 1.6; max-width: 700px; }
+
+  .nav-hint { display: flex; align-items: center; gap: 12px; margin-top: 16px; font-size: 11px; color: var(--text-dim); }
+  .nav-key {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 24px; background: var(--surface2);
+    border: 1px solid var(--border); border-radius: 4px; font-size: 11px; color: var(--text);
+  }
+
+  /* ── Expandable Rows ── */
+  .rows-container { display: flex; flex-direction: column; gap: 8px; margin-top: 20px; }
+  .row-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; overflow: hidden;
+    transition: border-color 0.3s, box-shadow 0.3s;
+  }
+  .row-card:hover { border-color: #3a3a50; }
+  .row-card.expanded { box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
+  .row-header {
+    display: flex; align-items: center; padding: 14px 18px;
+    cursor: pointer; user-select: none; gap: 14px; transition: background 0.2s;
+  }
+  .row-header:hover { background: var(--surface2); }
+  .row-status { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .row-title { font-size: 13px; font-weight: 600; flex: 1; }
+  .row-meta { font-size: 11px; color: var(--text-dim); flex-shrink: 0; }
+  .row-chevron {
+    width: 18px; height: 18px; color: var(--text-dim);
+    transition: transform 0.3s; flex-shrink: 0;
+  }
+  .row-card.expanded .row-chevron { transform: rotate(180deg); }
+  .row-body { max-height: 0; overflow: hidden; transition: max-height 0.4s cubic-bezier(0.4,0,0.2,1); }
+  .row-card.expanded .row-body { max-height: 400px; }
+  .row-content {
+    padding: 0 18px 16px 40px; font-size: 12.5px;
+    color: var(--text-dim); line-height: 1.7;
+  }
+  .row-content p { margin-bottom: 8px; }
+  .row-content code {
+    background: var(--surface2); padding: 1px 6px;
+    border-radius: 3px; font-size: 11.5px; color: var(--purple);
+  }
+  .row-content .tag-list { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .row-content .mini-tag {
+    font-size: 10px; padding: 2px 8px; border-radius: 10px;
+    background: var(--surface2); border: 1px solid var(--border); color: var(--text-dim);
+  }
+
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  @keyframes fadeSlideUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .anim-in { animation: fadeSlideUp 0.5s ease-out forwards; opacity: 0; }
+</style>
+</head>
+<body>
+
+<div class="layout">
+
+  <!-- Ring Panel (left) -->
+  <div class="ring-panel">
+    <div class="ring-container">
+      <svg class="ring-svg" viewBox="0 0 140 140">
+        <defs>
+          <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="var(--green)" />
+            <stop offset="45%" stop-color="var(--purple)" />
+            <stop offset="75%" stop-color="var(--blue)" />
+            <stop offset="100%" stop-color="var(--gray)" />
+          </linearGradient>
+        </defs>
+        <circle class="ring-track" cx="70" cy="70" r="55" />
+        <circle class="ring-progress" cx="70" cy="70" r="55" stroke="url(#ringGrad)" />
+        <circle class="ring-highlight" cx="70" cy="70" r="55" stroke="var(--green)" />
+      </svg>
+      <div class="ring-endpoint" id="ringEndpoint"></div>
+      <div class="ring-center-text">
+        <div class="ring-percent" id="ringPercent">0%</div>
+      </div>
+    </div>
+    <div class="ring-title">Pipeline Progress</div>
+    <div class="module-legend" id="moduleLegend"></div>
+  </div>
+
+  <!-- Dot Strip (top) -->
+  <div class="dot-strip" id="dotStrip"></div>
+
+  <!-- Content Area -->
+  <div class="content-area" id="contentArea">
+    <div class="content-header">
+      <div class="content-step-tag" id="stepTag"></div>
+      <div class="content-title" id="stepTitle"></div>
+      <div class="content-summary" id="stepSummary"></div>
+      <div class="nav-hint">
+        <span class="nav-key">&larr;</span>
+        <span class="nav-key">&rarr;</span>
+        <span>Navigate steps</span>
+      </div>
+    </div>
+    <div class="rows-container" id="rowsContainer"></div>
+  </div>
+
+</div>
+
+<script>
+// ─── Pipeline Data ───
+const PIPELINE = [
+  {
+    id: 'seed', label: 'Seed', color: 'var(--green)', colorRaw: '#34d399', weight: 10,
+    steps: [
+      {
+        name: 'KG Init', status: 'completed',
+        title: 'Knowledge Graph Initialization',
+        summary: 'Parsed domain corpus and built knowledge graph with 2,847 entities and 11,203 edges.',
+        rows: [
+          { label: 'Entity extraction', status: 'completed', meta: '2,847 nodes',
+            detail: 'NER across 156 papers. Types: concepts (1,204), methods (689), materials (534), properties (420).' },
+          { label: 'Relation linking', status: 'completed', meta: '11,203 edges',
+            detail: 'Edge types: <code>causes</code>, <code>enables</code>, <code>inhibits</code>, <code>composed_of</code>.' },
+          { label: 'Dedup & merge', status: 'completed', meta: '342 merged',
+            detail: 'Fuzzy matching + embedding similarity resolved duplicates. Threshold: cosine > 0.92.' },
+        ]
+      },
+      {
+        name: 'Seed Hypos', status: 'completed',
+        title: 'Seed Hypothesis Generation',
+        summary: 'Generated 48 seed hypotheses via graph traversal. Top 12 selected by novelty scoring.',
+        rows: [
+          { label: 'Graph traversal', status: 'completed', meta: '48 seeds',
+            detail: 'Random walks with restart (alpha=0.15) biased toward low-degree nodes.' },
+          { label: 'Novelty filter', status: 'completed', meta: '12 selected',
+            detail: 'Embedding distance from literature centroid. Cutoff: z-score > 1.8.' },
+        ]
+      }
+    ]
+  },
+  {
+    id: 'hypo', label: 'Hypotheses', color: 'var(--purple)', colorRaw: '#a78bfa', weight: 25,
+    steps: [
+      {
+        name: 'Gen Hypo', status: 'completed',
+        title: 'Hypothesis Elaboration',
+        summary: 'Expanded 12 seeds into structured proposals with mechanisms, predictions, and 36 testable claims.',
+        rows: [
+          { label: 'Mechanism drafting', status: 'completed', meta: '12 drafts',
+            detail: 'Causal chains: preconditions, mechanism steps, predicted outcomes, boundary conditions.' },
+          { label: 'Literature grounding', status: 'completed', meta: '89 citations',
+            detail: 'Supporting/contradicting evidence per hypothesis. Mean: 7.4 citations each.' },
+          { label: 'Claim formalization', status: 'completed', meta: '36 claims',
+            detail: 'Testable claims in <code>IF-THEN-BECAUSE</code> format. ~3 per hypothesis.' },
+        ]
+      },
+      {
+        name: 'Review Hypo', status: 'active',
+        title: 'Hypothesis Review & Critique',
+        summary: 'Multi-agent adversarial review in progress. 8 of 12 hypotheses reviewed. Evaluating H-07 thermodynamic consistency.',
+        rows: [
+          { label: 'Soundness review', status: 'completed', meta: '8/12 done',
+            detail: 'Logical consistency and physical plausibility checks. Two flagged for revision.' },
+          { label: 'Novelty assessment', status: 'active', meta: 'in progress',
+            detail: '<p>Comparing against 18k papers. Current: 0.87 novelty score.</p><div class="tag-list"><span class="mini-tag">thermodynamics</span><span class="mini-tag">surface-energy</span><span class="mini-tag">catalysis</span></div>' },
+          { label: 'Contradiction scan', status: 'pending', meta: 'queued',
+            detail: 'Cross-check claims against known negative results and retracted findings.' },
+          { label: 'Scoring & ranking', status: 'pending', meta: 'queued',
+            detail: 'Composite: 40% novelty, 30% soundness, 20% feasibility, 10% impact.' },
+        ]
+      },
+      {
+        name: 'Revise Hypo', status: 'pending',
+        title: 'Hypothesis Revision',
+        summary: 'Will address flagged issues and strengthen weak mechanism links after review.',
+        rows: [
+          { label: 'Address flags', status: 'pending', meta: 'waiting',
+            detail: 'Revision targets from critiques. Expected: 2-4 mechanism rewrites.' },
+          { label: 'Re-score', status: 'pending', meta: 'waiting',
+            detail: 'Re-run scoring on revised hypotheses. Must exceed threshold.' },
+        ]
+      }
+    ]
+  },
+  {
+    id: 'invent', label: 'Invention', color: 'var(--blue)', colorRaw: '#60a5fa', weight: 40,
+    steps: [
+      {
+        name: 'Gen Strategy', status: 'pending',
+        title: 'Strategy Generation',
+        summary: 'Experimental strategies for top-ranked hypotheses with resource constraints.',
+        rows: [
+          { label: 'Resource analysis', status: 'pending', meta: 'waiting',
+            detail: 'Catalog computational resources, datasets, and simulation tools.' },
+          { label: 'Strategy drafting', status: 'pending', meta: 'waiting',
+            detail: 'Three candidates per hypothesis: fast, thorough, minimal viable.' },
+        ]
+      },
+      {
+        name: 'Gen Plan', status: 'pending',
+        title: 'Detailed Plan Generation',
+        summary: 'Step-by-step execution plans with task dependencies and go/no-go checkpoints.',
+        rows: [
+          { label: 'Task decomposition', status: 'pending', meta: 'waiting',
+            detail: 'Atomic tasks with input/output specs and time estimates.' },
+          { label: 'Dependency graph', status: 'pending', meta: 'waiting',
+            detail: 'Build DAG of task dependencies. Identify critical path.' },
+        ]
+      },
+      {
+        name: 'Gen Text', status: 'pending',
+        title: 'Paper Text Generation',
+        summary: 'Draft full paper: abstract, introduction, methods, results, discussion.',
+        rows: [
+          { label: 'Section drafting', status: 'pending', meta: 'waiting',
+            detail: 'LLM generates each section following venue-specific templates.' },
+          { label: 'Citation integration', status: 'pending', meta: 'waiting',
+            detail: 'Inline citations from grounded evidence. Auto-generate bibliography.' },
+        ]
+      },
+      {
+        name: 'Review', status: 'pending',
+        title: 'Paper Review',
+        summary: 'Multi-agent simulated peer review with structured feedback.',
+        rows: [
+          { label: 'Simulated reviews', status: 'pending', meta: 'waiting',
+            detail: 'Three reviewers with distinct expertise profiles.' },
+          { label: 'Meta-review', status: 'pending', meta: 'waiting',
+            detail: 'Aggregate reviews into actionable revision plan.' },
+        ]
+      }
+    ]
+  },
+  {
+    id: 'paper', label: 'Paper Repo', color: 'var(--gray)', colorRaw: '#6a6a82', weight: 25,
+    steps: [
+      {
+        name: 'Artifacts', status: 'pending',
+        title: 'Artifact Generation',
+        summary: 'Code demos, data pipelines, and supplementary materials.',
+        rows: [
+          { label: 'Python demos', status: 'pending', meta: 'waiting',
+            detail: 'Self-contained scripts demonstrating key methods.' },
+          { label: 'Data pipelines', status: 'pending', meta: 'waiting',
+            detail: 'Preprocessing and analysis scripts for reproducibility.' },
+        ]
+      },
+      {
+        name: 'Gen Viz', status: 'pending',
+        title: 'Visualization Generation',
+        summary: 'Figures, diagrams, and interactive visualizations for the paper.',
+        rows: [
+          { label: 'Static figures', status: 'pending', meta: 'waiting',
+            detail: 'Matplotlib/seaborn plots matching paper style guidelines.' },
+          { label: 'Interactive viz', status: 'pending', meta: 'waiting',
+            detail: 'Plotly-based interactive versions for supplementary web material.' },
+        ]
+      },
+      {
+        name: 'Compile', status: 'pending',
+        title: 'Full Paper Compilation',
+        summary: 'Assemble all components into final LaTeX document and repository.',
+        rows: [
+          { label: 'LaTeX assembly', status: 'pending', meta: 'waiting',
+            detail: 'Merge sections, figures, tables, bibliography into venue template.' },
+          { label: 'Final QA', status: 'pending', meta: 'waiting',
+            detail: 'Formatting, references, figure resolution, page limits.' },
+          { label: 'Repository package', status: 'pending', meta: 'waiting',
+            detail: 'Bundle paper, code, data into publishable repository.' },
+        ]
+      }
+    ]
+  }
+];
+
+// ─── State ───
+let currentStepIndex = 3; // Start at Review Hypo (active)
+let allSteps = [];
+let moduleRanges = [];
+const CIRC = 2 * Math.PI * 55; // ring circumference ~345.58
+
+// Flatten all steps with module references
+function buildIndex() {
+  allSteps = [];
+  moduleRanges = [];
+  PIPELINE.forEach((mod, mi) => {
+    const start = allSteps.length;
+    mod.steps.forEach(step => allSteps.push({ ...step, moduleIdx: mi, module: mod }));
+    moduleRanges.push({ start, end: allSteps.length - 1 });
+  });
+}
+
+// Overall progress percentage
+function computeProgress() {
+  let total = 0, done = 0;
+  PIPELINE.forEach(mod => {
+    const w = mod.weight / mod.steps.length;
+    mod.steps.forEach(s => {
+      total += w;
+      if (s.status === 'completed') done += w;
+      else if (s.status === 'active') done += w * 0.5;
+    });
+  });
+  return Math.round((done / total) * 100);
+}
+
+// ─── Ring ───
+function updateRing(percent) {
+  const el = document.querySelector('.ring-progress');
+  el.style.strokeDashoffset = CIRC - (percent / 100) * CIRC;
+
+  // Animate counter
+  const counter = document.getElementById('ringPercent');
+  let cur = 0;
+  const step = percent / 40;
+  const iv = setInterval(() => {
+    cur += step;
+    if (cur >= percent) { cur = percent; clearInterval(iv); }
+    counter.textContent = Math.round(cur) + '%';
+  }, 25);
+
+  // Position glowing endpoint
+  const angle = (percent / 100) * 360 - 90;
+  const rad = (angle * Math.PI) / 180;
+  const ep = document.getElementById('ringEndpoint');
+  ep.style.left = (70 + 55 * Math.cos(rad) - 6) + 'px';
+  ep.style.top = (70 + 55 * Math.sin(rad) - 6) + 'px';
+  const c = percent < 33 ? 'var(--green)' : percent < 66 ? 'var(--purple)' : 'var(--blue)';
+  ep.style.background = c;
+  ep.style.boxShadow = `0 0 12px ${c}, 0 0 24px ${c}`;
+}
+
+function highlightArc(mi) {
+  const hl = document.querySelector('.ring-highlight');
+  if (mi < 0) { hl.classList.remove('visible'); return; }
+  let offset = 0;
+  for (let i = 0; i < mi; i++) offset += (PIPELINE[i].weight / 100) * CIRC;
+  const len = (PIPELINE[mi].weight / 100) * CIRC;
+  hl.style.stroke = PIPELINE[mi].color;
+  hl.style.strokeDasharray = `${len} ${CIRC}`;
+  hl.style.strokeDashoffset = -offset;
+  hl.classList.add('visible');
+  document.querySelectorAll('.legend-item').forEach((el, i) => el.classList.toggle('active', i === mi));
+}
+
+// ─── Build Legend ───
+function buildLegend() {
+  const c = document.getElementById('moduleLegend');
+  PIPELINE.forEach((mod, i) => {
+    const done = mod.steps.filter(s => s.status === 'completed').length;
+    const el = document.createElement('div');
+    el.className = 'legend-item';
+    el.innerHTML = `<span class="legend-dot" style="background:${mod.color}"></span>
+      <span>${mod.label}</span><span class="legend-progress">${done}/${mod.steps.length}</span>`;
+    el.addEventListener('click', () => {
+      const r = moduleRanges[i];
+      let t = r.start;
+      for (let s = r.start; s <= r.end; s++) {
+        if (allSteps[s].status !== 'completed') { t = s; break; }
+      }
+      navigateTo(t);
+    });
+    c.appendChild(el);
+  });
+}
+
+// ─── Build Dot Strip ───
+function buildDotStrip() {
+  const strip = document.getElementById('dotStrip');
+  PIPELINE.forEach((mod, mi) => {
+    if (mi > 0) {
+      const sep = document.createElement('div');
+      sep.className = 'dot-separator';
+      strip.appendChild(sep);
+    }
+    const group = document.createElement('div');
+    group.className = 'dot-group';
+    group.dataset.module = mi;
+
+    const lbl = document.createElement('div');
+    lbl.className = 'dot-group-label';
+    lbl.textContent = mod.label;
+    group.appendChild(lbl);
+
+    const row = document.createElement('div');
+    row.className = 'dot-row';
+
+    mod.steps.forEach((step, si) => {
+      const gi = moduleRanges[mi].start + si;
+      const dot = document.createElement('div');
+      dot.className = `dot ${step.status}`;
+      dot.style.color = mod.color;
+      dot.dataset.index = gi;
+
+      if (step.status === 'completed') {
+        dot.style.background = mod.color;
+        dot.style.borderColor = mod.color;
+      } else if (step.status === 'active') {
+        dot.style.background = mod.colorRaw + '44';
+        dot.style.borderColor = mod.color;
+      }
+
+      const tip = document.createElement('div');
+      tip.className = 'dot-tooltip';
+      tip.textContent = step.name;
+      dot.appendChild(tip);
+
+      dot.addEventListener('click', () => navigateTo(gi));
+      row.appendChild(dot);
+    });
+
+    group.appendChild(row);
+    strip.appendChild(group);
+  });
+}
+
+// ─── Update Dot Selection ───
+function updateDots(index) {
+  document.querySelectorAll('.dot').forEach(d => d.classList.remove('selected'));
+  const target = document.querySelector(`.dot[data-index="${index}"]`);
+  if (target) {
+    target.classList.add('selected');
+    target.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+  }
+  const mi = allSteps[index].moduleIdx;
+  document.querySelectorAll('.dot-group').forEach(g => {
+    g.classList.toggle('active-group', parseInt(g.dataset.module) === mi);
+  });
+}
+
+// ─── Render Content ───
+function renderContent(index) {
+  const step = allSteps[index];
+  const mod = step.module;
+
+  const tag = document.getElementById('stepTag');
+  tag.style.borderColor = mod.color;
+  tag.style.color = mod.color;
+  tag.style.background = mod.colorRaw + '15';
+  const icon = step.status === 'completed' ? '\u2713' : step.status === 'active' ? '\u25CF' : '\u25CB';
+  const localIdx = index - moduleRanges[step.moduleIdx].start + 1;
+  tag.innerHTML = `<span>${icon}</span> ${mod.label} / Step ${localIdx}`;
+
+  document.getElementById('stepTitle').textContent = step.title;
+  document.getElementById('stepSummary').textContent = step.summary;
+
+  const container = document.getElementById('rowsContainer');
+  container.innerHTML = '';
+  step.rows.forEach((row, ri) => {
+    const card = document.createElement('div');
+    card.className = 'row-card anim-in';
+    card.style.animationDelay = ri * 0.06 + 's';
+
+    const sc = row.status === 'completed' ? mod.color
+      : row.status === 'active' ? mod.colorRaw : 'var(--gray)';
+    const glow = row.status === 'active' ? `box-shadow:0 0 8px ${sc}` : '';
+
+    card.innerHTML = `
+      <div class="row-header">
+        <div class="row-status" style="background:${sc};${glow}"></div>
+        <div class="row-title">${row.label}</div>
+        <div class="row-meta">${row.meta}</div>
+        <svg class="row-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </div>
+      <div class="row-body"><div class="row-content">${row.detail}</div></div>`;
+
+    card.querySelector('.row-header').addEventListener('click', () => card.classList.toggle('expanded'));
+    container.appendChild(card);
+  });
+}
+
+// ─── Navigate ───
+function navigateTo(index) {
+  if (index < 0 || index >= allSteps.length) return;
+  currentStepIndex = index;
+  updateDots(index);
+  highlightArc(allSteps[index].moduleIdx);
+  renderContent(index);
+}
+
+// Arrow keys
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight') { e.preventDefault(); navigateTo(Math.min(currentStepIndex + 1, allSteps.length - 1)); }
+  if (e.key === 'ArrowLeft') { e.preventDefault(); navigateTo(Math.max(currentStepIndex - 1, 0)); }
+});
+
+// ─── Init ───
+buildIndex();
+buildLegend();
+buildDotStrip();
+requestAnimationFrame(() => setTimeout(() => updateRing(computeProgress()), 200));
+navigateTo(currentStepIndex);
+</script>
+</body>
+</html>

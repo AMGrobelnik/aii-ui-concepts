@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Subway Map View</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #12121a;
+    --border: #1e1e2e;
+    --text: #e2e2e8;
+    --text-dim: #6e6e82;
+    --text-muted: #44445a;
+    --green: #10b981;
+    --purple: #8b5cf6;
+    --blue: #3b82f6;
+    --orange: #f59e0b;
+    --line-width: 4px;
+    --station-r: 8;
+    --transfer-r: 12;
+    --grid-color: rgba(255,255,255,0.025);
+  }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Top Bar ──────────────────────────────────── */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 24px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
+    z-index: 10;
+  }
+  .topbar-left { display: flex; align-items: center; gap: 16px; }
+  .topbar-brand {
+    font-weight: 700;
+    font-size: 15px;
+    letter-spacing: -0.3px;
+    color: var(--text);
+  }
+  .topbar-run {
+    font-size: 13px;
+    color: var(--text-dim);
+    padding-left: 16px;
+    border-left: 1px solid var(--border);
+  }
+  .topbar-run strong { color: var(--text); font-weight: 500; }
+  .topbar-stats { display: flex; gap: 20px; }
+  .topbar-stat {
+    font-size: 12px;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .topbar-stat .val { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  /* ── Map Container ───────────────────────────── */
+  .map-wrap {
+    flex: 1;
+    overflow-x: auto;
+    overflow-y: hidden;
+    position: relative;
+    scrollbar-width: thin;
+    scrollbar-color: #2a2a3a transparent;
+  }
+  .map-wrap::-webkit-scrollbar { height: 6px; }
+  .map-wrap::-webkit-scrollbar-track { background: transparent; }
+  .map-wrap::-webkit-scrollbar-thumb { background: #2a2a3a; border-radius: 3px; }
+
+  .map-svg {
+    display: block;
+    height: 100%;
+    min-width: 100%;
+  }
+
+  /* Grid pattern rendered in SVG */
+
+  /* ── Station Labels ──────────────────────────── */
+  .station-label {
+    font-family: 'Inter', sans-serif;
+    font-size: 11px;
+    fill: var(--text-dim);
+    cursor: default;
+    user-select: none;
+  }
+  .station-label.active { fill: var(--text); font-weight: 600; }
+
+  .station-circle { cursor: pointer; transition: transform 0.15s ease; }
+  .station-circle:hover { transform: scale(1.2); }
+
+  /* ── Transfer Symbol ─────────────────────────── */
+  .transfer-outer { fill: var(--bg); stroke: #fff; stroke-width: 2; }
+  .transfer-inner { fill: none; stroke: #fff; stroke-width: 1.5; }
+
+  /* ── Pulse Animation ─────────────────────────── */
+  @keyframes pulse-ring {
+    0%   { r: 8;  opacity: 0.6; }
+    100% { r: 20; opacity: 0; }
+  }
+  .pulse-ring { animation: pulse-ring 1.8s ease-out infinite; }
+
+  @keyframes pulse-glow {
+    0%, 100% { filter: drop-shadow(0 0 4px currentColor); }
+    50%      { filter: drop-shadow(0 0 12px currentColor); }
+  }
+  .active-glow { animation: pulse-glow 2s ease-in-out infinite; }
+
+  /* ── Popup Card ──────────────────────────────── */
+  .popup-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    pointer-events: none;
+  }
+  .popup-card {
+    position: absolute;
+    width: 280px;
+    background: rgba(18, 18, 30, 0.92);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    padding: 16px;
+    pointer-events: all;
+    z-index: 51;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.03);
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+  }
+  .popup-card.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .popup-card::after {
+    content: '';
+    position: absolute;
+    bottom: -7px;
+    left: 50%;
+    transform: translateX(-50%) rotate(45deg);
+    width: 12px;
+    height: 12px;
+    background: rgba(18, 18, 30, 0.92);
+    border-right: 1px solid rgba(255,255,255,0.08);
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  .popup-card.below::after {
+    bottom: auto;
+    top: -7px;
+    border-right: none;
+    border-bottom: none;
+    border-left: 1px solid rgba(255,255,255,0.08);
+    border-top: 1px solid rgba(255,255,255,0.08);
+  }
+  .popup-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+  .popup-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.3;
+  }
+  .popup-close {
+    width: 20px;
+    height: 20px;
+    border: none;
+    background: rgba(255,255,255,0.06);
+    color: var(--text-dim);
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    flex-shrink: 0;
+    margin-left: 8px;
+    transition: background 0.15s;
+  }
+  .popup-close:hover { background: rgba(255,255,255,0.12); color: var(--text); }
+  .popup-meta {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-bottom: 10px;
+    line-height: 1.5;
+  }
+  .popup-meta .status-done { color: var(--green); }
+  .popup-meta .status-active { color: var(--blue); }
+  .popup-meta .status-pending { color: var(--text-muted); }
+  .popup-metrics {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-bottom: 10px;
+    padding: 8px 10px;
+    background: rgba(255,255,255,0.03);
+    border-radius: 6px;
+    line-height: 1.6;
+  }
+  .popup-metrics strong { color: var(--text); font-weight: 500; }
+  .popup-summary {
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.6;
+  }
+  .popup-summary .item {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 2px;
+  }
+  .popup-summary .icon { flex-shrink: 0; width: 14px; text-align: center; }
+  .popup-summary .icon.done { color: var(--green); }
+  .popup-summary .icon.running { color: var(--blue); }
+  .popup-summary .icon.pending { color: var(--text-muted); }
+
+  /* ── Legend ───────────────────────────────────── */
+  .legend {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 28px;
+    padding: 14px 24px;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .legend-swatch {
+    width: 20px;
+    height: 4px;
+    border-radius: 2px;
+  }
+  .legend-sep {
+    width: 1px;
+    height: 16px;
+    background: var(--border);
+  }
+  .legend-station {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  .legend-circle {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 2px solid var(--text-dim);
+  }
+  .legend-circle.filled { background: var(--text-dim); }
+  .legend-circle.ring { border-color: var(--blue); background: none; box-shadow: 0 0 4px var(--blue); }
+  .legend-circle.hollow { border-style: dashed; background: none; }
+</style>
+</head>
+<body>
+
+<!-- Top Bar -->
+<div class="topbar">
+  <div class="topbar-left">
+    <span class="topbar-brand">AI Inventor</span>
+    <span class="topbar-run"><strong>ssl-low-resource-v3</strong> &mdash; Invention Loop Iter 2</span>
+  </div>
+  <div class="topbar-stats">
+    <div class="topbar-stat">Elapsed <span class="val" id="elapsed">1h 42m</span></div>
+    <div class="topbar-stat">Cost <span class="val">$18.73</span></div>
+    <div class="topbar-stat">Stations <span class="val">15/24</span></div>
+  </div>
+</div>
+
+<!-- Map Area -->
+<div class="map-wrap" id="mapWrap">
+  <svg class="map-svg" id="mapSvg" xmlns="http://www.w3.org/2000/svg"></svg>
+</div>
+
+<!-- Popup -->
+<div class="popup-overlay" id="popupOverlay">
+  <div class="popup-card" id="popupCard">
+    <div class="popup-header">
+      <span class="popup-title" id="popupTitle"></span>
+      <button class="popup-close" id="popupClose">&times;</button>
+    </div>
+    <div class="popup-meta" id="popupMeta"></div>
+    <div class="popup-metrics" id="popupMetrics"></div>
+    <div class="popup-summary" id="popupSummary"></div>
+  </div>
+</div>
+
+<!-- Legend -->
+<div class="legend">
+  <div class="legend-item">
+    <div class="legend-swatch" style="background:#10b981"></div> Seed
+  </div>
+  <div class="legend-item">
+    <div class="legend-swatch" style="background:#8b5cf6"></div> Hypothesis
+  </div>
+  <div class="legend-item">
+    <div class="legend-swatch" style="background:#3b82f6"></div> Invention
+  </div>
+  <div class="legend-item">
+    <div class="legend-swatch" style="background:#f59e0b"></div> Paper
+  </div>
+  <div class="legend-sep"></div>
+  <div class="legend-station"><div class="legend-circle filled"></div> Complete</div>
+  <div class="legend-station"><div class="legend-circle ring"></div> Active</div>
+  <div class="legend-station"><div class="legend-circle hollow"></div> Pending</div>
+</div>
+
+<script>
+// ── Data Model ────────────────────────────────────────────────────────
+const LINES = [
+  {
+    id: 'seed', name: 'Seed', color: '#10b981',
+    stations: [
+      { id: 's1', label: 'Mine Papers', full: 'Mine Papers', status: 'done',
+        detail: { time: '8m 12s', cost: '$1.24',
+          metrics: 'Papers found: <strong>347</strong> | Filtered: <strong>82</strong>',
+          summary: 'Crawled arXiv + Semantic Scholar for SSL and low-resource NLP papers from 2022-2025.' }},
+      { id: 's2', label: 'Build KG', full: 'Build Knowledge Graph', status: 'done',
+        detail: { time: '4m 45s', cost: '$0.93',
+          metrics: 'Nodes: <strong>1,204</strong> | Edges: <strong>3,871</strong>',
+          summary: 'Extracted entities and relations. Core cluster around contrastive + multilingual pretraining.' }},
+      { id: 's3', label: 'Find Gaps', full: 'Find Research Gaps', status: 'done',
+        detail: { time: '3m 08s', cost: '$0.61',
+          metrics: 'Gaps identified: <strong>14</strong> | High-value: <strong>5</strong>',
+          summary: 'Cross-referenced knowledge graph against recent survey papers to identify under-explored intersections.' }},
+      { id: 's4', label: 'Select Seeds', full: 'Select Seed Hypotheses', status: 'done',
+        detail: { time: '2m 51s', cost: '$0.55',
+          metrics: 'Seeds selected: <strong>3</strong> | Avg novelty: <strong>0.82</strong>',
+          summary: 'Ranked gaps by novelty and feasibility. Top seed: contrastive SSL for low-resource code-switching.' }},
+    ]
+  },
+  {
+    id: 'hypo', name: 'Hypothesis', color: '#8b5cf6',
+    stations: [
+      { id: 'h1', label: 'Gen H.1', full: 'Generate Hypothesis \u2014 Iteration 1', status: 'done',
+        detail: { time: '3m 22s', cost: '$1.10',
+          metrics: 'Hypotheses: <strong>5</strong> | Top score: <strong>6.2/10</strong>',
+          summary: 'Initial hypothesis batch. Strongest candidate: multi-granularity contrastive objectives for code-switched text.' }},
+      { id: 'h2', label: 'Review 1', full: 'Review \u2014 Iteration 1', status: 'done',
+        detail: { time: '2m 15s', cost: '$0.78',
+          metrics: 'Score: <strong>6.2/10</strong> | Confidence: <strong>2/5</strong>',
+          summary: 'Major gaps: no convergence guarantee, weak baseline comparison, under-specified data augmentation strategy.' }},
+      { id: 'h3', label: 'Gen H.2', full: 'Generate Hypothesis \u2014 Iteration 2', status: 'done',
+        detail: { time: '3m 41s', cost: '$1.18',
+          metrics: 'Hypotheses: <strong>4</strong> | Top score: <strong>7.8/10</strong>',
+          summary: 'Refined with convergence bound and explicit augmentation pipeline. Added cross-lingual transfer component.' }},
+      { id: 'h4', label: 'Review 2', full: 'Review \u2014 Iteration 2', status: 'done',
+        detail: { time: '2m 34s', cost: '$0.87',
+          metrics: 'Score: <strong>7.8/10</strong> | Confidence: <strong>3/5</strong>',
+          summary: '1 major issue: needs convergence analysis. 2 minor: strengthen baselines, tighten abstract.' }},
+      { id: 'h5', label: 'Gen H.3', full: 'Generate Hypothesis \u2014 Iteration 3', status: 'done',
+        detail: { time: '3m 55s', cost: '$1.31',
+          metrics: 'Hypotheses: <strong>3</strong> | Top score: <strong>8.9/10</strong>',
+          summary: 'Final refinement with formal convergence proof sketch and 4 strong baselines. Ready for invention.' }},
+      { id: 'h6', label: 'Review 3', full: 'Review \u2014 Iteration 3', status: 'done',
+        detail: { time: '2m 48s', cost: '$0.92',
+          metrics: 'Score: <strong>8.9/10</strong> | Confidence: <strong>4/5</strong>',
+          summary: 'Approved. Strong theoretical grounding, clear experimental plan, novel contribution well-articulated.' }},
+    ]
+  },
+  {
+    id: 'inv', name: 'Invention', color: '#3b82f6',
+    stations: [
+      { id: 'i1', label: 'Strat 1', full: 'Strategy \u2014 Iteration 1', status: 'done',
+        detail: { time: '2m 12s', cost: '$0.74',
+          metrics: 'Approaches: <strong>3</strong> | Selected: <strong>contrastive + augment</strong>',
+          summary: 'Chose multi-granularity contrastive learning with code-switch augmentation as primary strategy.' }},
+      { id: 'i2', label: 'Plan 1', full: 'Plan \u2014 Iteration 1', status: 'done',
+        detail: { time: '3m 08s', cost: '$0.95',
+          metrics: 'Artifacts: <strong>5 planned</strong> | Est. runtime: <strong>~25m</strong>',
+          summary: 'Planned: contrastive baseline, multilingual pairs, ablation study, cross-lingual eval, convergence proof.' }},
+      { id: 'i3', label: 'Art 1', full: 'Generate Artifacts \u2014 Iteration 1', status: 'done',
+        detail: { time: '18m 44s', cost: '$4.82',
+          metrics: 'Artifacts: <strong>5/5</strong> | Peak acc: <strong>0.831</strong>',
+          summary: 'All artifacts generated. Contrastive baseline accuracy 0.831. Multilingual pairs: 2,100 examples.' }},
+      { id: 'i4', label: 'Paper 1', full: 'Generate Paper Text \u2014 Iteration 1', status: 'done',
+        detail: { time: '6m 33s', cost: '$2.14',
+          metrics: 'Sections: <strong>7/7</strong> | Words: <strong>4,820</strong>',
+          summary: 'Full paper draft with all sections. Results tables populated from artifact outputs.' }},
+      { id: 'i5', label: 'Review 1', full: 'Review Paper \u2014 Iteration 1', status: 'done',
+        detail: { time: '3m 17s', cost: '$1.08',
+          metrics: 'Score: <strong>6.4/10</strong> | Issues: <strong>4 major, 3 minor</strong>',
+          summary: 'Weak convergence section, missing ablation analysis, baseline comparison incomplete. Needs iteration.' }},
+      { id: 'i6', label: 'Upd 1', full: 'Update Strategy \u2014 Iteration 1', status: 'done',
+        detail: { time: '1m 55s', cost: '$0.62',
+          metrics: 'Changes: <strong>3 major</strong> | New artifacts: <strong>2</strong>',
+          summary: 'Added formal convergence proof, expanded ablation matrix, strengthened baseline comparisons.' }},
+      { id: 'i7', label: 'Strat 2', full: 'Strategy \u2014 Iteration 2', status: 'done',
+        detail: { time: '2m 28s', cost: '$0.81',
+          metrics: 'Focus: <strong>convergence + baselines</strong>',
+          summary: 'Iteration 2 focuses on formal convergence bound and expanded baseline suite (4 additional methods).' }},
+      { id: 'i8', label: 'Plan 2', full: 'Plan \u2014 Iteration 2', status: 'done',
+        detail: { time: '2m 51s', cost: '$0.88',
+          metrics: 'Artifacts: <strong>5 planned</strong> | Reuse: <strong>2 from iter 1</strong>',
+          summary: 'Re-generate contrastive baseline with larger data, new convergence proof, fresh ablation matrix.' }},
+      { id: 'i9', label: 'Art 2', full: 'Generate Artifacts \u2014 Iteration 2', status: 'active',
+        detail: { time: '12m 08s', cost: '$3.41',
+          metrics: 'Artifacts: <strong>3/5 complete</strong>',
+          items: [
+            { icon: 'done', text: 'Contrastive baseline (acc: 0.847)' },
+            { icon: 'done', text: 'Multilingual pairs (2,400 examples)' },
+            { icon: 'done', text: 'Extended baseline suite (4 methods)' },
+            { icon: 'running', text: 'Ablation study (running...)' },
+            { icon: 'pending', text: 'Updated convergence proof (pending)' },
+          ]}},
+      { id: 'i10', label: 'Paper 2', full: 'Generate Paper Text \u2014 Iteration 2', status: 'pending',
+        detail: { time: '\u2014', cost: '\u2014', metrics: '', summary: 'Waiting for artifact generation to complete.' }},
+      { id: 'i11', label: 'Review 2', full: 'Review Paper \u2014 Iteration 2', status: 'pending',
+        detail: { time: '\u2014', cost: '\u2014', metrics: '', summary: 'Pending.' }},
+      { id: 'i12', label: 'Upd 2', full: 'Update Strategy \u2014 Iteration 2', status: 'pending',
+        detail: { time: '\u2014', cost: '\u2014', metrics: '', summary: 'Pending.' }},
+    ]
+  },
+  {
+    id: 'paper', name: 'Paper', color: '#f59e0b',
+    stations: [
+      { id: 'p1', label: 'Gen Repo', full: 'Generate Repository', status: 'pending',
+        detail: { time: '\u2014', cost: '\u2014', metrics: '', summary: 'Will scaffold the paper repository with code, data, and LaTeX source.' }},
+      { id: 'p2', label: 'Demos', full: 'Generate Demos', status: 'pending',
+        detail: { time: '\u2014', cost: '\u2014', metrics: '', summary: 'Interactive demos for key results and artifact showcases.' }},
+      { id: 'p3', label: 'Viz', full: 'Generate Visualizations', status: 'pending',
+        detail: { time: '\u2014', cost: '\u2014', metrics: '', summary: 'Charts, figures, and diagrams for the final paper.' }},
+      { id: 'p4', label: 'Full Paper', full: 'Compile Full Paper', status: 'pending',
+        detail: { time: '\u2014', cost: '\u2014', metrics: '', summary: 'Assemble all sections, figures, and references into final LaTeX document.' }},
+      { id: 'p5', label: 'Deploy', full: 'Deploy Paper & Artifacts', status: 'pending',
+        detail: { time: '\u2014', cost: '\u2014', metrics: '', summary: 'Upload to repository, generate project page, archive artifacts.' }},
+    ]
+  }
+];
+
+// ── Layout Constants ─────────────────────────────────────────────────
+const MARGIN_LEFT  = 60;
+const MARGIN_RIGHT = 80;
+const STATION_GAP  = 90;
+const TRANSFER_GAP = 50;
+const LINE_Y       = 0; // computed dynamically, centered
+
+// ── Rendering ────────────────────────────────────────────────────────
+const svg      = document.getElementById('mapSvg');
+const mapWrap  = document.getElementById('mapWrap');
+const NS       = 'http://www.w3.org/2000/svg';
+
+let stationPositions = {}; // id -> {x, y, line, data}
+let activePopup = null;
+
+function buildMap() {
+  const wrapRect = mapWrap.getBoundingClientRect();
+  const centerY  = Math.round(wrapRect.height / 2);
+
+  // Calculate total width
+  let totalStations = 0;
+  LINES.forEach(l => { totalStations += l.stations.length; });
+  const totalTransfers = LINES.length - 1;
+  const totalWidth = MARGIN_LEFT + (totalStations - 1) * STATION_GAP + totalTransfers * TRANSFER_GAP + MARGIN_RIGHT;
+
+  svg.setAttribute('viewBox', `0 0 ${totalWidth} ${wrapRect.height}`);
+  svg.setAttribute('width', totalWidth);
+  svg.setAttribute('height', wrapRect.height);
+  svg.innerHTML = '';
+
+  // ── Defs ──
+  const defs = ce('defs');
+
+  // Grid pattern
+  const gridPat = ce('pattern', { id: 'grid', width: 40, height: 40, patternUnits: 'userSpaceOnUse' });
+  gridPat.appendChild(ce('line', { x1: 0, y1: 0, x2: 40, y2: 0, stroke: 'rgba(255,255,255,0.018)', 'stroke-width': 1 }));
+  gridPat.appendChild(ce('line', { x1: 0, y1: 0, x2: 0, y2: 40, stroke: 'rgba(255,255,255,0.018)', 'stroke-width': 1 }));
+  defs.appendChild(gridPat);
+
+  // Glow filters per line
+  LINES.forEach(l => {
+    const filter = ce('filter', { id: `glow-${l.id}`, x: '-50%', y: '-50%', width: '200%', height: '200%' });
+    const blur = ce('feGaussianBlur', { stdDeviation: '3', result: 'blur' });
+    const merge = ce('feMerge');
+    merge.appendChild(ce('feMergeNode', { in: 'blur' }));
+    merge.appendChild(ce('feMergeNode', { in: 'SourceGraphic' }));
+    filter.appendChild(blur);
+    filter.appendChild(merge);
+    defs.appendChild(filter);
+  });
+
+  svg.appendChild(defs);
+
+  // ── Grid Background ──
+  svg.appendChild(ce('rect', { width: totalWidth, height: wrapRect.height, fill: 'url(#grid)' }));
+
+  // ── Draw Lines and Stations ──
+  let x = MARGIN_LEFT;
+  stationPositions = {};
+
+  LINES.forEach((line, li) => {
+    const lineGroup = ce('g', { class: 'line-group', 'data-line': line.id });
+    const startX = x;
+
+    line.stations.forEach((st, si) => {
+      const sx = x;
+      const labelAbove = si % 2 === 0;
+
+      stationPositions[st.id] = { x: sx, y: centerY, line, data: st, labelAbove };
+
+      if (si < line.stations.length - 1) {
+        x += STATION_GAP;
+      }
+    });
+
+    const endX = x;
+
+    // Draw the line segment
+    lineGroup.appendChild(ce('line', {
+      x1: startX, y1: centerY, x2: endX, y2: centerY,
+      stroke: line.color, 'stroke-width': 4, 'stroke-linecap': 'round',
+      opacity: 0.35
+    }));
+
+    // Draw completed portion
+    let lastDoneX = startX;
+    line.stations.forEach(st => {
+      const pos = stationPositions[st.id];
+      if (st.status === 'done' || st.status === 'active') {
+        lastDoneX = pos.x;
+      }
+    });
+    if (lastDoneX > startX) {
+      lineGroup.appendChild(ce('line', {
+        x1: startX, y1: centerY, x2: lastDoneX, y2: centerY,
+        stroke: line.color, 'stroke-width': 4, 'stroke-linecap': 'round',
+        opacity: 0.9
+      }));
+    }
+
+    // Draw stations
+    line.stations.forEach((st, si) => {
+      const pos = stationPositions[st.id];
+      const sg = ce('g', { class: 'station-circle', 'data-station': st.id });
+
+      if (st.status === 'active') {
+        // Pulse ring
+        const ring = ce('circle', {
+          cx: pos.x, cy: centerY, r: 8,
+          fill: 'none', stroke: line.color, 'stroke-width': 2,
+          class: 'pulse-ring'
+        });
+        sg.appendChild(ring);
+
+        // Active station
+        const outer = ce('circle', {
+          cx: pos.x, cy: centerY, r: 10,
+          fill: line.color, stroke: '#fff', 'stroke-width': 2,
+          class: 'active-glow', style: `color:${line.color}`
+        });
+        sg.appendChild(outer);
+
+        const inner = ce('circle', {
+          cx: pos.x, cy: centerY, r: 4,
+          fill: '#fff'
+        });
+        sg.appendChild(inner);
+      } else if (st.status === 'done') {
+        sg.appendChild(ce('circle', {
+          cx: pos.x, cy: centerY, r: 8,
+          fill: line.color, stroke: line.color, 'stroke-width': 2
+        }));
+        // Checkmark
+        const check = ce('path', {
+          d: `M${pos.x - 3} ${centerY} l2 3 l4 -5`,
+          fill: 'none', stroke: '#fff', 'stroke-width': 1.5, 'stroke-linecap': 'round', 'stroke-linejoin': 'round'
+        });
+        sg.appendChild(check);
+      } else {
+        // Pending
+        sg.appendChild(ce('circle', {
+          cx: pos.x, cy: centerY, r: 8,
+          fill: 'var(--bg)', stroke: line.color, 'stroke-width': 2,
+          'stroke-dasharray': '3 3', opacity: 0.5
+        }));
+      }
+
+      // Label
+      const labelY = pos.labelAbove ? centerY - 22 : centerY + 30;
+      const label = ce('text', {
+        x: pos.x, y: labelY,
+        'text-anchor': 'middle',
+        class: `station-label${st.status === 'active' ? ' active' : ''}`,
+        'data-station': st.id
+      });
+      label.textContent = st.label;
+      sg.appendChild(label);
+
+      // Click handler
+      sg.addEventListener('click', (e) => {
+        e.stopPropagation();
+        showPopup(st.id);
+      });
+
+      lineGroup.appendChild(sg);
+    });
+
+    svg.appendChild(lineGroup);
+
+    // Transfer symbol between lines
+    if (li < LINES.length - 1) {
+      const nextLine = LINES[li + 1];
+      const tx = endX + TRANSFER_GAP / 2;
+      const tg = ce('g', { class: 'transfer-symbol' });
+
+      // Connector line (dim, from end of this line to start of next)
+      tg.appendChild(ce('line', {
+        x1: endX, y1: centerY, x2: endX + TRANSFER_GAP, y2: centerY,
+        stroke: '#fff', 'stroke-width': 1.5, opacity: 0.15,
+        'stroke-dasharray': '4 4'
+      }));
+
+      // Transfer circle
+      tg.appendChild(ce('circle', {
+        cx: tx, cy: centerY, r: 12,
+        class: 'transfer-outer'
+      }));
+      tg.appendChild(ce('circle', {
+        cx: tx, cy: centerY, r: 7,
+        class: 'transfer-inner'
+      }));
+
+      // Small colored dots showing which lines connect
+      tg.appendChild(ce('circle', { cx: tx - 3, cy: centerY, r: 2.5, fill: line.color }));
+      tg.appendChild(ce('circle', { cx: tx + 3, cy: centerY, r: 2.5, fill: nextLine.color }));
+
+      svg.appendChild(tg);
+      x = endX + TRANSFER_GAP;
+    }
+  });
+
+  // Auto-scroll to active station
+  scrollToActive();
+}
+
+function ce(tag, attrs) {
+  const el = document.createElementNS(NS, tag);
+  if (attrs) {
+    for (const [k, v] of Object.entries(attrs)) {
+      if (k === 'class') el.setAttribute('class', v);
+      else if (k === 'style') el.setAttribute('style', v);
+      else el.setAttribute(k, v);
+    }
+  }
+  return el;
+}
+
+// ── Popup Logic ──────────────────────────────────────────────────────
+const popupOverlay = document.getElementById('popupOverlay');
+const popupCard    = document.getElementById('popupCard');
+const popupTitle   = document.getElementById('popupTitle');
+const popupMeta    = document.getElementById('popupMeta');
+const popupMetrics = document.getElementById('popupMetrics');
+const popupSummary = document.getElementById('popupSummary');
+const popupClose   = document.getElementById('popupClose');
+
+function showPopup(stationId) {
+  const pos = stationPositions[stationId];
+  if (!pos) return;
+  const st = pos.data;
+  const d  = st.detail;
+
+  popupTitle.textContent = st.full;
+
+  // Status line
+  const statusClass = st.status === 'done' ? 'status-done' : st.status === 'active' ? 'status-active' : 'status-pending';
+  const statusIcon  = st.status === 'done' ? '\u2713' : st.status === 'active' ? '\u25b6' : '\u25cb';
+  const statusLabel = st.status === 'done' ? 'Complete' : st.status === 'active' ? 'Running' : 'Pending';
+  popupMeta.innerHTML = `<span class="${statusClass}">${statusIcon} ${statusLabel}</span> &middot; ${d.time} &middot; ${d.cost}`;
+
+  // Metrics
+  if (d.metrics) {
+    popupMetrics.innerHTML = d.metrics;
+    popupMetrics.style.display = 'block';
+  } else {
+    popupMetrics.style.display = 'none';
+  }
+
+  // Summary / items
+  if (d.items) {
+    popupSummary.innerHTML = d.items.map(it =>
+      `<div class="item"><span class="icon ${it.icon}">${it.icon === 'done' ? '\u2713' : it.icon === 'running' ? '\u25b6' : '\u25cb'}</span><span>${it.text}</span></div>`
+    ).join('');
+  } else if (d.summary) {
+    popupSummary.innerHTML = d.summary;
+  } else {
+    popupSummary.innerHTML = '';
+  }
+
+  // Position the popup
+  const mapRect  = mapWrap.getBoundingClientRect();
+  const svgPoint = svg.getBoundingClientRect();
+  const scale    = svgPoint.width / parseFloat(svg.getAttribute('width'));
+
+  const screenX = svgPoint.left + pos.x * scale - mapWrap.scrollLeft;
+  const screenY = svgPoint.top + pos.y * scale;
+
+  popupCard.classList.remove('below');
+  let popLeft = screenX - 140;
+  let popTop  = screenY - 12; // start near station
+
+  // Show above by default
+  popupCard.style.left = popLeft + 'px';
+  popupCard.style.top  = '0px';
+  popupCard.style.visibility = 'hidden';
+  popupCard.classList.add('visible');
+
+  requestAnimationFrame(() => {
+    const cardH = popupCard.offsetHeight;
+
+    if (pos.labelAbove) {
+      // Label is above, popup goes below
+      popTop = screenY + 24;
+      popupCard.classList.add('below');
+    } else {
+      // Label is below, popup goes above
+      popTop = screenY - cardH - 16;
+    }
+
+    // Clamp horizontal
+    popLeft = Math.max(8, Math.min(popLeft, window.innerWidth - 290));
+
+    popupCard.style.left = popLeft + 'px';
+    popupCard.style.top  = popTop + 'px';
+    popupCard.style.visibility = 'visible';
+  });
+
+  activePopup = stationId;
+}
+
+function hidePopup() {
+  popupCard.classList.remove('visible');
+  activePopup = null;
+}
+
+popupClose.addEventListener('click', (e) => { e.stopPropagation(); hidePopup(); });
+document.addEventListener('click', (e) => {
+  if (activePopup && !popupCard.contains(e.target)) hidePopup();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') hidePopup();
+});
+
+// ── Scroll to Active ─────────────────────────────────────────────────
+function scrollToActive() {
+  for (const [id, pos] of Object.entries(stationPositions)) {
+    if (pos.data.status === 'active') {
+      const svgWidth = parseFloat(svg.getAttribute('width'));
+      const wrapW    = mapWrap.clientWidth;
+      const scrollTo = Math.max(0, (pos.x / svgWidth) * svg.getBoundingClientRect().width - wrapW / 2);
+      mapWrap.scrollTo({ left: scrollTo, behavior: 'smooth' });
+      break;
+    }
+  }
+}
+
+// ── Elapsed Timer ────────────────────────────────────────────────────
+let elapsedSeconds = 1 * 3600 + 42 * 60;
+const elapsedEl = document.getElementById('elapsed');
+
+function updateElapsed() {
+  elapsedSeconds++;
+  const h = Math.floor(elapsedSeconds / 3600);
+  const m = Math.floor((elapsedSeconds % 3600) / 60);
+  const s = elapsedSeconds % 60;
+  elapsedEl.textContent = h > 0
+    ? `${h}h ${String(m).padStart(2, '0')}m`
+    : `${m}m ${String(s).padStart(2, '0')}s`;
+}
+setInterval(updateElapsed, 1000);
+
+// ── Init ─────────────────────────────────────────────────────────────
+buildMap();
+window.addEventListener('resize', () => {
+  hidePopup();
+  buildMap();
+});
+</script>
+</body>
+</html>

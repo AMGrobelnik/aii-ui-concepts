@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor - Minimal Focus</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0b10;
+    --surface: #12131a;
+    --surface2: #1a1b26;
+    --surface3: #222330;
+    --border: #2a2b3a;
+    --text: #e2e4f0;
+    --text-dim: #8888a8;
+    --text-faint: #555570;
+    --accent: #7c6aef;
+    --accent-glow: #9580ff;
+    --accent-dim: #5a4abd;
+    --blue: #58a6ff;
+    --green: #3fb950;
+    --amber: #d29922;
+    --red: #f85149;
+    --radius: 12px;
+    --radius-sm: 8px;
+  }
+
+  html, body {
+    height: 100%; width: 100%;
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ---- LAYOUT SHELL ---- */
+  #app {
+    display: flex; flex-direction: column;
+    height: 100vh; width: 100vw;
+    transition: all .3s ease-out;
+  }
+
+  /* ---- TOP BAR ---- */
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 24px; height: 52px; min-height: 52px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    z-index: 100;
+  }
+  .topbar-left { display: flex; align-items: center; gap: 14px; }
+  .run-name {
+    font-weight: 600; font-size: 14px; color: var(--text);
+    white-space: nowrap;
+  }
+  .run-tag {
+    font-size: 11px; font-weight: 500;
+    background: rgba(124,106,239,.15); color: var(--accent-glow);
+    padding: 2px 8px; border-radius: 20px;
+  }
+
+  .topbar-center { display: flex; align-items: center; gap: 8px; }
+
+  /* Pipeline dots (simple mode) */
+  .pipeline-dots { display: flex; align-items: center; gap: 6px; }
+  .pdot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--surface3); border: 1.5px solid var(--border);
+    transition: all .3s;
+    position: relative;
+  }
+  .pdot.done { background: var(--green); border-color: var(--green); }
+  .pdot.active {
+    background: var(--accent); border-color: var(--accent-glow);
+    box-shadow: 0 0 10px rgba(124,106,239,.5), 0 0 20px rgba(124,106,239,.2);
+    animation: dotPulse 2s ease-in-out infinite;
+  }
+  .pdot-label {
+    font-size: 9px; color: var(--text-faint); position: absolute;
+    bottom: -16px; left: 50%; transform: translateX(-50%);
+    white-space: nowrap; opacity: 0; transition: opacity .2s;
+    pointer-events: none;
+  }
+  .pdot:hover .pdot-label { opacity: 1; }
+  .pdot-connector {
+    width: 20px; height: 1.5px; background: var(--border);
+  }
+  .pdot-connector.done { background: var(--green); }
+
+  @keyframes dotPulse {
+    0%, 100% { box-shadow: 0 0 8px rgba(124,106,239,.4); }
+    50% { box-shadow: 0 0 16px rgba(124,106,239,.7), 0 0 30px rgba(124,106,239,.2); }
+  }
+
+  /* Pipeline expanded nodes (advanced) */
+  .pipeline-nodes { display: none; align-items: center; gap: 4px; }
+  .pnode {
+    display: flex; align-items: center; gap: 6px;
+    padding: 4px 12px; border-radius: 20px;
+    font-size: 11px; font-weight: 500;
+    background: var(--surface3); color: var(--text-dim);
+    border: 1px solid transparent; transition: all .3s;
+  }
+  .pnode.done { color: var(--green); border-color: rgba(63,185,80,.2); }
+  .pnode.active {
+    color: var(--accent-glow); border-color: rgba(124,106,239,.3);
+    background: rgba(124,106,239,.08);
+  }
+  .pnode-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--text-faint);
+  }
+  .pnode.done .pnode-dot { background: var(--green); }
+  .pnode.active .pnode-dot {
+    background: var(--accent-glow);
+    box-shadow: 0 0 8px rgba(149,128,255,.6);
+  }
+  .pnode-arrow { color: var(--text-faint); font-size: 10px; }
+
+  .topbar-right { display: flex; align-items: center; gap: 10px; }
+
+  /* Gear button */
+  .gear-btn {
+    width: 32px; height: 32px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    background: transparent; border: 1px solid var(--border);
+    color: var(--text-dim); cursor: pointer; font-size: 15px;
+    transition: all .15s; position: relative;
+  }
+  .gear-btn:hover { background: var(--surface3); color: var(--text); }
+
+  /* Run controls popover */
+  .popover {
+    position: absolute; top: 42px; right: 0;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 14px; min-width: 200px;
+    box-shadow: 0 12px 40px rgba(0,0,0,.5);
+    z-index: 200; display: none; flex-direction: column; gap: 10px;
+  }
+  .popover.open { display: flex; }
+  .popover-title { font-size: 11px; text-transform: uppercase; letter-spacing: .8px; color: var(--text-faint); }
+  .pop-row { display: flex; gap: 6px; }
+  .pop-btn {
+    flex: 1; padding: 8px 0; border-radius: var(--radius-sm);
+    border: 1px solid var(--border); background: var(--surface3);
+    color: var(--text-dim); font-size: 12px; font-weight: 500;
+    cursor: pointer; transition: all .15s;
+    font-family: inherit;
+  }
+  .pop-btn:hover { background: var(--surface); color: var(--text); border-color: var(--accent); }
+  .pop-btn.active-ctrl { background: var(--accent-dim); border-color: var(--accent); color: #fff; }
+  .pop-btn.danger:hover { border-color: var(--red); color: var(--red); }
+  .pop-select {
+    width: 100%; padding: 7px 10px; border-radius: var(--radius-sm);
+    background: var(--surface3); border: 1px solid var(--border);
+    color: var(--text); font-size: 12px; font-family: inherit;
+    cursor: pointer; appearance: none;
+  }
+
+  /* Mode toggle */
+  .mode-toggle {
+    display: flex; align-items: center; gap: 0;
+    background: var(--surface3); border-radius: 20px;
+    border: 1px solid var(--border); overflow: hidden;
+  }
+  .mode-btn {
+    padding: 5px 14px; font-size: 11px; font-weight: 500;
+    color: var(--text-dim); cursor: pointer; transition: all .2s;
+    border: none; background: none; font-family: inherit;
+  }
+  .mode-btn.active { background: var(--accent); color: #fff; }
+
+  /* ---- MAIN AREA ---- */
+  .main-area {
+    flex: 1; display: flex; flex-direction: column;
+    overflow: hidden; position: relative;
+    transition: all .3s ease-out;
+  }
+
+  /* Tab bar (advanced mode) */
+  .tab-bar {
+    display: none; align-items: center; gap: 0;
+    padding: 0 24px; height: 42px; min-height: 42px;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+  }
+  .tab-btn {
+    padding: 10px 20px; font-size: 12px; font-weight: 500;
+    color: var(--text-dim); cursor: pointer;
+    border: none; background: none; font-family: inherit;
+    border-bottom: 2px solid transparent;
+    transition: all .15s;
+  }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { color: var(--accent-glow); border-bottom-color: var(--accent); }
+
+  /* Slide viewport */
+  .slide-viewport {
+    flex: 1; overflow: hidden; position: relative;
+  }
+  .slide-track {
+    display: flex; height: 100%;
+    transition: transform .35s cubic-bezier(.4, 0, .2, 1);
+  }
+  .slide-panel {
+    min-width: 100%; width: 100%; height: 100%;
+    padding: 40px;
+    display: flex; align-items: center; justify-content: center;
+    overflow-y: auto;
+  }
+
+  /* Edge arrows */
+  .edge-arrow {
+    position: absolute; top: 50%; transform: translateY(-50%);
+    width: 40px; height: 80px; display: flex; align-items: center;
+    justify-content: center; z-index: 50;
+    background: rgba(10,11,16,.6); backdrop-filter: blur(8px);
+    border: 1px solid var(--border); color: var(--text-dim);
+    cursor: pointer; font-size: 18px; transition: all .2s;
+  }
+  .edge-arrow:hover { color: var(--text); background: rgba(18,19,26,.9); border-color: var(--accent); }
+  .edge-arrow.left { left: 0; border-radius: 0 var(--radius) var(--radius) 0; }
+  .edge-arrow.right { right: 0; border-radius: var(--radius) 0 0 var(--radius); }
+  .edge-arrow.hidden { opacity: 0; pointer-events: none; }
+
+  /* Slide indicators */
+  .slide-indicators {
+    display: flex; gap: 6px; justify-content: center;
+    padding: 8px 0; position: absolute; bottom: 4px;
+    left: 50%; transform: translateX(-50%); z-index: 50;
+  }
+  .slide-ind {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--text-faint); cursor: pointer;
+    transition: all .2s;
+  }
+  .slide-ind.active { background: var(--accent-glow); width: 18px; border-radius: 4px; }
+
+  /* ---- PANEL: Overview (Hypothesis Card) ---- */
+  .hypo-card {
+    max-width: 680px; width: 100%; text-align: center;
+  }
+  .hypo-stage-badge {
+    display: inline-block; font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 1px;
+    color: var(--accent-glow); background: rgba(124,106,239,.1);
+    padding: 4px 14px; border-radius: 20px;
+    margin-bottom: 20px;
+  }
+  .hypo-title {
+    font-size: 34px; font-weight: 700; line-height: 1.2;
+    margin-bottom: 24px; color: var(--text);
+  }
+  .hypo-gauge-wrap {
+    display: flex; align-items: center; justify-content: center;
+    gap: 16px; margin-bottom: 28px;
+  }
+  .gauge-ring {
+    width: 80px; height: 80px; position: relative;
+  }
+  .gauge-ring svg { transform: rotate(-90deg); }
+  .gauge-ring .track { fill: none; stroke: var(--surface3); stroke-width: 6; }
+  .gauge-ring .fill { fill: none; stroke: var(--accent-glow); stroke-width: 6; stroke-linecap: round; transition: stroke-dashoffset .6s ease; }
+  .gauge-val {
+    position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; font-size: 20px; font-weight: 700;
+    color: var(--accent-glow);
+  }
+  .gauge-label { font-size: 13px; color: var(--text-dim); }
+  .hypo-abstract {
+    font-size: 15px; line-height: 1.7; color: var(--text-dim);
+    max-width: 580px; margin: 0 auto;
+  }
+
+  /* ---- PANEL: Invention Loop (split) ---- */
+  .invention-split {
+    display: flex; gap: 32px; width: 100%; max-width: 1100px;
+    height: 100%; max-height: 520px;
+  }
+  .inv-left, .inv-right { flex: 1; display: flex; flex-direction: column; }
+  .inv-section-title {
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 1px; color: var(--text-faint); margin-bottom: 16px;
+  }
+  .activity-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 24px; flex: 1;
+    display: flex; flex-direction: column; gap: 16px;
+  }
+  .act-status {
+    display: flex; align-items: center; gap: 10px;
+  }
+  .pulse-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 8px rgba(63,185,80,.5);
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: .5; }
+  }
+  .act-status span { font-size: 14px; font-weight: 500; color: var(--green); }
+  .act-task {
+    font-size: 15px; font-weight: 500; color: var(--text); line-height: 1.5;
+  }
+  .act-stats { display: flex; gap: 20px; margin-top: auto; }
+  .act-stat {
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .act-stat-val { font-size: 18px; font-weight: 600; color: var(--text); }
+  .act-stat-lbl { font-size: 11px; color: var(--text-faint); }
+  .act-progress-bar {
+    width: 100%; height: 4px; background: var(--surface3);
+    border-radius: 2px; overflow: hidden;
+  }
+  .act-progress-fill {
+    height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent-glow));
+    border-radius: 2px; transition: width .3s;
+  }
+
+  /* Artifact cards */
+  .artifacts-grid {
+    display: flex; flex-direction: column; gap: 10px; flex: 1;
+    overflow-y: auto;
+  }
+  .artifact-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 14px 16px;
+    display: flex; align-items: center; gap: 12px;
+    transition: border-color .15s;
+  }
+  .artifact-card:hover { border-color: var(--accent); }
+  .art-icon {
+    width: 36px; height: 36px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; flex-shrink: 0;
+  }
+  .art-icon.paper { background: rgba(88,166,255,.12); color: var(--blue); }
+  .art-icon.code { background: rgba(124,106,239,.12); color: var(--accent-glow); }
+  .art-icon.data { background: rgba(63,185,80,.12); color: var(--green); }
+  .art-icon.viz { background: rgba(210,153,34,.12); color: var(--amber); }
+  .art-info { flex: 1; min-width: 0; }
+  .art-name { font-size: 13px; font-weight: 500; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .art-meta { font-size: 11px; color: var(--text-faint); margin-top: 2px; }
+  .art-badge {
+    font-size: 10px; font-weight: 600; padding: 2px 8px;
+    border-radius: 10px; flex-shrink: 0;
+  }
+  .art-badge.ready { background: rgba(63,185,80,.12); color: var(--green); }
+  .art-badge.wip { background: rgba(210,153,34,.12); color: var(--amber); }
+
+  /* ---- PANEL: Paper Preview ---- */
+  .paper-preview {
+    max-width: 600px; width: 100%; text-align: center;
+  }
+  .paper-mock {
+    width: 240px; height: 320px; margin: 0 auto 24px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 20px;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .paper-mock-title {
+    font-size: 10px; font-weight: 700; color: var(--text);
+    text-align: left;
+  }
+  .paper-mock-line {
+    height: 3px; background: var(--surface3); border-radius: 2px;
+  }
+  .paper-mock-line.short { width: 60%; }
+  .paper-mock-line.med { width: 80%; }
+  .paper-mock-block {
+    flex: 1; background: var(--surface3); border-radius: 4px;
+    margin-top: 4px;
+  }
+  .paper-title { font-size: 22px; font-weight: 700; margin-bottom: 16px; }
+  .paper-counts {
+    display: flex; gap: 24px; justify-content: center;
+  }
+  .paper-count { display: flex; flex-direction: column; gap: 2px; }
+  .paper-count-val { font-size: 20px; font-weight: 600; color: var(--accent-glow); }
+  .paper-count-lbl { font-size: 11px; color: var(--text-faint); }
+
+  /* ---- BOTTOM PANELS (advanced) ---- */
+  .bottom-row {
+    display: flex; gap: 1px; background: var(--border);
+    height: 0; overflow: hidden;
+    transition: height .35s cubic-bezier(.4, 0, .2, 1);
+  }
+  .bottom-row.open { height: 40%; }
+
+  .btm-panel {
+    flex: 1; background: var(--surface);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .btm-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 16px; border-bottom: 1px solid var(--border);
+    min-height: 40px;
+  }
+  .btm-header-left { display: flex; align-items: center; gap: 8px; }
+  .grip-dots {
+    display: grid; grid-template-columns: repeat(2, 4px); gap: 3px;
+    opacity: .3;
+  }
+  .grip-dots span {
+    width: 3px; height: 3px; border-radius: 50%;
+    background: var(--text-dim);
+  }
+  .btm-title { font-size: 12px; font-weight: 600; color: var(--text); }
+  .btm-body { flex: 1; padding: 14px 16px; overflow-y: auto; }
+
+  /* Feedback */
+  .fb-textarea {
+    width: 100%; height: 80px; background: var(--surface3);
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    color: var(--text); font-size: 13px; padding: 10px 12px;
+    resize: vertical; font-family: inherit;
+    transition: border-color .15s;
+  }
+  .fb-textarea:focus { outline: none; border-color: var(--accent); }
+  .fb-actions { display: flex; gap: 8px; margin-top: 10px; }
+  .fb-btn {
+    padding: 7px 16px; border-radius: var(--radius-sm);
+    font-size: 12px; font-weight: 500; cursor: pointer;
+    border: 1px solid var(--border); background: var(--surface3);
+    color: var(--text-dim); transition: all .15s; font-family: inherit;
+  }
+  .fb-btn:hover { border-color: var(--accent); color: var(--text); }
+  .fb-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .fb-btn.primary:hover { background: var(--accent-glow); }
+
+  /* Logs */
+  .log-lines { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 11px; line-height: 1.6; }
+  .log-line { display: flex; gap: 8px; white-space: nowrap; }
+  .log-ts { color: var(--text-faint); flex-shrink: 0; }
+  .log-lvl { font-weight: 600; flex-shrink: 0; width: 36px; }
+  .log-lvl.info { color: var(--blue); }
+  .log-lvl.warn { color: var(--amber); }
+  .log-lvl.ok { color: var(--green); }
+  .log-msg { color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; }
+
+  .add-panel-btn {
+    font-size: 11px; color: var(--text-faint); cursor: pointer;
+    border: 1px dashed var(--border); background: none;
+    padding: 3px 10px; border-radius: var(--radius-sm);
+    font-family: inherit; transition: all .15s;
+  }
+  .add-panel-btn:hover { color: var(--accent-glow); border-color: var(--accent); }
+
+  /* ---- STATS BAR ---- */
+  .stats-bar {
+    display: flex; align-items: center; justify-content: center;
+    gap: 28px; padding: 0 24px;
+    height: 36px; min-height: 36px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    font-size: 12px; color: var(--text-dim);
+  }
+  .stat-item { display: flex; align-items: center; gap: 6px; }
+  .stat-val { color: var(--text); font-weight: 500; }
+  .stats-extra { display: none; }
+
+  /* Advanced mode overrides */
+  body.advanced .pipeline-dots { display: none; }
+  body.advanced .pipeline-nodes { display: flex; }
+  body.advanced .tab-bar { display: flex; }
+  body.advanced .edge-arrow { display: none; }
+  body.advanced .slide-indicators { display: none; }
+  body.advanced .bottom-row { height: 40%; }
+  body.advanced .stats-extra { display: flex; }
+  body.advanced .slide-panel { padding: 28px 40px; }
+  body.advanced .topbar { height: 56px; }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--surface3); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--border); }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <span class="run-name">ssl-low-resource-v3</span>
+      <span class="run-tag">Invention Loop</span>
+    </div>
+
+    <div class="topbar-center">
+      <!-- Simple: pipeline dots -->
+      <div class="pipeline-dots">
+        <div class="pdot done"><span class="pdot-label">Seed</span></div>
+        <div class="pdot-connector done"></div>
+        <div class="pdot done"><span class="pdot-label">Hypotheses</span></div>
+        <div class="pdot-connector done"></div>
+        <div class="pdot active"><span class="pdot-label">Invention</span></div>
+        <div class="pdot-connector"></div>
+        <div class="pdot"><span class="pdot-label">Paper</span></div>
+      </div>
+      <!-- Advanced: pipeline nodes -->
+      <div class="pipeline-nodes">
+        <div class="pnode done"><span class="pnode-dot"></span>Seed Hypo</div>
+        <span class="pnode-arrow">&rsaquo;</span>
+        <div class="pnode done"><span class="pnode-dot"></span>Hypo Loop</div>
+        <span class="pnode-arrow">&rsaquo;</span>
+        <div class="pnode active"><span class="pnode-dot"></span>Invention Loop</div>
+        <span class="pnode-arrow">&rsaquo;</span>
+        <div class="pnode"><span class="pnode-dot"></span>Gen Paper</div>
+      </div>
+    </div>
+
+    <div class="topbar-right">
+      <div style="position:relative">
+        <button class="gear-btn" id="gearBtn" title="Run Controls">&#9881;</button>
+        <div class="popover" id="popover">
+          <span class="popover-title">Run Controls</span>
+          <div class="pop-row">
+            <button class="pop-btn active-ctrl" id="ctrlPause">&#9646;&#9646; Pause</button>
+            <button class="pop-btn" id="ctrlResume">&#9654; Resume</button>
+            <button class="pop-btn danger" id="ctrlStop">&#9632; Stop</button>
+          </div>
+          <span class="popover-title" style="margin-top:6px">Mode</span>
+          <select class="pop-select" id="popMode">
+            <option value="auto" selected>Auto (follow pipeline)</option>
+            <option value="manual">Manual (stay on panel)</option>
+          </select>
+        </div>
+      </div>
+      <div class="mode-toggle">
+        <button class="mode-btn active" data-mode="simple">Simple</button>
+        <button class="mode-btn" data-mode="advanced">Advanced</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN AREA -->
+  <div class="main-area">
+
+    <!-- Tab bar (advanced only) -->
+    <div class="tab-bar">
+      <button class="tab-btn" data-slide="0">Overview</button>
+      <button class="tab-btn active" data-slide="1">Invention Loop</button>
+      <button class="tab-btn" data-slide="2">Artifacts</button>
+      <button class="tab-btn" data-slide="3">Paper</button>
+    </div>
+
+    <!-- Slide viewport -->
+    <div class="slide-viewport">
+      <div class="edge-arrow left hidden" id="arrowLeft">&#8249;</div>
+      <div class="edge-arrow right" id="arrowRight">&#8250;</div>
+
+      <div class="slide-track" id="slideTrack">
+
+        <!-- Slide 0: Hypothesis Card (Overview) -->
+        <div class="slide-panel">
+          <div class="hypo-card">
+            <span class="hypo-stage-badge">Hypothesis Review</span>
+            <h1 class="hypo-title">Semi-Supervised Label Propagation via Entropy-Gated Mixup for Low-Resource Domains</h1>
+            <div class="hypo-gauge-wrap">
+              <div class="gauge-ring">
+                <svg viewBox="0 0 80 80" width="80" height="80">
+                  <circle class="track" cx="40" cy="40" r="34"/>
+                  <circle class="fill" cx="40" cy="40" r="34" stroke-dasharray="213.6" stroke-dashoffset="35.3"/>
+                </svg>
+                <span class="gauge-val">8.4</span>
+              </div>
+              <div style="text-align:left">
+                <div class="gauge-label">Novelty Score</div>
+                <div style="font-size:12px;color:var(--text-faint);margin-top:2px">Top 12% of generated hypotheses</div>
+              </div>
+            </div>
+            <p class="hypo-abstract">We propose a semi-supervised framework combining entropy-gated sample selection with domain-adaptive mixup augmentation. The approach addresses catastrophic label noise in low-resource settings by dynamically weighting pseudo-labels based on prediction confidence calibration, achieving significant improvements on benchmarks with fewer than 100 labeled samples per class.</p>
+          </div>
+        </div>
+
+        <!-- Slide 1: Invention Loop (Activity + Artifacts split) -->
+        <div class="slide-panel">
+          <div class="invention-split">
+            <div class="inv-left">
+              <div class="inv-section-title">Current Activity</div>
+              <div class="activity-card">
+                <div class="act-status">
+                  <div class="pulse-dot"></div>
+                  <span>Running</span>
+                </div>
+                <div class="act-task">Generating experimental plan for entropy-gated mixup strategy with ablation study design...</div>
+                <div class="act-progress-bar"><div class="act-progress-fill" style="width:62%"></div></div>
+                <div class="act-stats">
+                  <div class="act-stat"><span class="act-stat-val">3 / 5</span><span class="act-stat-lbl">Iterations</span></div>
+                  <div class="act-stat"><span class="act-stat-val">2</span><span class="act-stat-lbl">Revisions</span></div>
+                  <div class="act-stat"><span class="act-stat-val">84%</span><span class="act-stat-lbl">Confidence</span></div>
+                </div>
+              </div>
+            </div>
+            <div class="inv-right">
+              <div class="inv-section-title">Artifacts</div>
+              <div class="artifacts-grid">
+                <div class="artifact-card">
+                  <div class="art-icon paper">&#128196;</div>
+                  <div class="art-info"><div class="art-name">paper_draft_v2.tex</div><div class="art-meta">LaTeX -- 14.2 KB -- Iteration 3</div></div>
+                  <span class="art-badge ready">Ready</span>
+                </div>
+                <div class="artifact-card">
+                  <div class="art-icon code">&#128187;</div>
+                  <div class="art-info"><div class="art-name">entropy_gate.py</div><div class="art-meta">Python -- 3.8 KB -- Core module</div></div>
+                  <span class="art-badge ready">Ready</span>
+                </div>
+                <div class="artifact-card">
+                  <div class="art-icon viz">&#128202;</div>
+                  <div class="art-info"><div class="art-name">ablation_results.svg</div><div class="art-meta">SVG -- 28 KB -- Figure 3</div></div>
+                  <span class="art-badge wip">In Progress</span>
+                </div>
+                <div class="artifact-card">
+                  <div class="art-icon data">&#128451;</div>
+                  <div class="art-info"><div class="art-name">benchmark_scores.json</div><div class="art-meta">JSON -- 5.1 KB -- All benchmarks</div></div>
+                  <span class="art-badge ready">Ready</span>
+                </div>
+                <div class="artifact-card">
+                  <div class="art-icon code">&#128187;</div>
+                  <div class="art-info"><div class="art-name">mixup_augment.py</div><div class="art-meta">Python -- 2.4 KB -- Augmentation</div></div>
+                  <span class="art-badge ready">Ready</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Slide 2: Artifacts (full view) -->
+        <div class="slide-panel">
+          <div style="width:100%;max-width:700px">
+            <div class="inv-section-title" style="text-align:center;margin-bottom:20px">All Artifacts</div>
+            <div class="artifacts-grid">
+              <div class="artifact-card">
+                <div class="art-icon paper">&#128196;</div>
+                <div class="art-info"><div class="art-name">paper_draft_v2.tex</div><div class="art-meta">LaTeX -- 14.2 KB -- Iteration 3</div></div>
+                <span class="art-badge ready">Ready</span>
+              </div>
+              <div class="artifact-card">
+                <div class="art-icon code">&#128187;</div>
+                <div class="art-info"><div class="art-name">entropy_gate.py</div><div class="art-meta">Python -- 3.8 KB -- Core module</div></div>
+                <span class="art-badge ready">Ready</span>
+              </div>
+              <div class="artifact-card">
+                <div class="art-icon viz">&#128202;</div>
+                <div class="art-info"><div class="art-name">ablation_results.svg</div><div class="art-meta">SVG -- 28 KB -- Figure 3</div></div>
+                <span class="art-badge wip">In Progress</span>
+              </div>
+              <div class="artifact-card">
+                <div class="art-icon data">&#128451;</div>
+                <div class="art-info"><div class="art-name">benchmark_scores.json</div><div class="art-meta">JSON -- 5.1 KB -- All benchmarks</div></div>
+                <span class="art-badge ready">Ready</span>
+              </div>
+              <div class="artifact-card">
+                <div class="art-icon code">&#128187;</div>
+                <div class="art-info"><div class="art-name">mixup_augment.py</div><div class="art-meta">Python -- 2.4 KB -- Augmentation</div></div>
+                <span class="art-badge ready">Ready</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Slide 3: Paper Preview -->
+        <div class="slide-panel">
+          <div class="paper-preview">
+            <div class="paper-mock">
+              <div class="paper-mock-title">Semi-Supervised Label Propagation via Entropy-Gated Mixup</div>
+              <div class="paper-mock-line short"></div>
+              <div class="paper-mock-line med"></div>
+              <div class="paper-mock-line"></div>
+              <div class="paper-mock-line short"></div>
+              <div class="paper-mock-line med"></div>
+              <div class="paper-mock-line"></div>
+              <div class="paper-mock-line short"></div>
+              <div class="paper-mock-block"></div>
+            </div>
+            <h2 class="paper-title">Paper Draft v2</h2>
+            <div class="paper-counts">
+              <div class="paper-count"><span class="paper-count-val">7</span><span class="paper-count-lbl">Sections</span></div>
+              <div class="paper-count"><span class="paper-count-val">3</span><span class="paper-count-lbl">Figures</span></div>
+              <div class="paper-count"><span class="paper-count-val">2</span><span class="paper-count-lbl">Tables</span></div>
+              <div class="paper-count"><span class="paper-count-val">24</span><span class="paper-count-lbl">References</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Slide indicators -->
+      <div class="slide-indicators" id="slideIndicators">
+        <div class="slide-ind" data-slide="0"></div>
+        <div class="slide-ind active" data-slide="1"></div>
+        <div class="slide-ind" data-slide="2"></div>
+        <div class="slide-ind" data-slide="3"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTTOM ROW (advanced) -->
+  <div class="bottom-row" id="bottomRow">
+    <div class="btm-panel">
+      <div class="btm-header">
+        <div class="btm-header-left">
+          <div class="grip-dots"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+          <span class="btm-title">Feedback</span>
+        </div>
+        <button class="add-panel-btn">+ Panel</button>
+      </div>
+      <div class="btm-body">
+        <textarea class="fb-textarea" placeholder="Provide feedback on the current hypothesis or generation step..."></textarea>
+        <div class="fb-actions">
+          <button class="fb-btn primary">Submit Feedback</button>
+          <button class="fb-btn">Rewind to Hypothesis</button>
+        </div>
+      </div>
+    </div>
+    <div class="btm-panel">
+      <div class="btm-header">
+        <div class="btm-header-left">
+          <div class="grip-dots"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+          <span class="btm-title">Logs</span>
+        </div>
+      </div>
+      <div class="btm-body">
+        <div class="log-lines" id="logLines">
+          <div class="log-line"><span class="log-ts">14:32:01</span><span class="log-lvl info">INFO</span><span class="log-msg">Invention loop iteration 3/5 started</span></div>
+          <div class="log-line"><span class="log-ts">14:32:03</span><span class="log-lvl ok">OK</span><span class="log-msg">Loaded hypothesis ssl-low-resource-v3 (score: 8.4)</span></div>
+          <div class="log-line"><span class="log-ts">14:32:05</span><span class="log-lvl info">INFO</span><span class="log-msg">Generating experimental plan -- entropy-gated mixup</span></div>
+          <div class="log-line"><span class="log-ts">14:32:18</span><span class="log-lvl info">INFO</span><span class="log-msg">Plan accepted -- 5 ablation variants defined</span></div>
+          <div class="log-line"><span class="log-ts">14:32:20</span><span class="log-lvl ok">OK</span><span class="log-msg">Artifact paper_draft_v2.tex updated (14.2 KB)</span></div>
+          <div class="log-line"><span class="log-ts">14:32:24</span><span class="log-lvl warn">WARN</span><span class="log-msg">Token budget 82% consumed -- 47.2k remaining</span></div>
+          <div class="log-line"><span class="log-ts">14:32:31</span><span class="log-lvl info">INFO</span><span class="log-msg">Generating visualization: ablation_results.svg</span></div>
+          <div class="log-line"><span class="log-ts">14:32:38</span><span class="log-lvl ok">OK</span><span class="log-msg">entropy_gate.py validation passed -- all tests green</span></div>
+          <div class="log-line"><span class="log-ts">14:32:42</span><span class="log-lvl info">INFO</span><span class="log-msg">Review cycle 2 -- checking paper coherence</span></div>
+          <div class="log-line"><span class="log-ts">14:32:50</span><span class="log-lvl info">INFO</span><span class="log-msg">Benchmark scores compiled -- 4 datasets evaluated</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STATS BAR -->
+  <div class="stats-bar">
+    <div class="stat-item"><span>Runtime</span><span class="stat-val" id="statRuntime">14m 32s</span></div>
+    <div class="stat-item"><span>Cost</span><span class="stat-val">$1.84</span></div>
+    <div class="stat-item stats-extra"><span>Tokens</span><span class="stat-val">213.4k</span></div>
+    <div class="stat-item stats-extra"><span>Iterations</span><span class="stat-val">3 / 5</span></div>
+    <div class="stat-item stats-extra"><span>Artifacts</span><span class="stat-val">5</span></div>
+  </div>
+
+</div>
+
+<script>
+(function() {
+  const TOTAL_SLIDES = 4;
+  let currentSlide = 1;
+  let isAdvanced = false;
+
+  const slideTrack = document.getElementById('slideTrack');
+  const arrowLeft = document.getElementById('arrowLeft');
+  const arrowRight = document.getElementById('arrowRight');
+  const indicators = document.querySelectorAll('.slide-ind');
+  const tabBtns = document.querySelectorAll('.tab-btn');
+  const modeBtns = document.querySelectorAll('.mode-btn');
+  const bottomRow = document.getElementById('bottomRow');
+  const gearBtn = document.getElementById('gearBtn');
+  const popover = document.getElementById('popover');
+
+  function goToSlide(idx) {
+    if (idx < 0 || idx >= TOTAL_SLIDES) return;
+    currentSlide = idx;
+    slideTrack.style.transform = `translateX(-${idx * 100}%)`;
+
+    indicators.forEach((ind, i) => ind.classList.toggle('active', i === idx));
+    tabBtns.forEach((btn) => btn.classList.toggle('active', parseInt(btn.dataset.slide) === idx));
+
+    if (!isAdvanced) {
+      arrowLeft.classList.toggle('hidden', idx === 0);
+      arrowRight.classList.toggle('hidden', idx === TOTAL_SLIDES - 1);
+    }
+  }
+
+  // Edge arrows
+  arrowLeft.addEventListener('click', () => goToSlide(currentSlide - 1));
+  arrowRight.addEventListener('click', () => goToSlide(currentSlide + 1));
+
+  // Indicators
+  indicators.forEach(ind => {
+    ind.addEventListener('click', () => goToSlide(parseInt(ind.dataset.slide)));
+  });
+
+  // Tab buttons
+  tabBtns.forEach(btn => {
+    btn.addEventListener('click', () => goToSlide(parseInt(btn.dataset.slide)));
+  });
+
+  // Keyboard navigation
+  document.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'INPUT') return;
+    if (e.key === 'ArrowLeft') { e.preventDefault(); goToSlide(currentSlide - 1); }
+    if (e.key === 'ArrowRight') { e.preventDefault(); goToSlide(currentSlide + 1); }
+  });
+
+  // Mode toggle
+  modeBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const mode = btn.dataset.mode;
+      isAdvanced = mode === 'advanced';
+      document.body.classList.toggle('advanced', isAdvanced);
+      modeBtns.forEach(b => b.classList.toggle('active', b === btn));
+
+      if (!isAdvanced) {
+        arrowLeft.style.display = '';
+        arrowRight.style.display = '';
+        arrowLeft.classList.toggle('hidden', currentSlide === 0);
+        arrowRight.classList.toggle('hidden', currentSlide === TOTAL_SLIDES - 1);
+      }
+      goToSlide(currentSlide);
+    });
+  });
+
+  // Gear popover
+  gearBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    popover.classList.toggle('open');
+  });
+  document.addEventListener('click', (e) => {
+    if (!popover.contains(e.target) && e.target !== gearBtn) {
+      popover.classList.remove('open');
+    }
+  });
+
+  // Run control buttons
+  const ctrlPause = document.getElementById('ctrlPause');
+  const ctrlResume = document.getElementById('ctrlResume');
+  const ctrlStop = document.getElementById('ctrlStop');
+
+  ctrlPause.addEventListener('click', () => {
+    ctrlPause.classList.add('active-ctrl');
+    ctrlResume.classList.remove('active-ctrl');
+  });
+  ctrlResume.addEventListener('click', () => {
+    ctrlResume.classList.add('active-ctrl');
+    ctrlPause.classList.remove('active-ctrl');
+  });
+  ctrlStop.addEventListener('click', () => {
+    ctrlPause.classList.remove('active-ctrl');
+    ctrlResume.classList.remove('active-ctrl');
+  });
+
+  // Runtime counter
+  let runtimeSec = 14 * 60 + 32;
+  const statRuntime = document.getElementById('statRuntime');
+  setInterval(() => {
+    runtimeSec++;
+    const m = Math.floor(runtimeSec / 60);
+    const s = runtimeSec % 60;
+    statRuntime.textContent = `${m}m ${s.toString().padStart(2, '0')}s`;
+  }, 1000);
+
+  // Initialize on default slide
+  goToSlide(1);
+})();
+</script>
+</body>
+</html>

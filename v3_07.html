@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — v3.07</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#1a1d23;--surface:#22262e;--border:#2e3440;
+    --text:#e2e4e9;--muted:#8b919a;
+    --green:#22c55e;--purple:#a78bfa;--blue:#3b82f6;--orange:#f59e0b;
+    --active:var(--green);
+    --ring-size:100px;
+  }
+  html{background:var(--bg);color:var(--text);font-family:'Inter','Segoe UI',system-ui,sans-serif;font-size:14px}
+  body{min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:32px 16px 64px;overflow-x:hidden;user-select:none}
+
+  /* ── Hero Ring ─────────────────────────────────────── */
+  .hero-ring{position:relative;width:var(--ring-size);height:var(--ring-size);margin-bottom:10px;flex-shrink:0}
+  .hero-ring svg{width:100%;height:100%;transform:rotate(-90deg)}
+  .hero-ring .track{fill:none;stroke:var(--border);stroke-width:6}
+  .hero-ring .progress{fill:none;stroke-width:6;stroke-linecap:round;transition:stroke 0.6s ease, stroke-dashoffset 0.5s ease}
+  .hero-ring .glow{fill:none;stroke-width:10;stroke-linecap:round;opacity:0.18;filter:blur(4px);transition:stroke 0.6s ease, stroke-dashoffset 0.5s ease}
+  .hero-pct{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+  .hero-pct .num{font-size:26px;font-weight:700;letter-spacing:-1px;line-height:1}
+  .hero-pct .lbl{font-size:10px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:0.6px}
+  .hero-title{font-size:13px;color:var(--muted);margin-bottom:22px;text-align:center;transition:color 0.4s}
+
+  /* ── Row 1: Module Nodes ───────────────────────────── */
+  .module-row{display:flex;align-items:center;gap:0;margin-bottom:18px;position:relative}
+  .module-node{position:relative;width:42px;height:42px;cursor:pointer;flex-shrink:0;z-index:2}
+  .module-node svg{width:100%;height:100%}
+  .module-node .m-track{fill:none;stroke:var(--border);stroke-width:3;transition:stroke 0.3s}
+  .module-node .m-fill{fill:none;stroke-width:3;stroke-linecap:round;transition:stroke-dashoffset 0.5s, opacity 0.3s;opacity:0.45}
+  .module-node.active .m-fill{opacity:1}
+  .module-node .m-dot{fill:var(--border);transition:fill 0.3s, r 0.3s}
+  .module-node.active .m-dot{r:3.5}
+  .module-node .m-label{position:absolute;bottom:-16px;left:50%;transform:translateX(-50%);font-size:9px;white-space:nowrap;color:var(--muted);transition:color 0.3s;text-transform:uppercase;letter-spacing:0.5px}
+  .module-node.active .m-label{color:var(--text)}
+
+  /* connectors between module nodes */
+  .connector{width:48px;height:2px;position:relative;overflow:visible;flex-shrink:0;z-index:1}
+  .connector .line{position:absolute;top:0;left:0;right:0;height:2px;background:var(--border);border-radius:1px}
+  .connector .particle{position:absolute;top:-1px;width:6px;height:4px;border-radius:2px;opacity:0;animation:none}
+  .connector.live .particle{animation:particleMove 1.8s ease-in-out infinite}
+  @keyframes particleMove{
+    0%{left:-6px;opacity:0}
+    15%{opacity:0.9}
+    85%{opacity:0.9}
+    100%{left:calc(100%);opacity:0}
+  }
+
+  /* ── Row 2: Sub-module Dots ────────────────────────── */
+  .sub-row{display:flex;align-items:center;justify-content:center;gap:8px;margin-bottom:28px;min-height:20px;transition:opacity 0.3s}
+  .sub-dot{width:10px;height:10px;border-radius:50%;border:2px solid var(--border);background:transparent;cursor:pointer;transition:all 0.25s;position:relative}
+  .sub-dot.done{background:var(--muted);border-color:var(--muted)}
+  .sub-dot.active{border-color:var(--text);background:var(--text);box-shadow:0 0 8px rgba(255,255,255,0.15)}
+  .sub-dot .tip{position:absolute;bottom:16px;left:50%;transform:translateX(-50%);background:var(--surface);color:var(--text);font-size:10px;padding:3px 8px;border-radius:4px;white-space:nowrap;opacity:0;pointer-events:none;transition:opacity 0.2s;border:1px solid var(--border)}
+  .sub-dot:hover .tip{opacity:1}
+
+  /* ── Content Area ──────────────────────────────────── */
+  .content{width:100%;max-width:700px;animation:fadeUp 0.3s ease}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px 24px;margin-bottom:14px;transition:border-color 0.3s}
+  .card:hover{border-color:color-mix(in srgb, var(--active) 30%, var(--border))}
+  .card h3{font-size:14px;font-weight:600;margin-bottom:6px}
+  .card p{font-size:13px;color:var(--muted);line-height:1.55}
+  .card .tag{display:inline-block;font-size:10px;padding:2px 8px;border-radius:4px;margin-right:6px;margin-top:8px;border:1px solid var(--border);color:var(--muted)}
+  .card .tag.hi{border-color:color-mix(in srgb, var(--active) 40%, transparent);color:var(--active)}
+  .stat-row{display:flex;gap:10px;margin-bottom:14px}
+  .stat{flex:1;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px;text-align:center}
+  .stat .val{font-size:22px;font-weight:700;line-height:1}
+  .stat .lbl{font-size:10px;color:var(--muted);margin-top:4px;text-transform:uppercase;letter-spacing:0.4px}
+  .mini-bar{height:4px;border-radius:2px;background:var(--border);margin-top:8px;overflow:hidden}
+  .mini-bar .fill{height:100%;border-radius:2px;transition:width 0.5s ease, background 0.5s ease}
+  .log-line{font-size:12px;color:var(--muted);padding:5px 0;border-bottom:1px solid var(--border);display:flex;gap:10px}
+  .log-line:last-child{border-bottom:none}
+  .log-line .ts{color:color-mix(in srgb, var(--active) 70%, var(--muted));font-family:'JetBrains Mono',monospace;flex-shrink:0}
+  .section-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px}
+
+  /* ── Keyboard hint ─────────────────────────────────── */
+  .kbd-hint{position:fixed;bottom:14px;right:18px;font-size:10px;color:var(--muted);display:flex;gap:6px;align-items:center}
+  .kbd{background:var(--surface);border:1px solid var(--border);border-radius:3px;padding:1px 6px;font-size:10px;font-family:monospace}
+
+  /* ── Pulse on active module dot center ─────────────── */
+  @keyframes pulse{0%,100%{r:2.5;opacity:1}50%{r:4;opacity:0.6}}
+  .module-node.active .m-dot{animation:pulse 2s ease-in-out infinite}
+</style>
+</head>
+<body>
+
+<!-- Hero Ring -->
+<div class="hero-ring" id="heroRing">
+  <svg viewBox="0 0 44 44">
+    <circle class="track" cx="22" cy="22" r="19"/>
+    <circle class="glow" cx="22" cy="22" r="19" id="heroGlow"/>
+    <circle class="progress" cx="22" cy="22" r="19" id="heroProgress"/>
+  </svg>
+  <div class="hero-pct">
+    <span class="num" id="heroPct">65%</span>
+    <span class="lbl" id="heroLbl">overall</span>
+  </div>
+</div>
+<div class="hero-title" id="heroTitle">Seed Hypotheses</div>
+
+<!-- Row 1: Module Nodes with Connectors -->
+<div class="module-row" id="moduleRow"></div>
+
+<!-- Row 2: Sub-module Dots -->
+<div class="sub-row" id="subRow"></div>
+
+<!-- Content -->
+<div class="content" id="contentArea"></div>
+
+<!-- Keyboard hint -->
+<div class="kbd-hint">
+  <span class="kbd">&larr;</span><span class="kbd">&rarr;</span> modules
+  <span class="kbd">&uarr;</span><span class="kbd">&darr;</span> steps
+</div>
+
+<script>
+/* ================================================================
+   DATA
+   ================================================================ */
+const MODULES = [
+  {
+    id: 'seed', name: 'Seed', color: '#22c55e', progress: 100,
+    subs: [
+      { name: 'Load KG', done: true },
+      { name: 'Sample Nodes', done: true },
+      { name: 'Cross-Link', done: true },
+      { name: 'Gen Hypotheses', done: true }
+    ],
+    stats: { hypotheses: 48, sources: 312, clusters: 8, avgConf: 0.74 },
+    cards: [
+      { title: 'Knowledge Graph Loaded', body: 'Parsed 312 source papers across 8 topical clusters. Entity extraction identified 1,847 unique concepts with 4,221 pairwise relations.', tags: ['complete','312 papers'] },
+      { title: 'Hypothesis Generation', body: '48 seed hypotheses generated via cross-domain bridging. Top cluster: computational neuroscience + materials science (9 hypotheses, avg novelty 0.82).', tags: ['48 hypos','novelty 0.82'] },
+      { title: 'Deduplication Pass', body: 'Semantic similarity filtering removed 11 near-duplicate hypotheses. Remaining 48 cover 6 distinct research themes.', tags: ['deduplicated'] }
+    ],
+    logs: [
+      { ts: '14:02:11', msg: 'KG load complete — 1,847 entities, 4,221 relations' },
+      { ts: '14:02:38', msg: 'Cross-link pass found 127 bridging opportunities' },
+      { ts: '14:03:05', msg: 'Generated 59 raw hypotheses from 8 cluster pairs' },
+      { ts: '14:03:19', msg: 'Dedup filter: 59 -> 48 unique hypotheses' },
+      { ts: '14:03:22', msg: 'Confidence scoring complete (mean 0.74, std 0.11)' }
+    ]
+  },
+  {
+    id: 'hypo', name: 'Hypo', color: '#a78bfa', progress: 65,
+    subs: [
+      { name: 'Review Hypo', done: true },
+      { name: 'Score Novelty', done: true },
+      { name: 'Check Feasibility', done: false },
+      { name: 'Rank & Select', done: false }
+    ],
+    stats: { reviewed: 31, passed: 22, noveltyAvg: 0.78, remaining: 17 },
+    cards: [
+      { title: 'Hypothesis Review', body: '31 of 48 hypotheses reviewed by dual-LLM panel. 22 passed initial feasibility screening with novelty scores above threshold (0.65).', tags: ['31/48','22 passed'] },
+      { title: 'Novelty Assessment', body: 'Semantic search against 1.2M abstracts confirms low prior-art overlap. Mean novelty score 0.78 across passing hypotheses. 3 flagged for partial overlap.', tags: ['novelty 0.78','3 flagged'] },
+      { title: 'Feasibility Queue', body: '17 hypotheses awaiting resource-feasibility check. Estimated compute + data requirements being scored against available infrastructure.', tags: ['pending','17 queued'] }
+    ],
+    logs: [
+      { ts: '14:05:44', msg: 'Review batch 1/4 complete — 12 hypotheses scored' },
+      { ts: '14:07:12', msg: 'Review batch 2/4 complete — 10 hypotheses scored' },
+      { ts: '14:08:30', msg: 'Review batch 3/4 complete — 9 hypotheses scored' },
+      { ts: '14:08:55', msg: 'Novelty pass: 22/31 above 0.65 threshold' },
+      { ts: '14:09:02', msg: 'Feasibility queue: 17 remaining, starting resource check' }
+    ]
+  },
+  {
+    id: 'inv', name: 'Invention', color: '#3b82f6', progress: 40,
+    subs: [
+      { name: 'Gen Strategy', done: true },
+      { name: 'Gen Plan', done: true },
+      { name: 'Gen Experiments', done: false },
+      { name: 'Gen Paper Text', done: false },
+      { name: 'Review Paper', done: false }
+    ],
+    stats: { strategies: 5, plans: 3, experiments: 0, papers: 0 },
+    cards: [
+      { title: 'Strategy Generation', body: '5 invention strategies derived from top-ranked hypotheses. Each strategy maps a research trajectory across 2-3 experimental phases with clear milestones.', tags: ['5 strategies','multi-phase'] },
+      { title: 'Plan Synthesis', body: '3 detailed research plans generated. Each includes methodology, expected datasets, baseline comparisons, and estimated timelines (4-8 weeks per plan).', tags: ['3 plans','4-8 weeks'] },
+      { title: 'Awaiting Experiments', body: 'Experiment generation paused until plan review completes. Next: synthetic data generation for Plan A (computational neuroscience bridge).', tags: ['blocked','plan review'] }
+    ],
+    logs: [
+      { ts: '14:12:03', msg: 'Strategy generation started for top 5 hypotheses' },
+      { ts: '14:14:28', msg: '5/5 strategies complete — resource estimates attached' },
+      { ts: '14:15:44', msg: 'Plan synthesis: 3 plans generated from strategies 1,2,4' },
+      { ts: '14:16:01', msg: 'Plan A: neuro-materials bridge — 6 week timeline' },
+      { ts: '14:16:02', msg: 'Experiment gen queued, awaiting plan approval' }
+    ]
+  },
+  {
+    id: 'paper', name: 'Paper', color: '#f59e0b', progress: 10,
+    subs: [
+      { name: 'Gen Artifacts', done: true },
+      { name: 'Gen Viz', done: false },
+      { name: 'Gen Full Paper', done: false }
+    ],
+    stats: { artifacts: 2, figures: 0, pages: 0, citations: 0 },
+    cards: [
+      { title: 'Artifact Demos', body: '2 interactive artifact demos generated (Python notebook + web widget). Demonstrates core mechanism of top-ranked invention before full paper write-up.', tags: ['2 artifacts','interactive'] },
+      { title: 'Visualization Queue', body: 'Figure generation pending. Planned: 4 main figures (architecture diagram, results comparison, ablation study, qualitative examples).', tags: ['pending','4 figures'] },
+      { title: 'Paper Outline', body: 'LaTeX template prepared. Sections: Abstract, Introduction, Related Work, Method, Experiments, Results, Discussion, Conclusion. Targeting 8-10 pages.', tags: ['outline ready','8-10 pp'] }
+    ],
+    logs: [
+      { ts: '14:18:30', msg: 'Artifact gen started — Python demo for Plan A' },
+      { ts: '14:19:55', msg: 'Artifact 1/2 complete — notebook with 12 cells' },
+      { ts: '14:20:33', msg: 'Artifact 2/2 complete — interactive web widget' },
+      { ts: '14:20:40', msg: 'Viz generation queued (4 figures planned)' },
+      { ts: '14:20:41', msg: 'Paper repo initialized — LaTeX template ready' }
+    ]
+  }
+];
+
+/* ================================================================
+   STATE
+   ================================================================ */
+let activeModule = 0;
+let activeSub = 0;
+
+/* ================================================================
+   RING MATH
+   ================================================================ */
+const CIRC = 2 * Math.PI * 19; // r=19 in viewBox 44
+
+function setRing(el, glowEl, pct) {
+  const offset = CIRC * (1 - pct / 100);
+  el.style.strokeDasharray = CIRC;
+  el.style.strokeDashoffset = offset;
+  if (glowEl) {
+    glowEl.style.strokeDasharray = CIRC;
+    glowEl.style.strokeDashoffset = offset;
+  }
+}
+
+/* ================================================================
+   BUILD MODULE ROW
+   ================================================================ */
+const modRow = document.getElementById('moduleRow');
+const MC = 2 * Math.PI * 16; // module ring r=16 in viewBox 38
+
+function buildModuleRow() {
+  modRow.innerHTML = '';
+  MODULES.forEach((m, i) => {
+    // connector before (skip first)
+    if (i > 0) {
+      const con = document.createElement('div');
+      con.className = 'connector' + (i <= activeModule ? ' live' : '');
+      con.innerHTML = `<div class="line"></div><div class="particle" style="background:${MODULES[i-1].color}"></div>`;
+      modRow.appendChild(con);
+    }
+    // node
+    const node = document.createElement('div');
+    node.className = 'module-node' + (i === activeModule ? ' active' : '');
+    const pct = m.progress;
+    const offset = MC * (1 - pct / 100);
+    node.innerHTML = `
+      <svg viewBox="0 0 38 38" style="transform:rotate(-90deg)">
+        <circle class="m-track" cx="19" cy="19" r="16"/>
+        <circle class="m-fill" cx="19" cy="19" r="16"
+          style="stroke:${m.color};stroke-dasharray:${MC};stroke-dashoffset:${offset}"/>
+        <circle class="m-dot" cx="19" cy="19" r="2.5" style="fill:${m.color}" transform="rotate(90 19 19)"/>
+      </svg>
+      <span class="m-label">${m.name}</span>`;
+    node.addEventListener('click', () => { activeModule = i; activeSub = 0; render(); });
+    modRow.appendChild(node);
+  });
+}
+
+/* ================================================================
+   BUILD SUB ROW
+   ================================================================ */
+const subRow = document.getElementById('subRow');
+
+function buildSubRow() {
+  const m = MODULES[activeModule];
+  subRow.innerHTML = '';
+  m.subs.forEach((s, i) => {
+    const d = document.createElement('div');
+    let cls = 'sub-dot';
+    if (i === activeSub) cls += ' active';
+    else if (s.done) cls += ' done';
+    d.className = cls;
+    d.innerHTML = `<span class="tip">${s.name}</span>`;
+    d.addEventListener('click', () => { activeSub = i; render(); });
+    subRow.appendChild(d);
+  });
+}
+
+/* ================================================================
+   BUILD CONTENT
+   ================================================================ */
+const contentArea = document.getElementById('contentArea');
+
+function buildContent() {
+  const m = MODULES[activeModule];
+  const col = m.color;
+  let html = '';
+
+  // Stats row
+  const sk = Object.keys(m.stats);
+  html += '<div class="stat-row">';
+  sk.forEach(k => {
+    const v = m.stats[k];
+    const display = typeof v === 'number' && v < 1 && v > 0 ? v.toFixed(2) : v;
+    html += `<div class="stat"><div class="val" style="color:${col}">${display}</div><div class="lbl">${k.replace(/([A-Z])/g,' $1')}</div></div>`;
+  });
+  html += '</div>';
+
+  // Cards
+  m.cards.forEach(c => {
+    html += `<div class="card"><h3>${c.title}</h3><p>${c.body}</p>`;
+    if (c.tags) c.tags.forEach(t => {
+      const hi = (t.includes(String(m.progress)) || t === 'complete' || t.includes('passed')) ? ' hi' : '';
+      html += `<span class="tag${hi}">${t}</span>`;
+    });
+    // mini bar
+    html += `<div class="mini-bar"><div class="fill" style="width:${m.progress}%;background:${col}"></div></div>`;
+    html += '</div>';
+  });
+
+  // Log
+  html += '<div class="section-label">Activity Log</div>';
+  m.logs.forEach(l => {
+    html += `<div class="log-line"><span class="ts">${l.ts}</span><span>${l.msg}</span></div>`;
+  });
+
+  contentArea.innerHTML = html;
+  // re-trigger fade animation
+  contentArea.style.animation = 'none';
+  void contentArea.offsetWidth;
+  contentArea.style.animation = '';
+}
+
+/* ================================================================
+   HERO RING UPDATE
+   ================================================================ */
+const heroProgress = document.getElementById('heroProgress');
+const heroGlow     = document.getElementById('heroGlow');
+const heroPct      = document.getElementById('heroPct');
+const heroLbl      = document.getElementById('heroLbl');
+const heroTitle    = document.getElementById('heroTitle');
+
+function updateHero() {
+  const m = MODULES[activeModule];
+  heroProgress.style.stroke = m.color;
+  heroGlow.style.stroke = m.color;
+  setRing(heroProgress, heroGlow, m.progress);
+  heroPct.textContent = m.progress + '%';
+  heroLbl.textContent = m.id;
+  heroTitle.textContent = m.name + ' ' + (m.subs[activeSub]?.name || '');
+  heroTitle.style.color = m.color;
+  document.documentElement.style.setProperty('--active', m.color);
+}
+
+/* ================================================================
+   RENDER
+   ================================================================ */
+function render() {
+  // clamp
+  if (activeModule < 0) activeModule = MODULES.length - 1;
+  if (activeModule >= MODULES.length) activeModule = 0;
+  const maxSub = MODULES[activeModule].subs.length - 1;
+  if (activeSub < 0) activeSub = maxSub;
+  if (activeSub > maxSub) activeSub = 0;
+
+  updateHero();
+  buildModuleRow();
+  buildSubRow();
+  buildContent();
+}
+
+/* ================================================================
+   KEYBOARD
+   ================================================================ */
+document.addEventListener('keydown', e => {
+  switch (e.key) {
+    case 'ArrowRight': activeModule++; activeSub = 0; render(); break;
+    case 'ArrowLeft':  activeModule--; activeSub = 0; render(); break;
+    case 'ArrowDown':  e.preventDefault(); activeSub++; render(); break;
+    case 'ArrowUp':    e.preventDefault(); activeSub--; render(); break;
+  }
+});
+
+/* ================================================================
+   INIT
+   ================================================================ */
+render();
+</script>
+</body>
+</html>

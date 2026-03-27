@@ -1,0 +1,1919 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor Pipeline</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* ================================================================
+     RESET & VARIABLES
+     ================================================================ */
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --slate-950: #020617;
+    --slate-900: #0f172a;
+    --slate-850: #131c31;
+    --slate-800: #1e293b;
+    --slate-750: #253349;
+    --slate-700: #334155;
+    --slate-600: #475569;
+    --slate-500: #64748b;
+    --slate-400: #94a3b8;
+    --slate-300: #cbd5e1;
+    --slate-200: #e2e8f0;
+    --slate-100: #f1f5f9;
+
+    --seed-color: #22c55e;
+    --seed-glow: rgba(34, 197, 94, 0.35);
+    --seed-dim: rgba(34, 197, 94, 0.12);
+    --seed-hue: 142;
+
+    --hypo-color: #38bdf8;
+    --hypo-glow: rgba(56, 189, 248, 0.35);
+    --hypo-dim: rgba(56, 189, 248, 0.12);
+    --hypo-hue: 199;
+
+    --inv-color: #a78bfa;
+    --inv-glow: rgba(167, 139, 250, 0.35);
+    --inv-dim: rgba(167, 139, 250, 0.12);
+    --inv-hue: 271;
+
+    --paper-color: #fb923c;
+    --paper-glow: rgba(251, 146, 60, 0.35);
+    --paper-dim: rgba(251, 146, 60, 0.12);
+    --paper-hue: 32;
+
+    --card-radius: 14px;
+    --sub-radius: 10px;
+    --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-out-smooth: cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  html {
+    background: var(--slate-950);
+    color: var(--slate-200);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 14px;
+    min-height: 100vh;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 36px 24px 80px;
+    position: relative;
+  }
+
+  /* ================================================================
+     BACKGROUND PARTICLES (canvas)
+     ================================================================ */
+  #bgCanvas {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.45;
+  }
+
+  /* ================================================================
+     BACKGROUND AMBIANCE
+     ================================================================ */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 900px 600px at 50% 20%, rgba(99, 102, 241, 0.06) 0%, transparent 70%),
+      radial-gradient(ellipse 600px 400px at 80% 70%, rgba(167, 139, 250, 0.04) 0%, transparent 60%),
+      radial-gradient(ellipse 500px 500px at 20% 80%, rgba(34, 197, 94, 0.03) 0%, transparent 60%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(148, 163, 184, 0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(148, 163, 184, 0.02) 1px, transparent 1px);
+    background-size: 44px 44px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ================================================================
+     FLOATING MOTES (ambient CSS particles)
+     ================================================================ */
+  .mote {
+    position: fixed;
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: var(--slate-600);
+    opacity: 0;
+    pointer-events: none;
+    z-index: 0;
+    animation: mote-float linear infinite;
+  }
+
+  @keyframes mote-float {
+    0%   { opacity: 0; transform: translateY(0) translateX(0); }
+    10%  { opacity: 0.4; }
+    90%  { opacity: 0.4; }
+    100% { opacity: 0; transform: translateY(-200px) translateX(30px); }
+  }
+
+  /* ================================================================
+     HEADER — ring + title row, centered
+     ================================================================ */
+  .header {
+    text-align: center;
+    margin-bottom: 40px;
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 1100px;
+  }
+
+  .header-top {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    margin-bottom: 8px;
+  }
+
+  /* 40px progress ring in header */
+  .header-ring {
+    position: relative;
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+  }
+
+  .header-ring svg {
+    width: 40px;
+    height: 40px;
+    transform: rotate(-90deg);
+  }
+
+  .ring-track { fill: none; stroke: var(--slate-700); stroke-width: 3.5; }
+  .ring-progress {
+    fill: none;
+    stroke-width: 3.5;
+    stroke-linecap: round;
+    stroke-dasharray: 100.53;
+    stroke-dashoffset: 100.53;
+    transition: stroke-dashoffset 1.4s cubic-bezier(0.4, 0, 0.2, 1);
+    filter: drop-shadow(0 0 4px rgba(167,139,250,0.35));
+  }
+
+  .ring-pct {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+    background: linear-gradient(135deg, var(--seed-color), var(--hypo-color), var(--inv-color));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .header h1 {
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    color: var(--slate-100);
+  }
+
+  .header-sub {
+    font-size: 13px;
+    color: var(--slate-500);
+    font-weight: 400;
+  }
+
+  /* Stats row below title */
+  .header-stats {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    margin-top: 10px;
+    font-size: 11.5px;
+    color: var(--slate-500);
+  }
+
+  .header-stat-val {
+    font-weight: 600;
+    color: var(--slate-300);
+    margin-left: 4px;
+  }
+
+  /* ================================================================
+     PIPELINE LAYOUT — horizontal row of module columns
+     ================================================================ */
+  .pipeline {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 1100px;
+    justify-content: center;
+    flex-wrap: nowrap;
+  }
+
+  /* Colored connector line behind cards */
+  .connector-line {
+    position: absolute;
+    top: 42px;
+    left: 0;
+    right: 0;
+    height: 2px;
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  .connector-segment {
+    position: absolute;
+    top: 0;
+    height: 100%;
+  }
+
+  /* ================================================================
+     MODULE COLUMN
+     ================================================================ */
+  .module-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+    min-width: 220px;
+    max-width: 280px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ================================================================
+     MINI RING — above each module card
+     ================================================================ */
+  .mini-ring {
+    position: relative;
+    width: 28px;
+    height: 28px;
+    margin-bottom: 10px;
+    flex-shrink: 0;
+  }
+
+  .mini-ring svg {
+    width: 28px;
+    height: 28px;
+    transform: rotate(-90deg);
+  }
+
+  .mini-ring-track { fill: none; stroke: var(--slate-700); stroke-width: 3; }
+  .mini-ring-progress {
+    fill: none;
+    stroke-width: 3;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 1s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .mini-ring-icon {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+  }
+
+  /* ================================================================
+     MODULE CARD
+     ================================================================ */
+  .module-card {
+    width: 100%;
+    border-radius: var(--card-radius);
+    padding: 16px 18px;
+    position: relative;
+    cursor: pointer;
+    user-select: none;
+    transition:
+      transform 260ms var(--ease-out-smooth),
+      box-shadow 260ms var(--ease-out-smooth),
+      border-color 260ms var(--ease-out-smooth);
+    border: 1.5px solid var(--slate-700);
+    background: linear-gradient(135deg, var(--slate-850) 0%, var(--slate-900) 100%);
+    overflow: hidden;
+  }
+
+  .module-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    opacity: 0;
+    transition: opacity 260ms var(--ease-out-smooth);
+    pointer-events: none;
+  }
+
+  .module-card:hover { transform: translateY(-2px); }
+  .module-card:hover::before { opacity: 1; }
+  .module-card:active { transform: translateY(0px) scale(0.99); }
+
+  /* Per-module card accent styles */
+  .module-card[data-module="seed"] {
+    border-color: color-mix(in srgb, var(--seed-color) 30%, var(--slate-700));
+  }
+  .module-card[data-module="seed"]::before {
+    background: radial-gradient(ellipse at 30% 20%, var(--seed-glow), transparent 70%);
+  }
+  .module-card[data-module="seed"]:hover {
+    border-color: color-mix(in srgb, var(--seed-color) 50%, var(--slate-600));
+    box-shadow: 0 8px 32px -8px var(--seed-glow);
+  }
+
+  .module-card[data-module="hypo"] {
+    border-color: color-mix(in srgb, var(--hypo-color) 30%, var(--slate-700));
+  }
+  .module-card[data-module="hypo"]::before {
+    background: radial-gradient(ellipse at 30% 20%, var(--hypo-glow), transparent 70%);
+  }
+  .module-card[data-module="hypo"]:hover {
+    border-color: color-mix(in srgb, var(--hypo-color) 50%, var(--slate-600));
+    box-shadow: 0 8px 32px -8px var(--hypo-glow);
+  }
+
+  .module-card[data-module="inv"] {
+    border-color: color-mix(in srgb, var(--inv-color) 50%, var(--slate-600));
+    box-shadow: 0 0 24px -4px var(--inv-glow), 0 4px 16px -4px rgba(0,0,0,0.3);
+  }
+  .module-card[data-module="inv"]::before {
+    background: radial-gradient(ellipse at 30% 20%, var(--inv-glow), transparent 70%);
+    opacity: 0.6;
+  }
+  .module-card[data-module="inv"]:hover {
+    border-color: color-mix(in srgb, var(--inv-color) 60%, var(--slate-500));
+    box-shadow: 0 0 32px -4px var(--inv-glow), 0 8px 24px -4px rgba(0,0,0,0.4);
+  }
+
+  .module-card[data-module="paper"] {
+    border-color: color-mix(in srgb, var(--paper-color) 30%, var(--slate-700));
+  }
+  .module-card[data-module="paper"]::before {
+    background: radial-gradient(ellipse at 30% 20%, var(--paper-glow), transparent 70%);
+  }
+  .module-card[data-module="paper"]:hover {
+    border-color: color-mix(in srgb, var(--paper-color) 50%, var(--slate-600));
+    box-shadow: 0 8px 32px -8px var(--paper-glow);
+  }
+
+  /* Card header */
+  .card-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+
+  .card-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+
+  .module-card[data-module="seed"] .card-icon {
+    background: color-mix(in srgb, var(--seed-color) 15%, var(--slate-800));
+    color: var(--seed-color);
+  }
+  .module-card[data-module="hypo"] .card-icon {
+    background: color-mix(in srgb, var(--hypo-color) 15%, var(--slate-800));
+    color: var(--hypo-color);
+  }
+  .module-card[data-module="inv"] .card-icon {
+    background: color-mix(in srgb, var(--inv-color) 15%, var(--slate-800));
+    color: var(--inv-color);
+  }
+  .module-card[data-module="paper"] .card-icon {
+    background: color-mix(in srgb, var(--paper-color) 15%, var(--slate-800));
+    color: var(--paper-color);
+  }
+
+  .card-title-block { flex: 1; min-width: 0; }
+
+  .card-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--slate-100);
+    line-height: 1.3;
+  }
+
+  .card-subtitle {
+    font-size: 11px;
+    color: var(--slate-500);
+    margin-top: 1px;
+  }
+
+  .expand-chevron {
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--slate-500);
+    transition: transform 420ms var(--ease-out-smooth);
+    flex-shrink: 0;
+  }
+
+  .module-col.expanded .expand-chevron { transform: rotate(180deg); }
+  .expand-chevron svg { width: 14px; height: 14px; }
+
+  /* Status pills */
+  .card-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--slate-400);
+  }
+
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .status-pill.complete {
+    background: color-mix(in srgb, #22c55e 12%, var(--slate-800));
+    color: #4ade80;
+  }
+
+  .status-pill.active {
+    background: color-mix(in srgb, var(--inv-color) 15%, var(--slate-800));
+    color: var(--inv-color);
+    animation: status-pulse 2.5s ease-in-out infinite;
+  }
+
+  .status-pill.pending {
+    background: color-mix(in srgb, var(--paper-color) 10%, var(--slate-800));
+    color: var(--slate-400);
+  }
+
+  @keyframes status-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }
+
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .status-dot.complete { background: #22c55e; }
+  .status-dot.active {
+    background: var(--inv-color);
+    animation: dot-pulse 2s ease-in-out infinite;
+  }
+  .status-dot.pending { background: var(--slate-600); }
+
+  @keyframes dot-pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(167, 139, 250, 0.4); }
+    50% { opacity: 0.8; box-shadow: 0 0 8px 2px rgba(167, 139, 250, 0.3); }
+  }
+
+  .score-badge {
+    font-size: 10.5px;
+    font-weight: 600;
+    color: var(--slate-300);
+    background: var(--slate-800);
+    padding: 2px 8px;
+    border-radius: 6px;
+    border: 1px solid var(--slate-700);
+  }
+
+  /* Collapsed summary text */
+  .collapsed-summary {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--slate-400);
+    padding-top: 2px;
+    font-weight: 500;
+  }
+
+  .collapsed-summary .check-mark { color: #4ade80; font-size: 12px; }
+
+  /* ================================================================
+     PULSE RING on active card
+     ================================================================ */
+  .pulse-ring {
+    position: absolute;
+    inset: -4px;
+    border-radius: calc(var(--card-radius) + 4px);
+    border: 1.5px solid var(--inv-color);
+    opacity: 0;
+    animation: pulse-ring-anim 3s ease-out infinite;
+    pointer-events: none;
+  }
+
+  @keyframes pulse-ring-anim {
+    0% { opacity: 0.5; inset: -4px; }
+    100% { opacity: 0; inset: -18px; }
+  }
+
+  /* Active card shimmer border */
+  @keyframes border-shimmer {
+    0%   { background-position: 0% 50%; }
+    100% { background-position: 200% 50%; }
+  }
+
+  .module-card[data-module="inv"]::after {
+    content: '';
+    position: absolute;
+    inset: -1.5px;
+    border-radius: calc(var(--card-radius) + 1.5px);
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(167, 139, 250, 0.3) 25%,
+      rgba(167, 139, 250, 0.6) 50%,
+      rgba(167, 139, 250, 0.3) 75%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+    animation: border-shimmer 4s linear infinite;
+    z-index: -1;
+    mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
+    mask-composite: exclude;
+    padding: 1.5px;
+    pointer-events: none;
+  }
+
+  /* ================================================================
+     TREE SECTION -- expandable area below each card
+     ================================================================ */
+  .tree-section {
+    width: 100%;
+    overflow: hidden;
+  }
+
+  .tree-section.collapsed {
+    max-height: 0 !important;
+    opacity: 0;
+    pointer-events: none;
+    transition: max-height 380ms var(--ease-out-smooth), opacity 200ms ease;
+  }
+
+  .tree-section.expanded {
+    opacity: 1;
+    transition: max-height 420ms var(--ease-out-smooth), opacity 280ms ease 80ms;
+  }
+
+  /* ================================================================
+     TREE LIST -- vertical trunk + branches
+     ================================================================ */
+  .tree-list {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    width: 100%;
+    padding: 8px 0 4px 28px;
+    position: relative;
+  }
+
+  /* Grey rail trunk */
+  .tree-list::before {
+    content: '';
+    position: absolute;
+    left: 28px;
+    top: 0;
+    bottom: 14px;
+    width: 2px;
+    background: var(--slate-700);
+  }
+
+  /* Colored trunk overlay -- grows via JS */
+  .trunk-grow {
+    position: absolute;
+    left: 28px;
+    top: 0;
+    width: 2px;
+    height: 0;
+    z-index: 1;
+    border-radius: 1px;
+  }
+
+  /* Trunk flash/pulse overlay */
+  .trunk-flash {
+    position: absolute;
+    left: 24px;
+    top: 0;
+    width: 10px;
+    height: 0;
+    z-index: 2;
+    border-radius: 5px;
+    opacity: 0;
+    pointer-events: none;
+    filter: blur(4px);
+  }
+
+  /* Per-module trunk colors */
+  .module-col[data-module="seed"] .trunk-grow  { background: var(--seed-color); }
+  .module-col[data-module="hypo"] .trunk-grow  { background: var(--hypo-color); }
+  .module-col[data-module="inv"]  .trunk-grow  { background: var(--inv-color); }
+  .module-col[data-module="paper"] .trunk-grow { background: var(--paper-color); }
+
+  .module-col[data-module="seed"] .trunk-flash  { background: var(--seed-color); }
+  .module-col[data-module="hypo"] .trunk-flash  { background: var(--hypo-color); }
+  .module-col[data-module="inv"]  .trunk-flash  { background: var(--inv-color); }
+  .module-col[data-module="paper"] .trunk-flash { background: var(--paper-color); }
+
+  /* ================================================================
+     TREE NODE -- each branch row
+     ================================================================ */
+  .tree-node {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    width: 100%;
+    position: relative;
+    padding: 4px 0;
+  }
+
+  .tree-node.grow-hidden { opacity: 0; }
+  .tree-node.grow-visible { opacity: 1; transition: opacity 180ms ease; }
+
+  /* Horizontal branch line (grey rail) */
+  .tree-branch {
+    width: 18px;
+    height: 2px;
+    background: var(--slate-700);
+    flex-shrink: 0;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Colored branch overlay */
+  .tree-branch-inner {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    width: 0;
+    border-radius: 1px;
+  }
+
+  .module-col[data-module="seed"] .tree-branch-inner  { background: var(--seed-color); }
+  .module-col[data-module="hypo"] .tree-branch-inner  { background: var(--hypo-color); }
+  .module-col[data-module="inv"]  .tree-branch-inner  { background: var(--inv-color); }
+  .module-col[data-module="paper"] .tree-branch-inner { background: var(--paper-color); }
+
+  /* Branch tip dot */
+  .branch-dot {
+    position: absolute;
+    right: -3px;
+    top: -2px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    opacity: 0;
+    transform: scale(0);
+    transition: opacity 150ms ease, transform 150ms var(--ease-out-expo);
+  }
+
+  .branch-dot.visible { opacity: 1; transform: scale(1); }
+
+  .module-col[data-module="seed"] .branch-dot  { background: var(--seed-color); box-shadow: 0 0 6px var(--seed-glow); }
+  .module-col[data-module="hypo"] .branch-dot  { background: var(--hypo-color); box-shadow: 0 0 6px var(--hypo-glow); }
+  .module-col[data-module="inv"]  .branch-dot  { background: var(--inv-color);  box-shadow: 0 0 6px var(--inv-glow); }
+  .module-col[data-module="paper"] .branch-dot { background: var(--paper-color); box-shadow: 0 0 6px var(--paper-glow); }
+
+  /* ================================================================
+     SUB-NODE BUBBLE
+     ================================================================ */
+  .sub-node {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    border-radius: var(--sub-radius);
+    border: 1px solid var(--slate-700);
+    background: var(--slate-850);
+    transition:
+      border-color 260ms var(--ease-out-smooth),
+      background 260ms var(--ease-out-smooth),
+      transform 200ms var(--ease-out-smooth);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .sub-node:hover {
+    border-color: var(--slate-600);
+    background: var(--slate-800);
+    transform: translateX(2px);
+  }
+
+  .sub-node.complete { border-color: color-mix(in srgb, #22c55e 25%, var(--slate-700)); }
+  .sub-node.active   { border-color: color-mix(in srgb, var(--inv-color) 40%, var(--slate-600)); }
+  .sub-node.pending   { border-color: var(--slate-750); opacity: 0.7; }
+
+  /* Active glow */
+  .sub-node.active::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: radial-gradient(ellipse at 20% 50%, var(--inv-glow), transparent 70%);
+    opacity: 0.4;
+    pointer-events: none;
+  }
+
+  .sub-icon {
+    width: 26px;
+    height: 26px;
+    border-radius: 7px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+
+  .sub-node.complete .sub-icon {
+    background: color-mix(in srgb, #22c55e 15%, var(--slate-800));
+    color: #4ade80;
+  }
+  .sub-node.active .sub-icon {
+    background: color-mix(in srgb, var(--inv-color) 18%, var(--slate-800));
+    color: var(--inv-color);
+  }
+  .sub-node.pending .sub-icon {
+    background: var(--slate-800);
+    color: var(--slate-500);
+  }
+
+  .sub-info { flex: 1; min-width: 0; }
+
+  .sub-name {
+    font-size: 12px;
+    font-weight: 550;
+    color: var(--slate-200);
+    line-height: 1.3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .sub-node.pending .sub-name { color: var(--slate-400); }
+
+  .sub-meta {
+    font-size: 10px;
+    color: var(--slate-500);
+    margin-top: 1px;
+  }
+
+  .sub-status-icon {
+    flex-shrink: 0;
+    font-size: 12px;
+    width: 18px;
+    text-align: center;
+  }
+
+  .sub-node.complete .sub-status-icon { color: #4ade80; }
+  .sub-node.active .sub-status-icon   { color: var(--inv-color); }
+  .sub-node.pending .sub-status-icon   { color: var(--slate-600); }
+
+  /* Spinner */
+  .spinner {
+    width: 13px;
+    height: 13px;
+    border: 2px solid transparent;
+    border-top-color: var(--inv-color);
+    border-right-color: var(--inv-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Progress bar for active node */
+  .sub-progress-bar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 2px;
+    border-radius: 0 0 var(--sub-radius) var(--sub-radius);
+    background: var(--inv-color);
+    transition: width 1s ease;
+  }
+
+  /* ================================================================
+     TREE PARTICLE CANVAS (positioned within each module column)
+     ================================================================ */
+  .particle-canvas {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 2;
+  }
+
+  /* ================================================================
+     TRUNK GLOW KEYFRAMES
+     ================================================================ */
+  @keyframes trunk-pulse-glow {
+    0%   { opacity: 0; }
+    15%  { opacity: 0.7; }
+    50%  { opacity: 0.4; }
+    85%  { opacity: 0.7; }
+    100% { opacity: 0; }
+  }
+
+  /* ================================================================
+     RESPONSIVE
+     ================================================================ */
+  @media (max-width: 1100px) {
+    .pipeline { flex-wrap: wrap; justify-content: center; }
+    .connector-line { display: none; }
+    .module-col { max-width: 340px; }
+  }
+
+  @media (max-width: 600px) {
+    body { padding: 24px 12px 60px; }
+    .module-col { min-width: 100%; max-width: 100%; }
+    .pipeline { gap: 16px; }
+    .header h1 { font-size: 20px; }
+  }
+
+  /* ================================================================
+     CUSTOM SCROLLBAR
+     ================================================================ */
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--slate-700); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<!-- Background particle canvas -->
+<canvas id="bgCanvas"></canvas>
+
+<!-- Ambient motes container -->
+<div id="motes-container"></div>
+
+<!-- ================================================================
+     HEADER — 40px ring + title + stats, centered
+     ================================================================ -->
+<div class="header">
+  <div class="header-top">
+    <div class="header-ring">
+      <svg viewBox="0 0 40 40">
+        <defs>
+          <linearGradient id="rg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%"   stop-color="var(--seed-color)"/>
+            <stop offset="35%"  stop-color="var(--hypo-color)"/>
+            <stop offset="65%"  stop-color="var(--inv-color)"/>
+            <stop offset="100%" stop-color="var(--paper-color)"/>
+          </linearGradient>
+        </defs>
+        <circle class="ring-track" cx="20" cy="20" r="16"/>
+        <circle class="ring-progress" id="mainRing" cx="20" cy="20" r="16" stroke="url(#rg)"/>
+      </svg>
+      <div class="ring-pct" id="ringPct">0%</div>
+    </div>
+    <h1>AI Inventor Pipeline</h1>
+  </div>
+  <p class="header-sub">Click a module card to see the tree-grow animation</p>
+  <div class="header-stats">
+    <span>Runtime<span class="header-stat-val">1h 42m</span></span>
+    <span>Cost<span class="header-stat-val">$18.73</span></span>
+    <span>LLM Calls<span class="header-stat-val">247</span></span>
+  </div>
+</div>
+
+<!-- ================================================================
+     PIPELINE — 4 module columns, centered at max-width 1100px
+     ================================================================ -->
+<div class="pipeline" id="pipeline">
+  <div class="connector-line" id="connectorLine"></div>
+
+  <!-- ======== SEED MODULE ======== -->
+  <div class="module-col" data-module="seed" id="col-seed">
+    <div class="mini-ring" id="mr-seed">
+      <svg viewBox="0 0 28 28">
+        <circle class="mini-ring-track" cx="14" cy="14" r="10"/>
+        <circle class="mini-ring-progress" cx="14" cy="14" r="10"
+                stroke="var(--seed-color)" fill="none"
+                stroke-dasharray="62.83" stroke-dashoffset="0"
+                stroke-width="3" stroke-linecap="round"/>
+      </svg>
+      <div class="mini-ring-icon" style="color:var(--seed-color)">&#10003;</div>
+    </div>
+
+    <div class="module-card" data-module="seed" onclick="toggleModule('seed')">
+      <div class="card-head">
+        <div class="card-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2z" opacity="0.3" fill="currentColor"/>
+            <circle cx="12" cy="12" r="4"/>
+            <path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>
+          </svg>
+        </div>
+        <div class="card-title-block">
+          <div class="card-title">Seed Hypotheses</div>
+          <div class="card-subtitle">Knowledge graph + generation</div>
+        </div>
+        <div class="expand-chevron">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </div>
+      </div>
+      <div class="card-status">
+        <span class="status-pill complete"><span class="status-dot complete"></span>Complete</span>
+      </div>
+      <div class="collapsed-summary" id="summary-seed">4/4 <span class="check-mark">&#10003;</span></div>
+    </div>
+
+    <div class="tree-section collapsed" id="tree-seed">
+      <div class="tree-list">
+        <div class="trunk-grow"></div>
+        <div class="trunk-flash"></div>
+        <div class="tree-node grow-hidden">
+          <div class="tree-branch"><div class="tree-branch-inner"></div><div class="branch-dot"></div></div>
+          <div class="sub-node complete">
+            <div class="sub-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg></div>
+            <div class="sub-info"><div class="sub-name">Build Knowledge Graph</div><div class="sub-meta">47 nodes, 126 edges</div></div>
+            <div class="sub-status-icon">&#10003;</div>
+          </div>
+        </div>
+        <div class="tree-node grow-hidden">
+          <div class="tree-branch"><div class="tree-branch-inner"></div><div class="branch-dot"></div></div>
+          <div class="sub-node complete">
+            <div class="sub-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg></div>
+            <div class="sub-info"><div class="sub-name">Extract Gap Clusters</div><div class="sub-meta">12 clusters identified</div></div>
+            <div class="sub-status-icon">&#10003;</div>
+          </div>
+        </div>
+        <div class="tree-node grow-hidden">
+          <div class="tree-branch"><div class="tree-branch-inner"></div><div class="branch-dot"></div></div>
+          <div class="sub-node complete">
+            <div class="sub-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg></div>
+            <div class="sub-info"><div class="sub-name">Generate Seed Ideas</div><div class="sub-meta">36 hypotheses seeded</div></div>
+            <div class="sub-status-icon">&#10003;</div>
+          </div>
+        </div>
+        <div class="tree-node grow-hidden">
+          <div class="tree-branch"><div class="tree-branch-inner"></div><div class="branch-dot"></div></div>
+          <div class="sub-node complete">
+            <div class="sub-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg></div>
+            <div class="sub-info"><div class="sub-name">Deduplicate &amp; Merge</div><div class="sub-meta">18 unique hypotheses</div></div>
+            <div class="sub-status-icon">&#10003;</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== HYPOTHESIS MODULE ======== -->
+  <div class="module-col" data-module="hypo" id="col-hypo">
+    <div class="mini-ring" id="mr-hypo">
+      <svg viewBox="0 0 28 28">
+        <circle class="mini-ring-track" cx="14" cy="14" r="10"/>
+        <circle class="mini-ring-progress" cx="14" cy="14" r="10"
+                stroke="var(--hypo-color)" fill="none"
+                stroke-dasharray="62.83" stroke-dashoffset="0"
+                stroke-width="3" stroke-linecap="round"/>
+      </svg>
+      <div class="mini-ring-icon" style="color:var(--hypo-color)">&#10003;</div>
+    </div>
+
+    <div class="module-card" data-module="hypo" onclick="toggleModule('hypo')">
+      <div class="card-head">
+        <div class="card-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 1 1 7.072 0l-.548.547A3.374 3.374 0 0 0 14 18.469V19a2 2 0 1 1-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+          </svg>
+        </div>
+        <div class="card-title-block">
+          <div class="card-title">Hypothesis Loop</div>
+          <div class="card-subtitle">Refine, review, iterate</div>
+        </div>
+        <div class="expand-chevron">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </div>
+      </div>
+      <div class="card-status">
+        <span class="status-pill complete"><span class="status-dot complete"></span>Complete</span>
+        <span class="score-badge">8.4 / 10</span>
+      </div>
+      <div class="collapsed-summary" id="summary-hypo">6/6 <span class="check-mark">&#10003;</span> &middot; 8.4/10</div>
+    </div>
+
+    <div class="tree-section collapsed" id="tree-hypo">
+      <div class="tree-list">
+        <div class="trunk-grow"></div>
+        <div class="trunk-flash"></div>
+        <div class="tree-node grow-hidden">
+          <div class="tree-branch"><div class="tree-branch-inner"></div><div class="branch-dot"></div></div>
+          <div class="sub-node complete">
+            <div class="sub-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg></div>
+            <div class="sub-info"><div class="sub-name">Generate Hypothesis</div><div class="sub-meta">Iteration 3 &middot; converged</div></div>
+            <div class="sub-status-icon">&#10003;</div>
+          </div>
+        </div>
+        <div class="tree-node grow-hidden">
+          <div class="tree-branch"><div class="tree-branch-inner"></div><div class="branch-dot"></div></div>
+          <div class="sub-node complete">
+            <div class="sub-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg></div>
+            <div class="sub-info"><div class="sub-name">Review Hypothesis</div><div class="sub-meta">Score: 8.4/10</div></div>
+            <div class="sub-status-icon">&#10003;</div>
+          </div>
+        </div>
+        <div class="tree-node grow-hidden">
+          <div class="tree-branch"><div class="tree-branch-inner"></div><div class="branch-dot"></div></div>
+          <div class="sub-node complete">
+            <div class="sub-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg></div>
+            <div class="sub-info"><div class="sub-name">Novelty Check</div><div class="sub-meta">3 prior works compared</div></div>
+            <div class="sub-status-icon">&#10003;</div>
+          </div>
+        </div>
+        <div class="tree-node grow-hidden">
+          <div class="tree-branch"><div class="tree-branch-inner"></div><div class="branch-dot"></div></div>
+          <div class="sub-node complete">
+            <div class="sub-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg></div>
+            <div class="sub-info"><div class="sub-name">Feasibility Analysis</div><div class="sub-meta">High confidence</div></div>
+            <div class="sub-status-icon">&#10003;</div>
+          </div>
+        </div>
+        <div class="tree-node grow-hidden">
+          <div class="tree-branch"><div class="tree-branch-inner"></div><div class="branch-dot"></div></div>
+          <div class="sub-node complete">
+            <div class="sub-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg></div>
+            <div class="sub-info"><div class="sub-name">Refine Hypothesis</div><div class="sub-meta">2 refinement rounds</div></div>
+            <div class="sub-status-icon">&#10003;</div>
+          </div>
+        </div>
+        <div class="tree-node grow-hidden">
+          <div class="tree-branch"><div class="tree-branch-inner"></div><div class="branch-dot"></div></div>
+          <div class="sub-node complete">
+            <div class="sub-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg></div>
+            <div class="sub-info"><div class="sub-name">Final Selection</div><div class="sub-meta">Top hypothesis locked</div></div>
+            <div class="sub-status-icon">&#10003;</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== INVENTION MODULE (ACTIVE) ======== -->
+  <div class="module-col expanded" data-module="inv" id="col-inv">
+    <div class="mini-ring" id="mr-inv">
+      <svg viewBox="0 0 28 28">
+        <circle class="mini-ring-track" cx="14" cy="14" r="10"/>
+        <circle class="mini-ring-progress" cx="14" cy="14" r="10"
+                stroke="var(--inv-color)" fill="none"
+                stroke-dasharray="62.83" stroke-dashoffset="22.99"
+                stroke-width="3" stroke-linecap="round"
+                style="transform:rotate(-90deg);transform-origin:center"/>
+      </svg>
+      <div class="mini-ring-icon" style="color:var(--inv-color);font-size:9px">4/7</div>
+    </div>
+
+    <div class="module-card" data-module="inv" onclick="toggleModule('inv')">
+      <div class="pulse-ring"></div>
+      <div class="card-head">
+        <div class="card-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+          </svg>
+        </div>
+        <div class="card-title-block">
+          <div class="card-title">Invention Loop</div>
+          <div class="card-subtitle">Plan, build, review, iterate</div>
+        </div>
+        <div class="expand-chevron">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </div>
+      </div>
+      <div class="card-status">
+        <span class="status-pill active"><span class="status-dot active"></span>In Progress</span>
+        <span class="score-badge">Step 4/7</span>
+      </div>
+      <div class="collapsed-summary" id="summary-inv" style="display:none;">4/7 running...</div>
+    </div>
+
+    <div class="tree-section expanded" id="tree-inv" style="max-height:600px;">
+      <div class="tree-list">
+        <div class="trunk-grow" style="height:calc(100% - 14px);"></div>
+        <div class="trunk-flash"></div>
+        <!-- Sub 1: Complete -->
+        <div class="tree-node grow-visible">
+          <div class="tree-branch"><div class="tree-branch-inner" style="width:100%;"></div><div class="branch-dot visible"></div></div>
+          <div class="sub-node complete">
+            <div class="sub-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg></div>
+            <div class="sub-info"><div class="sub-name">Generate Strategy</div><div class="sub-meta">Multi-agent approach</div></div>
+            <div class="sub-status-icon">&#10003;</div>
+          </div>
+        </div>
+        <!-- Sub 2: Complete -->
+        <div class="tree-node grow-visible">
+          <div class="tree-branch"><div class="tree-branch-inner" style="width:100%;"></div><div class="branch-dot visible"></div></div>
+          <div class="sub-node complete">
+            <div class="sub-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg></div>
+            <div class="sub-info"><div class="sub-name">Generate Plan</div><div class="sub-meta">5 sections outlined</div></div>
+            <div class="sub-status-icon">&#10003;</div>
+          </div>
+        </div>
+        <!-- Sub 3: Complete -->
+        <div class="tree-node grow-visible">
+          <div class="tree-branch"><div class="tree-branch-inner" style="width:100%;"></div><div class="branch-dot visible"></div></div>
+          <div class="sub-node complete">
+            <div class="sub-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="10"/></svg></div>
+            <div class="sub-info"><div class="sub-name">Generate Pseudocode</div><div class="sub-meta">3 algorithms defined</div></div>
+            <div class="sub-status-icon">&#10003;</div>
+          </div>
+        </div>
+        <!-- Sub 4: ACTIVE -->
+        <div class="tree-node grow-visible">
+          <div class="tree-branch"><div class="tree-branch-inner" style="width:100%;"></div><div class="branch-dot visible"></div></div>
+          <div class="sub-node active">
+            <div class="sub-icon"><div class="spinner"></div></div>
+            <div class="sub-info"><div class="sub-name">Generate Paper Text</div><div class="sub-meta">Writing section 3 of 5...</div></div>
+            <div class="sub-status-icon"><div class="spinner"></div></div>
+            <div class="sub-progress-bar" style="width:58%;"></div>
+          </div>
+        </div>
+        <!-- Sub 5: Pending -->
+        <div class="tree-node grow-visible">
+          <div class="tree-branch"><div class="tree-branch-inner" style="width:100%;"></div><div class="branch-dot visible"></div></div>
+          <div class="sub-node pending">
+            <div class="sub-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div>
+            <div class="sub-info"><div class="sub-name">Review Paper</div><div class="sub-meta">Awaiting text generation</div></div>
+            <div class="sub-status-icon">&middot;</div>
+          </div>
+        </div>
+        <!-- Sub 6: Pending -->
+        <div class="tree-node grow-visible">
+          <div class="tree-branch"><div class="tree-branch-inner" style="width:100%;"></div><div class="branch-dot visible"></div></div>
+          <div class="sub-node pending">
+            <div class="sub-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div>
+            <div class="sub-info"><div class="sub-name">Iterate Revisions</div><div class="sub-meta">Up to 3 rounds</div></div>
+            <div class="sub-status-icon">&middot;</div>
+          </div>
+        </div>
+        <!-- Sub 7: Pending -->
+        <div class="tree-node grow-visible">
+          <div class="tree-branch"><div class="tree-branch-inner" style="width:100%;"></div><div class="branch-dot visible"></div></div>
+          <div class="sub-node pending">
+            <div class="sub-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div>
+            <div class="sub-info"><div class="sub-name">Finalize Invention</div><div class="sub-meta">Lock paper + artifacts</div></div>
+            <div class="sub-status-icon">&middot;</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <canvas class="particle-canvas" id="particles-inv"></canvas>
+  </div>
+
+  <!-- ======== PAPER MODULE ======== -->
+  <div class="module-col" data-module="paper" id="col-paper">
+    <div class="mini-ring" id="mr-paper">
+      <svg viewBox="0 0 28 28">
+        <circle class="mini-ring-track" cx="14" cy="14" r="10"/>
+        <circle class="mini-ring-progress" cx="14" cy="14" r="10"
+                stroke="var(--paper-color)" fill="none"
+                stroke-dasharray="62.83" stroke-dashoffset="62.83"
+                stroke-width="3" stroke-linecap="round"
+                style="transform:rotate(-90deg);transform-origin:center"/>
+      </svg>
+      <div class="mini-ring-icon" style="color:var(--slate-500);font-size:9px">0/5</div>
+    </div>
+
+    <div class="module-card" data-module="paper" onclick="toggleModule('paper')">
+      <div class="card-head">
+        <div class="card-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="16" y1="13" x2="8" y2="13"/>
+            <line x1="16" y1="17" x2="8" y2="17"/>
+            <polyline points="10 9 9 9 8 9"/>
+          </svg>
+        </div>
+        <div class="card-title-block">
+          <div class="card-title">Paper Repository</div>
+          <div class="card-subtitle">LaTeX, figures, artifacts</div>
+        </div>
+        <div class="expand-chevron">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="6 9 12 15 18 9"/>
+          </svg>
+        </div>
+      </div>
+      <div class="card-status">
+        <span class="status-pill pending"><span class="status-dot pending"></span>Pending</span>
+      </div>
+      <div class="collapsed-summary" id="summary-paper">5 pending</div>
+    </div>
+
+    <div class="tree-section collapsed" id="tree-paper">
+      <div class="tree-list">
+        <div class="trunk-grow"></div>
+        <div class="trunk-flash"></div>
+        <div class="tree-node grow-hidden">
+          <div class="tree-branch"><div class="tree-branch-inner"></div><div class="branch-dot"></div></div>
+          <div class="sub-node pending">
+            <div class="sub-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div>
+            <div class="sub-info"><div class="sub-name">Generate Artifacts</div><div class="sub-meta">Code demos + data</div></div>
+            <div class="sub-status-icon">&middot;</div>
+          </div>
+        </div>
+        <div class="tree-node grow-hidden">
+          <div class="tree-branch"><div class="tree-branch-inner"></div><div class="branch-dot"></div></div>
+          <div class="sub-node pending">
+            <div class="sub-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div>
+            <div class="sub-info"><div class="sub-name">Generate Visualizations</div><div class="sub-meta">Figures + diagrams</div></div>
+            <div class="sub-status-icon">&middot;</div>
+          </div>
+        </div>
+        <div class="tree-node grow-hidden">
+          <div class="tree-branch"><div class="tree-branch-inner"></div><div class="branch-dot"></div></div>
+          <div class="sub-node pending">
+            <div class="sub-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div>
+            <div class="sub-info"><div class="sub-name">Compile Full Paper</div><div class="sub-meta">LaTeX assembly</div></div>
+            <div class="sub-status-icon">&middot;</div>
+          </div>
+        </div>
+        <div class="tree-node grow-hidden">
+          <div class="tree-branch"><div class="tree-branch-inner"></div><div class="branch-dot"></div></div>
+          <div class="sub-node pending">
+            <div class="sub-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div>
+            <div class="sub-info"><div class="sub-name">Quality Review</div><div class="sub-meta">Consistency checks</div></div>
+            <div class="sub-status-icon">&middot;</div>
+          </div>
+        </div>
+        <div class="tree-node grow-hidden">
+          <div class="tree-branch"><div class="tree-branch-inner"></div><div class="branch-dot"></div></div>
+          <div class="sub-node pending">
+            <div class="sub-icon"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div>
+            <div class="sub-info"><div class="sub-name">Package Repository</div><div class="sub-meta">Final output bundle</div></div>
+            <div class="sub-status-icon">&middot;</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ==================================================================
+   HEADER RING — progress calculation and animation
+   ================================================================== */
+const RING_CIRC = 2 * Math.PI * 16; // ~100.53 for r=16
+
+const MODULE_DATA = [
+  { id: 'seed',  steps: 4, done: 4, active: 0, weight: 10 },
+  { id: 'hypo',  steps: 6, done: 6, active: 0, weight: 25 },
+  { id: 'inv',   steps: 7, done: 3, active: 1, weight: 40 },
+  { id: 'paper', steps: 5, done: 0, active: 0, weight: 25 },
+];
+
+function calcProgress() {
+  let total = 0, done = 0;
+  MODULE_DATA.forEach(m => {
+    const w = m.weight / m.steps;
+    for (let i = 0; i < m.steps; i++) {
+      total += w;
+      if (i < m.done) done += w;
+      else if (i === m.done && m.active > 0) done += w * 0.5;
+    }
+  });
+  return Math.round(done / total * 100);
+}
+
+function updateHeaderRing() {
+  const pct = calcProgress();
+  const ring = document.getElementById('mainRing');
+  ring.style.strokeDashoffset = RING_CIRC - (pct / 100) * RING_CIRC;
+
+  const el = document.getElementById('ringPct');
+  let cur = 0;
+  const step = pct / 30;
+  const iv = setInterval(() => {
+    cur += step;
+    if (cur >= pct) { cur = pct; clearInterval(iv); }
+    el.textContent = Math.round(cur) + '%';
+  }, 25);
+}
+
+/* ==================================================================
+   COLORED CONNECTOR LINES between modules
+   ================================================================== */
+function buildConnectorLines() {
+  const line = document.getElementById('connectorLine');
+  line.innerHTML = '';
+
+  const cols = document.querySelectorAll('.module-col');
+  if (cols.length < 2) return;
+
+  const pipeRect = document.getElementById('pipeline').getBoundingClientRect();
+  const colors = ['var(--seed-color)', 'var(--hypo-color)', 'var(--inv-color)', 'var(--paper-color)'];
+  const statuses = ['complete', 'complete', 'active', 'pending'];
+
+  for (let i = 0; i < cols.length - 1; i++) {
+    const r1 = cols[i].getBoundingClientRect();
+    const r2 = cols[i + 1].getBoundingClientRect();
+    const left = r1.right - pipeRect.left;
+    const right = r2.left - pipeRect.left;
+    const width = right - left;
+
+    const seg = document.createElement('div');
+    seg.className = 'connector-segment';
+    seg.style.left = left + 'px';
+    seg.style.width = Math.max(0, width) + 'px';
+    seg.style.height = '2px';
+
+    if (statuses[i] === 'complete' && (statuses[i + 1] === 'complete' || statuses[i + 1] === 'active')) {
+      seg.style.background = `linear-gradient(90deg, ${colors[i]}, ${colors[i + 1]})`;
+      if (statuses[i + 1] === 'active') {
+        seg.style.boxShadow = `0 0 8px ${colors[i + 1]}`;
+        seg.style.opacity = '0.7';
+      }
+    } else {
+      seg.style.background = 'var(--slate-700)';
+      seg.style.opacity = '0.4';
+    }
+
+    line.appendChild(seg);
+  }
+}
+
+/* ==================================================================
+   TREE-GROW ANIMATION ENGINE
+   ================================================================== */
+const ACTIVE_MODULE = 'inv';
+let currentExpanded = ACTIVE_MODULE;
+const treeHeights = {};
+const runningAnimations = {};
+
+function measureTreeHeight(moduleId) {
+  const el = document.getElementById('tree-' + moduleId);
+  if (!el) return 0;
+  const wasColl = el.classList.contains('collapsed');
+  if (wasColl) {
+    el.style.transition = 'none';
+    el.classList.remove('collapsed');
+    el.classList.add('expanded');
+  }
+  const h = el.scrollHeight;
+  if (wasColl) {
+    el.classList.remove('expanded');
+    el.classList.add('collapsed');
+    el.offsetHeight;
+    el.style.transition = '';
+  }
+  return h;
+}
+
+function initHeights() {
+  ['seed', 'hypo', 'inv', 'paper'].forEach(id => {
+    treeHeights[id] = measureTreeHeight(id);
+  });
+  const invTree = document.getElementById('tree-inv');
+  if (invTree) invTree.style.maxHeight = treeHeights['inv'] + 'px';
+}
+
+/* Easing functions */
+function easeOutExpo(t) { return t === 1 ? 1 : 1 - Math.pow(2, -10 * t); }
+function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+function easeInOutQuad(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
+
+/* Core tree-grow animation */
+function animateTreeGrow(moduleId) {
+  const treeSection = document.getElementById('tree-' + moduleId);
+  if (!treeSection) return;
+
+  const treeList = treeSection.querySelector('.tree-list');
+  if (!treeList) return;
+
+  const trunkGrow = treeList.querySelector('.trunk-grow');
+  const trunkFlash = treeList.querySelector('.trunk-flash');
+  const nodes = treeList.querySelectorAll('.tree-node');
+
+  if (runningAnimations[moduleId]) {
+    cancelAnimationFrame(runningAnimations[moduleId]);
+    runningAnimations[moduleId] = null;
+  }
+
+  // Reset
+  if (trunkGrow) trunkGrow.style.height = '0px';
+  if (trunkFlash) { trunkFlash.style.height = '0px'; trunkFlash.style.opacity = '0'; trunkFlash.style.animation = 'none'; }
+
+  nodes.forEach(node => {
+    node.classList.remove('grow-visible');
+    node.classList.add('grow-hidden');
+    const bi = node.querySelector('.tree-branch-inner');
+    const bd = node.querySelector('.branch-dot');
+    if (bi) bi.style.width = '0px';
+    if (bd) bd.classList.remove('visible');
+  });
+
+  const listRect = treeList.getBoundingClientRect();
+  const trunkTargetH = listRect.height > 0 ? listRect.height - 14 : 200;
+
+  const TRUNK_DURATION = 320;
+  const TRUNK_FLASH_START = 80;
+  const TRUNK_FLASH_DURATION = 320;
+  const BRANCH_START = 320;
+  const BRANCH_STAGGER = 100;
+  const BRANCH_GROW_MS = 180;
+  const LABEL_FADE_MS = 180;
+  const totalNodes = nodes.length;
+  const TOTAL_DURATION = BRANCH_START + (totalNodes * BRANCH_STAGGER) + BRANCH_GROW_MS + LABEL_FADE_MS;
+
+  const startTime = performance.now();
+
+  function tick(now) {
+    const elapsed = now - startTime;
+
+    // Phase 1: Trunk grows
+    if (elapsed <= TRUNK_DURATION) {
+      const t = easeOutExpo(elapsed / TRUNK_DURATION);
+      if (trunkGrow) trunkGrow.style.height = (t * trunkTargetH) + 'px';
+    } else {
+      if (trunkGrow) trunkGrow.style.height = trunkTargetH + 'px';
+    }
+
+    // Phase 1b: Trunk flash
+    if (elapsed >= TRUNK_FLASH_START && elapsed <= TRUNK_FLASH_START + TRUNK_FLASH_DURATION) {
+      const flashT = (elapsed - TRUNK_FLASH_START) / TRUNK_FLASH_DURATION;
+      if (trunkFlash) {
+        const trunkT = Math.min(1, elapsed / TRUNK_DURATION);
+        const flashH = easeOutExpo(trunkT) * trunkTargetH;
+        trunkFlash.style.height = flashH + 'px';
+        const pulseOpacity = flashT < 0.3 ? (flashT / 0.3) * 0.7 : flashT < 0.6 ? 0.7 : 0.7 * (1 - (flashT - 0.6) / 0.4);
+        trunkFlash.style.opacity = Math.max(0, pulseOpacity).toString();
+      }
+    } else if (elapsed > TRUNK_FLASH_START + TRUNK_FLASH_DURATION && trunkFlash) {
+      trunkFlash.style.opacity = '0';
+    }
+
+    // Phase 2: Branches extend
+    for (let i = 0; i < totalNodes; i++) {
+      const branchStartMs = BRANCH_START + (i * BRANCH_STAGGER);
+      const branchEndMs = branchStartMs + BRANCH_GROW_MS;
+      const labelStartMs = branchEndMs - 40;
+      const node = nodes[i];
+      const branchInner = node.querySelector('.tree-branch-inner');
+      const branchDot = node.querySelector('.branch-dot');
+
+      if (elapsed >= branchStartMs) {
+        if (elapsed < branchEndMs) {
+          const branchT = easeOutCubic((elapsed - branchStartMs) / BRANCH_GROW_MS);
+          if (branchInner) branchInner.style.width = (branchT * 100) + '%';
+        } else {
+          if (branchInner) branchInner.style.width = '100%';
+          if (branchDot) branchDot.classList.add('visible');
+        }
+        if (elapsed >= labelStartMs) {
+          node.classList.remove('grow-hidden');
+          node.classList.add('grow-visible');
+        }
+      }
+    }
+
+    if (elapsed < TOTAL_DURATION + 50) {
+      runningAnimations[moduleId] = requestAnimationFrame(tick);
+    } else {
+      if (trunkGrow) trunkGrow.style.height = trunkTargetH + 'px';
+      if (trunkFlash) trunkFlash.style.opacity = '0';
+      nodes.forEach(node => {
+        node.classList.remove('grow-hidden');
+        node.classList.add('grow-visible');
+        const bi = node.querySelector('.tree-branch-inner');
+        const bd = node.querySelector('.branch-dot');
+        if (bi) bi.style.width = '100%';
+        if (bd) bd.classList.add('visible');
+      });
+      runningAnimations[moduleId] = null;
+    }
+  }
+
+  runningAnimations[moduleId] = requestAnimationFrame(tick);
+}
+
+/* Collapse animation */
+function animateTreeCollapse(moduleId) {
+  const treeSection = document.getElementById('tree-' + moduleId);
+  if (!treeSection) return;
+
+  const treeList = treeSection.querySelector('.tree-list');
+  if (!treeList) return;
+
+  const trunkGrow = treeList.querySelector('.trunk-grow');
+  const trunkFlash = treeList.querySelector('.trunk-flash');
+  const nodes = treeList.querySelectorAll('.tree-node');
+
+  if (runningAnimations[moduleId]) {
+    cancelAnimationFrame(runningAnimations[moduleId]);
+    runningAnimations[moduleId] = null;
+  }
+
+  const COLLAPSE_DURATION = 250;
+  const startTime = performance.now();
+  const currentTrunkH = trunkGrow ? parseFloat(trunkGrow.style.height) || 0 : 0;
+
+  function tick(now) {
+    const elapsed = now - startTime;
+    const t = Math.min(1, elapsed / COLLAPSE_DURATION);
+    const eased = easeInOutQuad(t);
+    const inv = 1 - eased;
+
+    if (trunkGrow) trunkGrow.style.height = (inv * currentTrunkH) + 'px';
+
+    nodes.forEach(node => {
+      const bi = node.querySelector('.tree-branch-inner');
+      const bd = node.querySelector('.branch-dot');
+      if (bi) bi.style.width = (inv * 100) + '%';
+      if (bd) bd.classList.remove('visible');
+      if (t > 0.15) {
+        node.classList.remove('grow-visible');
+        node.classList.add('grow-hidden');
+      }
+    });
+
+    if (trunkFlash) trunkFlash.style.opacity = '0';
+
+    if (t < 1) {
+      runningAnimations[moduleId] = requestAnimationFrame(tick);
+    } else {
+      if (trunkGrow) trunkGrow.style.height = '0px';
+      nodes.forEach(node => {
+        node.classList.remove('grow-visible');
+        node.classList.add('grow-hidden');
+        const bi = node.querySelector('.tree-branch-inner');
+        if (bi) bi.style.width = '0px';
+      });
+      runningAnimations[moduleId] = null;
+    }
+  }
+
+  runningAnimations[moduleId] = requestAnimationFrame(tick);
+}
+
+/* Toggle / Expand / Collapse */
+function toggleModule(moduleId) {
+  if (currentExpanded === moduleId) {
+    if (moduleId !== ACTIVE_MODULE) {
+      collapseModule(moduleId);
+      currentExpanded = null;
+    }
+    return;
+  }
+  if (currentExpanded) collapseModule(currentExpanded);
+  expandModule(moduleId);
+  currentExpanded = moduleId;
+}
+
+function collapseModule(moduleId) {
+  const col = document.getElementById('col-' + moduleId);
+  const tree = document.getElementById('tree-' + moduleId);
+  const summary = document.getElementById('summary-' + moduleId);
+  if (!col || !tree) return;
+
+  animateTreeCollapse(moduleId);
+  col.classList.remove('expanded');
+  tree.style.maxHeight = tree.scrollHeight + 'px';
+  tree.offsetHeight;
+  tree.style.maxHeight = '0px';
+  tree.classList.remove('expanded');
+  tree.classList.add('collapsed');
+  if (summary) summary.style.display = '';
+
+  if (moduleId === 'inv' && treeParticleSys) {
+    treeParticleSys.stop();
+    treeParticleSys.ctx.clearRect(0, 0, treeParticleSys.canvas.width, treeParticleSys.canvas.height);
+  }
+}
+
+function expandModule(moduleId) {
+  const col = document.getElementById('col-' + moduleId);
+  const tree = document.getElementById('tree-' + moduleId);
+  const summary = document.getElementById('summary-' + moduleId);
+  if (!col || !tree) return;
+
+  col.classList.add('expanded');
+  tree.classList.remove('collapsed');
+  tree.classList.add('expanded');
+
+  tree.style.maxHeight = '0px';
+  tree.offsetHeight;
+  const targetH = treeHeights[moduleId] || tree.scrollHeight;
+  tree.style.maxHeight = targetH + 'px';
+  if (summary) summary.style.display = 'none';
+
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => { animateTreeGrow(moduleId); });
+  });
+
+  setTimeout(() => {
+    if (tree.classList.contains('expanded')) {
+      tree.style.maxHeight = targetH + 40 + 'px';
+    }
+  }, 500);
+
+  if (moduleId === 'inv' && treeParticleSys) {
+    treeParticleSys.resize();
+    if (!treeParticleSys.running) treeParticleSys.start();
+  }
+}
+
+/* ==================================================================
+   TREE PARTICLE SYSTEM — positioned relative to trunk/branches
+   ================================================================== */
+class TreeParticleSystem {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.particles = [];
+    this.running = true;
+    this.raf = null;
+    this.resize();
+  }
+
+  resize() {
+    const col = this.canvas.closest('.module-col');
+    if (!col) return;
+    const rect = col.getBoundingClientRect();
+    this.canvas.width = rect.width;
+    this.canvas.height = rect.height;
+    this.canvas.style.width = rect.width + 'px';
+    this.canvas.style.height = rect.height + 'px';
+  }
+
+  spawn() {
+    const col = this.canvas.closest('.module-col');
+    if (!col) return;
+    const treeList = col.querySelector('.tree-list');
+    if (!treeList) return;
+
+    const colRect = col.getBoundingClientRect();
+    const treeRect = treeList.getBoundingClientRect();
+
+    const trunkX = treeRect.left - colRect.left + 28;
+    const trunkTop = treeRect.top - colRect.top;
+    const trunkBot = treeRect.bottom - colRect.top;
+
+    const y = trunkTop + Math.random() * (trunkBot - trunkTop);
+    const spawnOnBranch = Math.random() < 0.3;
+    let x = trunkX + (Math.random() - 0.5) * 6;
+    if (spawnOnBranch) x += Math.random() * 16;
+
+    this.particles.push({
+      x, y,
+      vx: (Math.random() - 0.5) * 0.5,
+      vy: -0.3 - Math.random() * 0.6,
+      life: 1.0,
+      decay: 0.008 + Math.random() * 0.006,
+      size: 1.5 + Math.random() * 1.5,
+      hue: 271
+    });
+  }
+
+  update() {
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const p = this.particles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      p.life -= p.decay;
+      if (p.life <= 0) this.particles.splice(i, 1);
+    }
+  }
+
+  draw() {
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    for (const p of this.particles) {
+      const alpha = p.life * 0.6;
+      this.ctx.beginPath();
+      this.ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      this.ctx.fillStyle = `hsla(${p.hue}, 80%, 72%, ${alpha})`;
+      this.ctx.fill();
+      // Glow halo
+      this.ctx.beginPath();
+      this.ctx.arc(p.x, p.y, p.size * 2.5, 0, Math.PI * 2);
+      this.ctx.fillStyle = `hsla(${p.hue}, 80%, 72%, ${alpha * 0.2})`;
+      this.ctx.fill();
+    }
+  }
+
+  tick() {
+    if (!this.running) return;
+    if (Math.random() < 0.3) this.spawn();
+    this.update();
+    this.draw();
+    this.raf = requestAnimationFrame(() => this.tick());
+  }
+
+  start() { this.running = true; this.tick(); }
+  stop() { this.running = false; if (this.raf) cancelAnimationFrame(this.raf); }
+}
+
+/* ==================================================================
+   BACKGROUND PARTICLE SYSTEM — full-viewport canvas
+   ================================================================== */
+const bgCanvas = document.getElementById('bgCanvas');
+const bgCtx = bgCanvas.getContext('2d');
+let bgParticles = [];
+const BG_PARTICLE_COUNT = 55;
+const MODULE_HUES = [142, 199, 271, 32]; // seed, hypo, inv, paper
+
+function resizeBgCanvas() {
+  bgCanvas.width = window.innerWidth;
+  bgCanvas.height = window.innerHeight;
+}
+
+function createBgParticle() {
+  const hue = MODULE_HUES[Math.floor(Math.random() * MODULE_HUES.length)];
+  return {
+    x: Math.random() * bgCanvas.width,
+    y: Math.random() * bgCanvas.height,
+    vx: (Math.random() - 0.5) * 0.3,
+    vy: (Math.random() - 0.5) * 0.3,
+    r: Math.random() * 1.5 + 0.5,
+    alpha: Math.random() * 0.35 + 0.08,
+    hue,
+    life: Math.random() * 200 + 100,
+    maxLife: 300,
+  };
+}
+
+function initBgParticles() {
+  bgParticles = [];
+  for (let i = 0; i < BG_PARTICLE_COUNT; i++) bgParticles.push(createBgParticle());
+}
+
+function drawBgParticles() {
+  bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
+  bgParticles.forEach((p, i) => {
+    p.x += p.vx;
+    p.y += p.vy;
+    p.life--;
+
+    if (p.life <= 0 || p.x < -10 || p.x > bgCanvas.width + 10 || p.y < -10 || p.y > bgCanvas.height + 10) {
+      bgParticles[i] = createBgParticle();
+      return;
+    }
+
+    const fadeIn = Math.min(1, (p.maxLife - p.life) / 30);
+    const fadeOut = Math.min(1, p.life / 30);
+    const alpha = p.alpha * fadeIn * fadeOut;
+
+    bgCtx.beginPath();
+    bgCtx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    bgCtx.fillStyle = `hsla(${p.hue}, 65%, 65%, ${alpha})`;
+    bgCtx.fill();
+  });
+
+  // Faint connections
+  for (let i = 0; i < bgParticles.length; i++) {
+    for (let j = i + 1; j < bgParticles.length; j++) {
+      const dx = bgParticles[i].x - bgParticles[j].x;
+      const dy = bgParticles[i].y - bgParticles[j].y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 110) {
+        const a = (1 - dist / 110) * 0.06;
+        bgCtx.beginPath();
+        bgCtx.moveTo(bgParticles[i].x, bgParticles[i].y);
+        bgCtx.lineTo(bgParticles[j].x, bgParticles[j].y);
+        bgCtx.strokeStyle = `hsla(${bgParticles[i].hue}, 60%, 60%, ${a})`;
+        bgCtx.lineWidth = 0.5;
+        bgCtx.stroke();
+      }
+    }
+  }
+
+  requestAnimationFrame(drawBgParticles);
+}
+
+/* ==================================================================
+   FLOATING MOTES (ambient CSS particles)
+   ================================================================== */
+function createMotes() {
+  const container = document.getElementById('motes-container');
+  const count = 15;
+  for (let i = 0; i < count; i++) {
+    const mote = document.createElement('div');
+    mote.className = 'mote';
+    mote.style.left = Math.random() * 100 + 'vw';
+    mote.style.top = (40 + Math.random() * 60) + 'vh';
+    mote.style.animationDuration = (8 + Math.random() * 12) + 's';
+    mote.style.animationDelay = Math.random() * 10 + 's';
+    mote.style.width = (2 + Math.random() * 2) + 'px';
+    mote.style.height = mote.style.width;
+    const hue = MODULE_HUES[Math.floor(Math.random() * MODULE_HUES.length)];
+    mote.style.background = `hsla(${hue}, 60%, 60%, 0.5)`;
+    container.appendChild(mote);
+  }
+}
+
+/* ==================================================================
+   PROGRESS BAR SIMULATION
+   ================================================================== */
+let progressValue = 58;
+let progressDir = 1;
+
+function animateProgress() {
+  const bar = document.querySelector('.sub-progress-bar');
+  if (!bar) return;
+  progressValue += progressDir * (0.1 + Math.random() * 0.15);
+  if (progressValue >= 72) progressDir = -0.3;
+  if (progressValue <= 55) progressDir = 1;
+  bar.style.width = progressValue + '%';
+}
+
+/* ==================================================================
+   INITIALIZATION
+   ================================================================== */
+let treeParticleSys = null;
+
+function init() {
+  initHeights();
+  createMotes();
+
+  // Background particles
+  resizeBgCanvas();
+  initBgParticles();
+  drawBgParticles();
+
+  // Tree particles on active module
+  const pCanvas = document.getElementById('particles-inv');
+  if (pCanvas) {
+    treeParticleSys = new TreeParticleSystem(pCanvas);
+    treeParticleSys.start();
+  }
+
+  // Header ring
+  setTimeout(() => updateHeaderRing(), 300);
+
+  // Connector lines
+  setTimeout(() => buildConnectorLines(), 100);
+
+  // Progress bar animation
+  setInterval(animateProgress, 200);
+
+  // Resize handler
+  window.addEventListener('resize', () => {
+    resizeBgCanvas();
+    if (treeParticleSys) treeParticleSys.resize();
+    ['seed', 'hypo', 'inv', 'paper'].forEach(id => {
+      treeHeights[id] = measureTreeHeight(id);
+    });
+    buildConnectorLines();
+  });
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
+</script>
+</body>
+</html>

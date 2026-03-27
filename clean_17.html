@@ -1,0 +1,682 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: #0f1117;
+    color: #c8cdd5;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 48px 20px;
+    line-height: 1.55;
+    font-size: 15px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Header ── */
+  .header {
+    text-align: center;
+    margin-bottom: 40px;
+  }
+  .header h1 {
+    font-size: 14px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #555d6b;
+  }
+
+  /* ── Pill rows ── */
+  .pill-row {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .pill-row.sub-pills {
+    margin-top: 10px;
+    overflow: hidden;
+    max-height: 0;
+    opacity: 0;
+    transition: max-height 0.35s ease, opacity 0.3s ease, margin-top 0.3s ease;
+  }
+  .pill-row.sub-pills.visible {
+    max-height: 60px;
+    opacity: 1;
+    margin-top: 10px;
+  }
+
+  .pill {
+    height: 32px;
+    padding: 0 16px;
+    border-radius: 9999px;
+    border: 1.5px solid transparent;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    transition: all 0.2s ease;
+    background: transparent;
+    white-space: nowrap;
+    user-select: none;
+  }
+  .pill:hover { filter: brightness(1.2); }
+
+  /* States */
+  .pill.complete {
+    border-color: #2d7a4a;
+    color: #5ec47e;
+  }
+  .pill.active {
+    border-color: transparent;
+    background: #3b82f6;
+    color: #fff;
+  }
+  .pill.running {
+    border-color: #3b82f6;
+    color: #7db4fc;
+  }
+  .pill.pending {
+    border-color: #2a2e38;
+    color: #4a5060;
+  }
+
+  /* Sub-pills are smaller */
+  .sub-pills .pill {
+    height: 28px;
+    padding: 0 12px;
+    font-size: 12px;
+  }
+
+  /* ── Content area ── */
+  .content-wrap {
+    max-width: 650px;
+    width: 100%;
+    margin-top: 36px;
+    position: relative;
+    min-height: 200px;
+  }
+
+  .content {
+    animation: fadeIn 0.3s ease;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .content-title {
+    font-size: 22px;
+    font-weight: 600;
+    color: #e2e6ec;
+    margin-bottom: 4px;
+  }
+  .content-subtitle {
+    font-size: 16px;
+    color: #7a8394;
+    margin-bottom: 20px;
+  }
+
+  .content-body p {
+    margin-bottom: 14px;
+    color: #9aa1b0;
+    line-height: 1.65;
+  }
+
+  /* ── Progress bar ── */
+  .progress-bar {
+    width: 100%;
+    height: 4px;
+    background: #1c1f28;
+    border-radius: 2px;
+    margin: 20px 0 16px;
+    overflow: hidden;
+  }
+  .progress-bar .fill {
+    height: 100%;
+    border-radius: 2px;
+    background: linear-gradient(90deg, #3b82f6, #60a5fa);
+    transition: width 0.6s ease;
+  }
+
+  /* ── Meta row ── */
+  .meta-row {
+    display: flex;
+    gap: 24px;
+    font-size: 13px;
+    color: #5a6270;
+  }
+  .meta-row span { display: flex; align-items: center; gap: 5px; }
+
+  /* ── Artifact list ── */
+  .artifact-list {
+    list-style: none;
+    margin-top: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .artifact-list li {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    font-size: 14px;
+    color: #9aa1b0;
+  }
+  .artifact-list .icon {
+    flex-shrink: 0;
+    font-size: 13px;
+    width: 18px;
+    text-align: center;
+  }
+  .artifact-list .icon.done { color: #5ec47e; }
+  .artifact-list .icon.run  { color: #7db4fc; }
+  .artifact-list .icon.wait { color: #3a3f4c; }
+  .artifact-list .detail {
+    color: #5a6270;
+    margin-left: auto;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  /* ── Iteration dots ── */
+  .iter-summary {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 16px 0;
+  }
+  .iter-summary .score-dot {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 600;
+    border: 2px solid #2d7a4a;
+    color: #5ec47e;
+  }
+  .iter-summary .arrow {
+    color: #3a3f4c;
+    font-size: 13px;
+  }
+
+  /* ── Stat grid ── */
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin: 16px 0;
+  }
+  .stat-box {
+    background: #161921;
+    border-radius: 8px;
+    padding: 14px 12px;
+    text-align: center;
+  }
+  .stat-box .num {
+    font-size: 20px;
+    font-weight: 600;
+    color: #e2e6ec;
+  }
+  .stat-box .label {
+    font-size: 11px;
+    color: #5a6270;
+    margin-top: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  /* ── Score badge ── */
+  .score-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: #161921;
+    border-radius: 8px;
+    padding: 8px 14px;
+    margin-bottom: 16px;
+    font-size: 14px;
+  }
+  .score-badge .val {
+    font-weight: 600;
+    color: #5ec47e;
+    font-size: 18px;
+  }
+  .score-badge .sep { color: #2a2e38; }
+  .score-badge .conf { color: #7a8394; font-size: 13px; }
+
+  /* ── Issues ── */
+  .issues {
+    font-size: 13px;
+    color: #5a6270;
+    margin-top: 12px;
+    padding: 10px 14px;
+    background: #161921;
+    border-radius: 8px;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>AI Inventor</h1>
+</div>
+
+<!-- Top-level pills -->
+<div class="pill-row" id="top-pills"></div>
+
+<!-- Sub-pills (hidden by default) -->
+<div class="pill-row sub-pills" id="sub-pills"></div>
+
+<!-- Content -->
+<div class="content-wrap">
+  <div class="content" id="content"></div>
+</div>
+
+<script>
+// ──────────────────────────────────────────
+// Data model
+// ──────────────────────────────────────────
+
+const MODULES = [
+  { id: 'seed',       label: 'Seed',       status: 'complete' },
+  { id: 'hypothesis', label: 'Hypothesis', status: 'complete' },
+  { id: 'invention',  label: 'Invention',  status: 'running'  },
+  { id: 'paper',      label: 'Paper',      status: 'pending'  },
+];
+
+const SUB_PILLS = {
+  seed: [
+    { id: 'papers', label: 'Papers', status: 'complete' },
+    { id: 'kg',     label: 'KG',     status: 'complete' },
+    { id: 'gaps',   label: 'Gaps',   status: 'complete' },
+    { id: 'seeds',  label: 'Seeds',  status: 'complete' },
+  ],
+  hypothesis: [
+    { id: 'iter1', label: 'Iter 1', status: 'complete' },
+    { id: 'iter2', label: 'Iter 2', status: 'complete' },
+    { id: 'iter3', label: 'Iter 3', status: 'complete' },
+  ],
+  invention: [
+    { id: 'strat',  label: 'Strat',  status: 'complete' },
+    { id: 'plan',   label: 'Plan',   status: 'complete' },
+    { id: 'art',    label: 'Art',    status: 'running'  },
+    { id: 'paper',  label: 'Paper',  status: 'pending'  },
+    { id: 'review', label: 'Review', status: 'pending'  },
+    { id: 'upd',    label: 'Upd',    status: 'pending'  },
+  ],
+  paper: [
+    { id: 'compile', label: 'Compile', status: 'pending' },
+    { id: 'viz',     label: 'Viz',     status: 'pending' },
+    { id: 'full',    label: 'Full',    status: 'pending' },
+  ],
+};
+
+const STATUS_ICON = {
+  complete: '\u2713',
+  running:  '\u25B6',
+  pending:  '\u25CB',
+};
+
+// ──────────────────────────────────────────
+// State
+// ──────────────────────────────────────────
+
+let activeModule = 'invention';
+let activeSub = null;
+let subVisible = false;
+
+// ──────────────────────────────────────────
+// Rendering helpers
+// ──────────────────────────────────────────
+
+function pillClass(status, isActive) {
+  if (isActive && status === 'running') return 'active';
+  if (isActive) return 'active';
+  return status;
+}
+
+function renderTopPills() {
+  const row = document.getElementById('top-pills');
+  row.innerHTML = '';
+  MODULES.forEach(m => {
+    const btn = document.createElement('button');
+    btn.className = 'pill ' + pillClass(m.status, m.id === activeModule);
+    btn.textContent = m.label + ' ' + STATUS_ICON[m.status];
+    btn.onclick = () => onTopPillClick(m.id);
+    row.appendChild(btn);
+  });
+}
+
+function renderSubPills() {
+  const row = document.getElementById('sub-pills');
+  const subs = SUB_PILLS[activeModule];
+  row.innerHTML = '';
+
+  if (!subs) { row.classList.remove('visible'); return; }
+
+  subs.forEach(s => {
+    const btn = document.createElement('button');
+    btn.className = 'pill ' + pillClass(s.status, s.id === activeSub);
+    btn.textContent = s.label + ' ' + STATUS_ICON[s.status];
+    btn.onclick = () => onSubPillClick(s.id);
+    row.appendChild(btn);
+  });
+
+  if (subVisible) {
+    requestAnimationFrame(() => row.classList.add('visible'));
+  } else {
+    row.classList.remove('visible');
+  }
+}
+
+// ──────────────────────────────────────────
+// Content generators
+// ──────────────────────────────────────────
+
+function defaultContent() {
+  return `
+    <div class="content-title">Invention Loop &mdash; Iteration 2/3</div>
+    <div class="content-subtitle">Generating Artifacts: 3/5</div>
+    <div class="content-body">
+      <p>Executing research artifacts. Baseline accuracy 0.847 (+17.5%). Multilingual dataset ready (2,400 examples). Convergence formally proved. Ablation study running.</p>
+    </div>
+    <div class="progress-bar"><div class="fill" style="width:60%"></div></div>
+    <div class="meta-row">
+      <span>42m</span>
+      <span>$12.47</span>
+    </div>
+  `;
+}
+
+// ── Module summaries (no sub selected) ──
+
+function inventionSummary() {
+  return `
+    <div class="content-title">Invention Loop &mdash; Iteration 2/3</div>
+    <div class="content-subtitle">Module Overview</div>
+    <div class="content-body">
+      <p>Building on hypothesis scored 8.4/10. Strategy selected contrastive alignment with ablation. 5 artifact plans created. Currently executing &mdash; 3 of 5 artifacts done.</p>
+    </div>
+    <div class="progress-bar"><div class="fill" style="width:60%"></div></div>
+    <div class="meta-row">
+      <span>42m</span>
+      <span>$12.47</span>
+    </div>
+  `;
+}
+
+function hypothesisSummary() {
+  return `
+    <div class="content-title">Hypothesis Generation</div>
+    <div class="content-subtitle">3 iterations of generation and adversarial review</div>
+    <div class="iter-summary">
+      <div class="score-dot">6.2</div>
+      <span class="arrow">&rarr;</span>
+      <div class="score-dot">7.8</div>
+      <span class="arrow">&rarr;</span>
+      <div class="score-dot">8.4</div>
+    </div>
+    <div class="content-body">
+      <p>Score: 6.2 &rarr; 7.8 &rarr; 8.4/10. Each iteration refined the hypothesis through structured adversarial review, resolving major feasibility concerns and strengthening the experimental design.</p>
+    </div>
+  `;
+}
+
+function seedSummary() {
+  return `
+    <div class="content-title">Seed Discovery</div>
+    <div class="content-subtitle">Complete</div>
+    <div class="stat-grid">
+      <div class="stat-box"><div class="num">847</div><div class="label">Papers</div></div>
+      <div class="stat-box"><div class="num">2,341</div><div class="label">Triples</div></div>
+      <div class="stat-box"><div class="num">12</div><div class="label">Gaps</div></div>
+      <div class="stat-box"><div class="num">5</div><div class="label">Seeds</div></div>
+    </div>
+    <div class="content-body">
+      <p>847 papers mined, 2,341 triples extracted into the knowledge graph, 12 research gaps identified, 5 seeds selected for hypothesis generation.</p>
+    </div>
+  `;
+}
+
+function paperSummary() {
+  return `
+    <div class="content-title">Paper Generation</div>
+    <div class="content-subtitle">Pending &mdash; waiting for invention loop</div>
+    <div class="content-body">
+      <p>Paper compilation, visualization generation, and full assembly will begin after the invention loop completes.</p>
+    </div>
+  `;
+}
+
+// ── Sub-pill content ──
+
+const SUB_CONTENT = {
+  // Invention subs
+  strat: () => `
+    <div class="content-title">Generate Strategy</div>
+    <div class="content-subtitle">Complete</div>
+    <div class="content-body">
+      <p>Refined approach to include ablation experiments addressing reviewer feedback. Focus on contrastive alignment with code-switching augmentation across 8 language families.</p>
+    </div>
+  `,
+  plan: () => `
+    <div class="content-title">Generate Plan</div>
+    <div class="content-subtitle">Complete &mdash; 5 artifacts planned</div>
+    <div class="content-body">
+      <p>Decomposed the strategy into 5 executable artifacts: contrastive baseline, multilingual pair generation, convergence proof, ablation study, and cross-lingual evaluation. Each has defined inputs, expected outputs, and success criteria.</p>
+    </div>
+  `,
+  art: () => `
+    <div class="content-title">Generate Artifacts</div>
+    <div class="content-subtitle">12m 08s &mdash; $5.41</div>
+    <ul class="artifact-list">
+      <li><span class="icon done">\u2713</span> Contrastive Baseline <span class="detail">acc: 0.847 (+17.5%)</span></li>
+      <li><span class="icon done">\u2713</span> Multilingual Pairs <span class="detail">2,400 examples</span></li>
+      <li><span class="icon done">\u2713</span> Convergence Proof <span class="detail">verified</span></li>
+      <li><span class="icon run">\u25B6</span> Ablation Study <span class="detail">running</span></li>
+      <li><span class="icon wait">\u25CB</span> Cross-lingual Eval <span class="detail">pending</span></li>
+    </ul>
+  `,
+  // invention.paper sub
+  'inv-paper': () => `
+    <div class="content-title">Generate Paper Text</div>
+    <div class="content-subtitle">Pending</div>
+    <div class="content-body">
+      <p>Will draft the paper text once all artifacts are complete.</p>
+    </div>
+  `,
+  review: () => `
+    <div class="content-title">Review Paper</div>
+    <div class="content-subtitle">Pending</div>
+    <div class="content-body">
+      <p>Adversarial review of the generated paper text. Will identify weaknesses and suggest revisions.</p>
+    </div>
+  `,
+  upd: () => `
+    <div class="content-title">Update Paper</div>
+    <div class="content-subtitle">Pending</div>
+    <div class="content-body">
+      <p>Incorporate review feedback and iterate on the paper text.</p>
+    </div>
+  `,
+
+  // Hypothesis subs
+  iter1: () => `
+    <div class="content-title">Iteration 1</div>
+    <div class="score-badge">
+      <span class="val">6.2</span>
+      <span class="sep">/</span>
+      <span>10</span>
+      <span class="conf">Confidence: 2/5</span>
+    </div>
+    <div class="content-body">
+      <p><strong>Cross-lingual Contrastive Alignment for Low-Resource NMT</strong></p>
+      <p>Initial hypothesis proposing contrastive objectives for aligning sentence representations across language pairs with limited parallel data. Leverages code-switching as a natural augmentation strategy.</p>
+    </div>
+    <div class="issues">2 major issues, 4 minor</div>
+  `,
+  iter2: () => `
+    <div class="content-title">Iteration 2</div>
+    <div class="score-badge">
+      <span class="val">7.8</span>
+      <span class="sep">/</span>
+      <span>10</span>
+      <span class="conf">Confidence: 3/5</span>
+    </div>
+    <div class="content-body">
+      <p><strong>Cross-lingual Contrastive Alignment for Low-Resource NMT</strong></p>
+      <p>Addressed feasibility concerns by constraining to 8 language families with available data. Added convergence analysis and clarified the code-switching augmentation procedure.</p>
+    </div>
+    <div class="issues">1 major issue, 3 minor</div>
+  `,
+  iter3: () => `
+    <div class="content-title">Iteration 3</div>
+    <div class="score-badge">
+      <span class="val">8.4</span>
+      <span class="sep">/</span>
+      <span>10</span>
+      <span class="conf">Confidence: 4/5</span>
+    </div>
+    <div class="content-body">
+      <p><strong>Cross-lingual Contrastive Alignment for Low-Resource NMT</strong></p>
+      <p>Final iteration. Formal convergence proof added. Ablation study design strengthened. Reviewer concerns about dataset contamination addressed with held-out evaluation protocol.</p>
+    </div>
+    <div class="issues">0 major issues, 2 minor</div>
+  `,
+
+  // Seed subs
+  papers: () => `
+    <div class="content-title">Paper Mining</div>
+    <div class="content-subtitle">847 papers collected</div>
+    <div class="content-body">
+      <p>Crawled Semantic Scholar and ArXiv for recent work on cross-lingual NLP, contrastive learning, and low-resource machine translation. Filtered by citation count, recency, and relevance to the research domain.</p>
+    </div>
+  `,
+  kg: () => `
+    <div class="content-title">Knowledge Graph</div>
+    <div class="content-subtitle">2,341 triples extracted</div>
+    <div class="content-body">
+      <p>Built a knowledge graph connecting methods, datasets, metrics, and findings across the paper corpus. Entities linked by relationships including <em>uses-method</em>, <em>evaluates-on</em>, <em>improves-upon</em>, and <em>contradicts</em>.</p>
+    </div>
+  `,
+  gaps: () => `
+    <div class="content-title">Gap Analysis</div>
+    <div class="content-subtitle">12 research gaps identified</div>
+    <div class="content-body">
+      <p>Structural analysis of the knowledge graph revealed 12 under-explored regions. Top gaps include contrastive alignment for morphologically-rich languages, cross-lingual code-switching augmentation, and convergence guarantees for bilingual objectives.</p>
+    </div>
+  `,
+  seeds: () => `
+    <div class="content-title">Seed Selection</div>
+    <div class="content-subtitle">5 seeds selected</div>
+    <div class="content-body">
+      <p>Ranked gaps by novelty, feasibility, and expected impact. Selected 5 seeds for hypothesis generation. Top seed: contrastive alignment with code-switching augmentation for low-resource NMT across diverse language families.</p>
+    </div>
+  `,
+
+  // Paper subs
+  compile: () => `
+    <div class="content-title">Compile Paper</div>
+    <div class="content-subtitle">Pending</div>
+    <div class="content-body"><p>Assemble sections from invention loop outputs into a structured draft.</p></div>
+  `,
+  viz: () => `
+    <div class="content-title">Generate Visualizations</div>
+    <div class="content-subtitle">Pending</div>
+    <div class="content-body"><p>Create figures, tables, and charts from artifact results.</p></div>
+  `,
+  full: () => `
+    <div class="content-title">Full Paper Assembly</div>
+    <div class="content-subtitle">Pending</div>
+    <div class="content-body"><p>Final assembly with abstract, bibliography, and formatting.</p></div>
+  `,
+};
+
+// ──────────────────────────────────────────
+// Navigation logic
+// ──────────────────────────────────────────
+
+function onTopPillClick(id) {
+  if (activeModule === id && subVisible) {
+    // Clicking the active pill again hides sub-pills
+    subVisible = false;
+    activeSub = null;
+    renderSubPills();
+    renderContent();
+    return;
+  }
+
+  activeModule = id;
+  activeSub = null;
+  subVisible = true;
+
+  renderTopPills();
+  renderSubPills();
+  // Small delay so the sub-pill row animates in
+  requestAnimationFrame(() => {
+    document.getElementById('sub-pills').classList.add('visible');
+  });
+  renderContent();
+}
+
+function onSubPillClick(id) {
+  activeSub = id;
+  renderSubPills();
+  renderContent();
+}
+
+function renderContent() {
+  const el = document.getElementById('content');
+
+  // If a sub-pill is selected, show its content
+  if (activeSub) {
+    // Handle the invention.paper collision with top-level paper
+    const key = (activeModule === 'invention' && activeSub === 'paper') ? 'inv-paper' : activeSub;
+    const fn = SUB_CONTENT[key];
+    if (fn) {
+      el.innerHTML = '<div class="content" key="' + key + '">' + fn() + '</div>';
+      return;
+    }
+  }
+
+  // If sub-pills are visible but none selected, show module summary
+  if (subVisible) {
+    const summaries = {
+      seed: seedSummary,
+      hypothesis: hypothesisSummary,
+      invention: inventionSummary,
+      paper: paperSummary,
+    };
+    const fn = summaries[activeModule];
+    el.innerHTML = '<div class="content" key="' + activeModule + '-sum">' + (fn ? fn() : '') + '</div>';
+    return;
+  }
+
+  // Default: overview
+  el.innerHTML = '<div class="content" key="default">' + defaultContent() + '</div>';
+}
+
+// ──────────────────────────────────────────
+// Init
+// ──────────────────────────────────────────
+
+renderTopPills();
+renderContent();
+</script>
+</body>
+</html>

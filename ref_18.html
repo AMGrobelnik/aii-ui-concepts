@@ -1,0 +1,1123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor - Simple View (Three-Row Dots)</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+  :root {
+    --bg: #0c0e14;
+    --surface: #13161f;
+    --surface-2: #1a1e2a;
+    --border: #252a38;
+    --border-lit: #3a4058;
+    --text: #e2e4ea;
+    --text-dim: #8a8fa3;
+    --text-muted: #5a5f73;
+
+    --green: #34d399;
+    --green-dim: #065f46;
+    --purple: #a78bfa;
+    --purple-dim: #4c1d95;
+    --blue: #60a5fa;
+    --blue-dim: #1e3a5f;
+    --gray: #4b5563;
+    --amber: #fbbf24;
+    --amber-dim: #78350f;
+    --rose: #fb7185;
+    --rose-dim: #881337;
+    --cyan: #22d3ee;
+    --cyan-dim: #164e63;
+
+    --row-height-1: 56px;
+    --row-height-2: 44px;
+    --row-height-3: 40px;
+    --content-top-gap: 20px;
+
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  html { font-size: 15px; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    line-height: 1.6;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ─── Top Strip ─── */
+  #top-strip {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    overflow: hidden;
+    transition: height 0.4s var(--ease-out);
+  }
+
+  /* Row containers */
+  .dot-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    position: relative;
+    overflow: hidden;
+    transition: height 0.35s var(--ease-out), opacity 0.3s ease;
+    opacity: 1;
+  }
+  .dot-row.collapsed {
+    height: 0 !important;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  #row-1 { height: var(--row-height-1); }
+  #row-2 { height: var(--row-height-2); border-top: 1px solid var(--border); }
+  #row-3 { height: var(--row-height-3); border-top: 1px solid var(--border); }
+
+  /* Breadcrumb hint */
+  .row-label {
+    position: absolute;
+    left: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    user-select: none;
+  }
+
+  /* ─── Dot + connector layout ─── */
+  .dot-track {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    position: relative;
+  }
+
+  .dot-unit {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
+    cursor: pointer;
+    user-select: none;
+    outline: none;
+  }
+  .dot-unit:focus-visible .dot-circle {
+    outline: 2px solid var(--blue);
+    outline-offset: 3px;
+  }
+
+  .dot-circle {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 2px solid var(--gray);
+    background: transparent;
+    transition: all 0.3s ease;
+    position: relative;
+    z-index: 2;
+    flex-shrink: 0;
+  }
+
+  /* Row 1 uses larger dots */
+  #row-1 .dot-circle {
+    width: 24px;
+    height: 24px;
+    border-width: 2.5px;
+  }
+
+  /* States */
+  .dot-unit[data-state="done"] .dot-circle {
+    border-color: var(--dot-color, var(--green));
+    background: var(--dot-color, var(--green));
+  }
+  .dot-unit[data-state="active"] .dot-circle {
+    border-color: var(--dot-color, var(--blue));
+    background: var(--dot-color, var(--blue));
+    animation: pulse-dot 2s ease-in-out infinite;
+  }
+  .dot-unit[data-state="pending"] .dot-circle {
+    border-color: var(--gray);
+    background: transparent;
+  }
+
+  /* Inner ring for active */
+  .dot-unit[data-state="active"] .dot-circle::after {
+    content: '';
+    position: absolute;
+    inset: 3px;
+    border-radius: 50%;
+    background: var(--surface);
+  }
+  #row-1 .dot-unit[data-state="active"] .dot-circle::after { inset: 4px; }
+
+  /* Glow halo for selected */
+  .dot-unit.selected .dot-circle {
+    box-shadow: 0 0 12px 4px color-mix(in srgb, var(--dot-color, var(--blue)) 40%, transparent);
+  }
+
+  /* Dot label */
+  .dot-label {
+    font-size: 0.6rem;
+    margin-top: 3px;
+    color: var(--text-dim);
+    white-space: nowrap;
+    letter-spacing: 0.02em;
+    transition: color 0.2s ease;
+  }
+  .dot-unit.selected .dot-label { color: var(--text); font-weight: 600; }
+  #row-1 .dot-label { font-size: 0.68rem; margin-top: 4px; }
+
+  /* Status icons on labels */
+  .dot-label .status-icon {
+    font-size: 0.55rem;
+    margin-left: 2px;
+  }
+
+  /* Connectors between dots */
+  .dot-connector {
+    width: 40px;
+    height: 2px;
+    position: relative;
+    flex-shrink: 0;
+    z-index: 1;
+  }
+  #row-1 .dot-connector { width: 64px; }
+  .dot-connector::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--gray);
+    border-radius: 1px;
+    transition: background 0.3s ease;
+  }
+  .dot-connector.lit::after {
+    background: linear-gradient(90deg, var(--from-color, var(--green)), var(--to-color, var(--green)));
+  }
+
+  /* ─── Content Area ─── */
+  #content-area {
+    max-width: 840px;
+    margin: 0 auto;
+    padding: var(--content-top-gap) 24px 60px;
+    animation: fadeUp 0.4s var(--ease-out);
+  }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .content-panel {
+    display: none;
+    animation: fadeUp 0.35s var(--ease-out);
+  }
+  .content-panel.visible { display: block; }
+
+  /* Card components */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px 24px;
+    margin-bottom: 16px;
+    transition: border-color 0.2s ease;
+  }
+  .card:hover { border-color: var(--border-lit); }
+  .card h3 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card h3 .badge {
+    font-size: 0.6rem;
+    padding: 2px 8px;
+    border-radius: 99px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .card p, .card li {
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    line-height: 1.7;
+  }
+  .card ul { padding-left: 18px; margin-top: 6px; }
+  .card li { margin-bottom: 4px; }
+
+  .badge-green  { background: var(--green-dim); color: var(--green); }
+  .badge-purple { background: var(--purple-dim); color: var(--purple); }
+  .badge-blue   { background: var(--blue-dim); color: var(--blue); }
+  .badge-amber  { background: var(--amber-dim); color: var(--amber); }
+  .badge-rose   { background: var(--rose-dim); color: var(--rose); }
+  .badge-cyan   { background: var(--cyan-dim); color: var(--cyan); }
+  .badge-gray   { background: #1f2937; color: var(--text-muted); }
+
+  /* Metric row */
+  .metrics {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .metric-box {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    text-align: center;
+  }
+  .metric-box .val {
+    font-size: 1.4rem;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .metric-box .lbl {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  /* Log-like display */
+  .log-lines {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 0.75rem;
+    line-height: 1.8;
+    max-height: 200px;
+    overflow-y: auto;
+    color: var(--text-dim);
+  }
+  .log-lines .ts { color: var(--green); }
+  .log-lines .lvl { color: var(--amber); }
+  .log-lines .fn { color: var(--cyan); }
+  .log-lines .msg { color: var(--text-dim); }
+
+  /* Key nav hint bar */
+  #nav-hints {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 36px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    z-index: 100;
+  }
+  .nav-key {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .nav-key kbd {
+    display: inline-block;
+    padding: 1px 6px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    font-family: inherit;
+    font-size: 0.65rem;
+    color: var(--text-dim);
+  }
+
+  /* Pulse animation */
+  @keyframes pulse-dot {
+    0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--dot-color, var(--blue)) 50%, transparent); }
+    50%      { box-shadow: 0 0 10px 4px color-mix(in srgb, var(--dot-color, var(--blue)) 25%, transparent); }
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* Small status table */
+  .status-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+    margin-top: 8px;
+  }
+  .status-table th {
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .status-table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text-dim);
+  }
+  .status-table tr:last-child td { border-bottom: none; }
+  .status-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+
+  /* Responsive */
+  @media (max-width: 640px) {
+    #row-1 .dot-connector { width: 36px; }
+    .dot-connector { width: 24px; }
+    #row-1 .dot-circle { width: 20px; height: 20px; }
+    .dot-circle { width: 14px; height: 14px; }
+    .dot-label { font-size: 0.55rem; }
+    #content-area { padding: var(--content-top-gap) 14px 60px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- TOP STRIP: Three rows of dots                              -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div id="top-strip">
+
+  <!-- ROW 1: Module dots (always visible) -->
+  <div class="dot-row" id="row-1">
+    <span class="row-label">Module</span>
+    <div class="dot-track" id="track-1"></div>
+  </div>
+
+  <!-- ROW 2: Iteration dots (visible when module selected) -->
+  <div class="dot-row collapsed" id="row-2">
+    <span class="row-label">Iteration</span>
+    <div class="dot-track" id="track-2"></div>
+  </div>
+
+  <!-- ROW 3: Sub-step dots (visible when iteration selected) -->
+  <div class="dot-row collapsed" id="row-3">
+    <span class="row-label">Step</span>
+    <div class="dot-track" id="track-3"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- CONTENT AREA                                               -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div id="content-area"></div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- KEYBOARD NAV HINTS                                         -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div id="nav-hints">
+  <span class="nav-key"><kbd>&larr;</kbd><kbd>&rarr;</kbd> Navigate</span>
+  <span class="nav-key"><kbd>&darr;</kbd> Drill in</span>
+  <span class="nav-key"><kbd>&uarr;</kbd> Go back</span>
+  <span class="nav-key"><kbd>Esc</kbd> Top level</span>
+</div>
+
+<script>
+// ═════════════════════════════════════════════════════════════
+// DATA MODEL
+// ═════════════════════════════════════════════════════════════
+
+const DATA = {
+  modules: [
+    {
+      id: 'seed',
+      label: 'Seed',
+      color: 'var(--green)',
+      state: 'done',
+      iterations: [
+        {
+          id: 'seed-1',
+          label: 'Run',
+          state: 'done',
+          steps: [
+            { id: 'seed-1-kg',    label: 'KG Build',  state: 'done' },
+            { id: 'seed-1-hypo',  label: 'Gen Hypo',  state: 'done' },
+          ],
+          content: {
+            title: 'Seed Hypotheses',
+            badge: { text: 'Complete', cls: 'badge-green' },
+            body: `
+              <div class="metrics">
+                <div class="metric-box"><div class="val" style="color:var(--green)">42</div><div class="lbl">Papers Ingested</div></div>
+                <div class="metric-box"><div class="val" style="color:var(--green)">187</div><div class="lbl">KG Entities</div></div>
+                <div class="metric-box"><div class="val" style="color:var(--green)">12</div><div class="lbl">Seed Hypotheses</div></div>
+                <div class="metric-box"><div class="val" style="color:var(--green)">3.2s</div><div class="lbl">Duration</div></div>
+              </div>
+              <div class="card">
+                <h3>Knowledge Graph Summary</h3>
+                <p>Built from 42 arXiv papers on diffusion-based protein design. Identified 187 unique entities across 14 relation types. Cluster analysis revealed 3 primary research threads.</p>
+              </div>
+            `
+          }
+        }
+      ],
+      content: {
+        title: 'Seed Module',
+        badge: { text: 'Complete', cls: 'badge-green' },
+        body: `
+          <div class="metrics">
+            <div class="metric-box"><div class="val" style="color:var(--green)">42</div><div class="lbl">Papers Parsed</div></div>
+            <div class="metric-box"><div class="val" style="color:var(--green)">12</div><div class="lbl">Hypotheses Seeded</div></div>
+            <div class="metric-box"><div class="val" style="color:var(--green)">3.2s</div><div class="lbl">Total Time</div></div>
+          </div>
+          <div class="card">
+            <h3>Pipeline Input <span class="badge badge-green">Done</span></h3>
+            <p>Ingested 42 papers from arXiv on diffusion-based protein design. Constructed a knowledge graph with 187 entities and 14 relation types, then seeded 12 initial hypotheses from gap analysis.</p>
+          </div>
+          <div class="card">
+            <h3>Seed Hypotheses Generated</h3>
+            <ul>
+              <li>Hierarchical latent diffusion for multi-domain protein complexes</li>
+              <li>Score-based generative model with physics-informed priors</li>
+              <li>Conditional flow matching for binding-site specificity</li>
+              <li>Graph transformer backbone with SE(3) equivariance</li>
+            </ul>
+            <p style="margin-top:8px;font-style:italic;">+ 8 more hypotheses (click iteration dot to see all)</p>
+          </div>
+        `
+      }
+    },
+    {
+      id: 'hypo',
+      label: 'Hypothesis',
+      color: 'var(--purple)',
+      state: 'done',
+      iterations: [
+        { id: 'hypo-1', label: 'Iter 1', state: 'done', steps: [
+          { id: 'h1-gen',    label: 'Generate', state: 'done' },
+          { id: 'h1-review', label: 'Review',   state: 'done' },
+          { id: 'h1-refine', label: 'Refine',   state: 'done' },
+        ], content: { title: 'Hypothesis Iter 1', badge: { text: 'Complete', cls: 'badge-green' }, body: `
+          <div class="card"><h3>Iteration 1 <span class="badge badge-green">Converged</span></h3>
+          <p>Generated 12 candidate hypotheses, reviewed against novelty and feasibility criteria. Refined the top 4 into structured hypothesis cards with experimental predictions.</p></div>
+          <div class="card"><h3>Review Feedback</h3><p>Reviewer flagged overlap with Chen et al. (2024) on 2 hypotheses. Merged into single stronger formulation. Feasibility score: 8.2/10.</p></div>
+        `}},
+        { id: 'hypo-2', label: 'Iter 2', state: 'done', steps: [
+          { id: 'h2-gen',    label: 'Generate', state: 'done' },
+          { id: 'h2-review', label: 'Review',   state: 'done' },
+          { id: 'h2-refine', label: 'Refine',   state: 'done' },
+        ], content: { title: 'Hypothesis Iter 2', badge: { text: 'Complete', cls: 'badge-green' }, body: `
+          <div class="card"><h3>Iteration 2 <span class="badge badge-green">Converged</span></h3>
+          <p>Expanded hypothesis space with cross-domain analogies. 3 new candidates from materials science transfer. Review sharpened claims and added quantitative predictions.</p></div>
+        `}},
+        { id: 'hypo-3', label: 'Iter 3', state: 'done', steps: [
+          { id: 'h3-gen',    label: 'Generate', state: 'done' },
+          { id: 'h3-review', label: 'Review',   state: 'done' },
+          { id: 'h3-refine', label: 'Refine',   state: 'done' },
+        ], content: { title: 'Hypothesis Iter 3', badge: { text: 'Complete', cls: 'badge-green' }, body: `
+          <div class="card"><h3>Iteration 3 <span class="badge badge-green">Final</span></h3>
+          <p>Converged on 5 strong hypotheses. All pass novelty check, feasibility > 7.5, and have at least 2 testable predictions each. Ready for invention loop.</p></div>
+          <div class="card"><h3>Final Hypotheses</h3>
+            <table class="status-table">
+              <tr><th>Hypothesis</th><th>Novelty</th><th>Feasibility</th></tr>
+              <tr><td>Hierarchical latent diffusion</td><td style="color:var(--green)">9.1</td><td style="color:var(--green)">8.4</td></tr>
+              <tr><td>Physics-informed score model</td><td style="color:var(--green)">8.7</td><td style="color:var(--green)">7.9</td></tr>
+              <tr><td>Conditional flow matching</td><td style="color:var(--green)">8.3</td><td style="color:var(--green)">8.1</td></tr>
+              <tr><td>SE(3) graph transformer</td><td style="color:var(--amber)">7.6</td><td style="color:var(--green)">8.8</td></tr>
+              <tr><td>Cross-domain transfer scaffold</td><td style="color:var(--green)">9.4</td><td style="color:var(--amber)">7.5</td></tr>
+            </table>
+          </div>
+        `}},
+      ],
+      content: {
+        title: 'Hypothesis Loop',
+        badge: { text: 'Complete', cls: 'badge-green' },
+        body: `
+          <div class="metrics">
+            <div class="metric-box"><div class="val" style="color:var(--purple)">3</div><div class="lbl">Iterations</div></div>
+            <div class="metric-box"><div class="val" style="color:var(--purple)">5</div><div class="lbl">Final Hypotheses</div></div>
+            <div class="metric-box"><div class="val" style="color:var(--purple)">8.6</div><div class="lbl">Avg Novelty</div></div>
+            <div class="metric-box"><div class="val" style="color:var(--purple)">8.1</div><div class="lbl">Avg Feasibility</div></div>
+          </div>
+          <div class="card">
+            <h3>Hypothesis Generation & Review <span class="badge badge-purple">3 Loops</span></h3>
+            <p>Iteratively generated, reviewed, and refined hypotheses over 3 cycles. Started with 12 seed candidates, converged to 5 strong hypotheses with quantitative testable predictions. Cross-domain transfer from materials science added novel angles.</p>
+          </div>
+          <div class="card">
+            <h3>Convergence Trace</h3>
+            <p>Iter 1: 12 candidates &rarr; 4 refined | Iter 2: +3 cross-domain &rarr; 6 active | Iter 3: Pruned to 5 final. All scores above threshold (novelty > 7.5, feasibility > 7.5).</p>
+          </div>
+        `
+      }
+    },
+    {
+      id: 'invention',
+      label: 'Invention',
+      color: 'var(--blue)',
+      state: 'active',
+      iterations: [
+        { id: 'inv-1', label: 'Iter 1', state: 'done', steps: [
+          { id: 'i1-strat',  label: 'Strat',   state: 'done' },
+          { id: 'i1-plan',   label: 'Plan',    state: 'done' },
+          { id: 'i1-art',    label: 'Art',     state: 'done' },
+          { id: 'i1-paper',  label: 'Paper',   state: 'done' },
+          { id: 'i1-review', label: 'Review',  state: 'done' },
+          { id: 'i1-upd',    label: 'Upd',     state: 'done' },
+        ], content: { title: 'Invention Iter 1', badge: { text: 'Complete', cls: 'badge-green' }, body: `
+          <div class="card"><h3>Iteration 1 <span class="badge badge-green">Complete</span></h3>
+          <p>First pass through the invention loop. Generated research strategy, detailed plan, artifact demos, paper text, and reviewer feedback. Identified 3 weaknesses in experimental design.</p></div>
+          <div class="card"><h3>Reviewer Feedback Summary</h3>
+          <ul><li>Missing ablation study for SE(3) equivariance component</li><li>Baseline comparison incomplete (lacks DiffDock reference)</li><li>Figure 3 needs error bars and statistical significance</li></ul></div>
+        `}},
+        { id: 'inv-2', label: 'Iter 2', state: 'active', steps: [
+          { id: 'i2-strat',  label: 'Strat',   state: 'done' },
+          { id: 'i2-plan',   label: 'Plan',    state: 'done' },
+          { id: 'i2-art',    label: 'Art',     state: 'active' },
+          { id: 'i2-paper',  label: 'Paper',   state: 'pending' },
+          { id: 'i2-review', label: 'Review',  state: 'pending' },
+          { id: 'i2-upd',    label: 'Upd',     state: 'pending' },
+        ], content: { title: 'Invention Iter 2', badge: { text: 'In Progress', cls: 'badge-blue' }, body: `
+          <div class="metrics">
+            <div class="metric-box"><div class="val" style="color:var(--green)">2/6</div><div class="lbl">Steps Done</div></div>
+            <div class="metric-box"><div class="val" style="color:var(--blue)">Art</div><div class="lbl">Current Step</div></div>
+            <div class="metric-box"><div class="val" style="color:var(--text-dim)">~4m</div><div class="lbl">ETA Remaining</div></div>
+          </div>
+          <div class="card"><h3>Iteration 2 <span class="badge badge-blue">Running</span></h3>
+          <p>Addressing reviewer feedback from Iter 1. Strategy updated to include ablation study. Plan expanded with DiffDock baseline comparison. Currently generating artifact demonstrations.</p></div>
+          <div class="card"><h3>Live Log</h3>
+            <div class="log-lines">
+              <div><span class="ts">14:23:01</span> | <span class="lvl">INFO</span> | <span class="fn">gen_strat</span> | <span class="msg">Strategy refined with ablation plan</span></div>
+              <div><span class="ts">14:23:18</span> | <span class="lvl">INFO</span> | <span class="fn">gen_plan</span> | <span class="msg">Plan v2: +DiffDock baseline, +ablation table</span></div>
+              <div><span class="ts">14:23:42</span> | <span class="lvl">INFO</span> | <span class="fn">gen_art</span> | <span class="msg">Generating Python demo for binding affinity predictor...</span></div>
+              <div><span class="ts">14:23:58</span> | <span class="lvl">INFO</span> | <span class="fn">gen_art</span> | <span class="msg">Demo 1/3 complete. Starting visualization gen...</span></div>
+              <div><span class="ts">14:24:11</span> | <span class="lvl">INFO</span> | <span class="fn">gen_art</span> | <span class="msg">Generating comparison chart with error bars...</span></div>
+            </div>
+          </div>
+        `}},
+        { id: 'inv-3', label: 'Iter 3', state: 'pending', steps: [
+          { id: 'i3-strat',  label: 'Strat',   state: 'pending' },
+          { id: 'i3-plan',   label: 'Plan',    state: 'pending' },
+          { id: 'i3-art',    label: 'Art',     state: 'pending' },
+          { id: 'i3-paper',  label: 'Paper',   state: 'pending' },
+          { id: 'i3-review', label: 'Review',  state: 'pending' },
+          { id: 'i3-upd',    label: 'Upd',     state: 'pending' },
+        ], content: { title: 'Invention Iter 3', badge: { text: 'Pending', cls: 'badge-gray' }, body: `
+          <div class="card"><h3>Iteration 3 <span class="badge badge-gray">Queued</span></h3>
+          <p>Will run after Iter 2 completes. Expected to address any remaining reviewer concerns and polish the final paper draft.</p></div>
+        `}},
+      ],
+      content: {
+        title: 'Invention Loop',
+        badge: { text: 'In Progress', cls: 'badge-blue' },
+        body: `
+          <div class="metrics">
+            <div class="metric-box"><div class="val" style="color:var(--green)">1</div><div class="lbl">Iterations Done</div></div>
+            <div class="metric-box"><div class="val" style="color:var(--blue)">2</div><div class="lbl">Current Iter</div></div>
+            <div class="metric-box"><div class="val" style="color:var(--text-muted)">3</div><div class="lbl">Max Iterations</div></div>
+            <div class="metric-box"><div class="val" style="color:var(--blue)">Art</div><div class="lbl">Current Step</div></div>
+          </div>
+          <div class="card">
+            <h3>Invention Progress <span class="badge badge-blue">Running</span></h3>
+            <p>Each iteration generates strategy, plan, artifacts, paper text, then runs self-review. Feedback loops back into the next iteration. Currently on Iter 2, addressing reviewer feedback from Iter 1.</p>
+          </div>
+          <div class="card">
+            <h3>Iteration History</h3>
+            <table class="status-table">
+              <tr><th>Iteration</th><th>Status</th><th>Key Change</th></tr>
+              <tr><td><span class="status-dot" style="background:var(--green)"></span>Iter 1</td><td style="color:var(--green)">Complete</td><td>Initial draft, 3 issues flagged</td></tr>
+              <tr><td><span class="status-dot" style="background:var(--blue)"></span>Iter 2</td><td style="color:var(--blue)">Running (Art)</td><td>Adding ablation + baselines</td></tr>
+              <tr><td><span class="status-dot" style="background:var(--gray)"></span>Iter 3</td><td style="color:var(--text-muted)">Pending</td><td>--</td></tr>
+            </table>
+          </div>
+        `
+      }
+    },
+    {
+      id: 'paper',
+      label: 'Paper',
+      color: 'var(--amber)',
+      state: 'pending',
+      iterations: [],
+      content: {
+        title: 'Paper Generation',
+        badge: { text: 'Pending', cls: 'badge-gray' },
+        body: `
+          <div class="card">
+            <h3>Paper Module <span class="badge badge-gray">Waiting</span></h3>
+            <p>Will compile the final paper once the Invention Loop converges. Generates LaTeX, figures, visualizations, and the full paper repository.</p>
+          </div>
+          <div class="card">
+            <h3>Expected Outputs</h3>
+            <ul>
+              <li>Full LaTeX paper with bibliography</li>
+              <li>Generated figures and visualizations</li>
+              <li>Artifact demonstration code</li>
+              <li>Supplementary materials</li>
+              <li>Git repository with all assets</li>
+            </ul>
+          </div>
+        `
+      }
+    }
+  ]
+};
+
+// ═════════════════════════════════════════════════════════════
+// SUB-STEP DETAIL CONTENT
+// ═════════════════════════════════════════════════════════════
+
+const STEP_CONTENT = {
+  // Seed steps
+  'seed-1-kg': { title: 'Knowledge Graph Build', badge: { text: 'Complete', cls: 'badge-green' }, body: `
+    <div class="metrics">
+      <div class="metric-box"><div class="val" style="color:var(--green)">42</div><div class="lbl">Papers</div></div>
+      <div class="metric-box"><div class="val" style="color:var(--green)">187</div><div class="lbl">Entities</div></div>
+      <div class="metric-box"><div class="val" style="color:var(--green)">14</div><div class="lbl">Relations</div></div>
+      <div class="metric-box"><div class="val" style="color:var(--green)">1.1s</div><div class="lbl">Duration</div></div>
+    </div>
+    <div class="card"><h3>Knowledge Graph Construction</h3><p>Parsed 42 papers from arXiv. Entity extraction found 187 unique concepts. Relation typing identified 14 distinct relation categories. Graph density: 0.034. Largest connected component covers 91% of entities.</p></div>
+  `},
+  'seed-1-hypo': { title: 'Generate Seed Hypotheses', badge: { text: 'Complete', cls: 'badge-green' }, body: `
+    <div class="card"><h3>Hypothesis Seeding</h3><p>Gap analysis on the KG identified 12 under-explored research directions. Each seed hypothesis includes: a core claim, supporting evidence from the KG, and a preliminary feasibility assessment.</p></div>
+  `},
+
+  // Hypo steps (iter 1)
+  'h1-gen': { title: 'Generate Hypotheses', badge: { text: 'Complete', cls: 'badge-green' }, body: `
+    <div class="card"><h3>Generation Phase</h3><p>Starting from 12 seed hypotheses, expanded to 18 candidates using analogical reasoning and gap-filling strategies. Each hypothesis structured with claim, mechanism, predictions.</p></div>
+  `},
+  'h1-review': { title: 'Review Hypotheses', badge: { text: 'Complete', cls: 'badge-green' }, body: `
+    <div class="card"><h3>Review Phase</h3><p>Evaluated 18 candidates against novelty, feasibility, and testability criteria. Flagged 2 for overlap with existing literature. Scored all on 10-point scales. Minimum threshold: 7.0.</p></div>
+  `},
+  'h1-refine': { title: 'Refine Hypotheses', badge: { text: 'Complete', cls: 'badge-green' }, body: `
+    <div class="card"><h3>Refinement Phase</h3><p>Merged 2 overlapping hypotheses. Sharpened claims on remaining 4 top candidates. Added quantitative predictions. Output: 4 refined hypothesis cards.</p></div>
+  `},
+
+  // Hypo steps (iter 2)
+  'h2-gen': { title: 'Generate (Iter 2)', badge: { text: 'Complete', cls: 'badge-green' }, body: `
+    <div class="card"><h3>Cross-Domain Expansion</h3><p>Introduced analogies from materials science (crystal structure prediction). Generated 3 novel transfer hypotheses. Total active pool: 7 candidates.</p></div>
+  `},
+  'h2-review': { title: 'Review (Iter 2)', badge: { text: 'Complete', cls: 'badge-green' }, body: `
+    <div class="card"><h3>Review</h3><p>Cross-domain hypotheses scored high on novelty (avg 8.9) but moderate on feasibility (avg 7.2). Recommended strengthening experimental design for transfer hypotheses.</p></div>
+  `},
+  'h2-refine': { title: 'Refine (Iter 2)', badge: { text: 'Complete', cls: 'badge-green' }, body: `
+    <div class="card"><h3>Refinement</h3><p>Dropped 1 low-feasibility transfer hypothesis. Strengthened experimental plans for remaining 2. Pool now at 6 active candidates.</p></div>
+  `},
+
+  // Hypo steps (iter 3)
+  'h3-gen': { title: 'Generate (Iter 3)', badge: { text: 'Complete', cls: 'badge-green' }, body: `
+    <div class="card"><h3>Final Generation</h3><p>No new hypotheses generated. Focus on convergence. All 6 candidates carried forward for final review.</p></div>
+  `},
+  'h3-review': { title: 'Review (Iter 3)', badge: { text: 'Complete', cls: 'badge-green' }, body: `
+    <div class="card"><h3>Final Review</h3><p>Strict evaluation with raised thresholds (novelty > 7.5, feasibility > 7.5). 1 candidate fell below. 5 pass all criteria.</p></div>
+  `},
+  'h3-refine': { title: 'Refine (Iter 3)', badge: { text: 'Complete', cls: 'badge-green' }, body: `
+    <div class="card"><h3>Final Refinement</h3><p>Polished 5 final hypothesis cards. Each has 2+ testable predictions, literature positioning, and estimated resource requirements. Handed off to invention loop.</p></div>
+  `},
+
+  // Invention steps (iter 1)
+  'i1-strat': { title: 'Strategy Generation', badge: { text: 'Complete', cls: 'badge-green' }, body: `
+    <div class="card"><h3>Research Strategy</h3><p>Defined overall approach: hierarchical latent diffusion with SE(3)-equivariant graph backbone. Strategy includes ablation points, baseline comparisons, and key metrics (binding affinity RMSD, designability score).</p></div>
+  `},
+  'i1-plan': { title: 'Plan Generation', badge: { text: 'Complete', cls: 'badge-green' }, body: `
+    <div class="card"><h3>Detailed Plan</h3><p>6-section paper structure. Experiments: 3 main + 2 ablation. Baselines: RFDiffusion, ProteinMPNN, Chroma. Metrics: scRMSD, pLDDT, designability. Figure budget: 5 main + 2 supplementary.</p></div>
+  `},
+  'i1-art': { title: 'Artifact Generation', badge: { text: 'Complete', cls: 'badge-green' }, body: `
+    <div class="card"><h3>Artifacts</h3><p>Generated 3 Python demos: binding affinity predictor, structure visualizer, comparison benchmark. 2 visualizations: architecture diagram, performance chart. All pass lint and type checks.</p></div>
+  `},
+  'i1-paper': { title: 'Paper Text', badge: { text: 'Complete', cls: 'badge-green' }, body: `
+    <div class="card"><h3>Paper Draft v1</h3><p>Full 8-page draft generated. Abstract, intro, related work, method, experiments, results, discussion, conclusion. ~4200 words. 23 citations.</p></div>
+  `},
+  'i1-review': { title: 'Self-Review', badge: { text: 'Complete', cls: 'badge-green' }, body: `
+    <div class="card"><h3>Review Results</h3><p>3 major issues identified:</p>
+    <ul><li>Missing ablation for SE(3) equivariance (major)</li><li>No DiffDock baseline (major)</li><li>Figure 3 lacks error bars (minor)</li></ul>
+    <p>Overall score: 5/10. Needs significant revision.</p></div>
+  `},
+  'i1-upd': { title: 'Update Hypothesis', badge: { text: 'Complete', cls: 'badge-green' }, body: `
+    <div class="card"><h3>Hypothesis Update</h3><p>Hypothesis card updated with reviewer findings. Added note: equivariance may be less critical than hypothesized for large complexes. Adjusted prediction confidence intervals.</p></div>
+  `},
+
+  // Invention steps (iter 2)
+  'i2-strat': { title: 'Strategy (Iter 2)', badge: { text: 'Complete', cls: 'badge-green' }, body: `
+    <div class="card"><h3>Revised Strategy</h3><p>Strategy updated: add SE(3) ablation experiment, include DiffDock in baselines, add statistical significance testing. Expanded figure budget to 6 main figures.</p></div>
+  `},
+  'i2-plan': { title: 'Plan (Iter 2)', badge: { text: 'Complete', cls: 'badge-green' }, body: `
+    <div class="card"><h3>Expanded Plan</h3><p>Added Section 4.3 (Ablation Study) and Table 2 (DiffDock comparison). Updated all experiment descriptions with error bar requirements. New figure: ablation heatmap.</p></div>
+  `},
+  'i2-art': { title: 'Artifacts (Iter 2)', badge: { text: 'In Progress', cls: 'badge-blue' }, body: `
+    <div class="metrics">
+      <div class="metric-box"><div class="val" style="color:var(--green)">1/3</div><div class="lbl">Demos Done</div></div>
+      <div class="metric-box"><div class="val" style="color:var(--blue)">2/3</div><div class="lbl">Viz in Progress</div></div>
+    </div>
+    <div class="card"><h3>Generating Artifacts <span class="badge badge-blue">Running</span></h3>
+    <p>Updated binding affinity demo with error bars. Now generating comparison visualization with DiffDock results. Ablation heatmap queued.</p></div>
+    <div class="card"><h3>Live Log</h3>
+      <div class="log-lines">
+        <div><span class="ts">14:23:42</span> | <span class="lvl">INFO</span> | <span class="fn">gen_art</span> | <span class="msg">Generating Python demo for binding affinity predictor...</span></div>
+        <div><span class="ts">14:23:58</span> | <span class="lvl">INFO</span> | <span class="fn">gen_art</span> | <span class="msg">Demo 1/3 complete. Starting visualization gen...</span></div>
+        <div><span class="ts">14:24:11</span> | <span class="lvl">INFO</span> | <span class="fn">gen_art</span> | <span class="msg">Generating comparison chart with error bars...</span></div>
+      </div>
+    </div>
+  `},
+  'i2-paper': { title: 'Paper Text (Iter 2)', badge: { text: 'Pending', cls: 'badge-gray' }, body: `
+    <div class="card"><h3>Paper Revision <span class="badge badge-gray">Queued</span></h3><p>Will revise paper draft with new ablation results, DiffDock comparison, and updated figures. Expected: ~4800 words, 6 main figures.</p></div>
+  `},
+  'i2-review': { title: 'Review (Iter 2)', badge: { text: 'Pending', cls: 'badge-gray' }, body: `
+    <div class="card"><h3>Self-Review <span class="badge badge-gray">Queued</span></h3><p>Will evaluate revised draft against original feedback. Target: resolve all 3 issues from Iter 1 review.</p></div>
+  `},
+  'i2-upd': { title: 'Update (Iter 2)', badge: { text: 'Pending', cls: 'badge-gray' }, body: `
+    <div class="card"><h3>Hypothesis Update <span class="badge badge-gray">Queued</span></h3><p>Will update hypothesis based on Iter 2 review findings.</p></div>
+  `},
+
+  // Invention steps (iter 3)
+  'i3-strat': { title: 'Strategy (Iter 3)', badge: { text: 'Pending', cls: 'badge-gray' }, body: `<div class="card"><h3>Pending</h3><p>Will run after Iter 2 completes.</p></div>` },
+  'i3-plan': { title: 'Plan (Iter 3)', badge: { text: 'Pending', cls: 'badge-gray' }, body: `<div class="card"><h3>Pending</h3><p>Will run after Iter 2 completes.</p></div>` },
+  'i3-art': { title: 'Artifacts (Iter 3)', badge: { text: 'Pending', cls: 'badge-gray' }, body: `<div class="card"><h3>Pending</h3><p>Will run after Iter 2 completes.</p></div>` },
+  'i3-paper': { title: 'Paper (Iter 3)', badge: { text: 'Pending', cls: 'badge-gray' }, body: `<div class="card"><h3>Pending</h3><p>Will run after Iter 2 completes.</p></div>` },
+  'i3-review': { title: 'Review (Iter 3)', badge: { text: 'Pending', cls: 'badge-gray' }, body: `<div class="card"><h3>Pending</h3><p>Will run after Iter 2 completes.</p></div>` },
+  'i3-upd': { title: 'Update (Iter 3)', badge: { text: 'Pending', cls: 'badge-gray' }, body: `<div class="card"><h3>Pending</h3><p>Will run after Iter 2 completes.</p></div>` },
+};
+
+
+// ═════════════════════════════════════════════════════════════
+// STATE
+// ═════════════════════════════════════════════════════════════
+
+const state = {
+  activeRow: 1,          // 1, 2, or 3
+  selectedModule: null,  // index into DATA.modules
+  selectedIter: null,    // index into module.iterations
+  selectedStep: null,    // index into iteration.steps
+  // highlight (cursor) within each row
+  cursor: { 1: 0, 2: 0, 3: 0 },
+};
+
+// ═════════════════════════════════════════════════════════════
+// RENDERING
+// ═════════════════════════════════════════════════════════════
+
+function buildDotHTML(items, parentColor) {
+  let html = '';
+  items.forEach((item, i) => {
+    if (i > 0) {
+      // connector
+      const prev = items[i - 1];
+      const fromDone = prev.state === 'done' || prev.state === 'active';
+      const toDone   = item.state === 'done' || item.state === 'active';
+      const lit = fromDone && toDone;
+      const fromCol = parentColor || colorForState(prev);
+      const toCol   = parentColor || colorForState(item);
+      html += `<div class="dot-connector ${lit ? 'lit' : ''}" style="--from-color:${fromCol};--to-color:${toCol}"></div>`;
+    }
+    const color = parentColor || colorForState(item);
+    const stateIcon = item.state === 'done' ? ' <span class="status-icon">&#10003;</span>'
+                    : item.state === 'active' ? ' <span class="status-icon">&#9654;</span>'
+                    : '';
+    html += `<div class="dot-unit" tabindex="0" data-index="${i}" data-state="${item.state}" style="--dot-color:${color}">
+      <div class="dot-circle"></div>
+      <div class="dot-label">${item.label}${stateIcon}</div>
+    </div>`;
+  });
+  return html;
+}
+
+function colorForState(item) {
+  if (item.color) return item.color;
+  switch (item.state) {
+    case 'done':   return 'var(--green)';
+    case 'active': return 'var(--blue)';
+    default:       return 'var(--gray)';
+  }
+}
+
+function renderRow1() {
+  const track = document.getElementById('track-1');
+  track.innerHTML = buildDotHTML(DATA.modules, null);
+  attachDotListeners(track, 1);
+  highlightCursor(1);
+}
+
+function renderRow2() {
+  const row = document.getElementById('row-2');
+  const track = document.getElementById('track-2');
+
+  if (state.selectedModule === null) {
+    row.classList.add('collapsed');
+    track.innerHTML = '';
+    return;
+  }
+
+  const mod = DATA.modules[state.selectedModule];
+  if (!mod.iterations || mod.iterations.length === 0) {
+    // Single-dot for modules with no iterations (like Seed or Paper)
+    if (mod.iterations.length === 0 && mod.state !== 'pending') {
+      const single = [{ id: mod.id + '-run', label: 'Single Run', state: mod.state }];
+      track.innerHTML = buildDotHTML(single, mod.color);
+    } else {
+      row.classList.add('collapsed');
+      track.innerHTML = '';
+      return;
+    }
+  } else {
+    track.innerHTML = buildDotHTML(mod.iterations, mod.color);
+  }
+
+  row.classList.remove('collapsed');
+  attachDotListeners(track, 2);
+  highlightCursor(2);
+}
+
+function renderRow3() {
+  const row = document.getElementById('row-3');
+  const track = document.getElementById('track-3');
+
+  if (state.selectedIter === null || state.selectedModule === null) {
+    row.classList.add('collapsed');
+    track.innerHTML = '';
+    return;
+  }
+
+  const mod = DATA.modules[state.selectedModule];
+  const iter = mod.iterations[state.selectedIter];
+  if (!iter || !iter.steps || iter.steps.length === 0) {
+    row.classList.add('collapsed');
+    track.innerHTML = '';
+    return;
+  }
+
+  const parentColor = mod.color;
+  track.innerHTML = buildDotHTML(iter.steps, null);
+  row.classList.remove('collapsed');
+  attachDotListeners(track, 3);
+  highlightCursor(3);
+}
+
+function highlightCursor(rowNum) {
+  const track = document.getElementById('track-' + rowNum);
+  const dots = track.querySelectorAll('.dot-unit');
+  dots.forEach((d, i) => {
+    d.classList.toggle('selected', i === state.cursor[rowNum]);
+  });
+}
+
+function attachDotListeners(track, rowNum) {
+  const dots = track.querySelectorAll('.dot-unit');
+  dots.forEach(dot => {
+    dot.addEventListener('click', () => {
+      const idx = parseInt(dot.dataset.index, 10);
+      state.cursor[rowNum] = idx;
+      selectAtRow(rowNum, idx);
+    });
+  });
+}
+
+function selectAtRow(rowNum, idx) {
+  state.cursor[rowNum] = idx;
+
+  if (rowNum === 1) {
+    state.selectedModule = idx;
+    state.selectedIter = null;
+    state.selectedStep = null;
+    state.activeRow = 1;
+    state.cursor[2] = 0;
+    state.cursor[3] = 0;
+    renderRow2();
+    renderRow3();
+    highlightCursor(1);
+    renderContent();
+  } else if (rowNum === 2) {
+    state.selectedIter = idx;
+    state.selectedStep = null;
+    state.activeRow = 2;
+    state.cursor[3] = 0;
+    renderRow3();
+    highlightCursor(2);
+    renderContent();
+  } else if (rowNum === 3) {
+    state.selectedStep = idx;
+    state.activeRow = 3;
+    highlightCursor(3);
+    renderContent();
+  }
+}
+
+function renderContent() {
+  const area = document.getElementById('content-area');
+  let content = null;
+
+  if (state.activeRow === 3 && state.selectedStep !== null) {
+    // Sub-step detail
+    const mod = DATA.modules[state.selectedModule];
+    const iter = mod.iterations[state.selectedIter];
+    const step = iter.steps[state.selectedStep];
+    content = STEP_CONTENT[step.id];
+  } else if (state.activeRow === 2 && state.selectedIter !== null) {
+    // Iteration detail
+    const mod = DATA.modules[state.selectedModule];
+    const iter = mod.iterations[state.selectedIter];
+    content = iter.content;
+  } else if (state.selectedModule !== null) {
+    // Module detail
+    const mod = DATA.modules[state.selectedModule];
+    content = mod.content;
+  }
+
+  if (!content) {
+    area.innerHTML = `
+      <div class="card" style="text-align:center;padding:40px;">
+        <h3 style="color:var(--text-muted)">Select a module to view details</h3>
+        <p>Click any dot above or use arrow keys to navigate.</p>
+      </div>
+    `;
+    return;
+  }
+
+  area.innerHTML = `
+    <div class="content-panel visible">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+        <h2 style="font-size:1.15rem;font-weight:700;">${content.title}</h2>
+        ${content.badge ? `<span class="badge ${content.badge.cls}">${content.badge.text}</span>` : ''}
+      </div>
+      ${content.body}
+    </div>
+  `;
+}
+
+// ═════════════════════════════════════════════════════════════
+// KEYBOARD NAVIGATION
+// ═════════════════════════════════════════════════════════════
+
+function getRowItemCount(rowNum) {
+  if (rowNum === 1) return DATA.modules.length;
+  if (rowNum === 2) {
+    if (state.selectedModule === null) return 0;
+    const mod = DATA.modules[state.selectedModule];
+    return mod.iterations.length || 0;
+  }
+  if (rowNum === 3) {
+    if (state.selectedModule === null || state.selectedIter === null) return 0;
+    const mod = DATA.modules[state.selectedModule];
+    const iter = mod.iterations[state.selectedIter];
+    return iter ? iter.steps.length : 0;
+  }
+  return 0;
+}
+
+function isRowVisible(rowNum) {
+  if (rowNum === 1) return true;
+  const row = document.getElementById('row-' + rowNum);
+  return row && !row.classList.contains('collapsed');
+}
+
+document.addEventListener('keydown', (e) => {
+  const key = e.key;
+
+  if (key === 'ArrowLeft' || key === 'ArrowRight') {
+    e.preventDefault();
+    const row = state.activeRow;
+    const count = getRowItemCount(row);
+    if (count === 0) return;
+    const dir = key === 'ArrowRight' ? 1 : -1;
+    let next = state.cursor[row] + dir;
+    if (next < 0) next = 0;
+    if (next >= count) next = count - 1;
+    state.cursor[row] = next;
+    highlightCursor(row);
+    // Also trigger selection to update content
+    selectAtRow(row, next);
+  }
+
+  if (key === 'ArrowDown') {
+    e.preventDefault();
+    if (state.activeRow === 1) {
+      // Drill from module to iteration
+      if (state.selectedModule === null) {
+        selectAtRow(1, state.cursor[1]);
+      }
+      const mod = DATA.modules[state.selectedModule];
+      if (mod.iterations && mod.iterations.length > 0) {
+        state.activeRow = 2;
+        selectAtRow(2, state.cursor[2]);
+      }
+    } else if (state.activeRow === 2) {
+      // Drill from iteration to sub-step
+      if (state.selectedIter === null) {
+        selectAtRow(2, state.cursor[2]);
+      }
+      if (isRowVisible(3) && getRowItemCount(3) > 0) {
+        state.activeRow = 3;
+        selectAtRow(3, state.cursor[3]);
+      }
+    }
+  }
+
+  if (key === 'ArrowUp') {
+    e.preventDefault();
+    if (state.activeRow === 3) {
+      state.activeRow = 2;
+      state.selectedStep = null;
+      highlightCursor(2);
+      // Remove row 3 selection visual
+      const track3 = document.getElementById('track-3');
+      track3.querySelectorAll('.dot-unit').forEach(d => d.classList.remove('selected'));
+      renderContent();
+    } else if (state.activeRow === 2) {
+      state.activeRow = 1;
+      state.selectedIter = null;
+      state.selectedStep = null;
+      renderRow3();
+      highlightCursor(1);
+      // Remove row 2 selection visual
+      const track2 = document.getElementById('track-2');
+      track2.querySelectorAll('.dot-unit').forEach(d => d.classList.remove('selected'));
+      renderContent();
+    }
+  }
+
+  if (key === 'Escape') {
+    e.preventDefault();
+    state.activeRow = 1;
+    state.selectedModule = null;
+    state.selectedIter = null;
+    state.selectedStep = null;
+    renderRow2();
+    renderRow3();
+    highlightCursor(1);
+    renderContent();
+  }
+});
+
+// ═════════════════════════════════════════════════════════════
+// INIT
+// ═════════════════════════════════════════════════════════════
+
+function init() {
+  renderRow1();
+  renderRow2();
+  renderRow3();
+
+  // Default: select Invention module (index 2)
+  state.cursor[1] = 2;
+  selectAtRow(1, 2);
+}
+
+init();
+</script>
+</body>
+</html>

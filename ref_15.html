@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor - Simple View</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0c0e14;
+    --surface: #13161e;
+    --surface-hover: #191d28;
+    --border: #1e2230;
+    --text: #e4e6ec;
+    --text-dim: #7a7f91;
+    --text-faint: #454860;
+    --green: #34d399;
+    --green-glow: rgba(52, 211, 153, 0.35);
+    --purple: #a78bfa;
+    --purple-glow: rgba(167, 139, 250, 0.35);
+    --blue: #60a5fa;
+    --blue-glow: rgba(96, 165, 250, 0.4);
+    --gray: #555a6e;
+    --gray-glow: rgba(85, 90, 110, 0.2);
+    --hover-bg: rgba(255, 255, 255, 0.03);
+    --bar-track: #1a1d2e;
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  .app { display: flex; flex-direction: column; min-height: 100vh; }
+
+  /* -- TOP BAR -- */
+  .topbar {
+    position: sticky; top: 0; z-index: 50;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 28px; height: 48px;
+    background: rgba(12, 14, 20, 0.85);
+    backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--border);
+  }
+  .topbar-brand {
+    display: flex; align-items: center; gap: 10px;
+    font-weight: 700; font-size: 15px; letter-spacing: -0.3px;
+  }
+  .topbar-brand svg { width: 20px; height: 20px; }
+  .topbar-meta {
+    display: flex; align-items: center; gap: 20px;
+    font-size: 12px; color: var(--text-dim);
+  }
+  .topbar-meta span { display: flex; align-items: center; gap: 5px; }
+  .topbar-pill {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 6px; padding: 3px 10px; font-weight: 500;
+    color: var(--text); font-size: 12px;
+  }
+
+  /* -- CROWN / RING AREA -- */
+  .crown-section {
+    position: relative; height: 148px;
+    display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+    overflow: hidden; user-select: none;
+    background: linear-gradient(180deg, rgba(12,14,20,1) 0%, var(--bg) 100%);
+  }
+  .crown-svg-wrap { position: relative; width: 720px; height: 360px; margin-top: -4px; }
+  .crown-svg { width: 100%; height: 100%; overflow: visible; }
+
+  .ring-hit { fill: none; stroke: transparent; stroke-width: 18; cursor: pointer; }
+  .ring-hit:hover + .ring-track,
+  .ring-hit:hover + .ring-track + .ring-fill { filter: brightness(1.3); }
+  .ring-track { fill: none; stroke-linecap: round; pointer-events: none; transition: opacity 0.3s; }
+  .ring-fill { fill: none; stroke-linecap: round; pointer-events: none; transition: stroke-dashoffset 0.6s ease; }
+  .ring-dashed { fill: none; stroke-linecap: round; pointer-events: none; }
+
+  .ring-endpoint { pointer-events: none; }
+  .ring-endpoint circle { animation: endpointPulse 2s ease-in-out infinite; }
+  @keyframes endpointPulse { 0%,100% { r: 5; opacity: 1; } 50% { r: 9; opacity: 0.5; } }
+  .ring-halo { pointer-events: none; animation: haloPulse 2.5s ease-in-out infinite; }
+  @keyframes haloPulse { 0%,100% { opacity: 0.6; } 50% { opacity: 0.15; } }
+  @keyframes fillGlow { 0%,100% { filter: drop-shadow(0 0 4px var(--blue-glow)); } 50% { filter: drop-shadow(0 0 10px var(--blue-glow)); } }
+  .ring-fill.active-fill { animation: fillGlow 2s ease-in-out infinite; }
+
+  /* -- MODULE LABELS -- */
+  .module-labels { display: flex; align-items: center; justify-content: center; gap: 28px; padding: 8px 0 0; position: relative; z-index: 5; }
+  .module-label {
+    display: flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 500;
+    color: var(--text-dim); cursor: pointer; padding: 5px 12px; border-radius: 6px; transition: all 0.2s; position: relative;
+  }
+  .module-label:hover { color: var(--text); background: var(--hover-bg); }
+  .module-label.selected { color: var(--text); background: rgba(255,255,255,0.05); }
+  .module-label .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; transition: box-shadow 0.3s; }
+  .module-label.selected .dot { box-shadow: 0 0 8px currentColor; }
+  .module-label .lbl-name { letter-spacing: -0.2px; }
+  .module-label .lbl-pct { font-size: 11px; font-weight: 600; opacity: 0.6; margin-left: 2px; }
+  .ring-selected .ring-track { opacity: 1; }
+  .ring-deselected .ring-track { opacity: 0.35; }
+  .ring-deselected .ring-fill { opacity: 0.4; }
+
+  /* -- DIVIDER -- */
+  .divider { height: 1px; background: var(--border); margin: 0 32px; }
+
+  /* -- CONTENT AREA -- */
+  .content-area { flex: 1; overflow-y: auto; padding: 32px 0 80px; display: flex; justify-content: center; }
+  .content-inner { width: 100%; max-width: 720px; padding: 0 24px; }
+  .panel { display: none; animation: panelIn 0.25s ease; }
+  .panel.visible { display: block; }
+  @keyframes panelIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+  .panel-title { font-size: 22px; font-weight: 700; letter-spacing: -0.4px; margin-bottom: 4px; }
+  .panel-badge { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 10px; border-radius: 20px; margin-bottom: 20px; }
+  .panel-badge.complete { background: rgba(52,211,153,0.12); color: var(--green); }
+  .panel-badge.running { background: rgba(96,165,250,0.12); color: var(--blue); }
+  .panel-badge.pending { background: rgba(85,90,110,0.15); color: var(--text-dim); }
+  .panel-summary { font-size: 14px; line-height: 1.75; color: var(--text-dim); margin-bottom: 28px; max-width: 600px; }
+
+  .progress-bar { width: 100%; height: 4px; background: var(--bar-track); border-radius: 2px; margin-bottom: 28px; overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 2px; transition: width 0.5s ease; }
+
+  .stage-list { display: flex; flex-direction: column; gap: 0; margin-bottom: 28px; }
+  .stage-row { display: flex; align-items: center; padding: 10px 12px; border-radius: 8px; transition: background 0.12s; gap: 12px; }
+  .stage-row.clickable { cursor: pointer; }
+  .stage-row.clickable:hover { background: var(--hover-bg); }
+  .stage-icon { width: 22px; text-align: center; font-size: 13px; flex-shrink: 0; }
+  .stage-icon.done { color: var(--green); }
+  .stage-icon.running { color: var(--blue); }
+  .stage-icon.wait { color: var(--text-faint); }
+  .stage-name { flex: 1; font-size: 14px; font-weight: 500; }
+  .stage-name.dim { color: var(--text-dim); }
+  .stage-detail { font-size: 12px; color: var(--text-dim); text-align: right; }
+  .stage-detail.highlight { color: var(--blue); font-weight: 500; }
+
+  .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 28px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .stat-value { font-size: 24px; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 2px; }
+  .stat-label { font-size: 12px; color: var(--text-dim); font-weight: 500; }
+
+  .card-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 28px; }
+  .info-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; transition: border-color 0.2s, background 0.2s; cursor: default; }
+  .info-card:hover { border-color: rgba(255,255,255,0.08); background: var(--surface-hover); }
+  .info-card .card-title { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
+  .info-card .card-body { font-size: 13px; line-height: 1.65; color: var(--text-dim); }
+  .info-card .card-tag { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 4px; margin-top: 8px; }
+  .tag-green { background: rgba(52,211,153,0.12); color: var(--green); }
+  .tag-blue { background: rgba(96,165,250,0.12); color: var(--blue); }
+  .tag-purple { background: rgba(167,139,250,0.12); color: var(--purple); }
+  .tag-gray { background: rgba(85,90,110,0.15); color: var(--text-dim); }
+  .section-heading { font-size: 15px; font-weight: 600; margin-bottom: 14px; letter-spacing: -0.2px; }
+
+  .kv-list { margin-bottom: 28px; }
+  .kv-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.03); font-size: 13px; }
+  .kv-row:last-child { border-bottom: none; }
+  .kv-key { color: var(--text-dim); }
+  .kv-val { font-weight: 500; }
+
+  .nav-arrows { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; z-index: 40; }
+  .nav-btn { width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--border); background: rgba(19,22,30,0.92); backdrop-filter: blur(12px); color: var(--text-dim); display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 16px; transition: all 0.15s; }
+  .nav-btn:hover { background: var(--surface-hover); color: var(--text); border-color: rgba(255,255,255,0.1); }
+  .nav-btn:active { transform: scale(0.95); }
+  .nav-btn.disabled { opacity: 0.3; pointer-events: none; }
+  .nav-indicator { display: flex; align-items: center; gap: 6px; padding: 0 12px; font-size: 12px; font-weight: 500; color: var(--text-dim); }
+  .nav-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-faint); transition: all 0.2s; }
+  .nav-dot.active { background: var(--text); width: 18px; border-radius: 3px; }
+  .content-area::-webkit-scrollbar { width: 6px; }
+  .content-area::-webkit-scrollbar-track { background: transparent; }
+  .content-area::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
+  .content-area::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.14); }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- ── Top Bar ── -->
+  <div class="topbar">
+    <div class="topbar-brand">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/>
+      </svg>
+      AI Inventor
+    </div>
+    <div class="topbar-meta">
+      <span class="topbar-pill">Run #0247</span>
+      <span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        14m 32s
+      </span>
+      <span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+        Step 3 of 4
+      </span>
+    </div>
+  </div>
+
+  <!-- ── Crown / Ring Section ── -->
+  <div class="crown-section">
+    <div class="crown-svg-wrap">
+      <svg class="crown-svg" viewBox="0 0 720 360" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <!-- Glow filters -->
+          <filter id="glowGreen" x="-40%" y="-40%" width="180%" height="180%">
+            <feGaussianBlur stdDeviation="3" result="blur"/>
+            <feFlood flood-color="#34d399" flood-opacity="0.35"/>
+            <feComposite in2="blur" operator="in"/>
+            <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <filter id="glowPurple" x="-40%" y="-40%" width="180%" height="180%">
+            <feGaussianBlur stdDeviation="3" result="blur"/>
+            <feFlood flood-color="#a78bfa" flood-opacity="0.35"/>
+            <feComposite in2="blur" operator="in"/>
+            <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <filter id="glowBlue" x="-40%" y="-40%" width="180%" height="180%">
+            <feGaussianBlur stdDeviation="5" result="blur"/>
+            <feFlood flood-color="#60a5fa" flood-opacity="0.5"/>
+            <feComposite in2="blur" operator="in"/>
+            <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <filter id="glowBlueHalo" x="-60%" y="-60%" width="220%" height="220%">
+            <feGaussianBlur stdDeviation="10" result="blur"/>
+            <feFlood flood-color="#60a5fa" flood-opacity="0.45"/>
+            <feComposite in2="blur" operator="in"/>
+            <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <filter id="glowGray" x="-40%" y="-40%" width="180%" height="180%">
+            <feGaussianBlur stdDeviation="2" result="blur"/>
+            <feFlood flood-color="#555a6e" flood-opacity="0.2"/>
+            <feComposite in2="blur" operator="in"/>
+            <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+
+        <!-- Ring groups (outermost -> innermost) -->
+        <!-- Each ring: hit area, track, fill -->
+
+        <!-- RING 1: Seed (outermost, r=155) — 100% green -->
+        <g class="ring-group" data-module="0" id="ring-0">
+          <path class="ring-hit" id="hit-0"/>
+          <path class="ring-track" stroke="rgba(52,211,153,0.1)" stroke-width="6" filter="url(#glowGreen)" id="track-0"/>
+          <path class="ring-fill" stroke="#34d399" stroke-width="6" filter="url(#glowGreen)" id="fill-0"/>
+        </g>
+
+        <!-- RING 2: Hypothesis (r=120) — 100% purple -->
+        <g class="ring-group" data-module="1" id="ring-1">
+          <path class="ring-hit" id="hit-1"/>
+          <path class="ring-track" stroke="rgba(167,139,250,0.1)" stroke-width="6" filter="url(#glowPurple)" id="track-1"/>
+          <path class="ring-fill" stroke="#a78bfa" stroke-width="6" filter="url(#glowPurple)" id="fill-1"/>
+        </g>
+
+        <!-- RING 3: Invention (r=85) — 60% blue, ACTIVE -->
+        <g class="ring-group" data-module="2" id="ring-2">
+          <path class="ring-hit" id="hit-2"/>
+          <path class="ring-track" stroke="rgba(96,165,250,0.1)" stroke-width="6" filter="url(#glowBlue)" id="track-2"/>
+          <path class="ring-fill active-fill" stroke="#60a5fa" stroke-width="6" filter="url(#glowBlue)" id="fill-2"/>
+          <!-- Endpoint dot + halo -->
+          <g class="ring-endpoint" id="endpoint-2">
+            <circle class="ring-halo" r="12" fill="rgba(96,165,250,0.18)" filter="url(#glowBlueHalo)"/>
+            <circle r="5" fill="#60a5fa"/>
+          </g>
+        </g>
+
+        <!-- RING 4: Paper (innermost, r=50) — 0% gray dashed -->
+        <g class="ring-group" data-module="3" id="ring-3">
+          <path class="ring-hit" id="hit-3"/>
+          <path class="ring-dashed" stroke="var(--gray)" stroke-width="4" stroke-dasharray="8 6" opacity="0.35" filter="url(#glowGray)" id="track-3"/>
+        </g>
+      </svg>
+    </div>
+
+    <!-- Module labels below rings -->
+    <div class="module-labels" id="moduleLabels">
+      <div class="module-label selected" data-module="0" onclick="selectModule(0)">
+        <span class="dot" style="background:var(--green);"></span>
+        <span class="lbl-name">Seed</span>
+        <span class="lbl-pct">100%</span>
+      </div>
+      <div class="module-label" data-module="1" onclick="selectModule(1)">
+        <span class="dot" style="background:var(--purple);"></span>
+        <span class="lbl-name">Hypothesis</span>
+        <span class="lbl-pct">100%</span>
+      </div>
+      <div class="module-label" data-module="2" onclick="selectModule(2)">
+        <span class="dot" style="background:var(--blue);"></span>
+        <span class="lbl-name">Invention</span>
+        <span class="lbl-pct">60%</span>
+      </div>
+      <div class="module-label" data-module="3" onclick="selectModule(3)">
+        <span class="dot" style="background:var(--gray);"></span>
+        <span class="lbl-name">Paper</span>
+        <span class="lbl-pct">0%</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- ── Content Area ── -->
+  <div class="content-area">
+    <div class="content-inner">
+
+      <!-- ===== Panel 0: Seed ===== -->
+      <div class="panel visible" id="panel-0">
+        <div class="panel-title">Seed Hypotheses</div>
+        <div class="panel-badge complete">Complete</div>
+        <div class="panel-summary">Mined literature graphs and cross-domain analogies to generate 24 seed ideas from under-explored research intersections.</div>
+        <div class="progress-bar"><div class="progress-fill" style="width:100%;background:var(--green);"></div></div>
+        <div class="stats-grid">
+          <div class="stat-card"><div class="stat-value" style="color:var(--green);">128</div><div class="stat-label">Papers scanned</div></div>
+          <div class="stat-card"><div class="stat-value">24</div><div class="stat-label">Seed ideas</div></div>
+          <div class="stat-card"><div class="stat-value">3m 12s</div><div class="stat-label">Duration</div></div>
+        </div>
+        <div class="section-heading">Sub-stages</div>
+        <div class="stage-list">
+          <div class="stage-row"><span class="stage-icon done">&#10003;</span><span class="stage-name">Build knowledge graph</span><span class="stage-detail">128 nodes</span></div>
+          <div class="stage-row"><span class="stage-icon done">&#10003;</span><span class="stage-name">Extract cross-domain links</span><span class="stage-detail">47 edges</span></div>
+          <div class="stage-row"><span class="stage-icon done">&#10003;</span><span class="stage-name">Generate seed hypotheses</span><span class="stage-detail">24 seeds</span></div>
+          <div class="stage-row"><span class="stage-icon done">&#10003;</span><span class="stage-name">Deduplicate &amp; cluster</span><span class="stage-detail">8 clusters</span></div>
+        </div>
+        <div class="section-heading">Top Seed Ideas</div>
+        <div class="card-list">
+          <div class="info-card"><div class="card-title">Diffusion-Guided Protein Folding</div><div class="card-body">Score-based diffusion models to iteratively refine protein backbone coordinates, replacing energy minimization with learned denoising.</div><span class="card-tag tag-green">High novelty</span></div>
+          <div class="info-card"><div class="card-title">Sparse MoE for Code Repair</div><div class="card-body">Routes buggy code to domain-specific expert sub-networks (memory, concurrency, type) for targeted repair.</div><span class="card-tag tag-green">High novelty</span></div>
+          <div class="info-card"><div class="card-title">Causal Attention for Time-Series Anomaly</div><div class="card-body">Integrates causal discovery into transformer attention to distinguish true anomalies from spurious correlations.</div><span class="card-tag tag-green">Medium novelty</span></div>
+        </div>
+      </div>
+
+      <!-- ===== Panel 1: Hypothesis ===== -->
+      <div class="panel" id="panel-1">
+        <div class="panel-title">Hypothesis Loop</div>
+        <div class="panel-badge complete">Complete</div>
+        <div class="panel-summary">Refined seeds through 3 critique-revise rounds, filtering for feasibility, novelty and impact. Converged on the top hypothesis.</div>
+        <div class="progress-bar"><div class="progress-fill" style="width:100%;background:var(--purple);"></div></div>
+        <div class="stats-grid">
+          <div class="stat-card"><div class="stat-value" style="color:var(--purple);">3</div><div class="stat-label">Review rounds</div></div>
+          <div class="stat-card"><div class="stat-value">24 &rarr; 1</div><div class="stat-label">Hypotheses narrowed</div></div>
+          <div class="stat-card"><div class="stat-value">4m 08s</div><div class="stat-label">Duration</div></div>
+        </div>
+        <div class="section-heading">Sub-stages</div>
+        <div class="stage-list">
+          <div class="stage-row"><span class="stage-icon done">&#10003;</span><span class="stage-name">Generate hypotheses</span><span class="stage-detail">24 candidates</span></div>
+          <div class="stage-row"><span class="stage-icon done">&#10003;</span><span class="stage-name">Review hypotheses (round 1)</span><span class="stage-detail">12 passed</span></div>
+          <div class="stage-row"><span class="stage-icon done">&#10003;</span><span class="stage-name">Review hypotheses (round 2)</span><span class="stage-detail">4 passed</span></div>
+          <div class="stage-row"><span class="stage-icon done">&#10003;</span><span class="stage-name">Review hypotheses (round 3)</span><span class="stage-detail">1 selected</span></div>
+        </div>
+        <div class="section-heading">Selected Hypothesis</div>
+        <div class="card-list">
+          <div class="info-card"><div class="card-title">Diffusion-Guided Protein Folding</div><div class="card-body">Score-based diffusion models iteratively denoise protein backbone coordinates, generating an ensemble of plausible conformations with uncertainty quantification.</div><span class="card-tag tag-purple">Selected</span></div>
+        </div>
+        <div class="section-heading">Review Scores</div>
+        <div class="kv-list">
+          <div class="kv-row"><span class="kv-key">Novelty</span><span class="kv-val" style="color:var(--green);">8.4 / 10</span></div>
+          <div class="kv-row"><span class="kv-key">Feasibility</span><span class="kv-val">7.2 / 10</span></div>
+          <div class="kv-row"><span class="kv-key">Impact</span><span class="kv-val" style="color:var(--green);">8.1 / 10</span></div>
+          <div class="kv-row"><span class="kv-key">Clarity</span><span class="kv-val">7.8 / 10</span></div>
+        </div>
+      </div>
+
+      <!-- ===== Panel 2: Invention ===== -->
+      <div class="panel" id="panel-2">
+        <div class="panel-title">Invention Loop</div>
+        <div class="panel-badge running">Running</div>
+        <div class="panel-summary">Developing the hypothesis into a full invention: research plan, methodology, paper text, and review cycles.</div>
+        <div class="progress-bar"><div class="progress-fill" style="width:60%;background:var(--blue);"></div></div>
+        <div class="stats-grid">
+          <div class="stat-card"><div class="stat-value" style="color:var(--blue);">60%</div><div class="stat-label">Progress</div></div>
+          <div class="stat-card"><div class="stat-value">2 / 5</div><div class="stat-label">Steps done</div></div>
+          <div class="stat-card"><div class="stat-value">7m 12s</div><div class="stat-label">Elapsed</div></div>
+        </div>
+        <div class="section-heading">Sub-stages</div>
+        <div class="stage-list">
+          <div class="stage-row"><span class="stage-icon done">&#10003;</span><span class="stage-name">Generate strategy</span><span class="stage-detail">2m 14s</span></div>
+          <div class="stage-row"><span class="stage-icon done">&#10003;</span><span class="stage-name">Generate plan</span><span class="stage-detail">1m 48s</span></div>
+          <div class="stage-row"><span class="stage-icon running"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="1s" repeatCount="indefinite"/></path></svg></span><span class="stage-name">Generate paper text</span><span class="stage-detail highlight">In progress...</span></div>
+          <div class="stage-row"><span class="stage-icon wait">&#x25CB;</span><span class="stage-name dim">Review paper</span><span class="stage-detail">Pending</span></div>
+          <div class="stage-row"><span class="stage-icon wait">&#x25CB;</span><span class="stage-name dim">Revise &amp; finalize</span><span class="stage-detail">Pending</span></div>
+        </div>
+        <div class="section-heading">Current Output</div>
+        <div class="card-list">
+          <div class="info-card"><div class="card-title">Strategy</div><div class="card-body">Three-phase: (1) denoising score network on backbone dihedrals, (2) Langevin sampling conditioned on sequence embeddings, (3) ensemble scoring via predicted lDDT.</div><span class="card-tag tag-blue">Accepted</span></div>
+          <div class="info-card"><div class="card-title">Plan</div><div class="card-body">8-section outline: Intro, Related Work, Background, Method (DiffFold), Experiments (CASP14 + CAMEO), Ablations, Discussion, Conclusion.</div><span class="card-tag tag-blue">Accepted</span></div>
+        </div>
+      </div>
+
+      <!-- ===== Panel 3: Paper ===== -->
+      <div class="panel" id="panel-3">
+        <div class="panel-title">Paper Generation</div>
+        <div class="panel-badge pending">Pending</div>
+        <div class="panel-summary">Compiles all artifacts into a research paper repo: LaTeX source, figures, visualizations, and supplementary materials.</div>
+        <div class="progress-bar"><div class="progress-fill" style="width:0%;background:var(--gray);"></div></div>
+        <div class="section-heading">Planned Stages</div>
+        <div class="stage-list">
+          <div class="stage-row"><span class="stage-icon wait">&#x25CB;</span><span class="stage-name dim">Generate artifact demos</span><span class="stage-detail">Pending</span></div>
+          <div class="stage-row"><span class="stage-icon wait">&#x25CB;</span><span class="stage-name dim">Generate visualizations</span><span class="stage-detail">Pending</span></div>
+          <div class="stage-row"><span class="stage-icon wait">&#x25CB;</span><span class="stage-name dim">Compile full paper</span><span class="stage-detail">Pending</span></div>
+          <div class="stage-row"><span class="stage-icon wait">&#x25CB;</span><span class="stage-name dim">Build repository</span><span class="stage-detail">Pending</span></div>
+        </div>
+        <div class="section-heading">Expected Deliverables</div>
+        <div class="kv-list">
+          <div class="kv-row"><span class="kv-key">Paper format</span><span class="kv-val">LaTeX (NeurIPS template)</span></div>
+          <div class="kv-row"><span class="kv-key">Figures</span><span class="kv-val">Architecture + results plots</span></div>
+          <div class="kv-row"><span class="kv-key">Code artifacts</span><span class="kv-val">Training script + inference demo</span></div>
+          <div class="kv-row"><span class="kv-key">Repository</span><span class="kv-val">GitHub-ready package</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Navigation Arrows ── -->
+  <div class="nav-arrows">
+    <button class="nav-btn" id="navPrev" onclick="navigate(-1)">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>
+    </button>
+    <div class="nav-indicator" id="navIndicator">
+      <span class="nav-dot active"></span>
+      <span class="nav-dot"></span>
+      <span class="nav-dot"></span>
+      <span class="nav-dot"></span>
+    </div>
+    <button class="nav-btn" id="navNext" onclick="navigate(1)">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 6 15 12 9 18"/></svg>
+    </button>
+  </div>
+</div>
+
+<script>
+  // -- MODULE DATA --
+  const MODULES = [
+    { name: 'Seed',       color: '#34d399', pct: 1.0,  status: 'complete' },
+    { name: 'Hypothesis', color: '#a78bfa', pct: 1.0,  status: 'complete' },
+    { name: 'Invention',  color: '#60a5fa', pct: 0.6,  status: 'running'  },
+    { name: 'Paper',      color: '#555a6e', pct: 0.0,  status: 'pending'  },
+  ];
+
+  // Ring radii (outermost first) and center
+  const CX = 360, CY = 180;
+  const RADII = [155, 120, 85, 50];
+  const STROKE_W = 6;
+
+  let selected = 0;
+
+  // -- BUILD SVG RING ARCS --
+  function arcPath(cx, cy, r, startAngle, endAngle) {
+    // Angles in degrees, 0=right, going counterclockwise
+    // For a top semi-circle: from 180 to 0 (left to right, curving up)
+    const toRad = (d) => (d * Math.PI) / 180;
+    const x1 = cx + r * Math.cos(toRad(startAngle));
+    const y1 = cy + r * Math.sin(toRad(startAngle));
+    const x2 = cx + r * Math.cos(toRad(endAngle));
+    const y2 = cy + r * Math.sin(toRad(endAngle));
+    const sweep = endAngle - startAngle;
+    const largeArc = Math.abs(sweep) > 180 ? 1 : 0;
+    // SVG arc: sweep-flag 0 = counterclockwise
+    return `M ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 0 ${x2} ${y2}`;
+  }
+
+  function semiArcLength(r) {
+    return Math.PI * r;  // half circumference
+  }
+
+  function buildRings() {
+    // Semi-circle: from 180 deg (left) to 0 deg (right), going up
+    const startDeg = 180;
+    const endDeg = 0;
+
+    MODULES.forEach((mod, i) => {
+      const r = RADII[i];
+      const fullPath = arcPath(CX, CY, r, startDeg, endDeg);
+      const totalLen = semiArcLength(r);
+
+      // Hit area
+      const hit = document.getElementById(`hit-${i}`);
+      if (hit) {
+        hit.setAttribute('d', fullPath);
+        hit.onclick = () => selectModule(i);
+      }
+
+      if (i === 3) {
+        // Paper ring: dashed, no fill
+        const track = document.getElementById(`track-${i}`);
+        if (track) track.setAttribute('d', fullPath);
+        return;
+      }
+
+      // Track (dim background arc)
+      const track = document.getElementById(`track-${i}`);
+      if (track) track.setAttribute('d', fullPath);
+
+      // Fill (progress arc)
+      const fill = document.getElementById(`fill-${i}`);
+      if (fill) {
+        fill.setAttribute('d', fullPath);
+        const fillLen = totalLen * mod.pct;
+        const dashOffset = totalLen - fillLen;
+        fill.style.strokeDasharray = `${totalLen}`;
+        fill.style.strokeDashoffset = `${dashOffset}`;
+      }
+
+      // Endpoint for active ring (Invention)
+      if (i === 2) {
+        const endpointAngle = startDeg - (startDeg - endDeg) * mod.pct;
+        const toRad = (d) => (d * Math.PI) / 180;
+        const ex = CX + r * Math.cos(toRad(endpointAngle));
+        const ey = CY + r * Math.sin(toRad(endpointAngle));
+
+        const ep = document.getElementById(`endpoint-${i}`);
+        if (ep) {
+          ep.querySelectorAll('circle').forEach((c) => {
+            c.setAttribute('cx', ex);
+            c.setAttribute('cy', ey);
+          });
+        }
+      }
+    });
+  }
+
+  // -- MODULE SELECTION --
+  function selectModule(idx) {
+    if (idx < 0 || idx >= MODULES.length) return;
+    selected = idx;
+
+    // Update labels
+    document.querySelectorAll('.module-label').forEach((el, i) => {
+      el.classList.toggle('selected', i === idx);
+    });
+
+    // Update ring visuals
+    document.querySelectorAll('.ring-group').forEach((g, i) => {
+      g.classList.remove('ring-selected', 'ring-deselected');
+      if (i === idx) {
+        g.classList.add('ring-selected');
+      }
+      // Don't deselect others, keep them visible normally
+    });
+
+    // Update panels
+    document.querySelectorAll('.panel').forEach((p, i) => {
+      p.classList.toggle('visible', i === idx);
+    });
+
+    // Update nav dots
+    updateNavDots();
+    updateNavButtons();
+  }
+
+  // -- ARROW NAVIGATION --
+  function navigate(dir) {
+    const next = selected + dir;
+    if (next >= 0 && next < MODULES.length) {
+      selectModule(next);
+    }
+  }
+
+  function updateNavDots() {
+    const dots = document.querySelectorAll('.nav-dot');
+    dots.forEach((d, i) => d.classList.toggle('active', i === selected));
+  }
+
+  function updateNavButtons() {
+    document.getElementById('navPrev').classList.toggle(
+      'disabled', selected === 0
+    );
+    document.getElementById('navNext').classList.toggle(
+      'disabled', selected === MODULES.length - 1
+    );
+  }
+
+  // -- KEYBOARD NAVIGATION --
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      navigate(-1);
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      navigate(1);
+    }
+  });
+
+  // -- INIT --
+  buildRings();
+  updateNavDots();
+  updateNavButtons();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,1516 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Live Pipeline Dashboard</title>
+<style>
+  /* ── Reset & Base ──────────────────────────────────────────────── */
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --slate-950:   #020617;
+    --slate-900:   #0f172a;
+    --slate-850:   #131c31;
+    --slate-800:   #1e293b;
+    --slate-750:   #243044;
+    --slate-700:   #334155;
+    --slate-600:   #475569;
+    --slate-500:   #64748b;
+    --slate-400:   #94a3b8;
+    --slate-300:   #cbd5e1;
+    --slate-200:   #e2e8f0;
+    --slate-100:   #f1f5f9;
+
+    --bg:          var(--slate-950);
+    --bg-panel:    var(--slate-900);
+    --bg-surface:  var(--slate-850);
+    --bg-card:     var(--slate-800);
+    --bg-hover:    var(--slate-750);
+    --border:      var(--slate-800);
+    --border-light:var(--slate-700);
+    --text:        var(--slate-300);
+    --text-dim:    var(--slate-500);
+    --text-bright: var(--slate-100);
+
+    --blue:        #3b82f6;
+    --blue-dim:    rgba(59,130,246,.12);
+    --cyan:        #06b6d4;
+    --cyan-dim:    rgba(6,182,212,.10);
+    --green:       #22c55e;
+    --green-dim:   rgba(34,197,94,.10);
+    --amber:       #f59e0b;
+    --amber-dim:   rgba(245,158,11,.10);
+    --red:         #ef4444;
+    --red-dim:     rgba(239,68,68,.10);
+    --purple:      #a855f7;
+    --purple-dim:  rgba(168,85,247,.10);
+    --pink:        #ec4899;
+    --pink-dim:    rgba(236,72,153,.10);
+    --teal:        #14b8a6;
+    --teal-dim:    rgba(20,184,166,.10);
+
+    --mono:  'SF Mono','Cascadia Code','JetBrains Mono','Fira Code',Consolas,monospace;
+    --sans:  'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+    --radius:    8px;
+    --radius-sm: 4px;
+    --radius-lg: 12px;
+  }
+  html, body {
+    height: 100%; width: 100%;
+    font-family: var(--sans);
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg);
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--slate-700); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--slate-600); }
+
+  /* ── Particles Canvas ──────────────────────────────────────────── */
+  #particles {
+    position: fixed; top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    z-index: 0; pointer-events: none;
+  }
+
+  /* ── Shell Layout ──────────────────────────────────────────────── */
+  #shell {
+    position: relative; z-index: 1;
+    display: flex; flex-direction: column;
+    height: 100vh; width: 100vw;
+  }
+
+  /* ── Top Bar ───────────────────────────────────────────────────── */
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    height: 44px; min-height: 44px;
+    padding: 0 20px;
+    background: var(--bg-panel);
+    border-bottom: 1px solid var(--border);
+    z-index: 20;
+  }
+  .topbar-left {
+    display: flex; align-items: center; gap: 12px;
+  }
+  .topbar-logo {
+    font-family: var(--mono);
+    font-size: 14px; font-weight: 700;
+    color: var(--text-bright);
+    letter-spacing: -0.5px;
+  }
+  .topbar-logo .accent { color: var(--blue); }
+  .topbar-sep {
+    width: 1px; height: 18px;
+    background: var(--border-light);
+  }
+  .topbar-run {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.3px;
+  }
+  .topbar-right {
+    display: flex; align-items: center; gap: 16px;
+  }
+  .topbar-stat {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12px; color: var(--text-dim);
+  }
+  .topbar-stat .val {
+    font-family: var(--mono);
+    color: var(--text);
+    font-weight: 600;
+  }
+  .topbar-stat .val.cost { color: var(--amber); }
+  .topbar-stat .val.tokens { color: var(--cyan); }
+
+  /* ── Colored Top Line ──────────────────────────────────────────── */
+  .color-line {
+    height: 2px; min-height: 2px;
+    background: linear-gradient(90deg,
+      var(--blue) 0%, var(--cyan) 20%, var(--green) 40%,
+      var(--amber) 60%, var(--purple) 80%, var(--pink) 100%);
+    opacity: 0.7;
+  }
+
+  /* ── Main Workspace ────────────────────────────────────────────── */
+  .workspace {
+    display: grid;
+    grid-template-columns: 280px 1fr 340px;
+    grid-template-rows: 1fr;
+    flex: 1; min-height: 0;
+  }
+
+  /* ── Sidebar (left) ────────────────────────────────────────────── */
+  .sidebar {
+    background: var(--bg-panel);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .sidebar-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .sidebar-title {
+    font-size: 11px; font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+  }
+  .sidebar-body {
+    flex: 1; overflow-y: auto;
+    padding: 8px 0;
+  }
+
+  /* ── Pipeline Steps ────────────────────────────────────────────── */
+  .step-group { margin-bottom: 4px; }
+  .step-group-header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 16px;
+    cursor: pointer;
+    user-select: none;
+    transition: background .15s;
+    border-left: 3px solid transparent;
+  }
+  .step-group-header:hover { background: var(--bg-hover); }
+  .step-group-header.active {
+    background: var(--bg-surface);
+    border-left-color: var(--blue);
+  }
+  .step-group-chevron {
+    width: 14px; height: 14px;
+    display: flex; align-items: center; justify-content: center;
+    transition: transform .2s;
+    color: var(--text-dim);
+    font-size: 10px;
+  }
+  .step-group-header.collapsed .step-group-chevron {
+    transform: rotate(-90deg);
+  }
+  .step-group-label {
+    flex: 1;
+    font-size: 12px; font-weight: 500;
+    color: var(--text);
+  }
+  .step-group-badge {
+    font-family: var(--mono);
+    font-size: 10px; font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 3px;
+  }
+  .badge-done {
+    background: var(--green-dim);
+    color: var(--green);
+  }
+  .badge-running {
+    background: var(--blue-dim);
+    color: var(--blue);
+    animation: badgePulse 2s ease-in-out infinite;
+  }
+  .badge-pending {
+    background: rgba(100,116,139,.1);
+    color: var(--slate-500);
+  }
+  .badge-warning {
+    background: var(--amber-dim);
+    color: var(--amber);
+  }
+  @keyframes badgePulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.55; }
+  }
+  .step-children {
+    overflow: hidden;
+    transition: max-height .3s ease;
+    max-height: 500px;
+  }
+  .step-group-header.collapsed + .step-children {
+    max-height: 0;
+  }
+  .step-child {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 16px 6px 40px;
+    font-size: 11px;
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: background .12s, color .12s;
+  }
+  .step-child:hover {
+    background: var(--bg-hover);
+    color: var(--text);
+  }
+  .step-child .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .dot-done    { background: var(--green); box-shadow: 0 0 6px rgba(34,197,94,.4); }
+  .dot-running { background: var(--blue);  box-shadow: 0 0 6px rgba(59,130,246,.5);
+                 animation: dotPulse 1.5s ease-in-out infinite; }
+  .dot-pending { background: var(--slate-600); }
+  .dot-error   { background: var(--red); box-shadow: 0 0 6px rgba(239,68,68,.4); }
+  @keyframes dotPulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.4); opacity: 0.6; }
+  }
+
+  /* ── Center Panel ──────────────────────────────────────────────── */
+  .center {
+    display: flex; flex-direction: column;
+    min-height: 0; overflow: hidden;
+  }
+  .center-top {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .stat-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    position: relative;
+    overflow: hidden;
+  }
+  .stat-card::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0;
+    height: 2px;
+  }
+  .stat-card.sc-blue::before   { background: var(--blue); }
+  .stat-card.sc-green::before  { background: var(--green); }
+  .stat-card.sc-amber::before  { background: var(--amber); }
+  .stat-card.sc-purple::before { background: var(--purple); }
+  .stat-label {
+    font-size: 10px; font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+  }
+  .stat-value {
+    font-family: var(--mono);
+    font-size: 22px; font-weight: 700;
+    color: var(--text-bright);
+  }
+  .stat-sub {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 4px;
+  }
+
+  /* ── Progress Rail ─────────────────────────────────────────────── */
+  .progress-rail {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 12px;
+  }
+  .progress-label {
+    font-size: 11px; font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    white-space: nowrap;
+  }
+  .progress-track {
+    flex: 1; height: 6px;
+    background: var(--slate-800);
+    border-radius: 3px;
+    overflow: hidden;
+    position: relative;
+  }
+  .progress-fill {
+    height: 100%;
+    border-radius: 3px;
+    background: linear-gradient(90deg, var(--blue), var(--cyan));
+    transition: width 1s ease;
+    position: relative;
+  }
+  .progress-fill::after {
+    content: '';
+    position: absolute; right: 0; top: 0; bottom: 0;
+    width: 20px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.25));
+    animation: progressShine 2s ease-in-out infinite;
+  }
+  @keyframes progressShine {
+    0%, 100% { opacity: 0; }
+    50% { opacity: 1; }
+  }
+  .progress-pct {
+    font-family: var(--mono);
+    font-size: 12px; font-weight: 600;
+    color: var(--cyan);
+    min-width: 36px; text-align: right;
+  }
+
+  /* ── Center Body — split horizontally ──────────────────────────── */
+  .center-body {
+    flex: 1; display: flex; flex-direction: column;
+    min-height: 0;
+  }
+
+  /* ── Module Grid ───────────────────────────────────────────────── */
+  .module-grid-wrap {
+    flex: 1; overflow-y: auto;
+    padding: 16px 20px;
+  }
+  .module-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 10px;
+  }
+  .module-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px;
+    transition: border-color .2s, box-shadow .2s;
+    cursor: default;
+    position: relative;
+  }
+  .module-card:hover {
+    border-color: var(--border-light);
+    box-shadow: 0 2px 12px rgba(0,0,0,.3);
+  }
+  .module-card .color-bar {
+    position: absolute; top: 0; left: 12px; right: 12px;
+    height: 2px; border-radius: 0 0 2px 2px;
+  }
+  .module-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  .module-name {
+    font-size: 12px; font-weight: 600;
+    color: var(--text-bright);
+  }
+  .module-status {
+    font-family: var(--mono);
+    font-size: 9px; font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .ms-done    { background: var(--green-dim); color: var(--green); }
+  .ms-running { background: var(--blue-dim);  color: var(--blue); animation: badgePulse 2s ease-in-out infinite; }
+  .ms-pending { background: rgba(100,116,139,.08); color: var(--slate-500); }
+  .ms-error   { background: var(--red-dim); color: var(--red); }
+  .module-meta {
+    font-size: 11px; color: var(--text-dim);
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .module-meta-row {
+    display: flex; justify-content: space-between;
+  }
+  .module-meta-row .mv {
+    font-family: var(--mono);
+    color: var(--text);
+  }
+  .module-mini-bar {
+    margin-top: 8px; height: 3px;
+    background: var(--slate-800);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .module-mini-fill {
+    height: 100%; border-radius: 2px;
+    transition: width .8s ease;
+  }
+
+  /* ── Collapsible Sections ──────────────────────────────────────── */
+  .collapse-section {
+    border-top: 1px solid var(--border);
+  }
+  .collapse-header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 10px 20px;
+    cursor: pointer;
+    user-select: none;
+    transition: background .12s;
+  }
+  .collapse-header:hover {
+    background: var(--bg-surface);
+  }
+  .collapse-chevron {
+    font-size: 10px;
+    color: var(--text-dim);
+    transition: transform .2s;
+    width: 14px;
+  }
+  .collapse-header.collapsed .collapse-chevron {
+    transform: rotate(-90deg);
+  }
+  .collapse-title {
+    font-size: 11px; font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-dim);
+  }
+  .collapse-count {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--slate-500);
+    margin-left: auto;
+  }
+  .collapse-body {
+    overflow: hidden;
+    transition: max-height .35s ease;
+    max-height: 600px;
+  }
+  .collapse-header.collapsed + .collapse-body {
+    max-height: 0;
+  }
+
+  /* ── Right Panel — Activity Feed ───────────────────────────────── */
+  .feed-panel {
+    background: var(--bg-panel);
+    border-left: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .feed-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .feed-header-left {
+    display: flex; align-items: center; gap: 10px;
+  }
+  .feed-title {
+    font-size: 11px; font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+  }
+  .live-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-family: var(--mono);
+    font-size: 9px; font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--red);
+    background: var(--red-dim);
+    padding: 3px 8px;
+    border-radius: 3px;
+    animation: livePulse 1.5s ease-in-out infinite;
+  }
+  .live-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--red);
+    animation: liveDotPulse 1.5s ease-in-out infinite;
+  }
+  @keyframes livePulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+  }
+  @keyframes liveDotPulse {
+    0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239,68,68,.4); }
+    50% { transform: scale(1.3); box-shadow: 0 0 0 4px rgba(239,68,68,0); }
+  }
+  .feed-filter-row {
+    display: flex; gap: 4px;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .feed-filter {
+    font-size: 10px; font-weight: 500;
+    padding: 3px 8px;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--text-dim);
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .feed-filter:hover {
+    background: var(--bg-hover);
+    color: var(--text);
+  }
+  .feed-filter.active {
+    background: var(--blue-dim);
+    color: var(--blue);
+    border-color: rgba(59,130,246,.2);
+  }
+  .feed-body {
+    flex: 1; overflow-y: auto;
+    padding: 8px 0;
+    display: flex; flex-direction: column;
+  }
+
+  /* ── Feed Items ────────────────────────────────────────────────── */
+  .feed-item {
+    display: flex; gap: 10px;
+    padding: 10px 16px;
+    border-bottom: 1px solid rgba(30,41,59,.5);
+    animation: feedFadeIn 0.5s ease-out both;
+    position: relative;
+  }
+  .feed-item:hover {
+    background: var(--bg-surface);
+  }
+  @keyframes feedFadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(-8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  .feed-color-line {
+    width: 3px; min-height: 100%;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+  .fcl-blue   { background: var(--blue); }
+  .fcl-green  { background: var(--green); }
+  .fcl-amber  { background: var(--amber); }
+  .fcl-red    { background: var(--red); }
+  .fcl-purple { background: var(--purple); }
+  .fcl-cyan   { background: var(--cyan); }
+  .fcl-teal   { background: var(--teal); }
+  .fcl-pink   { background: var(--pink); }
+  .feed-content {
+    flex: 1; min-width: 0;
+  }
+  .feed-top-row {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 3px;
+  }
+  .feed-source {
+    font-size: 11px; font-weight: 600;
+    color: var(--text-bright);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .feed-time {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--slate-500);
+    flex-shrink: 0;
+    margin-left: 8px;
+  }
+  .feed-msg {
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.45;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .feed-tag {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 9px; font-weight: 600;
+    padding: 1px 5px;
+    border-radius: 2px;
+    margin-top: 4px;
+  }
+  .ft-info    { background: var(--blue-dim); color: var(--blue); }
+  .ft-success { background: var(--green-dim); color: var(--green); }
+  .ft-warn    { background: var(--amber-dim); color: var(--amber); }
+  .ft-error   { background: var(--red-dim); color: var(--red); }
+  .ft-llm     { background: var(--purple-dim); color: var(--purple); }
+  .ft-cost    { background: var(--cyan-dim); color: var(--cyan); }
+
+  /* ── Bottom Ticker ─────────────────────────────────────────────── */
+  .ticker {
+    height: 28px; min-height: 28px;
+    display: flex; align-items: center;
+    padding: 0 20px;
+    background: var(--bg-panel);
+    border-top: 1px solid var(--border);
+    gap: 24px;
+    overflow: hidden;
+  }
+  .ticker-item {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 11px; color: var(--text-dim);
+    white-space: nowrap;
+  }
+  .ticker-dot {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+  }
+  .td-green  { background: var(--green); box-shadow: 0 0 4px rgba(34,197,94,.5); }
+  .td-blue   { background: var(--blue);  box-shadow: 0 0 4px rgba(59,130,246,.5); }
+  .td-amber  { background: var(--amber); box-shadow: 0 0 4px rgba(245,158,11,.5); }
+  .td-red    { background: var(--red);   box-shadow: 0 0 4px rgba(239,68,68,.5); }
+  .ticker-label { font-family: var(--mono); font-size: 10px; color: var(--text); }
+
+  /* ── Color Stripe on Bottom ────────────────────────────────────── */
+  .color-line-bottom {
+    height: 2px; min-height: 2px;
+    background: linear-gradient(90deg,
+      var(--pink) 0%, var(--purple) 20%, var(--amber) 40%,
+      var(--green) 60%, var(--cyan) 80%, var(--blue) 100%);
+    opacity: 0.5;
+  }
+
+  /* ── Log Table (inside collapse) ───────────────────────────────── */
+  .log-table {
+    width: 100%;
+    padding: 0 20px 12px 20px;
+  }
+  .log-row {
+    display: flex; align-items: baseline; gap: 10px;
+    padding: 4px 0;
+    font-size: 11px;
+    border-bottom: 1px solid rgba(30,41,59,.3);
+  }
+  .log-ts {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--slate-500);
+    min-width: 60px;
+  }
+  .log-level {
+    font-family: var(--mono);
+    font-size: 9px; font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 2px;
+    min-width: 42px;
+    text-align: center;
+  }
+  .ll-info  { background: var(--blue-dim); color: var(--blue); }
+  .ll-warn  { background: var(--amber-dim); color: var(--amber); }
+  .ll-error { background: var(--red-dim); color: var(--red); }
+  .ll-debug { background: rgba(100,116,139,.08); color: var(--slate-400); }
+  .log-text {
+    flex: 1;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* ── Cost Breakdown (inside collapse) ──────────────────────────── */
+  .cost-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    padding: 8px 20px 12px;
+  }
+  .cost-item {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+  }
+  .cost-item-label {
+    font-size: 10px; font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+  }
+  .cost-item-val {
+    font-family: var(--mono);
+    font-size: 16px; font-weight: 700;
+    color: var(--text-bright);
+  }
+  .cost-item-sub {
+    font-size: 10px;
+    color: var(--slate-500);
+    margin-top: 2px;
+  }
+</style>
+</head>
+<body>
+
+<canvas id="particles"></canvas>
+
+<div id="shell">
+  <!-- Top Color Line -->
+  <div class="color-line"></div>
+
+  <!-- Top Bar -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="topbar-logo"><span class="accent">AI</span> Inventor</div>
+      <div class="topbar-sep"></div>
+      <div class="topbar-run">run://ssl-low-resource-v3</div>
+    </div>
+    <div class="topbar-right">
+      <div class="topbar-stat">
+        <span>Cost</span>
+        <span class="val cost" id="topCost">$4.72</span>
+      </div>
+      <div class="topbar-stat">
+        <span>Tokens</span>
+        <span class="val tokens" id="topTokens">1.24M</span>
+      </div>
+      <div class="topbar-stat">
+        <span>Elapsed</span>
+        <span class="val" id="topElapsed">00:12:38</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Workspace -->
+  <div class="workspace">
+
+    <!-- ── Left Sidebar ──────────────────────────────────────────── -->
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <span class="sidebar-title">Pipeline Steps</span>
+      </div>
+      <div class="sidebar-body">
+
+        <!-- Step 1: Seed Hypotheses -->
+        <div class="step-group">
+          <div class="step-group-header active" onclick="toggleStep(this)">
+            <div class="step-group-chevron">&#9662;</div>
+            <span class="step-group-label">1. Seed Hypotheses</span>
+            <span class="step-group-badge badge-done">DONE</span>
+          </div>
+          <div class="step-children">
+            <div class="step-child"><span class="dot dot-done"></span> Build Invention KG</div>
+            <div class="step-child"><span class="dot dot-done"></span> Extract Seed Topics</div>
+            <div class="step-child"><span class="dot dot-done"></span> Generate Candidates</div>
+          </div>
+        </div>
+
+        <!-- Step 2: Hypothesis Loop -->
+        <div class="step-group">
+          <div class="step-group-header active" onclick="toggleStep(this)">
+            <div class="step-group-chevron">&#9662;</div>
+            <span class="step-group-label">2. Hypothesis Loop</span>
+            <span class="step-group-badge badge-running">RUN</span>
+          </div>
+          <div class="step-children">
+            <div class="step-child"><span class="dot dot-done"></span> gen_hypo (iter 1)</div>
+            <div class="step-child"><span class="dot dot-done"></span> gen_hypo (iter 2)</div>
+            <div class="step-child"><span class="dot dot-running"></span> review_hypo (iter 2)</div>
+            <div class="step-child"><span class="dot dot-pending"></span> gen_hypo (iter 3)</div>
+          </div>
+        </div>
+
+        <!-- Step 3: Invention Loop -->
+        <div class="step-group">
+          <div class="step-group-header" onclick="toggleStep(this)">
+            <div class="step-group-chevron">&#9662;</div>
+            <span class="step-group-label">3. Invention Loop</span>
+            <span class="step-group-badge badge-pending">WAIT</span>
+          </div>
+          <div class="step-children">
+            <div class="step-child"><span class="dot dot-pending"></span> gen_strategy</div>
+            <div class="step-child"><span class="dot dot-pending"></span> gen_plan</div>
+            <div class="step-child"><span class="dot dot-pending"></span> gen_paper_text</div>
+            <div class="step-child"><span class="dot dot-pending"></span> review_paper</div>
+          </div>
+        </div>
+
+        <!-- Step 4: Paper Repo -->
+        <div class="step-group">
+          <div class="step-group-header collapsed" onclick="toggleStep(this)">
+            <div class="step-group-chevron">&#9662;</div>
+            <span class="step-group-label">4. Paper & Repo</span>
+            <span class="step-group-badge badge-pending">WAIT</span>
+          </div>
+          <div class="step-children">
+            <div class="step-child"><span class="dot dot-pending"></span> gen_artifact_demos</div>
+            <div class="step-child"><span class="dot dot-pending"></span> gen_viz</div>
+            <div class="step-child"><span class="dot dot-pending"></span> gen_full_paper</div>
+            <div class="step-child"><span class="dot dot-pending"></span> publish_repo</div>
+          </div>
+        </div>
+
+        <!-- Separator -->
+        <div style="height:1px;background:var(--border);margin:8px 16px;"></div>
+
+        <!-- Current Hypothesis summary -->
+        <div style="padding:12px 16px;">
+          <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-dim);margin-bottom:8px;">Active Hypothesis</div>
+          <div style="font-size:12px;color:var(--text);line-height:1.5;background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px;">
+            Low-resource SSL via adaptive curriculum scheduling with perplexity-weighted masking
+          </div>
+          <div style="margin-top:8px;display:flex;gap:8px;">
+            <span style="font-family:var(--mono);font-size:10px;padding:2px 6px;border-radius:3px;background:var(--purple-dim);color:var(--purple);">NLP</span>
+            <span style="font-family:var(--mono);font-size:10px;padding:2px 6px;border-radius:3px;background:var(--cyan-dim);color:var(--cyan);">SSL</span>
+            <span style="font-family:var(--mono);font-size:10px;padding:2px 6px;border-radius:3px;background:var(--teal-dim);color:var(--teal);">Low-Res</span>
+          </div>
+        </div>
+
+        <!-- Iteration tracker -->
+        <div style="padding:0 16px 16px;">
+          <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;color:var(--text-dim);margin-bottom:8px;">Iteration</div>
+          <div style="display:flex;gap:6px;">
+            <div style="flex:1;height:4px;border-radius:2px;background:var(--green);"></div>
+            <div style="flex:1;height:4px;border-radius:2px;background:var(--blue);animation:badgePulse 2s ease-in-out infinite;"></div>
+            <div style="flex:1;height:4px;border-radius:2px;background:var(--slate-700);"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-top:4px;font-family:var(--mono);font-size:9px;color:var(--slate-500);">
+            <span>Iter 1</span><span>Iter 2</span><span>Iter 3</span>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ── Center Panel ──────────────────────────────────────────── -->
+    <div class="center">
+      <!-- Stats Row -->
+      <div class="center-top">
+        <div class="stat-card sc-blue">
+          <div class="stat-label">Hypotheses</div>
+          <div class="stat-value">12</div>
+          <div class="stat-sub">3 passing review</div>
+        </div>
+        <div class="stat-card sc-green">
+          <div class="stat-label">LLM Calls</div>
+          <div class="stat-value">47</div>
+          <div class="stat-sub">2 retried, 0 failed</div>
+        </div>
+        <div class="stat-card sc-amber">
+          <div class="stat-label">Total Cost</div>
+          <div class="stat-value">$4.72</div>
+          <div class="stat-sub">~$8.40 projected</div>
+        </div>
+        <div class="stat-card sc-purple">
+          <div class="stat-label">Elapsed</div>
+          <div class="stat-value" id="elapsedCard">12:38</div>
+          <div class="stat-sub">~22 min projected</div>
+        </div>
+      </div>
+
+      <!-- Progress Rail -->
+      <div class="progress-rail">
+        <span class="progress-label">Pipeline</span>
+        <div class="progress-track">
+          <div class="progress-fill" id="mainProgress" style="width:38%"></div>
+        </div>
+        <span class="progress-pct" id="mainPct">38%</span>
+      </div>
+
+      <!-- Center Body -->
+      <div class="center-body">
+        <!-- Module Grid -->
+        <div class="module-grid-wrap">
+          <div class="module-grid">
+            <!-- Module: build_kg -->
+            <div class="module-card">
+              <div class="color-bar" style="background:var(--green);"></div>
+              <div class="module-head">
+                <span class="module-name">build_kg</span>
+                <span class="module-status ms-done">done</span>
+              </div>
+              <div class="module-meta">
+                <div class="module-meta-row"><span>Duration</span><span class="mv">2m 14s</span></div>
+                <div class="module-meta-row"><span>LLM calls</span><span class="mv">8</span></div>
+                <div class="module-meta-row"><span>Cost</span><span class="mv">$0.62</span></div>
+              </div>
+              <div class="module-mini-bar"><div class="module-mini-fill" style="width:100%;background:var(--green);"></div></div>
+            </div>
+
+            <!-- Module: seed_topics -->
+            <div class="module-card">
+              <div class="color-bar" style="background:var(--green);"></div>
+              <div class="module-head">
+                <span class="module-name">seed_topics</span>
+                <span class="module-status ms-done">done</span>
+              </div>
+              <div class="module-meta">
+                <div class="module-meta-row"><span>Duration</span><span class="mv">1m 03s</span></div>
+                <div class="module-meta-row"><span>LLM calls</span><span class="mv">4</span></div>
+                <div class="module-meta-row"><span>Cost</span><span class="mv">$0.28</span></div>
+              </div>
+              <div class="module-mini-bar"><div class="module-mini-fill" style="width:100%;background:var(--green);"></div></div>
+            </div>
+
+            <!-- Module: gen_hypo -->
+            <div class="module-card">
+              <div class="color-bar" style="background:var(--green);"></div>
+              <div class="module-head">
+                <span class="module-name">gen_hypo</span>
+                <span class="module-status ms-done">done</span>
+              </div>
+              <div class="module-meta">
+                <div class="module-meta-row"><span>Duration</span><span class="mv">3m 47s</span></div>
+                <div class="module-meta-row"><span>Iterations</span><span class="mv">2</span></div>
+                <div class="module-meta-row"><span>Cost</span><span class="mv">$1.84</span></div>
+              </div>
+              <div class="module-mini-bar"><div class="module-mini-fill" style="width:100%;background:var(--green);"></div></div>
+            </div>
+
+            <!-- Module: review_hypo (RUNNING) -->
+            <div class="module-card" style="border-color:rgba(59,130,246,.25);">
+              <div class="color-bar" style="background:var(--blue);"></div>
+              <div class="module-head">
+                <span class="module-name">review_hypo</span>
+                <span class="module-status ms-running">running</span>
+              </div>
+              <div class="module-meta">
+                <div class="module-meta-row"><span>Elapsed</span><span class="mv">1m 22s</span></div>
+                <div class="module-meta-row"><span>LLM calls</span><span class="mv">6</span></div>
+                <div class="module-meta-row"><span>Cost</span><span class="mv">$0.91</span></div>
+              </div>
+              <div class="module-mini-bar"><div class="module-mini-fill" style="width:65%;background:var(--blue);"></div></div>
+            </div>
+
+            <!-- Module: gen_strategy -->
+            <div class="module-card">
+              <div class="color-bar" style="background:var(--slate-600);"></div>
+              <div class="module-head">
+                <span class="module-name">gen_strategy</span>
+                <span class="module-status ms-pending">pending</span>
+              </div>
+              <div class="module-meta">
+                <div class="module-meta-row"><span>Duration</span><span class="mv">--</span></div>
+                <div class="module-meta-row"><span>LLM calls</span><span class="mv">--</span></div>
+                <div class="module-meta-row"><span>Cost</span><span class="mv">--</span></div>
+              </div>
+              <div class="module-mini-bar"><div class="module-mini-fill" style="width:0%;background:var(--slate-600);"></div></div>
+            </div>
+
+            <!-- Module: gen_plan -->
+            <div class="module-card">
+              <div class="color-bar" style="background:var(--slate-600);"></div>
+              <div class="module-head">
+                <span class="module-name">gen_plan</span>
+                <span class="module-status ms-pending">pending</span>
+              </div>
+              <div class="module-meta">
+                <div class="module-meta-row"><span>Duration</span><span class="mv">--</span></div>
+                <div class="module-meta-row"><span>LLM calls</span><span class="mv">--</span></div>
+                <div class="module-meta-row"><span>Cost</span><span class="mv">--</span></div>
+              </div>
+              <div class="module-mini-bar"><div class="module-mini-fill" style="width:0%;background:var(--slate-600);"></div></div>
+            </div>
+
+            <!-- Module: gen_paper_text -->
+            <div class="module-card">
+              <div class="color-bar" style="background:var(--slate-600);"></div>
+              <div class="module-head">
+                <span class="module-name">gen_paper_text</span>
+                <span class="module-status ms-pending">pending</span>
+              </div>
+              <div class="module-meta">
+                <div class="module-meta-row"><span>Duration</span><span class="mv">--</span></div>
+                <div class="module-meta-row"><span>LLM calls</span><span class="mv">--</span></div>
+                <div class="module-meta-row"><span>Cost</span><span class="mv">--</span></div>
+              </div>
+              <div class="module-mini-bar"><div class="module-mini-fill" style="width:0%;background:var(--slate-600);"></div></div>
+            </div>
+
+            <!-- Module: review_paper -->
+            <div class="module-card">
+              <div class="color-bar" style="background:var(--slate-600);"></div>
+              <div class="module-head">
+                <span class="module-name">review_paper</span>
+                <span class="module-status ms-pending">pending</span>
+              </div>
+              <div class="module-meta">
+                <div class="module-meta-row"><span>Duration</span><span class="mv">--</span></div>
+                <div class="module-meta-row"><span>LLM calls</span><span class="mv">--</span></div>
+                <div class="module-meta-row"><span>Cost</span><span class="mv">--</span></div>
+              </div>
+              <div class="module-mini-bar"><div class="module-mini-fill" style="width:0%;background:var(--slate-600);"></div></div>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Collapse: Recent Logs -->
+        <div class="collapse-section">
+          <div class="collapse-header" onclick="toggleCollapse(this)">
+            <span class="collapse-chevron">&#9662;</span>
+            <span class="collapse-title">Recent Logs</span>
+            <span class="collapse-count">24 entries</span>
+          </div>
+          <div class="collapse-body">
+            <div class="log-table">
+              <div class="log-row">
+                <span class="log-ts">12:38:02</span>
+                <span class="log-level ll-info">INFO</span>
+                <span class="log-text">review_hypo: scoring hypothesis 7/12 - adaptive masking schedule</span>
+              </div>
+              <div class="log-row">
+                <span class="log-ts">12:37:58</span>
+                <span class="log-level ll-info">INFO</span>
+                <span class="log-text">review_hypo: LLM response received (1,847 tokens, 0.8s latency)</span>
+              </div>
+              <div class="log-row">
+                <span class="log-ts">12:37:44</span>
+                <span class="log-level ll-warn">WARN</span>
+                <span class="log-text">review_hypo: hypothesis 6 score below threshold (2.1/5.0), will retry</span>
+              </div>
+              <div class="log-row">
+                <span class="log-ts">12:37:31</span>
+                <span class="log-level ll-info">INFO</span>
+                <span class="log-text">review_hypo: scoring hypothesis 6/12 - contrastive pretraining alignment</span>
+              </div>
+              <div class="log-row">
+                <span class="log-ts">12:37:12</span>
+                <span class="log-level ll-debug">DBG</span>
+                <span class="log-text">context_tracker: input_tokens=3241 output_tokens=1847 cache_hit=0.82</span>
+              </div>
+              <div class="log-row">
+                <span class="log-ts">12:36:55</span>
+                <span class="log-level ll-info">INFO</span>
+                <span class="log-text">review_hypo: scoring hypothesis 5/12 - dynamic loss weighting</span>
+              </div>
+              <div class="log-row">
+                <span class="log-ts">12:36:40</span>
+                <span class="log-level ll-info">INFO</span>
+                <span class="log-text">gen_hypo: iteration 2 complete - 12 hypotheses generated</span>
+              </div>
+              <div class="log-row">
+                <span class="log-ts">12:36:22</span>
+                <span class="log-level ll-error">ERR</span>
+                <span class="log-text">llm_pool: rate limit hit on claude-sonnet-4-20250514, backing off 2s</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Collapse: Cost Breakdown -->
+        <div class="collapse-section">
+          <div class="collapse-header" onclick="toggleCollapse(this)">
+            <span class="collapse-chevron">&#9662;</span>
+            <span class="collapse-title">Cost Breakdown</span>
+            <span class="collapse-count">by module</span>
+          </div>
+          <div class="collapse-body">
+            <div class="cost-grid">
+              <div class="cost-item">
+                <div class="cost-item-label">build_kg</div>
+                <div class="cost-item-val">$0.62</div>
+                <div class="cost-item-sub">13.1% of total</div>
+              </div>
+              <div class="cost-item">
+                <div class="cost-item-label">gen_hypo</div>
+                <div class="cost-item-val">$1.84</div>
+                <div class="cost-item-sub">39.0% of total</div>
+              </div>
+              <div class="cost-item">
+                <div class="cost-item-label">review_hypo</div>
+                <div class="cost-item-val">$0.91</div>
+                <div class="cost-item-sub">19.3% of total</div>
+              </div>
+              <div class="cost-item">
+                <div class="cost-item-label">seed_topics</div>
+                <div class="cost-item-val">$0.28</div>
+                <div class="cost-item-sub">5.9% of total</div>
+              </div>
+              <div class="cost-item">
+                <div class="cost-item-label">overhead</div>
+                <div class="cost-item-val">$0.18</div>
+                <div class="cost-item-sub">3.8% of total</div>
+              </div>
+              <div class="cost-item">
+                <div class="cost-item-label">remaining</div>
+                <div class="cost-item-val" style="color:var(--slate-500);">~$3.68</div>
+                <div class="cost-item-sub">projected</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ── Right Panel — Live Activity Feed ──────────────────────── -->
+    <div class="feed-panel">
+      <div class="feed-header">
+        <div class="feed-header-left">
+          <span class="feed-title">Activity Feed</span>
+          <span class="live-badge"><span class="live-dot"></span> LIVE</span>
+        </div>
+        <span style="font-family:var(--mono);font-size:10px;color:var(--slate-500);" id="feedCount">0 events</span>
+      </div>
+      <div class="feed-filter-row">
+        <span class="feed-filter active" data-filter="all">All</span>
+        <span class="feed-filter" data-filter="llm">LLM</span>
+        <span class="feed-filter" data-filter="step">Steps</span>
+        <span class="feed-filter" data-filter="cost">Cost</span>
+        <span class="feed-filter" data-filter="error">Errors</span>
+      </div>
+      <div class="feed-body" id="feedBody">
+        <!-- Feed items inserted dynamically -->
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Bottom Ticker -->
+  <div class="ticker">
+    <div class="ticker-item">
+      <span class="ticker-dot td-green"></span>
+      <span>LLM Pool</span>
+      <span class="ticker-label">3/4 workers</span>
+    </div>
+    <div class="ticker-item">
+      <span class="ticker-dot td-blue"></span>
+      <span>Active Module</span>
+      <span class="ticker-label">review_hypo</span>
+    </div>
+    <div class="ticker-item">
+      <span class="ticker-dot td-amber"></span>
+      <span>Queue</span>
+      <span class="ticker-label">5 pending</span>
+    </div>
+    <div class="ticker-item">
+      <span class="ticker-dot td-green"></span>
+      <span>Cache Hit</span>
+      <span class="ticker-label">82%</span>
+    </div>
+    <div class="ticker-item">
+      <span class="ticker-dot td-blue"></span>
+      <span>Avg Latency</span>
+      <span class="ticker-label">1.2s</span>
+    </div>
+    <div class="ticker-item">
+      <span class="ticker-dot td-green"></span>
+      <span>Model</span>
+      <span class="ticker-label">claude-sonnet-4-20250514</span>
+    </div>
+  </div>
+
+  <!-- Bottom Color Line -->
+  <div class="color-line-bottom"></div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════
+   PARTICLES
+   ═══════════════════════════════════════════════════════════════════ */
+(function initParticles() {
+  const canvas = document.getElementById('particles');
+  const ctx = canvas.getContext('2d');
+  let W, H, particles = [];
+  const COUNT = 60;
+  const COLORS = [
+    'rgba(59,130,246,.15)',
+    'rgba(6,182,212,.12)',
+    'rgba(34,197,94,.10)',
+    'rgba(168,85,247,.10)',
+    'rgba(245,158,11,.08)',
+    'rgba(236,72,153,.08)',
+  ];
+
+  function resize() {
+    W = canvas.width = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  for (let i = 0; i < COUNT; i++) {
+    particles.push({
+      x: Math.random() * W,
+      y: Math.random() * H,
+      r: Math.random() * 2 + 0.5,
+      vx: (Math.random() - 0.5) * 0.3,
+      vy: (Math.random() - 0.5) * 0.3,
+      color: COLORS[Math.floor(Math.random() * COLORS.length)],
+    });
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    for (const p of particles) {
+      p.x += p.vx;
+      p.y += p.vy;
+      if (p.x < 0) p.x = W;
+      if (p.x > W) p.x = 0;
+      if (p.y < 0) p.y = H;
+      if (p.y > H) p.y = 0;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = p.color;
+      ctx.fill();
+    }
+    // Draw faint connection lines between nearby particles
+    for (let i = 0; i < particles.length; i++) {
+      for (let j = i + 1; j < particles.length; j++) {
+        const dx = particles[i].x - particles[j].x;
+        const dy = particles[i].y - particles[j].y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 120) {
+          ctx.beginPath();
+          ctx.moveTo(particles[i].x, particles[i].y);
+          ctx.lineTo(particles[j].x, particles[j].y);
+          ctx.strokeStyle = 'rgba(100,116,139,' + (0.04 * (1 - dist / 120)) + ')';
+          ctx.lineWidth = 0.5;
+          ctx.stroke();
+        }
+      }
+    }
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+
+/* ═══════════════════════════════════════════════════════════════════
+   TOGGLE HELPERS
+   ═══════════════════════════════════════════════════════════════════ */
+function toggleStep(el) {
+  el.classList.toggle('collapsed');
+}
+
+function toggleCollapse(el) {
+  el.classList.toggle('collapsed');
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   FEED FILTER
+   ═══════════════════════════════════════════════════════════════════ */
+let activeFilter = 'all';
+document.querySelectorAll('.feed-filter').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.feed-filter').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeFilter = btn.dataset.filter;
+    filterFeed();
+  });
+});
+
+function filterFeed() {
+  document.querySelectorAll('.feed-item').forEach(item => {
+    if (activeFilter === 'all') {
+      item.style.display = '';
+    } else {
+      item.style.display = item.dataset.category === activeFilter ? '' : 'none';
+    }
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   LIVE ACTIVITY FEED — event generator
+   ═══════════════════════════════════════════════════════════════════ */
+const feedBody = document.getElementById('feedBody');
+const feedCountEl = document.getElementById('feedCount');
+let feedTotal = 0;
+const MAX_FEED_ITEMS = 80;
+
+const EVENT_TEMPLATES = [
+  {
+    category: 'llm',
+    sources: ['review_hypo', 'gen_hypo', 'gen_strategy', 'gen_plan', 'gen_paper_text'],
+    messages: [
+      'LLM call dispatched to claude-sonnet-4-20250514 ({tokens} input tokens)',
+      'Response received: {tokens} tokens in {latency}s',
+      'Structured output parsed successfully ({fields} fields)',
+      'Prompt assembled: system={sys_tok} + user={usr_tok} tokens',
+      'Cache hit on prompt prefix, saved {saved} tokens',
+      'Token budget check: {tokens}/{max_tok} within limit',
+    ],
+    colors: ['fcl-purple', 'fcl-blue'],
+    tags: [{ cls: 'ft-llm', text: 'LLM' }],
+  },
+  {
+    category: 'step',
+    sources: ['review_hypo', 'hypo_loop', 'pipeline', 'sequencer', 'build_kg'],
+    messages: [
+      'Scoring hypothesis {idx}/12: {hypo}',
+      'Hypothesis {idx} scored {score}/5.0 — {verdict}',
+      'Sub-step complete, advancing to next candidate',
+      'Iteration boundary reached, aggregating results',
+      'Checkpoint saved to run state',
+      'Worker pool rotated: {workers} active workers',
+      'Resuming from checkpoint at step {step}',
+      'Emitting task_start for {task}',
+    ],
+    colors: ['fcl-cyan', 'fcl-teal', 'fcl-blue'],
+    tags: [{ cls: 'ft-info', text: 'STEP' }],
+  },
+  {
+    category: 'cost',
+    sources: ['context_tracker', 'cost_monitor', 'billing'],
+    messages: [
+      'Cumulative cost: ${cost} (+${delta} this call)',
+      'Token usage: {input_tok} input / {output_tok} output',
+      'Cache read savings: ${saved} ({pct}% hit rate)',
+      'Budget utilization: {pct}% of $12.00 limit',
+      'Cost projection updated: ~${proj} total',
+    ],
+    colors: ['fcl-amber', 'fcl-cyan'],
+    tags: [{ cls: 'ft-cost', text: 'COST' }],
+  },
+  {
+    category: 'error',
+    sources: ['llm_pool', 'review_hypo', 'sequencer', 'network'],
+    messages: [
+      'Rate limit hit (429), backing off {delay}s',
+      'Retry {n}/3 for hypothesis scoring call',
+      'Timeout on LLM response after {timeout}s, retrying',
+      'Schema validation warning: optional field "citations" missing',
+      'Connection reset, re-establishing session',
+    ],
+    colors: ['fcl-red', 'fcl-amber'],
+    tags: [{ cls: 'ft-warn', text: 'WARN' }, { cls: 'ft-error', text: 'ERROR' }],
+  },
+  {
+    category: 'step',
+    sources: ['telemetry', 'sse_sink', 'console_sink'],
+    messages: [
+      'Event broadcast: task_progress (review_hypo)',
+      'SSE client connected from dashboard',
+      'Metrics snapshot emitted: {metrics} data points',
+      'Heartbeat OK — pipeline healthy',
+    ],
+    colors: ['fcl-teal', 'fcl-green'],
+    tags: [{ cls: 'ft-success', text: 'OK' }],
+  },
+];
+
+const HYPO_NAMES = [
+  'adaptive masking schedule',
+  'contrastive pretraining alignment',
+  'dynamic loss weighting',
+  'perplexity-weighted sampling',
+  'curriculum difficulty scaling',
+  'multi-view augmentation',
+  'knowledge distillation bridge',
+  'sparse attention regularization',
+  'meta-learning initialization',
+  'domain-adaptive tokenization',
+  'gradient surgery for SSL',
+  'self-supervised data filtering',
+];
+
+function randInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+function randFloat(min, max) { return (Math.random() * (max - min) + min).toFixed(1); }
+function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+function fillTemplate(msg) {
+  return msg
+    .replace('{tokens}', randInt(800, 4200))
+    .replace('{latency}', randFloat(0.4, 2.8))
+    .replace('{fields}', randInt(3, 12))
+    .replace('{sys_tok}', randInt(1200, 3000))
+    .replace('{usr_tok}', randInt(800, 2500))
+    .replace('{saved}', randInt(400, 2000))
+    .replace('{max_tok}', randInt(4000, 8000))
+    .replace('{idx}', randInt(1, 12))
+    .replace('{hypo}', pick(HYPO_NAMES))
+    .replace('{score}', randFloat(1.5, 4.8))
+    .replace('{verdict}', pick(['accepted', 'needs revision', 'borderline', 'strong accept', 'rejected']))
+    .replace('{workers}', randInt(2, 4))
+    .replace('{step}', randInt(1, 8))
+    .replace('{task}', pick(['review_hypo', 'gen_hypo', 'gen_plan']))
+    .replace('{cost}', randFloat(3.5, 6.0))
+    .replace('{delta}', randFloat(0.01, 0.15))
+    .replace('{input_tok}', randInt(1000, 4000))
+    .replace('{output_tok}', randInt(500, 2500))
+    .replace('{pct}', randInt(60, 92))
+    .replace('{proj}', randFloat(7.0, 10.5))
+    .replace('{delay}', randInt(1, 5))
+    .replace('{n}', randInt(1, 3))
+    .replace('{timeout}', randInt(15, 30))
+    .replace('{metrics}', randInt(8, 24));
+}
+
+function currentTime() {
+  const d = new Date();
+  return d.toTimeString().slice(0, 8);
+}
+
+function addFeedItem() {
+  const tmpl = pick(EVENT_TEMPLATES);
+  const source = pick(tmpl.sources);
+  const msg = fillTemplate(pick(tmpl.messages));
+  const color = pick(tmpl.colors);
+  const tag = pick(tmpl.tags);
+  const time = currentTime();
+
+  const item = document.createElement('div');
+  item.className = 'feed-item';
+  item.dataset.category = tmpl.category;
+
+  item.innerHTML = `
+    <div class="feed-color-line ${color}"></div>
+    <div class="feed-content">
+      <div class="feed-top-row">
+        <span class="feed-source">${source}</span>
+        <span class="feed-time">${time}</span>
+      </div>
+      <div class="feed-msg">${msg}</div>
+      <span class="feed-tag ${tag.cls}">${tag.text}</span>
+    </div>
+  `;
+
+  // Apply current filter
+  if (activeFilter !== 'all' && tmpl.category !== activeFilter) {
+    item.style.display = 'none';
+  }
+
+  feedBody.insertBefore(item, feedBody.firstChild);
+  feedTotal++;
+  feedCountEl.textContent = feedTotal + ' events';
+
+  // Remove old items to prevent unbounded growth
+  while (feedBody.children.length > MAX_FEED_ITEMS) {
+    feedBody.removeChild(feedBody.lastChild);
+  }
+}
+
+// Add some initial events immediately
+for (let i = 0; i < 8; i++) {
+  addFeedItem();
+}
+
+// Then add events every 4 seconds
+setInterval(addFeedItem, 4000);
+
+/* ═══════════════════════════════════════════════════════════════════
+   SIMULATED ELAPSED TIMER
+   ═══════════════════════════════════════════════════════════════════ */
+let elapsedSec = 12 * 60 + 38; // start at 12:38
+function updateElapsed() {
+  elapsedSec++;
+  const m = Math.floor(elapsedSec / 60);
+  const s = elapsedSec % 60;
+  const hh = Math.floor(m / 60);
+  const mm = m % 60;
+  const ss = s;
+  const pad = n => String(n).padStart(2, '0');
+  document.getElementById('topElapsed').textContent = `${pad(hh)}:${pad(mm)}:${pad(ss)}`;
+  document.getElementById('elapsedCard').textContent = `${mm}:${pad(ss)}`;
+}
+setInterval(updateElapsed, 1000);
+
+/* ═══════════════════════════════════════════════════════════════════
+   SIMULATED PROGRESS CREEP
+   ═══════════════════════════════════════════════════════════════════ */
+let progress = 38;
+function creepProgress() {
+  if (progress < 94) {
+    progress += Math.random() * 0.6 + 0.1;
+    if (progress > 94) progress = 94;
+    document.getElementById('mainProgress').style.width = progress.toFixed(1) + '%';
+    document.getElementById('mainPct').textContent = Math.floor(progress) + '%';
+  }
+}
+setInterval(creepProgress, 8000);
+
+/* ═══════════════════════════════════════════════════════════════════
+   SIMULATED COST CREEP
+   ═══════════════════════════════════════════════════════════════════ */
+let totalCost = 4.72;
+let totalTokens = 1.24;
+function creepCost() {
+  totalCost += Math.random() * 0.08 + 0.01;
+  totalTokens += Math.random() * 0.04 + 0.005;
+  document.getElementById('topCost').textContent = '$' + totalCost.toFixed(2);
+  document.getElementById('topTokens').textContent = totalTokens.toFixed(2) + 'M';
+}
+setInterval(creepCost, 6000);
+</script>
+
+</body>
+</html>

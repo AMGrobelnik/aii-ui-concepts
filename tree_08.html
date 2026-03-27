@@ -1,0 +1,1770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Tree Path with Ring Cards</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ── Reset & Variables ──────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  /* Slate surfaces */
+  --bg-deep:     #0e1015;
+  --bg-surface:  #151820;
+  --bg-card:     #1a1e28;
+  --bg-card-active: #1f2433;
+  --bg-hover:    #232839;
+  --bg-elevated: #282d3e;
+
+  /* Borders */
+  --border:      #272c3a;
+  --border-dim:  #1d2130;
+  --border-lite: #323848;
+  --border-active: #3d4560;
+
+  /* Text hierarchy */
+  --text-100:    #e6e8f0;
+  --text-200:    #aeb3c4;
+  --text-300:    #787e94;
+  --text-400:    #4f5468;
+  --text-500:    #383d4e;
+
+  /* Accents */
+  --accent:      #5b8af5;
+  --accent-dim:  #3a5fb8;
+  --accent-glow: rgba(91, 138, 245, 0.30);
+  --accent-bg:   rgba(91, 138, 245, 0.08);
+  --accent-ring: rgba(91, 138, 245, 0.50);
+
+  /* Semantic */
+  --green:       #34d399;
+  --green-dim:   rgba(52, 211, 153, 0.12);
+  --green-glow:  rgba(52, 211, 153, 0.30);
+  --green-ring:  rgba(52, 211, 153, 0.50);
+  --amber:       #fbbf24;
+  --amber-dim:   rgba(251, 191, 36, 0.12);
+  --amber-glow:  rgba(251, 191, 36, 0.25);
+  --amber-ring:  rgba(251, 191, 36, 0.50);
+  --red:         #f87171;
+  --red-dim:     rgba(248, 113, 113, 0.12);
+  --purple:      #a78bfa;
+  --purple-dim:  rgba(167, 139, 250, 0.10);
+
+  /* Layout */
+  --sidebar-w:   280px;
+  --topbar-h:    50px;
+  --ring-size:   170px;
+  --mini-ring:   28px;
+  --sub-ring:    36px;
+
+  /* Tokens */
+  --radius:      8px;
+  --radius-lg:   12px;
+  --transition:  180ms ease;
+  --shadow-card: 0 1px 4px rgba(0,0,0,0.25), 0 0 0 1px var(--border-dim);
+  --shadow-active: 0 2px 12px rgba(0,0,0,0.3), 0 0 0 1px var(--border-active);
+}
+
+html { font-size: 14px; }
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  background: var(--bg-deep);
+  color: var(--text-200);
+  line-height: 1.5;
+  overflow: hidden;
+  height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Layout Shell ──────────────────────────────────────────── */
+.shell {
+  display: flex;
+  height: 100vh;
+}
+
+.sidebar {
+  width: var(--sidebar-w);
+  min-width: var(--sidebar-w);
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border-dim);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  z-index: 10;
+}
+
+.main-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  position: relative;
+}
+
+/* ── Particle Canvas ──────────────────────────────────────── */
+#particleCanvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* ── Topbar ────────────────────────────────────────────────── */
+.topbar {
+  height: var(--topbar-h);
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-dim);
+  display: flex;
+  align-items: center;
+  padding: 0 24px;
+  gap: 14px;
+  position: relative;
+  z-index: 5;
+  flex-shrink: 0;
+}
+
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.topbar-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-300);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.topbar-sep { color: var(--text-500); font-size: 0.7rem; }
+.topbar-sub { font-size: 0.78rem; color: var(--text-200); font-weight: 500; }
+
+.topbar-run {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  animation: livePulse 2s ease-in-out infinite;
+}
+
+@keyframes livePulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 var(--green-glow); }
+  50% { opacity: 0.7; box-shadow: 0 0 8px 3px var(--green-glow); }
+}
+
+.topbar-run-label {
+  font-size: 0.75rem;
+  color: var(--text-300);
+  font-variant-numeric: tabular-nums;
+}
+.topbar-run-id { font-weight: 600; color: var(--text-200); }
+
+/* ── Sidebar: Overall Ring Progress ────────────────────────── */
+.ring-section {
+  padding: 20px 16px 12px;
+  flex-shrink: 0;
+}
+
+.ring-container {
+  width: var(--ring-size);
+  height: var(--ring-size);
+  margin: 0 auto;
+  position: relative;
+}
+
+.ring-svg { width: 100%; height: 100%; }
+
+.ring-track {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 3.5;
+}
+
+.ring-progress {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  stroke-dasharray: 440;
+  stroke-dashoffset: 264;
+  filter: drop-shadow(0 0 5px var(--accent-glow));
+  transition: stroke-dashoffset 1s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.ring-dashed {
+  fill: none;
+  stroke: var(--text-400);
+  stroke-width: 1;
+  stroke-dasharray: 6 8;
+  opacity: 0.2;
+  animation: ringRotate 12s linear infinite;
+  transform-origin: 50% 50%;
+}
+
+@keyframes ringRotate {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.ring-endpoint {
+  fill: var(--accent);
+  filter: drop-shadow(0 0 5px var(--accent-ring));
+  animation: endpointGlow 2.5s ease-in-out infinite;
+}
+
+@keyframes endpointGlow {
+  0%, 100% { opacity: 1; filter: drop-shadow(0 0 5px var(--accent-ring)); }
+  50% { opacity: 0.6; filter: drop-shadow(0 0 12px var(--accent-ring)); }
+}
+
+.ring-center-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  pointer-events: none;
+}
+
+.ring-pct {
+  font-size: 1.55rem;
+  font-weight: 700;
+  color: var(--text-100);
+  line-height: 1.1;
+}
+
+.ring-label {
+  font-size: 0.64rem;
+  color: var(--text-300);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-top: 2px;
+}
+
+.ring-phase {
+  text-align: center;
+  padding: 6px 0 10px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--text-300);
+  letter-spacing: 0.02em;
+}
+
+.ring-phase-label { color: var(--accent); font-weight: 600; }
+
+.ring-divider {
+  height: 1px;
+  background: var(--border-dim);
+  margin: 0 16px;
+}
+
+/* ── Sidebar: Module Tree ──────────────────────────────────── */
+.tree-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 10px 0 20px;
+}
+
+.tree-scroll::-webkit-scrollbar { width: 4px; }
+.tree-scroll::-webkit-scrollbar-track { background: transparent; }
+.tree-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.tree-scroll::-webkit-scrollbar-thumb:hover { background: var(--border-lite); }
+
+/* ── Tree Path Trunk ──────────────────────────────────────── */
+.tree-group {
+  position: relative;
+  margin-left: 28px;
+  padding-left: 20px;
+}
+
+/* The vertical trunk line */
+.tree-group::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: linear-gradient(
+    to bottom,
+    var(--border) 0%,
+    var(--border-lite) 50%,
+    transparent 100%
+  );
+}
+
+/* Active trunk segment glow */
+.tree-group.has-active::before {
+  background: linear-gradient(
+    to bottom,
+    var(--accent-bg) 0%,
+    var(--accent) 30%,
+    var(--accent) 60%,
+    var(--border) 100%
+  );
+  filter: drop-shadow(0 0 3px var(--accent-glow));
+}
+
+/* ── Module Card (with mini ring) ─────────────────────────── */
+.module-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px 8px 10px;
+  margin: 3px 10px 3px 0;
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  border: 1px solid var(--border-dim);
+  cursor: pointer;
+  transition: all var(--transition);
+  box-shadow: var(--shadow-card);
+}
+
+/* Branch connector from trunk to card */
+.module-card::before {
+  content: '';
+  position: absolute;
+  left: -20px;
+  top: 50%;
+  width: 18px;
+  height: 2px;
+  background: var(--border);
+  transition: background var(--transition);
+}
+
+.module-card:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-lite);
+}
+
+.module-card.active {
+  background: var(--bg-card-active);
+  border-color: var(--border-active);
+  box-shadow: var(--shadow-active);
+}
+
+.module-card.active::before {
+  background: var(--accent);
+  filter: drop-shadow(0 0 3px var(--accent-glow));
+}
+
+/* Branch node dot */
+.module-card::after {
+  content: '';
+  position: absolute;
+  left: -23px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--border-lite);
+  border: 1.5px solid var(--bg-surface);
+  transition: all var(--transition);
+}
+
+.module-card.active::after {
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent-glow);
+}
+
+.module-card.done::after {
+  background: var(--green);
+  box-shadow: 0 0 4px var(--green-glow);
+}
+
+/* ── Mini Ring Gauge (28px) ───────────────────────────────── */
+.mini-ring-wrap {
+  width: var(--mini-ring);
+  height: var(--mini-ring);
+  flex-shrink: 0;
+  position: relative;
+}
+
+.mini-ring-svg { width: 100%; height: 100%; }
+
+.mini-ring-track {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 3;
+}
+
+.mini-ring-progress {
+  fill: none;
+  stroke-width: 3;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.8s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.mini-ring-progress.color-green { stroke: var(--green); }
+.mini-ring-progress.color-accent { stroke: var(--accent); }
+.mini-ring-progress.color-amber { stroke: var(--amber); }
+
+/* Active card ring endpoint glow */
+.module-card.active .mini-ring-endpoint {
+  animation: miniEndpointGlow 2s ease-in-out infinite;
+}
+
+.mini-ring-endpoint {
+  transition: opacity 0.3s ease;
+}
+
+@keyframes miniEndpointGlow {
+  0%, 100% { opacity: 1; filter: drop-shadow(0 0 3px var(--accent-ring)); }
+  50% { opacity: 0.5; filter: drop-shadow(0 0 8px var(--accent-ring)); }
+}
+
+/* ── Card Info (right side) ───────────────────────────────── */
+.card-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.card-name {
+  font-size: 0.74rem;
+  font-weight: 500;
+  color: var(--text-200);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
+.module-card.active .card-name { color: var(--text-100); }
+.module-card.done .card-name { color: var(--text-300); }
+
+.card-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 1px;
+}
+
+.card-metric {
+  font-size: 0.64rem;
+  font-weight: 600;
+  color: var(--text-300);
+  font-variant-numeric: tabular-nums;
+}
+
+.module-card.active .card-metric { color: var(--accent); }
+.module-card.done .card-metric { color: var(--green); }
+
+.card-status {
+  font-size: 0.58rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+.card-status.running {
+  color: var(--accent);
+  background: var(--accent-bg);
+}
+
+.card-status.done {
+  color: var(--green);
+  background: var(--green-dim);
+}
+
+.card-status.pending {
+  color: var(--text-400);
+  background: rgba(79, 84, 104, 0.15);
+}
+
+.card-status.warning {
+  color: var(--amber);
+  background: var(--amber-dim);
+}
+
+/* ── Sub-module Cards (36px ring) ─────────────────────────── */
+.sub-modules {
+  margin-left: 8px;
+  padding-left: 18px;
+  position: relative;
+  overflow: hidden;
+  max-height: 0;
+  opacity: 0;
+  transition: max-height 0.4s cubic-bezier(0.22, 0.61, 0.36, 1),
+              opacity 0.3s ease;
+}
+
+.sub-modules.expanded {
+  max-height: 600px;
+  opacity: 1;
+}
+
+/* Sub-module branch line */
+.sub-modules::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 16px;
+  width: 1.5px;
+  background: linear-gradient(
+    to bottom,
+    var(--border-lite) 0%,
+    transparent 100%
+  );
+}
+
+.sub-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  margin: 4px 8px 4px 0;
+  border-radius: 6px;
+  background: rgba(26, 30, 40, 0.5);
+  border: 1px solid var(--border-dim);
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.sub-card::before {
+  content: '';
+  position: absolute;
+  left: -18px;
+  top: 50%;
+  width: 16px;
+  height: 1.5px;
+  background: var(--border);
+}
+
+.sub-card:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-lite);
+}
+
+.sub-card.active {
+  background: var(--bg-card-active);
+  border-color: var(--border-active);
+}
+
+/* Sub-module ring: 36px */
+.sub-ring-wrap {
+  width: var(--sub-ring);
+  height: var(--sub-ring);
+  flex-shrink: 0;
+  position: relative;
+}
+
+.sub-ring-svg { width: 100%; height: 100%; }
+
+.sub-ring-track {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 2.5;
+}
+
+.sub-ring-progress {
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.8s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.sub-ring-progress.color-green { stroke: var(--green); }
+.sub-ring-progress.color-accent { stroke: var(--accent); }
+.sub-ring-progress.color-amber { stroke: var(--amber); }
+
+.sub-ring-pct {
+  font-size: 0.5rem;
+  font-weight: 600;
+  fill: var(--text-300);
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
+.sub-card.active .sub-ring-endpoint {
+  animation: miniEndpointGlow 2s ease-in-out infinite;
+}
+
+.sub-card-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.sub-card-name {
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--text-200);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sub-card.active .sub-card-name { color: var(--text-100); }
+
+.sub-card-detail {
+  font-size: 0.6rem;
+  color: var(--text-400);
+  margin-top: 1px;
+  font-variant-numeric: tabular-nums;
+}
+
+.sub-card.active .sub-card-detail { color: var(--text-300); }
+
+/* ── Content Area ──────────────────────────────────────────── */
+.content-area {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 28px 32px 40px;
+  position: relative;
+  z-index: 2;
+}
+
+.content-area::-webkit-scrollbar { width: 5px; }
+.content-area::-webkit-scrollbar-track { background: transparent; }
+.content-area::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+.content-area::-webkit-scrollbar-thumb:hover { background: var(--border-lite); }
+
+/* ── Content Header ───────────────────────────────────────── */
+.content-header {
+  margin-bottom: 24px;
+}
+
+.content-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  color: var(--text-400);
+  margin-bottom: 8px;
+}
+
+.content-breadcrumb .bc-sep { color: var(--text-500); }
+.content-breadcrumb .bc-active { color: var(--accent); font-weight: 500; }
+
+.content-title {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--text-100);
+  margin-bottom: 4px;
+}
+
+.content-subtitle {
+  font-size: 0.78rem;
+  color: var(--text-300);
+}
+
+/* ── Stats Row ─────────────────────────────────────────────── */
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.stat-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  box-shadow: var(--shadow-card);
+}
+
+.stat-label {
+  font-size: 0.66rem;
+  font-weight: 500;
+  color: var(--text-400);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 6px;
+}
+
+.stat-value {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--text-100);
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-value.accent { color: var(--accent); }
+.stat-value.green { color: var(--green); }
+.stat-value.amber { color: var(--amber); }
+
+.stat-delta {
+  font-size: 0.62rem;
+  color: var(--text-400);
+  margin-top: 2px;
+}
+
+/* ── Detail Sections ───────────────────────────────────────── */
+.detail-section {
+  margin-bottom: 20px;
+}
+
+.detail-section-title {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-300);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-dim);
+}
+
+/* Log entries */
+.log-entries {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.log-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: 5px;
+  font-size: 0.72rem;
+  transition: background var(--transition);
+}
+
+.log-entry:hover { background: rgba(255,255,255,0.02); }
+
+.log-time {
+  font-size: 0.64rem;
+  font-weight: 500;
+  color: var(--text-400);
+  font-variant-numeric: tabular-nums;
+  min-width: 52px;
+  flex-shrink: 0;
+}
+
+.log-msg { color: var(--text-200); line-height: 1.4; }
+.log-msg .highlight { color: var(--accent); font-weight: 500; }
+.log-msg .success { color: var(--green); font-weight: 500; }
+.log-msg .warn { color: var(--amber); font-weight: 500; }
+
+/* ── Iteration Cards (in content) ──────────────────────────── */
+.iter-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.iter-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  box-shadow: var(--shadow-card);
+  transition: all var(--transition);
+}
+
+.iter-card:hover {
+  border-color: var(--border-lite);
+  background: var(--bg-hover);
+}
+
+.iter-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.iter-card-num {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text-300);
+}
+
+.iter-card-badge {
+  font-size: 0.56rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.iter-card-badge.pass { color: var(--green); background: var(--green-dim); }
+.iter-card-badge.fail { color: var(--red); background: var(--red-dim); }
+.iter-card-badge.active { color: var(--accent); background: var(--accent-bg); }
+
+.iter-card-title {
+  font-size: 0.74rem;
+  font-weight: 500;
+  color: var(--text-200);
+  margin-bottom: 6px;
+  line-height: 1.3;
+}
+
+.iter-card-metric {
+  font-size: 0.62rem;
+  color: var(--text-400);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Progress Bar (inline) ─────────────────────────────────── */
+.progress-bar {
+  width: 100%;
+  height: 3px;
+  background: var(--border-dim);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-top: 8px;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.6s cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.progress-fill.accent { background: var(--accent); }
+.progress-fill.green { background: var(--green); }
+.progress-fill.amber { background: var(--amber); }
+
+/* ── Animations ────────────────────────────────────────────── */
+
+/* Tree path particle canvas */
+#treeParticleCanvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 5;
+}
+
+/* Fade-in for cards */
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.module-card { animation: fadeSlideIn 0.3s ease both; }
+.module-card:nth-child(1) { animation-delay: 0.05s; }
+.module-card:nth-child(2) { animation-delay: 0.1s; }
+.module-card:nth-child(3) { animation-delay: 0.15s; }
+.module-card:nth-child(4) { animation-delay: 0.2s; }
+.module-card:nth-child(5) { animation-delay: 0.25s; }
+
+.sub-card { animation: fadeSlideIn 0.25s ease both; }
+.sub-card:nth-child(1) { animation-delay: 0.05s; }
+.sub-card:nth-child(2) { animation-delay: 0.1s; }
+.sub-card:nth-child(3) { animation-delay: 0.15s; }
+.sub-card:nth-child(4) { animation-delay: 0.2s; }
+
+/* Shimmer for active elements */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.module-card.active .card-name::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(91,138,245,0.04) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: shimmer 3s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* ── Sidebar Footer ───────────────────────────────────────── */
+.sidebar-footer {
+  padding: 10px 16px;
+  border-top: 1px solid var(--border-dim);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.sidebar-footer-label {
+  font-size: 0.62rem;
+  color: var(--text-400);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.sidebar-footer-value {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text-300);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Responsive collapse indicator ─────────────────────────── */
+.expand-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-500);
+  transition: transform 0.25s ease, color 0.2s ease;
+}
+
+.module-card.active .expand-icon { color: var(--accent); }
+.module-card.expanded .expand-icon { transform: rotate(90deg); }
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <!-- ── Sidebar ── -->
+  <aside class="sidebar">
+    <!-- Overall Ring Progress -->
+    <div class="ring-section">
+      <div class="ring-container">
+        <svg class="ring-svg" viewBox="0 0 160 160">
+          <!-- Outer dashed orbit -->
+          <circle class="ring-dashed" cx="80" cy="80" r="76" />
+          <!-- Track -->
+          <circle class="ring-track" cx="80" cy="80" r="70" />
+          <!-- Progress arc -->
+          <circle class="ring-progress" id="mainRingProgress"
+                  cx="80" cy="80" r="70"
+                  transform="rotate(-90 80 80)" />
+          <!-- Endpoint dot -->
+          <circle class="ring-endpoint" id="mainRingEndpoint"
+                  cx="80" cy="80" r="3.5" />
+        </svg>
+        <div class="ring-center-text">
+          <div class="ring-pct" id="mainRingPct">40%</div>
+          <div class="ring-label">Pipeline</div>
+        </div>
+      </div>
+      <div class="ring-phase">
+        Phase: <span class="ring-phase-label" id="phaseName">Hypothesis Loop</span>
+      </div>
+    </div>
+
+    <div class="ring-divider"></div>
+
+    <!-- Module Tree -->
+    <div class="tree-scroll" id="treeScroll">
+      <canvas id="treeParticleCanvas"></canvas>
+
+      <div class="tree-group has-active" id="treeGroup">
+        <!-- Modules injected by JS -->
+      </div>
+    </div>
+
+    <div class="sidebar-footer">
+      <span class="sidebar-footer-label">Elapsed</span>
+      <span class="sidebar-footer-value" id="elapsedTime">14m 32s</span>
+    </div>
+  </aside>
+
+  <!-- ── Main Content ── -->
+  <div class="main-area">
+    <canvas id="particleCanvas"></canvas>
+
+    <div class="topbar">
+      <div class="topbar-left">
+        <span class="topbar-title">AI Inventor</span>
+        <span class="topbar-sep">/</span>
+        <span class="topbar-sub" id="topbarModule">Review Hypotheses</span>
+      </div>
+      <div class="topbar-run">
+        <div class="live-dot"></div>
+        <span class="topbar-run-label">
+          Run <span class="topbar-run-id">ssl-low-resource-v3</span>
+        </span>
+      </div>
+    </div>
+
+    <div class="content-area" id="contentArea">
+      <!-- Content injected by JS -->
+    </div>
+  </div>
+</div>
+
+<script>
+/* ================================================================
+   DATA & STATE
+   ================================================================ */
+const MODULES = [
+  {
+    id: 'seed_hypo',
+    name: 'Seed Hypotheses',
+    pct: 100,
+    status: 'done',
+    metric: '6 / 6',
+    color: 'green',
+    subs: [
+      { id: 'kg_build', name: 'Build Knowledge Graph', pct: 100, status: 'done', detail: '247 nodes' },
+      { id: 'kg_cluster', name: 'Cluster Concepts', pct: 100, status: 'done', detail: '14 clusters' },
+      { id: 'gen_seeds', name: 'Generate Seed Ideas', pct: 100, status: 'done', detail: '6 hypotheses' },
+    ]
+  },
+  {
+    id: 'review_hypo',
+    name: 'Review Hypotheses',
+    pct: 67,
+    status: 'running',
+    metric: '4 / 6',
+    color: 'accent',
+    subs: [
+      { id: 'novelty_check', name: 'Novelty Check', pct: 100, status: 'done', detail: '6 / 6 passed' },
+      { id: 'feasibility', name: 'Feasibility Analysis', pct: 100, status: 'done', detail: 'Avg 7.2 / 10' },
+      { id: 'lit_grounding', name: 'Literature Grounding', pct: 45, status: 'running', detail: '3 / 6 grounded' },
+      { id: 'final_filter', name: 'Final Filter', pct: 0, status: 'pending', detail: 'Waiting...' },
+    ]
+  },
+  {
+    id: 'gen_plan',
+    name: 'Generate Plans',
+    pct: 0,
+    status: 'pending',
+    metric: '0 / 4',
+    color: 'accent',
+    subs: [
+      { id: 'outline_plan', name: 'Outline Structure', pct: 0, status: 'pending', detail: '--' },
+      { id: 'method_plan', name: 'Method Design', pct: 0, status: 'pending', detail: '--' },
+    ]
+  },
+  {
+    id: 'gen_paper',
+    name: 'Generate Paper Text',
+    pct: 0,
+    status: 'pending',
+    metric: '0 / 4',
+    color: 'accent',
+    subs: []
+  },
+  {
+    id: 'gen_repo',
+    name: 'Generate Paper Repo',
+    pct: 0,
+    status: 'pending',
+    metric: '0 / 4',
+    color: 'accent',
+    subs: [
+      { id: 'gen_artifacts', name: 'Generate Artifacts', pct: 0, status: 'pending', detail: '--' },
+      { id: 'gen_viz', name: 'Generate Visualizations', pct: 0, status: 'pending', detail: '--' },
+      { id: 'gen_full', name: 'Assemble Full Paper', pct: 0, status: 'pending', detail: '--' },
+    ]
+  },
+];
+
+let activeModuleId = 'review_hypo';
+let expandedModuleId = 'review_hypo';
+
+/* ================================================================
+   MINI RING SVG GENERATORS
+   ================================================================ */
+function createMiniRingSVG(pct, color, size, isActive) {
+  const r = (size - 6) / 2;
+  const circumference = 2 * Math.PI * r;
+  const offset = circumference - (pct / 100) * circumference;
+  const cx = size / 2;
+  const cy = size / 2;
+  const strokeW = size <= 28 ? 3 : 2.5;
+
+  // Compute endpoint position
+  const angle = ((pct / 100) * 360 - 90) * (Math.PI / 180);
+  const epx = cx + r * Math.cos(angle);
+  const epy = cy + r * Math.sin(angle);
+
+  const colorMap = {
+    green:  'var(--green)',
+    accent: 'var(--accent)',
+    amber:  'var(--amber)',
+  };
+  const glowMap = {
+    green:  'var(--green-ring)',
+    accent: 'var(--accent-ring)',
+    amber:  'var(--amber-ring)',
+  };
+  const strokeColor = colorMap[color] || colorMap.accent;
+  const glowColor = glowMap[color] || glowMap.accent;
+
+  const endpointClass = isActive ? (size <= 28 ? 'mini-ring-endpoint' : 'sub-ring-endpoint') : '';
+  const endpointAnim = isActive ? `class="${endpointClass}"` : '';
+
+  let endpointSVG = '';
+  if (pct > 0 && pct < 100) {
+    endpointSVG = `<circle ${endpointAnim}
+      cx="${epx.toFixed(2)}" cy="${epy.toFixed(2)}" r="${size <= 28 ? 2 : 2.5}"
+      fill="${strokeColor}"
+      style="filter: drop-shadow(0 0 3px ${glowColor}); ${isActive ? '' : 'opacity: 0.7;'}" />`;
+  }
+
+  // Pct text for larger rings
+  let pctText = '';
+  if (size > 28) {
+    pctText = `<text class="sub-ring-pct" x="${cx}" y="${cy + 0.5}">${pct}%</text>`;
+  }
+
+  return `<svg class="${size <= 28 ? 'mini-ring-svg' : 'sub-ring-svg'}" viewBox="0 0 ${size} ${size}">
+    <circle class="${size <= 28 ? 'mini-ring-track' : 'sub-ring-track'}"
+      cx="${cx}" cy="${cy}" r="${r}" />
+    <circle class="${size <= 28 ? 'mini-ring-progress color-' + color : 'sub-ring-progress color-' + color}"
+      cx="${cx}" cy="${cy}" r="${r}"
+      style="stroke-dasharray: ${circumference.toFixed(2)};
+             stroke-dashoffset: ${offset.toFixed(2)};"
+      transform="rotate(-90 ${cx} ${cy})" />
+    ${endpointSVG}
+    ${pctText}
+  </svg>`;
+}
+
+/* ================================================================
+   BUILD TREE
+   ================================================================ */
+function buildTree() {
+  const group = document.getElementById('treeGroup');
+  group.innerHTML = '';
+
+  MODULES.forEach((mod, i) => {
+    const isActive = mod.id === activeModuleId;
+    const isExpanded = mod.id === expandedModuleId;
+    const hasSubs = mod.subs.length > 0;
+
+    // Module card
+    const card = document.createElement('div');
+    card.className = `module-card ${mod.status}${isActive ? ' active' : ''}${isExpanded ? ' expanded' : ''}`;
+    card.dataset.id = mod.id;
+
+    const ringColor = mod.status === 'done' ? 'green' : mod.status === 'running' ? 'accent' : 'accent';
+    const effectivePct = mod.status === 'pending' ? 0 : mod.pct;
+
+    card.innerHTML = `
+      <div class="mini-ring-wrap">
+        ${createMiniRingSVG(effectivePct, ringColor, 28, isActive)}
+      </div>
+      <div class="card-info">
+        <div class="card-name">${mod.name}</div>
+        <div class="card-meta">
+          <span class="card-metric">${mod.metric}</span>
+          <span class="card-status ${mod.status}">${statusLabel(mod.status)}</span>
+        </div>
+      </div>
+      ${hasSubs ? '<div class="expand-icon"><svg width="10" height="10" viewBox="0 0 10 10"><path d="M3 1l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></div>' : ''}
+    `;
+
+    card.addEventListener('click', () => {
+      activeModuleId = mod.id;
+      expandedModuleId = expandedModuleId === mod.id ? null : mod.id;
+      buildTree();
+      renderContent(mod.id);
+      updateTopbar(mod.name);
+    });
+
+    group.appendChild(card);
+
+    // Sub-modules
+    if (hasSubs) {
+      const subWrap = document.createElement('div');
+      subWrap.className = `sub-modules${isExpanded ? ' expanded' : ''}`;
+
+      mod.subs.forEach((sub) => {
+        const subActive = isActive && sub.status === 'running';
+        const sc = document.createElement('div');
+        sc.className = `sub-card${subActive ? ' active' : ''} ${sub.status}`;
+
+        const subColor = sub.status === 'done' ? 'green' : sub.status === 'running' ? 'accent' : 'accent';
+        const subPct = sub.status === 'pending' ? 0 : sub.pct;
+
+        sc.innerHTML = `
+          <div class="sub-ring-wrap">
+            ${createMiniRingSVG(subPct, subColor, 36, subActive)}
+          </div>
+          <div class="sub-card-info">
+            <div class="sub-card-name">${sub.name}</div>
+            <div class="sub-card-detail">${sub.detail}</div>
+          </div>
+        `;
+        subWrap.appendChild(sc);
+      });
+
+      group.appendChild(subWrap);
+    }
+  });
+}
+
+function statusLabel(s) {
+  return { done: 'Done', running: 'Running', pending: 'Pending', warning: 'Warn' }[s] || s;
+}
+
+function updateTopbar(name) {
+  document.getElementById('topbarModule').textContent = name;
+}
+
+/* ================================================================
+   MAIN RING
+   ================================================================ */
+function updateMainRing(pct) {
+  const circumference = 2 * Math.PI * 70;
+  const offset = circumference - (pct / 100) * circumference;
+  const progressEl = document.getElementById('mainRingProgress');
+  progressEl.style.strokeDasharray = circumference.toFixed(2);
+  progressEl.style.strokeDashoffset = offset.toFixed(2);
+
+  // Update endpoint position
+  const angle = ((pct / 100) * 360 - 90) * (Math.PI / 180);
+  const epx = 80 + 70 * Math.cos(angle);
+  const epy = 80 + 70 * Math.sin(angle);
+  const ep = document.getElementById('mainRingEndpoint');
+  ep.setAttribute('cx', epx.toFixed(2));
+  ep.setAttribute('cy', epy.toFixed(2));
+
+  document.getElementById('mainRingPct').textContent = pct + '%';
+}
+
+/* ================================================================
+   CONTENT RENDERERS
+   ================================================================ */
+function renderContent(moduleId) {
+  const area = document.getElementById('contentArea');
+  const mod = MODULES.find(m => m.id === moduleId);
+  if (!mod) return;
+
+  let html = '';
+
+  // Breadcrumb
+  html += `<div class="content-header">
+    <div class="content-breadcrumb">
+      <span>Pipeline</span>
+      <span class="bc-sep">/</span>
+      <span class="bc-active">${mod.name}</span>
+    </div>
+    <div class="content-title">${mod.name}</div>
+    <div class="content-subtitle">${getSubtitle(mod)}</div>
+  </div>`;
+
+  // Stats row
+  html += renderStats(mod);
+
+  // Specific content per module
+  switch (moduleId) {
+    case 'seed_hypo':
+      html += renderSeedHypoContent();
+      break;
+    case 'review_hypo':
+      html += renderReviewHypoContent();
+      break;
+    case 'gen_plan':
+      html += renderGenPlanContent();
+      break;
+    case 'gen_paper':
+      html += renderGenPaperContent();
+      break;
+    case 'gen_repo':
+      html += renderGenRepoContent();
+      break;
+  }
+
+  area.innerHTML = html;
+}
+
+function getSubtitle(mod) {
+  const map = {
+    seed_hypo: 'Knowledge graph construction and initial hypothesis generation',
+    review_hypo: 'Evaluating novelty, feasibility, and literature grounding',
+    gen_plan: 'Structuring methods and experimental design for each hypothesis',
+    gen_paper: 'Generating full paper text sections from plans',
+    gen_repo: 'Building reproducible artifacts, visualizations, and final paper',
+  };
+  return map[mod.id] || '';
+}
+
+function renderStats(mod) {
+  const statsMap = {
+    seed_hypo: [
+      { label: 'KG Nodes', value: '247', cls: 'green' },
+      { label: 'Clusters', value: '14', cls: '' },
+      { label: 'Hypotheses', value: '6', cls: 'accent' },
+      { label: 'Duration', value: '4m 12s', cls: '' },
+    ],
+    review_hypo: [
+      { label: 'Reviewed', value: '4 / 6', cls: 'accent' },
+      { label: 'Avg. Score', value: '7.2', cls: '' },
+      { label: 'Passing', value: '3', cls: 'green' },
+      { label: 'Grounded', value: '3 / 6', cls: 'amber' },
+    ],
+    gen_plan: [
+      { label: 'Plans', value: '0 / 4', cls: '' },
+      { label: 'Methods', value: '--', cls: '' },
+      { label: 'Baselines', value: '--', cls: '' },
+      { label: 'Duration', value: '--', cls: '' },
+    ],
+    gen_paper: [
+      { label: 'Sections', value: '0 / 16', cls: '' },
+      { label: 'Tokens', value: '--', cls: '' },
+      { label: 'Iterations', value: '--', cls: '' },
+      { label: 'Duration', value: '--', cls: '' },
+    ],
+    gen_repo: [
+      { label: 'Artifacts', value: '0', cls: '' },
+      { label: 'Viz', value: '0', cls: '' },
+      { label: 'Pages', value: '--', cls: '' },
+      { label: 'Duration', value: '--', cls: '' },
+    ],
+  };
+
+  const stats = statsMap[mod.id] || [];
+  let html = '<div class="stats-row">';
+  stats.forEach(s => {
+    html += `<div class="stat-card">
+      <div class="stat-label">${s.label}</div>
+      <div class="stat-value ${s.cls}">${s.value}</div>
+    </div>`;
+  });
+  html += '</div>';
+  return html;
+}
+
+function renderSeedHypoContent() {
+  return `
+    <div class="detail-section">
+      <div class="detail-section-title">Generated Hypotheses</div>
+      <div class="iter-grid">
+        ${seedHypoCards()}
+      </div>
+    </div>
+    <div class="detail-section">
+      <div class="detail-section-title">Activity Log</div>
+      <div class="log-entries">
+        ${logEntry('14:18', 'Knowledge graph built with <span class="highlight">247 nodes</span> and 382 edges')}
+        ${logEntry('14:20', 'Identified <span class="highlight">14 concept clusters</span> via spectral decomposition')}
+        ${logEntry('14:22', 'Generated <span class="success">6 seed hypotheses</span> from high-density clusters')}
+        ${logEntry('14:23', 'Seed phase <span class="success">complete</span> in 4m 12s')}
+      </div>
+    </div>`;
+}
+
+function seedHypoCards() {
+  const seeds = [
+    { num: 'H-1', title: 'SSL with Sparse Pseudo-Labels', badge: 'pass', metric: 'Score: 8.4' },
+    { num: 'H-2', title: 'Contrastive Pretraining for Low-Resource NLP', badge: 'pass', metric: 'Score: 7.9' },
+    { num: 'H-3', title: 'Data Augmentation via Retrieval Mixing', badge: 'pass', metric: 'Score: 7.6' },
+    { num: 'H-4', title: 'Curriculum Learning for Noisy Labels', badge: 'pass', metric: 'Score: 6.8' },
+    { num: 'H-5', title: 'Meta-Learning Feature Reweighting', badge: 'pass', metric: 'Score: 6.3' },
+    { num: 'H-6', title: 'Graph-Augmented Few-Shot Transfer', badge: 'pass', metric: 'Score: 5.9' },
+  ];
+  return seeds.map(s => `
+    <div class="iter-card">
+      <div class="iter-card-header">
+        <span class="iter-card-num">${s.num}</span>
+        <span class="iter-card-badge ${s.badge}">${s.badge}</span>
+      </div>
+      <div class="iter-card-title">${s.title}</div>
+      <div class="iter-card-metric">${s.metric}</div>
+    </div>`).join('');
+}
+
+function renderReviewHypoContent() {
+  return `
+    <div class="detail-section">
+      <div class="detail-section-title">Review Progress</div>
+      <div class="iter-grid">
+        ${reviewCards()}
+      </div>
+    </div>
+    <div class="detail-section">
+      <div class="detail-section-title">Literature Grounding</div>
+      <div class="progress-bar"><div class="progress-fill accent" style="width: 45%"></div></div>
+      <div style="margin-top: 6px; font-size: 0.68rem; color: var(--text-400);">3 of 6 hypotheses grounded against reference literature</div>
+    </div>
+    <div class="detail-section">
+      <div class="detail-section-title">Activity Log</div>
+      <div class="log-entries">
+        ${logEntry('14:24', 'Starting novelty check for <span class="highlight">6 hypotheses</span>')}
+        ${logEntry('14:25', 'All 6 passed novelty filter')}
+        ${logEntry('14:27', 'Feasibility analysis complete. Avg score: <span class="highlight">7.2 / 10</span>')}
+        ${logEntry('14:29', 'Literature grounding: <span class="warn">H-5</span> has weak citations')}
+        ${logEntry('14:30', 'Grounded <span class="success">3 / 6</span> hypotheses so far')}
+        ${logEntry('14:31', 'Processing H-4 literature search...')}
+      </div>
+    </div>`;
+}
+
+function reviewCards() {
+  const items = [
+    { num: 'H-1', title: 'SSL with Sparse Pseudo-Labels', badge: 'pass', metric: 'Novelty: 9.1 | Feasibility: 8.0' },
+    { num: 'H-2', title: 'Contrastive Pretraining for Low-Resource NLP', badge: 'pass', metric: 'Novelty: 8.3 | Feasibility: 7.5' },
+    { num: 'H-3', title: 'Data Augmentation via Retrieval Mixing', badge: 'pass', metric: 'Novelty: 7.8 | Feasibility: 7.1' },
+    { num: 'H-4', title: 'Curriculum Learning for Noisy Labels', badge: 'active', metric: 'Novelty: 6.9 | Grounding...' },
+    { num: 'H-5', title: 'Meta-Learning Feature Reweighting', badge: 'fail', metric: 'Novelty: 5.4 | Weak support' },
+    { num: 'H-6', title: 'Graph-Augmented Few-Shot Transfer', badge: 'active', metric: 'Novelty: 6.1 | Pending...' },
+  ];
+  return items.map(s => `
+    <div class="iter-card">
+      <div class="iter-card-header">
+        <span class="iter-card-num">${s.num}</span>
+        <span class="iter-card-badge ${s.badge}">${s.badge === 'active' ? 'active' : s.badge}</span>
+      </div>
+      <div class="iter-card-title">${s.title}</div>
+      <div class="iter-card-metric">${s.metric}</div>
+    </div>`).join('');
+}
+
+function renderGenPlanContent() {
+  return `
+    <div class="detail-section">
+      <div class="detail-section-title">Plan Generation</div>
+      <div style="padding: 30px; text-align: center; color: var(--text-400); font-size: 0.78rem;">
+        Waiting for hypothesis review to complete before generating plans.
+      </div>
+    </div>`;
+}
+
+function renderGenPaperContent() {
+  return `
+    <div class="detail-section">
+      <div class="detail-section-title">Paper Text Generation</div>
+      <div style="padding: 30px; text-align: center; color: var(--text-400); font-size: 0.78rem;">
+        Queued. Plans must be generated first.
+      </div>
+    </div>`;
+}
+
+function renderGenRepoContent() {
+  return `
+    <div class="detail-section">
+      <div class="detail-section-title">Repository Generation</div>
+      <div style="padding: 30px; text-align: center; color: var(--text-400); font-size: 0.78rem;">
+        Queued. Paper text generation must complete first.
+      </div>
+    </div>`;
+}
+
+function logEntry(time, msg) {
+  return `<div class="log-entry">
+    <span class="log-time">${time}</span>
+    <span class="log-msg">${msg}</span>
+  </div>`;
+}
+
+/* ================================================================
+   BACKGROUND PARTICLE SYSTEM (main area)
+   ================================================================ */
+function initMainParticles() {
+  const canvas = document.getElementById('particleCanvas');
+  const ctx = canvas.getContext('2d');
+  const mainArea = canvas.parentElement;
+  let particles = [];
+  const COUNT = 40;
+
+  function resize() {
+    canvas.width = mainArea.clientWidth;
+    canvas.height = mainArea.clientHeight;
+  }
+
+  function createParticle() {
+    return {
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height,
+      vx: (Math.random() - 0.5) * 0.15,
+      vy: (Math.random() - 0.5) * 0.15,
+      r: Math.random() * 1.2 + 0.4,
+      opacity: Math.random() * 0.25 + 0.05,
+      life: Math.random() * 400 + 200,
+      maxLife: 600,
+    };
+  }
+
+  function init() {
+    resize();
+    for (let i = 0; i < COUNT; i++) {
+      particles.push(createParticle());
+    }
+  }
+
+  function animate() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    particles.forEach((p, i) => {
+      p.x += p.vx;
+      p.y += p.vy;
+      p.life--;
+
+      if (p.life <= 0 || p.x < -10 || p.x > canvas.width + 10 ||
+          p.y < -10 || p.y > canvas.height + 10) {
+        particles[i] = createParticle();
+        return;
+      }
+
+      const fadeIn = Math.min(p.life / 50, 1);
+      const fadeOut = Math.min((p.maxLife - (p.maxLife - p.life)) / 100, 1);
+      const alpha = p.opacity * Math.min(fadeIn, fadeOut);
+
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(91, 138, 245, ${alpha})`;
+      ctx.fill();
+    });
+
+    // Draw faint connections
+    for (let i = 0; i < particles.length; i++) {
+      for (let j = i + 1; j < particles.length; j++) {
+        const dx = particles[i].x - particles[j].x;
+        const dy = particles[i].y - particles[j].y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 120) {
+          const alpha = (1 - dist / 120) * 0.04;
+          ctx.beginPath();
+          ctx.moveTo(particles[i].x, particles[i].y);
+          ctx.lineTo(particles[j].x, particles[j].y);
+          ctx.strokeStyle = `rgba(91, 138, 245, ${alpha})`;
+          ctx.lineWidth = 0.5;
+          ctx.stroke();
+        }
+      }
+    }
+
+    requestAnimationFrame(animate);
+  }
+
+  window.addEventListener('resize', resize);
+  init();
+  animate();
+}
+
+/* ================================================================
+   TREE PATH PARTICLE SYSTEM (sidebar)
+   ================================================================ */
+function initTreeParticles() {
+  const scrollEl = document.getElementById('treeScroll');
+  const canvas = document.getElementById('treeParticleCanvas');
+  const ctx = canvas.getContext('2d');
+  let particles = [];
+  const COUNT = 18;
+
+  function resize() {
+    canvas.width = scrollEl.clientWidth;
+    canvas.height = scrollEl.scrollHeight;
+  }
+
+  function createParticle() {
+    // Particles travel along the trunk line
+    const trunkX = 28; // trunk offset
+    return {
+      x: trunkX + (Math.random() - 0.5) * 6,
+      y: Math.random() * canvas.height * 0.3, // start in top portion
+      vy: Math.random() * 0.6 + 0.3,
+      vx: (Math.random() - 0.5) * 0.2,
+      r: Math.random() * 1.5 + 0.5,
+      opacity: Math.random() * 0.4 + 0.1,
+      life: 300 + Math.random() * 200,
+      maxLife: 500,
+    };
+  }
+
+  function init() {
+    resize();
+    for (let i = 0; i < COUNT; i++) {
+      const p = createParticle();
+      p.y = Math.random() * canvas.height; // distribute initially
+      particles.push(p);
+    }
+  }
+
+  function animate() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    particles.forEach((p, i) => {
+      p.x += p.vx;
+      p.y += p.vy;
+      p.life--;
+
+      if (p.life <= 0 || p.y > canvas.height + 10) {
+        particles[i] = createParticle();
+        return;
+      }
+
+      const fadeIn = Math.min((p.maxLife - p.life) / 40, 1);
+      const fadeOut = Math.min(p.life / 60, 1);
+      const alpha = p.opacity * Math.min(fadeIn, fadeOut);
+
+      // Glow
+      const gradient = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r * 3);
+      gradient.addColorStop(0, `rgba(91, 138, 245, ${alpha})`);
+      gradient.addColorStop(1, `rgba(91, 138, 245, 0)`);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r * 3, 0, Math.PI * 2);
+      ctx.fillStyle = gradient;
+      ctx.fill();
+
+      // Core
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(91, 138, 245, ${alpha * 1.5})`;
+      ctx.fill();
+    });
+
+    requestAnimationFrame(animate);
+  }
+
+  // Re-observe scrollHeight changes
+  const observer = new ResizeObserver(() => resize());
+  observer.observe(scrollEl);
+
+  init();
+  animate();
+}
+
+/* ================================================================
+   ELAPSED TIMER SIMULATION
+   ================================================================ */
+function initElapsedTimer() {
+  let seconds = 14 * 60 + 32;
+  const el = document.getElementById('elapsedTime');
+
+  setInterval(() => {
+    seconds++;
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    el.textContent = `${m}m ${s.toString().padStart(2, '0')}s`;
+  }, 1000);
+}
+
+/* ================================================================
+   PROGRESS SIMULATION
+   ================================================================ */
+function initProgressSim() {
+  const litGrounding = MODULES.find(m => m.id === 'review_hypo').subs.find(s => s.id === 'lit_grounding');
+  const reviewMod = MODULES.find(m => m.id === 'review_hypo');
+
+  let tick = 0;
+  setInterval(() => {
+    tick++;
+
+    // Slowly increment lit_grounding
+    if (litGrounding.pct < 100) {
+      litGrounding.pct = Math.min(100, litGrounding.pct + 0.35);
+      if (litGrounding.pct >= 100) {
+        litGrounding.status = 'done';
+        litGrounding.detail = '6 / 6 grounded';
+      } else {
+        const grounded = Math.floor((litGrounding.pct / 100) * 6);
+        litGrounding.detail = `${grounded} / 6 grounded`;
+      }
+    }
+
+    // Update review_hypo pct
+    const reviewSubs = reviewMod.subs;
+    const reviewTotalPct = reviewSubs.reduce((acc, s) => acc + s.pct, 0) / reviewSubs.length;
+    reviewMod.pct = Math.round(reviewTotalPct);
+
+    // Update metric
+    const reviewDone = reviewSubs.filter(s => s.status === 'done').length;
+    const total = reviewSubs.length;
+    reviewMod.metric = `${reviewDone + (litGrounding.status === 'done' ? 0 : 0)} / ${total}`;
+
+    // Once lit_grounding is done, start final_filter
+    if (litGrounding.status === 'done') {
+      const finalFilter = reviewSubs.find(s => s.id === 'final_filter');
+      if (finalFilter.pct < 100) {
+        if (finalFilter.status === 'pending') {
+          finalFilter.status = 'running';
+        }
+        finalFilter.pct = Math.min(100, finalFilter.pct + 0.5);
+        if (finalFilter.pct >= 100) {
+          finalFilter.status = 'done';
+          finalFilter.detail = '4 / 6 passed';
+          reviewMod.status = 'done';
+          reviewMod.metric = '4 / 4';
+        } else {
+          finalFilter.detail = 'Filtering...';
+        }
+      }
+    }
+
+    // Once review is done, start gen_plan
+    if (reviewMod.status === 'done') {
+      const genPlan = MODULES.find(m => m.id === 'gen_plan');
+      if (genPlan.status === 'pending') {
+        genPlan.status = 'running';
+        genPlan.subs.forEach(s => { s.status = 'pending'; });
+        genPlan.subs[0].status = 'running';
+        genPlan.subs[0].pct = 0;
+        activeModuleId = 'gen_plan';
+        expandedModuleId = 'gen_plan';
+        document.getElementById('phaseName').textContent = 'Invention Loop';
+      }
+      if (genPlan.status === 'running') {
+        const outline = genPlan.subs.find(s => s.id === 'outline_plan');
+        if (outline.pct < 100) {
+          outline.pct = Math.min(100, outline.pct + 0.4);
+          outline.detail = `${Math.round(outline.pct)}%`;
+          if (outline.pct >= 100) {
+            outline.status = 'done';
+            outline.detail = '4 outlines';
+          }
+        } else {
+          const method = genPlan.subs.find(s => s.id === 'method_plan');
+          if (method.status === 'pending') { method.status = 'running'; }
+          if (method.pct < 100) {
+            method.pct = Math.min(100, method.pct + 0.35);
+            method.detail = `${Math.round(method.pct)}%`;
+            if (method.pct >= 100) {
+              method.status = 'done';
+              method.detail = '4 methods';
+              genPlan.status = 'done';
+              genPlan.metric = '4 / 4';
+            }
+          }
+        }
+        const planSubs = genPlan.subs;
+        genPlan.pct = Math.round(planSubs.reduce((a, s) => a + s.pct, 0) / planSubs.length);
+        genPlan.metric = `${planSubs.filter(s => s.status === 'done').length} / ${planSubs.length}`;
+      }
+    }
+
+    // Compute overall
+    const overallPct = Math.round(MODULES.reduce((a, m) => a + m.pct, 0) / MODULES.length);
+    updateMainRing(overallPct);
+
+    // Rebuild tree if active module is in sidebar
+    buildTree();
+    if (activeModuleId) {
+      renderContent(activeModuleId);
+      const mod = MODULES.find(m => m.id === activeModuleId);
+      if (mod) updateTopbar(mod.name);
+    }
+  }, 600);
+}
+
+/* ================================================================
+   INIT
+   ================================================================ */
+document.addEventListener('DOMContentLoaded', () => {
+  buildTree();
+  updateMainRing(40);
+  renderContent('review_hypo');
+  initMainParticles();
+  initTreeParticles();
+  initElapsedTimer();
+  initProgressSim();
+});
+</script>
+</body>
+</html>

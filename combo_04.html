@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Combo 04: Sidebar + Dot Rows</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0c0e14; --surface: #13161f; --surface-2: #1a1e2a;
+    --border: #262b3a; --text: #d4d8e8; --text-dim: #6b7394;
+    --accent: #7c6aef; --green: #4ae08c; --amber: #e8b84a;
+    --cyan: #5ac8e8; --sidebar-w: 70px;
+  }
+  html, body {
+    height: 100%;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg); color: var(--text); overflow: hidden;
+  }
+
+  /* ── Shell ─────────────────────────────────────────── */
+  .app { display: flex; height: 100vh; width: 100vw; }
+
+  /* ── Sidebar ───────────────────────────────────────── */
+  .sidebar {
+    width: var(--sidebar-w); min-width: var(--sidebar-w); height: 100vh;
+    background: var(--surface); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; align-items: center;
+    padding-top: 18px; z-index: 10;
+  }
+  .ring-wrap {
+    width: 100px; height: 100px; position: relative;
+    margin-bottom: 24px; flex-shrink: 0;
+  }
+  .ring-wrap svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .ring-track { fill: none; stroke: var(--border); stroke-width: 5; }
+  .ring-fill {
+    fill: none; stroke: url(#ringGrad); stroke-width: 5;
+    stroke-linecap: round; stroke-dasharray: 276.46;
+    stroke-dashoffset: 96.76;
+    transition: stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .ring-label {
+    position: absolute; inset: 0; display: flex;
+    flex-direction: column; align-items: center;
+    justify-content: center; pointer-events: none;
+  }
+  .ring-pct { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; line-height: 1; }
+  .ring-sub {
+    font-size: 9px; text-transform: uppercase;
+    letter-spacing: 1px; color: var(--text-dim); margin-top: 3px;
+  }
+
+  /* ── Diamonds ──────────────────────────────────────── */
+  .diamond-stack {
+    display: flex; flex-direction: column;
+    align-items: center; gap: 20px; padding-top: 6px;
+  }
+  .diamond {
+    width: 16px; height: 16px; position: relative;
+    cursor: pointer; transition: transform 0.2s ease;
+  }
+  .diamond:hover { transform: scale(1.25); }
+  .diamond-shape {
+    width: 16px; height: 16px; transform: rotate(45deg);
+    border-radius: 2px; transition: all 0.3s ease;
+  }
+  .diamond[data-m="hypo"]   .diamond-shape { background: var(--accent); }
+  .diamond[data-m="invent"] .diamond-shape { background: var(--cyan); }
+  .diamond[data-m="paper"]  .diamond-shape { background: var(--green); }
+  .diamond[data-m="review"] .diamond-shape { background: var(--amber); }
+
+  .diamond.active .diamond-shape { filter: drop-shadow(0 0 8px currentColor); }
+  .diamond[data-m="hypo"].active   .diamond-shape { box-shadow: 0 0 14px 4px rgba(124,106,239,.5); }
+  .diamond[data-m="invent"].active .diamond-shape { box-shadow: 0 0 14px 4px rgba(90,200,232,.5); }
+  .diamond[data-m="paper"].active  .diamond-shape { box-shadow: 0 0 14px 4px rgba(74,224,140,.5); }
+  .diamond[data-m="review"].active .diamond-shape { box-shadow: 0 0 14px 4px rgba(232,184,74,.5); }
+
+  .diamond-tip {
+    position: absolute; left: calc(100% + 10px); top: 50%;
+    transform: translateY(-50%); font-size: 11px; color: var(--text);
+    background: var(--surface-2); border: 1px solid var(--border);
+    padding: 3px 8px; border-radius: 4px; white-space: nowrap;
+    opacity: 0; pointer-events: none; transition: opacity 0.2s;
+  }
+  .diamond:hover .diamond-tip { opacity: 1; }
+
+  /* ── Main Panel ────────────────────────────────────── */
+  .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+
+  /* ── Dot Rows ──────────────────────────────────────── */
+  .dot-rows {
+    flex-shrink: 0; background: var(--surface);
+    border-bottom: 1px solid var(--border); padding: 0 28px;
+  }
+  .dot-row {
+    display: flex; align-items: center; height: 38px;
+    overflow: hidden; transition: height 0.35s ease, opacity 0.3s ease;
+  }
+  .dot-row.collapsed { height: 0; opacity: 0; pointer-events: none; }
+  .dot-row + .dot-row:not(.collapsed) { border-top: 1px solid var(--border); }
+  .dot-row-label {
+    font-size: 10px; text-transform: uppercase;
+    letter-spacing: 1.2px; color: var(--text-dim);
+    min-width: 70px; flex-shrink: 0;
+  }
+  .dot-row-items { display: flex; align-items: center; gap: 4px; }
+
+  /* ── Dots ──────────────────────────────────────────── */
+  .dot-item { display: flex; align-items: center; cursor: pointer; position: relative; }
+  .dot-c {
+    width: 10px; height: 10px; border-radius: 50%;
+    border: 2px solid var(--border); background: transparent;
+    transition: all 0.3s ease; flex-shrink: 0; z-index: 1;
+  }
+  .dot-item.done .dot-c    { background: var(--accent); border-color: var(--accent); }
+  .dot-item.active .dot-c  { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 10px 3px rgba(124,106,239,.45); }
+  .dot-item.pending .dot-c { background: transparent; border-color: var(--border); }
+  .dot-conn {
+    width: 22px; height: 2px; background: var(--border);
+    flex-shrink: 0; transition: background 0.3s ease; margin-right: -1px;
+  }
+  .dot-item:first-child .dot-conn { display: none; }
+  .dot-item.done .dot-conn, .dot-item.active .dot-conn { background: var(--accent); }
+  .dot-name {
+    position: absolute; top: calc(100% + 2px); left: 50%;
+    transform: translateX(-50%); font-size: 9px; color: var(--text-dim);
+    white-space: nowrap; opacity: 0; transition: opacity 0.2s; pointer-events: none;
+  }
+  .dot-item:hover .dot-name, .dot-item.active .dot-name { opacity: 1; }
+  .dot-item.active .dot-name { color: var(--accent); font-weight: 600; }
+
+  /* Accent overrides per row color */
+  .dot-row[data-a="cyan"]  .dot-item.done   .dot-c { background: var(--cyan);  border-color: var(--cyan); }
+  .dot-row[data-a="cyan"]  .dot-item.active .dot-c { background: var(--cyan);  border-color: var(--cyan); box-shadow: 0 0 10px 3px rgba(90,200,232,.45); }
+  .dot-row[data-a="cyan"]  .dot-item.done   .dot-conn,
+  .dot-row[data-a="cyan"]  .dot-item.active .dot-conn { background: var(--cyan); }
+  .dot-row[data-a="cyan"]  .dot-item.active .dot-name { color: var(--cyan); }
+  .dot-row[data-a="green"] .dot-item.done   .dot-c { background: var(--green); border-color: var(--green); }
+  .dot-row[data-a="green"] .dot-item.active .dot-c { background: var(--green); border-color: var(--green); box-shadow: 0 0 10px 3px rgba(74,224,140,.45); }
+  .dot-row[data-a="green"] .dot-item.done   .dot-conn,
+  .dot-row[data-a="green"] .dot-item.active .dot-conn { background: var(--green); }
+  .dot-row[data-a="green"] .dot-item.active .dot-name { color: var(--green); }
+  .dot-row[data-a="amber"] .dot-item.done   .dot-c { background: var(--amber); border-color: var(--amber); }
+  .dot-row[data-a="amber"] .dot-item.active .dot-c { background: var(--amber); border-color: var(--amber); box-shadow: 0 0 10px 3px rgba(232,184,74,.45); }
+  .dot-row[data-a="amber"] .dot-item.done   .dot-conn,
+  .dot-row[data-a="amber"] .dot-item.active .dot-conn { background: var(--amber); }
+  .dot-row[data-a="amber"] .dot-item.active .dot-name { color: var(--amber); }
+
+  /* ── Content ───────────────────────────────────────── */
+  .content-scroll { flex: 1; overflow-y: auto; padding: 28px 32px 40px; }
+  .content-scroll::-webkit-scrollbar { width: 5px; }
+  .content-scroll::-webkit-scrollbar-track { background: transparent; }
+  .content-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  .content-wrap { max-width: 650px; animation: fadeSlide 0.35s ease forwards; }
+  @keyframes fadeSlide {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── Content Header ────────────────────────────────── */
+  .content-header { margin-bottom: 24px; }
+  .content-header h2 { font-size: 18px; font-weight: 600; margin-bottom: 4px; }
+  .breadcrumb { font-size: 11px; color: var(--text-dim); letter-spacing: 0.5px; }
+  .bc-sep { margin: 0 5px; opacity: 0.4; }
+
+  /* ── Cards ─────────────────────────────────────────── */
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 20px 22px; margin-bottom: 16px;
+    transition: border-color 0.25s ease;
+  }
+  .card:hover { border-color: #363d54; }
+  .card-title {
+    font-size: 13px; font-weight: 600; margin-bottom: 10px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .badge {
+    font-size: 9px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.8px; padding: 2px 7px; border-radius: 3px;
+    background: rgba(124,106,239,.15); color: var(--accent);
+  }
+  .badge.done    { background: rgba(74,224,140,.12); color: var(--green); }
+  .badge.running { background: rgba(90,200,232,.12); color: var(--cyan); animation: pulse 2s ease-in-out infinite; }
+  .badge.pending { background: rgba(107,115,148,.12); color: var(--text-dim); }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+  .card-body { font-size: 13px; line-height: 1.65; color: var(--text-dim); }
+  .card-body p + p { margin-top: 8px; }
+  .card-meta {
+    display: flex; gap: 16px; margin-top: 12px;
+    padding-top: 10px; border-top: 1px solid var(--border);
+  }
+  .meta-item { font-size: 11px; color: var(--text-dim); display: flex; align-items: center; gap: 4px; }
+  .meta-item .val { color: var(--text); font-weight: 500; }
+
+  /* ── Stat Row ──────────────────────────────────────── */
+  .stat-row { display: flex; gap: 12px; margin-bottom: 20px; }
+  .stat-box {
+    flex: 1; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 6px; padding: 14px 16px; text-align: center;
+  }
+  .stat-val { font-size: 20px; font-weight: 700; line-height: 1; }
+  .stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-dim); margin-top: 5px; }
+
+  /* ── Code Block ────────────────────────────────────── */
+  .code-block {
+    background: #0a0c12; border: 1px solid var(--border); border-radius: 6px;
+    padding: 14px 16px; font-family: 'JetBrains Mono', monospace;
+    font-size: 12px; line-height: 1.6; color: var(--text-dim);
+    overflow-x: auto; margin: 10px 0;
+  }
+  .code-block .kw  { color: var(--accent); }
+  .code-block .str { color: var(--green); }
+  .code-block .num { color: var(--amber); }
+  .code-block .cmt { color: #4a4f6a; }
+
+  /* ── Mini Bar ──────────────────────────────────────── */
+  .mini-bar { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; margin-top: 10px; }
+  .mini-bar-fill { height: 100%; border-radius: 2px; transition: width 0.6s cubic-bezier(0.4,0,0.2,1); }
+  .mini-bar-fill.cyan  { background: var(--cyan); }
+  .mini-bar-fill.green { background: var(--green); }
+
+  /* ── Focus Ring ────────────────────────────────────── */
+  .focus-ring { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+
+  /* ── Nav Hint ──────────────────────────────────────── */
+  .nav-hint {
+    position: fixed; bottom: 14px; right: 18px; font-size: 10px;
+    color: var(--text-dim); background: var(--surface);
+    border: 1px solid var(--border); border-radius: 5px;
+    padding: 6px 12px; display: flex; gap: 12px; z-index: 20; opacity: 0.7;
+  }
+  .nav-hint:hover { opacity: 1; }
+  .nav-hint kbd {
+    display: inline-block; background: var(--surface-2);
+    border: 1px solid var(--border); border-radius: 3px;
+    padding: 1px 5px; font-size: 10px; font-family: inherit;
+    color: var(--text); margin: 0 2px;
+  }
+  .ring-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+</style>
+</head>
+<body>
+
+<svg class="ring-defs" aria-hidden="true">
+  <defs>
+    <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7c6aef"/><stop offset="100%" stop-color="#6aefb8"/>
+    </linearGradient>
+  </defs>
+</svg>
+
+<div class="app">
+  <!-- ── SIDEBAR ─────────────────────────────────────── -->
+  <aside class="sidebar" role="navigation" aria-label="Module selector">
+    <div class="ring-wrap">
+      <svg viewBox="0 0 100 100" aria-hidden="true">
+        <circle class="ring-track" cx="50" cy="50" r="44"/>
+        <circle class="ring-fill"  cx="50" cy="50" r="44"/>
+      </svg>
+      <div class="ring-label">
+        <span class="ring-pct" id="ringPct">65%</span>
+        <span class="ring-sub">Overall</span>
+      </div>
+    </div>
+    <div class="diamond-stack" id="diamondStack"></div>
+  </aside>
+
+  <!-- ── MAIN ────────────────────────────────────────── -->
+  <div class="main">
+    <div class="dot-rows" id="dotRows">
+      <div class="dot-row" id="dotRow1" data-a="" role="tablist" aria-label="Sub-modules">
+        <span class="dot-row-label">Steps</span>
+        <div class="dot-row-items" id="row1Items"></div>
+      </div>
+      <div class="dot-row collapsed" id="dotRow2" data-a="" role="tablist" aria-label="Detail items">
+        <span class="dot-row-label">Items</span>
+        <div class="dot-row-items" id="row2Items"></div>
+      </div>
+    </div>
+    <div class="content-scroll">
+      <div class="content-wrap" id="contentWrap"></div>
+    </div>
+  </div>
+</div>
+
+<div class="nav-hint">
+  <span><kbd>Up</kbd><kbd>Down</kbd> Modules</span>
+  <span><kbd>Left</kbd><kbd>Right</kbd> Steps</span>
+  <span><kbd>Enter</kbd> Drill in</span>
+  <span><kbd>Esc</kbd> Back up</span>
+</div>
+
+<script>
+// ═════════════════════════════════════════════════════════
+//  DATA
+// ═════════════════════════════════════════════════════════
+const M = [
+  { id:'hypo', label:'Hypothesis', accent:'', progress:100,
+    steps: [
+      {id:'seed',name:'Seed',s:'done'}, {id:'gen',name:'Gen',s:'done'},
+      {id:'review',name:'Review',s:'done'}, {id:'refine',name:'Refine',s:'done'}
+    ],
+    details: {},
+    content: {
+      seed:   ['Seed Hypotheses','done','Extracted 12 seed hypotheses from the research knowledge graph. Topics span attention mechanisms, sparse routing, and contrastive pre-training.',[['Sources','47'],['Seeds','12']]],
+      gen:    ['Generate Hypotheses','done','Expanded seeds into 36 candidate hypotheses with supporting rationale and expected outcomes.',[['Candidates','36'],['Avg length','280 tok']]],
+      review: ['Review Hypotheses','done','Scored each hypothesis on novelty, feasibility, and impact. Top 8 passed threshold (>0.72).',[['Passed','8/36'],['Threshold','0.72']]],
+      refine: ['Refine Hypotheses','done','Refined the top 8 hypotheses with additional literature grounding. Final set locked.',[['Final set','8'],['Iterations','2']]]
+    },
+    detailContent: {}
+  },
+  { id:'invent', label:'Invention', accent:'cyan', progress:55,
+    steps: [
+      {id:'strat',name:'Strat',s:'done'}, {id:'plan',name:'Plan',s:'done'},
+      {id:'art',name:'Art',s:'active'}, {id:'paper',name:'Paper',s:'pending'},
+      {id:'rev',name:'Review',s:'pending'}, {id:'upd',name:'Upd',s:'pending'}
+    ],
+    details: {
+      art: [
+        {id:'baseline',name:'Baseline',s:'done'}, {id:'dataset',name:'Dataset',s:'done'},
+        {id:'proof',name:'Proof',s:'done'}, {id:'ablation',name:'Ablation',s:'active'},
+        {id:'eval',name:'Eval',s:'pending'}
+      ]
+    },
+    content: {
+      strat: ['Strategy Selection','done','Evaluated 4 invention strategies. Selected "Compositional Sparse Routing" for best novelty/risk balance.',[['Strategies','4'],['Selected','CSR']],'code',`<span class="cmt"># Selected strategy</span>\nstrategy = <span class="str">"compositional_sparse_routing"</span>\nconfidence = <span class="num">0.87</span>`],
+      plan:  ['Execution Plan','done','Generated a 6-artifact plan with dependency graph. Estimated 45 min total generation time.',[['Artifacts','6'],['Est. time','45 min']],'bar',['cyan','100']],
+      art:   'artifact-summary',
+      paper: ['Paper Text','pending','Waiting for artifact generation to complete before synthesizing paper sections.',[['Status','Blocked'],['Sections','5']]],
+      rev:   ['Review','pending','Automated review will check logical consistency, citation coverage, and novelty claims.',[['Checks','12'],['Status','Queued']]],
+      upd:   ['Update','pending','Post-review revision pass. Addresses reviewer feedback and strengthens weak sections.',[['Status','Queued']]]
+    },
+    detailContent: {
+      baseline: ['Baseline Implementation','done','Reproduced transformer baseline with standard dense routing. Perplexity: 24.3 on validation set.',[['Perplexity','24.3'],['Params','125M']],'code',`model = <span class="kw">TransformerLM</span>(\n    layers=<span class="num">12</span>, d_model=<span class="num">768</span>,\n    routing=<span class="str">"dense"</span>\n)\n<span class="cmt"># val_ppl: 24.3</span>`],
+      dataset:  ['Dataset Preparation','done','Curated evaluation corpus: 50k examples across 4 domains. Applied deduplication and quality filtering.',[['Examples','50k'],['Domains','4']]],
+      proof:    ['Proof of Concept','done','Sparse routing prototype achieves 18.7 perplexity with 40% fewer active parameters per token.',[['Perplexity','18.7'],['Active params','60%']],'bar',['cyan','100']],
+      ablation: ['Ablation Study','running','Running ablation over routing granularity (2, 4, 8, 16 experts). 3 of 5 configurations complete.',[['Configs','3/5'],['ETA','~12 min']],'bar',['cyan','60']],
+      eval:     ['Evaluation Suite','pending','Full evaluation on held-out test set and downstream tasks. Waiting for ablation results.',[['Tasks','6'],['Status','Blocked']]]
+    }
+  },
+  { id:'paper', label:'Paper', accent:'green', progress:20,
+    steps: [
+      {id:'outline',name:'Outline',s:'done'}, {id:'figs',name:'Figs',s:'active'},
+      {id:'draft',name:'Draft',s:'pending'}, {id:'refs',name:'Refs',s:'pending'},
+      {id:'final',name:'Final',s:'pending'}
+    ],
+    details: {
+      figs: [
+        {id:'arch',name:'Arch Diag',s:'done'}, {id:'routing',name:'Route Viz',s:'active'},
+        {id:'perf',name:'Perf Chart',s:'pending'}, {id:'ablate',name:'Ablation Tbl',s:'pending'}
+      ]
+    },
+    content: {
+      outline: ['Paper Outline','done','5-section outline with subsection breakdown. Follows standard ML paper structure.',[['Sections','5'],['Words est.','~6k']],'code',`<span class="num">1.</span> Introduction\n<span class="num">2.</span> Related Work\n<span class="num">3.</span> Method\n<span class="num">4.</span> Experiments\n<span class="num">5.</span> Conclusion`],
+      figs:    'fig-summary',
+      draft:   ['Draft Assembly','pending','Combine text, figures, and tables into LaTeX draft. Auto-generates cross-references.',[['Status','Queued']]],
+      refs:    ['Reference Check','pending','Verify all citations, check formatting, ensure bibliography completeness.',[['Status','Queued']]],
+      final:   ['Final PDF','pending','Compile LaTeX, generate final PDF with supplementary materials and appendices.',[['Status','Queued']]]
+    },
+    detailContent: {
+      arch:    ['Architecture Diagram','done','Generated SVG architecture diagram showing sparse routing paths through the transformer stack.',[['Format','SVG'],['Size','840x560']]],
+      routing: ['Routing Visualization','running','Generating interactive routing heatmap. Shows expert activation patterns per input token.',[['Type','Heatmap'],['ETA','~5 min']],'bar',['green','40']],
+      perf:    ['Performance Chart','pending','Bar chart comparing perplexity across model variants. Needs ablation results.',[['Status','Blocked']]],
+      ablate:  ['Ablation Table','pending','LaTeX table summarizing ablation study results. Auto-generated from experiment logs.',[['Status','Blocked']]]
+    }
+  },
+  { id:'review', label:'Review', accent:'amber', progress:0,
+    steps: [
+      {id:'auto',name:'Auto',s:'pending'}, {id:'logic',name:'Logic',s:'pending'},
+      {id:'novel',name:'Novel',s:'pending'}, {id:'final',name:'Final',s:'pending'}
+    ],
+    details: {},
+    content: {
+      auto:  ['Automated Review','pending','LLM-based review checking structure, claims, and logical consistency. Runs 3 independent reviewers.',[['Reviewers','3'],['Status','Queued']]],
+      logic: ['Logic Check','pending','Verify that experimental results support all claims. Flag unsupported or overstated conclusions.',[['Status','Queued']]],
+      novel: ['Novelty Assessment','pending','Compare against recent literature to verify novelty claims. Check for prior art overlap.',[['Status','Queued']]],
+      final: ['Final Verdict','pending','Aggregate reviewer scores into accept/revise/reject recommendation with itemized feedback.',[['Status','Queued']]]
+    },
+    detailContent: {}
+  }
+];
+
+// ═════════════════════════════════════════════════════════
+//  HTML BUILDERS
+// ═════════════════════════════════════════════════════════
+function card(title, status, body, meta, extra) {
+  const bc = status === 'running' ? 'running' : status === 'done' ? 'done' : 'pending';
+  const bl = bc === 'running' ? 'Running' : bc === 'done' ? 'Complete' : 'Pending';
+  let mh = '';
+  if (meta && meta.length) {
+    mh = '<div class="card-meta">' +
+      meta.map(([k,v]) => `<span class="meta-item">${k}: <span class="val">${v}</span></span>`).join('') +
+      '</div>';
+  }
+  return `<div class="card"><div class="card-title">${title}<span class="badge ${bc}">${bl}</span></div><div class="card-body"><p>${body}</p>${extra||''}${mh}</div></div>`;
+}
+
+function codeBlock(c) { return `<div class="code-block">${c}</div>`; }
+function miniBar(color, pct) { return `<div class="mini-bar"><div class="mini-bar-fill ${color}" style="width:${pct}%"></div></div>`; }
+
+function statRow(items) {
+  return '<div class="stat-row">' + items.map(([val,label,color]) =>
+    `<div class="stat-box"><div class="stat-val"${color ? ` style="color:var(--${color})"` : ''}>${val}</div><div class="stat-label">${label}</div></div>`
+  ).join('') + '</div>';
+}
+
+function renderData(d) {
+  if (typeof d === 'string' && d === 'artifact-summary') {
+    return statRow([['3<span style="font-size:13px;color:var(--text-dim)">/5</span>','Complete',''],['1','Running','cyan'],['1','Queued','text-dim']]) +
+      card('Artifact Generation','running','Generating experimental artifacts for the compositional sparse routing invention. The ablation study is currently running. Select an item in the detail row above to see individual artifact status.',
+        [['Progress','60%'],['Active','Ablation']], miniBar('cyan','60'));
+  }
+  if (typeof d === 'string' && d === 'fig-summary') {
+    return statRow([['1<span style="font-size:13px;color:var(--text-dim)">/4</span>','Complete',''],['1','Running','green'],['2','Queued','text-dim']]) +
+      card('Figure Generation','running','Generating figures and tables for the paper. Architecture diagram is complete; routing visualization is in progress.',
+        [['Progress','30%'],['Active','Route Viz']], miniBar('green','30'));
+  }
+  if (!Array.isArray(d)) return '';
+  const [title, status, body, meta, extraType, extraVal] = d;
+  let extra = '';
+  if (extraType === 'code') extra = codeBlock(extraVal);
+  else if (extraType === 'bar') extra = miniBar(extraVal[0], extraVal[1]);
+  return card(title, status, body, meta, extra);
+}
+
+// ═════════════════════════════════════════════════════════
+//  STATE
+// ═════════════════════════════════════════════════════════
+let S = { mi: 1, si: 2, di: 3, focus: 2, showDet: true };
+
+// ═════════════════════════════════════════════════════════
+//  DOM REFERENCES
+// ═════════════════════════════════════════════════════════
+const $row1 = document.getElementById('row1Items');
+const $row2 = document.getElementById('row2Items');
+const $dr1  = document.getElementById('dotRow1');
+const $dr2  = document.getElementById('dotRow2');
+const $cw   = document.getElementById('contentWrap');
+const $rf   = document.querySelector('.ring-fill');
+const $rp   = document.getElementById('ringPct');
+const $ds   = document.getElementById('diamondStack');
+
+function mod() { return M[S.mi]; }
+
+// ═════════════════════════════════════════════════════════
+//  RENDER DIAMONDS (once)
+// ═════════════════════════════════════════════════════════
+function initDiamonds() {
+  $ds.innerHTML = M.map((m, i) =>
+    `<div class="diamond${i===S.mi?' active':''}" data-m="${m.id}" data-i="${i}" tabindex="0" role="button" aria-label="${m.label} module">
+      <div class="diamond-shape"></div>
+      <span class="diamond-tip">${m.label}</span>
+    </div>`
+  ).join('');
+  $ds.querySelectorAll('.diamond').forEach((d, i) => {
+    d.addEventListener('click', () => { selectModule(i); });
+  });
+}
+
+function selectModule(i) {
+  S.mi = i; S.focus = 0;
+  const m = M[i];
+  const ai = m.steps.findIndex(s => s.s === 'active');
+  S.si = ai >= 0 ? ai : 0;
+  S.di = 0; checkDetail(); render();
+}
+
+// ═════════════════════════════════════════════════════════
+//  RENDER
+// ═════════════════════════════════════════════════════════
+function render() {
+  // Diamonds
+  $ds.querySelectorAll('.diamond').forEach((d, i) => d.classList.toggle('active', i === S.mi));
+
+  // Row 1
+  const m = mod();
+  $dr1.setAttribute('data-a', m.accent);
+  $row1.innerHTML = m.steps.map((s, i) => {
+    const cls = i < S.si ? 'done' : i === S.si ? 'active' : 'pending';
+    const conn = i > 0 ? '<div class="dot-conn"></div>' : '';
+    return `<div class="dot-item ${cls}" data-r="1" data-i="${i}">${conn}<div class="dot-c"></div><span class="dot-name">${s.name}</span></div>`;
+  }).join('');
+  $row1.querySelectorAll('.dot-item').forEach((el, i) => {
+    el.addEventListener('click', () => { S.si = i; S.di = 0; checkDetail(); render(); });
+  });
+
+  // Row 2
+  const stepId = m.steps[S.si]?.id;
+  const dets = m.details?.[stepId];
+  if (!dets || !dets.length) {
+    $dr2.classList.add('collapsed');
+    S.showDet = false;
+  } else {
+    S.showDet = true;
+    $dr2.classList.remove('collapsed');
+    $dr2.setAttribute('data-a', m.accent);
+    if (S.di >= dets.length) S.di = 0;
+    $row2.innerHTML = dets.map((d, i) => {
+      const conn = i > 0 ? '<div class="dot-conn"></div>' : '';
+      return `<div class="dot-item ${d.s}" data-r="2" data-i="${i}">${conn}<div class="dot-c"></div><span class="dot-name">${d.name}</span></div>`;
+    }).join('');
+    $row2.querySelectorAll('.dot-item').forEach((el, i) => {
+      el.addEventListener('click', () => { S.di = i; S.focus = 2; render(); });
+    });
+  }
+
+  // Content
+  const stepName = m.steps[S.si]?.name || '';
+  let bc = `<span>${m.label}</span><span class="bc-sep">/</span><span>${stepName}</span>`;
+  let html = '';
+  if (S.showDet && S.focus === 2 && m.detailContent) {
+    const det = dets?.[S.di];
+    if (det) {
+      bc += `<span class="bc-sep">/</span><span>${det.name}</span>`;
+      html = renderData(m.detailContent[det.id]);
+    }
+  }
+  if (!html) html = renderData(m.content[stepId]);
+  let title = stepName;
+  if (S.showDet && S.focus === 2 && dets?.[S.di]) title = dets[S.di].name;
+
+  $cw.style.animation = 'none'; $cw.offsetHeight; $cw.style.animation = '';
+  $cw.innerHTML = `<div class="content-header"><div class="breadcrumb">${bc}</div><h2>${title}</h2></div>${html}`;
+
+  // Ring
+  const w = [0.15, 0.40, 0.30, 0.15];
+  let tot = 0; M.forEach((mm, i) => tot += (mm.progress / 100) * w[i]);
+  const pct = Math.round(tot * 100);
+  $rf.style.strokeDashoffset = 276.46 * (1 - pct / 100);
+  $rp.textContent = pct + '%';
+
+  // Focus ring
+  document.querySelectorAll('.focus-ring').forEach(el => el.classList.remove('focus-ring'));
+  if (S.focus === 0) {
+    const d = $ds.querySelectorAll('.diamond')[S.mi];
+    if (d) d.classList.add('focus-ring');
+  } else if (S.focus === 1) {
+    const items = $row1.querySelectorAll('.dot-item');
+    if (items[S.si]) items[S.si].classList.add('focus-ring');
+  } else if (S.focus === 2) {
+    const items = $row2.querySelectorAll('.dot-item');
+    if (items[S.di]) items[S.di].classList.add('focus-ring');
+  }
+}
+
+function checkDetail() {
+  const m = mod();
+  const stepId = m.steps[S.si]?.id;
+  const dets = m.details?.[stepId];
+  if (!dets || !dets.length) {
+    S.showDet = false;
+    if (S.focus === 2) S.focus = 1;
+  } else {
+    S.showDet = true;
+    const ai = dets.findIndex(d => d.s === 'active');
+    S.di = ai >= 0 ? ai : 0;
+  }
+}
+
+// ═════════════════════════════════════════════════════════
+//  KEYBOARD NAVIGATION
+// ═════════════════════════════════════════════════════════
+document.addEventListener('keydown', (e) => {
+  const m = mod();
+  switch (e.key) {
+    case 'ArrowUp':
+      e.preventDefault();
+      if (S.focus === 0) { if (S.mi > 0) selectModule(S.mi - 1); }
+      else if (S.focus === 2) S.focus = 1;
+      else if (S.focus === 1) S.focus = 0;
+      render(); break;
+
+    case 'ArrowDown':
+      e.preventDefault();
+      if (S.focus === 0) {
+        if (e.shiftKey) { if (S.mi < M.length - 1) selectModule(S.mi + 1); }
+        else S.focus = 1;
+      } else if (S.focus === 1 && S.showDet) {
+        S.focus = 2;
+      }
+      render(); break;
+
+    case 'ArrowLeft':
+      e.preventDefault();
+      if (S.focus === 1) { S.si = Math.max(0, S.si - 1); S.di = 0; checkDetail(); }
+      else if (S.focus === 2) { const d = m.details?.[m.steps[S.si]?.id]; if (d) S.di = Math.max(0, S.di - 1); }
+      else if (S.focus === 0 && S.mi > 0) selectModule(S.mi - 1);
+      render(); break;
+
+    case 'ArrowRight':
+      e.preventDefault();
+      if (S.focus === 1) { S.si = Math.min(m.steps.length - 1, S.si + 1); S.di = 0; checkDetail(); }
+      else if (S.focus === 2) { const d = m.details?.[m.steps[S.si]?.id]; if (d) S.di = Math.min(d.length - 1, S.di + 1); }
+      else if (S.focus === 0 && S.mi < M.length - 1) selectModule(S.mi + 1);
+      render(); break;
+
+    case 'Enter':
+      e.preventDefault();
+      if (S.focus === 0) S.focus = 1;
+      else if (S.focus === 1 && S.showDet) S.focus = 2;
+      render(); break;
+
+    case 'Escape':
+      e.preventDefault();
+      if (S.focus === 2) S.focus = 1;
+      else if (S.focus === 1) S.focus = 0;
+      render(); break;
+  }
+});
+
+// ═════════════════════════════════════════════════════════
+//  INIT
+// ═════════════════════════════════════════════════════════
+initDiamonds();
+render();
+</script>
+</body>
+</html>

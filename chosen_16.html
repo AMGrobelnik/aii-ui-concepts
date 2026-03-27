@@ -1,0 +1,1197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Pipeline Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0f1117;
+    --surface: #181b23;
+    --surface-h: #1e222c;
+    --border: #262b36;
+    --text: #e0e3ea;
+    --muted: #7c8294;
+    --green: #22c55e;
+    --purple: #a78bfa;
+    --blue: #3b82f6;
+    --orange: #f59e0b;
+    --sidebar-bg: #13161e;
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    width: 200px;
+    min-width: 200px;
+    background: var(--sidebar-bg);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    z-index: 10;
+  }
+
+  .sidebar::-webkit-scrollbar { width: 4px; }
+  .sidebar::-webkit-scrollbar-track { background: transparent; }
+  .sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* Ring area at top of sidebar */
+  .sidebar-ring {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px 16px 14px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .ring-wrap {
+    position: relative;
+    width: 100px;
+    height: 100px;
+  }
+
+  .ring-wrap canvas { width: 100px; height: 100px; }
+
+  .ring-pct {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: -0.5px;
+    pointer-events: none;
+  }
+
+  .ring-label {
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 6px;
+  }
+
+  /* Sidebar module sections with colored tints */
+  .sidebar-section {
+    padding: 10px 10px 6px;
+    border-bottom: 1px solid var(--border);
+    transition: background 0.3s ease;
+  }
+
+  .sidebar-section.tint-seed { background: rgba(34, 197, 94, 0.03); }
+  .sidebar-section.tint-hypo { background: rgba(167, 139, 250, 0.03); }
+  .sidebar-section.tint-invention { background: rgba(59, 130, 246, 0.05); }
+  .sidebar-section.tint-paper { background: transparent; }
+
+  .sidebar-section.selected.tint-seed { background: rgba(34, 197, 94, 0.06); }
+  .sidebar-section.selected.tint-hypo { background: rgba(167, 139, 250, 0.06); }
+  .sidebar-section.selected.tint-invention { background: rgba(59, 130, 246, 0.09); }
+  .sidebar-section.selected.tint-paper { background: rgba(245, 158, 11, 0.04); }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 6px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  .section-header:hover { background: rgba(255,255,255,0.03); }
+
+  .section-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    transition: box-shadow 0.2s;
+  }
+
+  .section-header.active .section-dot {
+    box-shadow: 0 0 6px 2px currentColor;
+  }
+
+  .section-name {
+    flex: 1;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--muted);
+    transition: color 0.2s;
+  }
+
+  .section-header.active .section-name { color: var(--text); font-weight: 600; }
+
+  .section-pct {
+    font-size: 10px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Sub-module items in sidebar */
+  .sub-items { padding: 2px 0 4px 22px; }
+
+  .sub-item {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 4px 6px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .sub-item:hover { background: rgba(255,255,255,0.03); color: var(--text); }
+  .sub-item.selected { color: var(--text); font-weight: 500; }
+
+  .sub-item-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    transition: all 0.2s;
+  }
+
+  .sub-item.selected .sub-item-dot {
+    box-shadow: 0 0 0 2px var(--bg), 0 0 0 3.5px currentColor;
+  }
+
+  .sub-item-dot.glow { animation: dotGlow 2s ease-in-out infinite; }
+
+  @keyframes dotGlow {
+    0%, 100% { box-shadow: 0 0 4px 1px currentColor; }
+    50% { box-shadow: 0 0 8px 3px currentColor; }
+  }
+
+  /* Sidebar footer stats */
+  .sidebar-stats {
+    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: auto;
+    border-top: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .sidebar-stat {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10.5px;
+  }
+
+  .stat-label { color: var(--muted); text-transform: uppercase; letter-spacing: 0.3px; }
+  .stat-val { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  /* ── Main Area ── */
+  .main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* Row 1: Module cards + particles */
+  .row1-wrap {
+    position: relative;
+    padding: 18px 28px 8px;
+    flex-shrink: 0;
+  }
+
+  .row1 {
+    display: flex;
+    gap: 14px;
+    position: relative;
+    z-index: 2;
+  }
+
+  #particleCanvas {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  .mod-card {
+    flex: 1;
+    max-width: 160px;
+    height: 54px;
+    background: rgba(24, 27, 35, 0.85);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--border);
+    border-radius: 8px;
+    padding: 7px 10px;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.25s ease;
+    backdrop-filter: blur(10px);
+    overflow: hidden;
+  }
+
+  .mod-card:hover { background: var(--surface-h); transform: translateY(-1px); }
+  .mod-card.selected {
+    transform: translateY(-1px);
+    border-color: var(--accent-color, var(--border));
+    box-shadow: 0 0 16px -4px var(--glow-color, transparent);
+  }
+
+  .mod-card .mc-glow {
+    position: absolute;
+    inset: -1px;
+    border-radius: 8px;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+  }
+
+  .mod-card.selected .mc-glow,
+  .mod-card.active .mc-glow { opacity: 1; }
+
+  .mod-card.active::after {
+    content: '';
+    position: absolute;
+    top: 0; left: -60%; width: 40%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.035), transparent);
+    animation: shimmer 3s ease-in-out infinite;
+  }
+
+  @keyframes shimmer { 0% { left: -60%; } 100% { left: 120%; } }
+
+  .mc-name {
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .mc-metric { font-size: 16px; font-weight: 700; margin-top: 1px; }
+
+  .mc-bar {
+    position: absolute;
+    bottom: 0; left: 0;
+    height: 3px;
+    border-radius: 0 0 0 8px;
+    transition: width 0.4s ease;
+  }
+
+  /* Beam connector canvas */
+  #beamCanvas {
+    height: 24px;
+    position: relative;
+    z-index: 2;
+    margin: 0 28px;
+    flex-shrink: 0;
+  }
+
+  /* Row 2: sub-module dot navigation */
+  .row2-wrap {
+    padding: 0 28px 12px;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  .row2 {
+    display: flex;
+    gap: 20px;
+    padding: 4px 0;
+    transition: transform 0.3s ease;
+  }
+
+  .dot-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    min-width: 40px;
+    transition: transform 0.2s;
+  }
+
+  .dot-wrap:hover { transform: translateY(-1px); }
+
+  .dot-circle {
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    transition: all 0.25s;
+    position: relative;
+  }
+
+  .dot-circle.glow { animation: dotPulse 2s ease-in-out infinite; }
+
+  @keyframes dotPulse {
+    0%, 100% { box-shadow: 0 0 5px 1px currentColor; }
+    50% { box-shadow: 0 0 10px 3px currentColor; }
+  }
+
+  .dot-circle.sel {
+    box-shadow: 0 0 0 2.5px var(--bg), 0 0 0 4px #fff;
+  }
+
+  .dot-circle.sel.glow {
+    animation: dotPulseSel 2s ease-in-out infinite;
+  }
+
+  @keyframes dotPulseSel {
+    0%, 100% { box-shadow: 0 0 0 2.5px var(--bg), 0 0 0 4px #fff, 0 0 6px 2px currentColor; }
+    50% { box-shadow: 0 0 0 2.5px var(--bg), 0 0 0 4px #fff, 0 0 12px 4px currentColor; }
+  }
+
+  .dot-label {
+    font-size: 9px;
+    color: var(--muted);
+    text-align: center;
+    white-space: nowrap;
+    transition: color 0.2s;
+  }
+
+  .dot-wrap:hover .dot-label { color: var(--text); }
+
+  /* ── Content area ── */
+  .content-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 28px 28px;
+  }
+
+  .content-scroll::-webkit-scrollbar { width: 5px; }
+  .content-scroll::-webkit-scrollbar-track { background: transparent; }
+  .content-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .content {
+    max-width: 720px;
+    animation: fadeIn 0.22s ease;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .tag-badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    margin-bottom: 8px;
+  }
+
+  .content h2 { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+
+  .step-status-line {
+    font-size: 11px;
+    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .step-status-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 1px 8px;
+    border-radius: 8px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+
+  .content .summary {
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.6;
+    margin-bottom: 16px;
+  }
+
+  .metric-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+  }
+
+  .metric-pill {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 78px;
+  }
+
+  .metric-pill-label {
+    font-size: 9px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+
+  .metric-pill-val {
+    font-size: 15px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Detail cards (expandable) */
+  .detail-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 8px;
+    overflow: hidden;
+    transition: all 0.25s;
+  }
+
+  .detail-card:hover { border-color: #333a48; }
+
+  .detail-card.active-item {
+    border-left: 2px solid var(--blue);
+    box-shadow: -2px 0 10px -4px rgba(59,130,246,0.25);
+  }
+
+  .detail-header {
+    display: flex;
+    align-items: center;
+    padding: 10px 14px;
+    cursor: pointer;
+    gap: 10px;
+    user-select: none;
+  }
+
+  .detail-status {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    flex-shrink: 0;
+  }
+
+  .detail-name { flex: 1; font-size: 13px; font-weight: 500; }
+  .detail-card.active-item .detail-name { color: var(--blue); }
+
+  .detail-meta {
+    font-size: 11px;
+    color: var(--muted);
+    display: flex;
+    gap: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .detail-meta-tag {
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 9px;
+    font-weight: 600;
+  }
+
+  .detail-chevron {
+    color: var(--muted);
+    font-size: 12px;
+    transition: transform 0.2s;
+    width: 14px;
+    text-align: center;
+  }
+
+  .detail-chevron.open { transform: rotate(90deg); }
+
+  .detail-body {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+  }
+
+  .detail-body-inner {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.65;
+    border-top: 1px solid var(--border);
+    margin: 0 14px;
+    padding: 10px 0 12px;
+  }
+
+  .detail-mini-bar {
+    height: 2px;
+    background: var(--border);
+    border-radius: 1px;
+    margin-top: 6px;
+    overflow: hidden;
+  }
+
+  .detail-mini-bar-fill {
+    height: 100%;
+    border-radius: 1px;
+    transition: width 0.4s;
+    position: relative;
+  }
+
+  .detail-mini-bar-fill::after {
+    content: '';
+    position: absolute;
+    right: 0; top: -1px;
+    width: 4px; height: 4px;
+    border-radius: 50%;
+    background: inherit;
+    box-shadow: 0 0 6px 1px currentColor;
+  }
+
+  .content-footer {
+    display: flex;
+    gap: 18px;
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .content-footer span { display: flex; align-items: center; gap: 5px; }
+  .content-footer .ft-val { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  @keyframes timerPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+  .timer-live { animation: timerPulse 1.5s ease-in-out infinite; color: var(--blue); }
+
+  .kbd-hint {
+    position: fixed;
+    bottom: 10px; right: 16px;
+    font-size: 9px;
+    color: #484e5c;
+    display: flex;
+    gap: 8px;
+    z-index: 100;
+  }
+
+  .kbd {
+    padding: 1px 5px;
+    border: 1px solid #333a48;
+    border-radius: 3px;
+    background: var(--surface);
+    font-family: 'Inter', monospace;
+    font-size: 9px;
+  }
+</style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<div class="sidebar">
+  <div class="sidebar-ring">
+    <div class="ring-wrap">
+      <canvas id="ringCanvas" width="200" height="200"></canvas>
+      <div class="ring-pct" id="ringPct">65%</div>
+    </div>
+    <div class="ring-label">Pipeline Progress</div>
+  </div>
+  <div id="sidebarModules"></div>
+  <div class="sidebar-stats" id="sidebarStats"></div>
+</div>
+
+<!-- Main -->
+<div class="main">
+  <div class="row1-wrap">
+    <canvas id="particleCanvas"></canvas>
+    <div class="row1" id="row1"></div>
+  </div>
+  <canvas id="beamCanvas"></canvas>
+  <div class="row2-wrap">
+    <div class="row2" id="row2"></div>
+  </div>
+  <div class="content-scroll">
+    <div class="content" id="content"></div>
+  </div>
+</div>
+
+<div class="kbd-hint">
+  <span><span class="kbd">&uarr;&darr;</span> modules</span>
+  <span><span class="kbd">&larr;&rarr;</span> steps</span>
+</div>
+
+<script>
+// ── Data ──
+const COLORS = { seed: '#22c55e', hypothesis: '#a78bfa', invention: '#3b82f6', paper: '#f59e0b' };
+const TINTS = { seed: 'tint-seed', hypothesis: 'tint-hypo', invention: 'tint-invention', paper: 'tint-paper' };
+
+const MODULES = [
+  {
+    id: 'seed', label: 'Seed Hypotheses', color: COLORS.seed,
+    metric: '12 gaps', progress: 1.0,
+    steps: [
+      {
+        name: 'Fetch Papers', status: 'done', metric: '847 papers', time: '4m 12s', cost: '$0.00',
+        detail: 'I pulled 847 papers from Semantic Scholar across three domains: geometric deep learning, attention mechanisms, and cross-modal transfer. After filtering for citation count, recency, and venue quality, I narrowed it down to 312 highly relevant candidates. The dedup pass removed about 40 near-duplicates that appeared across domain boundaries.',
+        metrics: { papers: '847', filtered: '312', domains: '3' }
+      },
+      {
+        name: 'Extract Claims', status: 'done', metric: '2,841 claims', time: '6m 38s', cost: '$1.24',
+        detail: 'I extracted 2,841 structured claims from the filtered paper set, classifying each as empirical, theoretical, or methodological. The average yield was 9.1 claims per paper. I cross-referenced every claim against the citation graph to flag which findings have broad consensus versus those that remain contested among authors.',
+        metrics: { claims: '2,841', avgPer: '9.1', confidence: '0.87' }
+      },
+      {
+        name: 'Build KG', status: 'done', metric: '1,204 nodes', time: '3m 05s', cost: '$0.87',
+        detail: 'I constructed a knowledge graph with 1,204 concept nodes and 3,847 directed edges representing causal, compositional, and contradictory relationships. The graph reveals 48 disconnected clusters and 12 bridge concepts that connect otherwise separate research threads. These bridge concepts are the most promising innovation targets.',
+        metrics: { nodes: '1,204', edges: '3,847', clusters: '48' }
+      },
+      {
+        name: 'Find Gaps', status: 'done', metric: '12 gaps', time: '2m 51s', cost: '$0.92',
+        detail: 'I identified 12 research gaps ranked by a composite novelty score that combines structural holes in the KG, citation trajectory momentum, and feasibility estimates. The top-scoring gap is "cross-modal transfer without aligned pretraining" at 0.94. Each gap comes with a full evidence chain tracing back to its source claims.',
+        metrics: { gaps: '12', topScore: '0.94', feasible: '8' }
+      }
+    ],
+    summary: 'I analyzed 847 papers across 3 domains, extracted 2,841 claims, and built a knowledge graph with 1,204 nodes. Gap analysis identified 12 research opportunities ranked by novelty, with the top gap scoring 0.94.',
+    totalTime: '16m 46s', totalCost: '$3.03'
+  },
+  {
+    id: 'hypothesis', label: 'Hypothesis Loop', color: COLORS.hypothesis,
+    metric: 'Score 8.4', progress: 1.0,
+    steps: [
+      {
+        name: 'Gen Initial', status: 'done', metric: '24 hypos', time: '3m 22s', cost: '$1.58',
+        detail: 'I generated 24 initial hypotheses from the top 6 research gaps, producing 4 formulations per gap. Each hypothesis includes a proposed mechanism, testable prediction, falsifiability criteria, and resource estimate. I used temperature-varied sampling to ensure stylistic diversity across the set.',
+        metrics: { generated: '24', perGap: '4', gaps: '6' }
+      },
+      {
+        name: 'Review Round 1', status: 'done', metric: 'Score 6.2', time: '5m 14s', cost: '$2.31',
+        detail: 'I scored all 24 hypotheses on novelty, feasibility, and impact (each 0-10). The mean composite came in at 6.2. I eliminated 8 that fell below the 5.0 threshold. The main failure modes were insufficient grounding in existing work (4 cases), unclear mechanism descriptions (3 cases), and trivially obvious predictions (1 case).',
+        metrics: { mean: '6.2', eliminated: '8', remaining: '16' }
+      },
+      {
+        name: 'Refine', status: 'done', metric: '16 revised', time: '4m 08s', cost: '$1.89',
+        detail: 'I revised the surviving 16 hypotheses based on the structured feedback from round 1. Each revision strengthened the experimental design with concrete baselines, clarified theoretical grounding using formal notation, and added explicit connections to related work. On average I touched 3.2 sections per hypothesis.',
+        metrics: { revised: '16', avgEdits: '3.2', improved: '14' }
+      },
+      {
+        name: 'Review Round 2', status: 'done', metric: 'Score 7.8', time: '4m 52s', cost: '$2.14',
+        detail: 'I ran the second review with stricter criteria. The mean score jumped to 7.8. I advanced the top 6 hypotheses that cleared 7.0 on every individual dimension. Scoring was weighted: novelty 40%, feasibility 35%, impact 25%. The gap between top and bottom candidates narrowed significantly after refinement.',
+        metrics: { mean: '7.8', advanced: '6', minScore: '7.0' }
+      },
+      {
+        name: 'Final Select', status: 'done', metric: 'Top 3', time: '2m 30s', cost: '$1.05',
+        detail: 'I selected the top 3 hypotheses using composite scores with a diversity penalty to prevent clustering. The winner is "Geometric Attention Bridges" at 8.4. Runner-up: "Spectral Transfer Kernels" at 8.1. Third place: "Adaptive Modality Fusion" at 7.9. I verified the ranking with a pairwise comparison tournament.',
+        metrics: { selected: '3', topScore: '8.4', method: 'Tournament' }
+      },
+      {
+        name: 'Polish', status: 'done', metric: 'Score 8.4', time: '1m 48s', cost: '$0.76',
+        detail: 'I gave the winning hypothesis a final polish: refined the abstract to exactly 150 words, added 12 inline citations to related work, and verified every reference resolves. The final expert review confirmed the 8.4 score. The hypothesis is now ready for the invention phase.',
+        metrics: { finalScore: '8.4', citations: '12', abstract: '150w' }
+      }
+    ],
+    summary: 'I generated 24 hypotheses from 6 gaps, ran two review rounds improving scores from 6.2 to 7.8, and selected "Geometric Attention Bridges" as the winner at 8.4/10 via tournament ranking.',
+    totalTime: '21m 54s', totalCost: '$9.73'
+  },
+  {
+    id: 'invention', label: 'Invention Loop', color: COLORS.invention,
+    metric: 'Iter 2', progress: 0.42,
+    steps: [
+      {
+        name: 'Strategy', status: 'done', metric: '3 paths', time: '2m 44s', cost: '$1.12',
+        detail: 'I evaluated three invention strategies: compositional (assemble from known modules), ablative (simplify a complex approach), and hybrid (compositional core with ablative refinement). The hybrid approach won with a novelty-to-effort ratio of 0.82, balancing innovation against implementation complexity.',
+        metrics: { strategies: '3', selected: 'Hybrid', ratio: '0.82' }
+      },
+      {
+        name: 'Plan', status: 'done', metric: '14 tasks', time: '3m 18s', cost: '$1.45',
+        detail: 'I decomposed the invention into 14 sub-tasks across three tracks: theory (4 tasks), implementation (6 tasks), and evaluation (4 tasks). The critical path runs through 8 sequential tasks. Six tasks can be parallelized across 3 workers. Total estimated compute time is about 45 minutes.',
+        metrics: { tasks: '14', critical: '8', parallel: '6' }
+      },
+      {
+        name: 'Artifacts', status: 'active', metric: '3 / 5', time: '12m 08s', cost: '$4.23',
+        detail: 'I am generating 5 key artifacts. Three are complete: the baseline model, the dataset pipeline, and the proof module. The ablation study is currently running, and the evaluation suite is queued. The ablation is the bottleneck right now as it explores 6 hyperparameter dimensions.',
+        metrics: { done: '3', running: '1', pending: '1' },
+        items: [
+          {
+            name: 'Baseline Model', status: 'done', metric: '0.847 F1', time: '3m 22s', cost: '$1.05',
+            detail: 'I trained the baseline transformer with geometric attention disabled. It hit 0.847 F1 on the validation set (95% CI: 0.839-0.855), giving me a solid performance floor for the ablation comparisons. Architecture: 6 layers, 8 heads, 512 hidden dim.'
+          },
+          {
+            name: 'Dataset Pipeline', status: 'done', metric: '2,400 samples', time: '2m 56s', cost: '$0.89',
+            detail: 'I built a synthetic dataset pipeline that generates 2,400 paired samples at three difficulty tiers (800 each). Every sample has source modality, target modality, ground truth alignment, and difficulty metadata. Three human annotators validated with Cohen kappa 0.91.'
+          },
+          {
+            name: 'Proof Module', status: 'done', metric: 'Verified', time: '2m 18s', cost: '$0.94',
+            detail: 'I formally verified the core geometric attention theorem. All 3 lemmas check out: equivariance under the rotation group, bounded attention entropy, and convergence guarantee. The proof follows Lean4-style checking with explicit type annotations throughout.'
+          },
+          {
+            name: 'Ablation Study', status: 'active', metric: 'Running...', time: '3m 32s', cost: '$1.35',
+            detail: 'I am running ablations across 6 dimensions: attention heads (2/4/8), bridge depth (1/2/3), geometric basis (Euclidean/hyperbolic/spherical), learning rate, dropout, and sequence length. Currently at 67% completion with 4 of 6 dimensions fully explored.',
+            progressPct: 0.67
+          },
+          {
+            name: 'Evaluation Suite', status: 'pending', metric: 'Pending', time: '--', cost: '--',
+            detail: 'I will evaluate across 4 benchmarks: CrossModal-100, GeoAttention-Bench, TransferQA, and ModalBridge-v2. This includes bootstrap confidence intervals, compute efficiency metrics, and qualitative error analysis on 50 failure cases.'
+          }
+        ]
+      },
+      {
+        name: 'Paper Text', status: 'pending', metric: '--', time: '--', cost: '--',
+        detail: 'I will write the full paper: introduction with motivation and contributions, related work survey with 40+ references, methodology with formal notation, experimental setup, results with tables and figures, limitations discussion, and future directions.',
+        metrics: null
+      },
+      {
+        name: 'Review', status: 'pending', metric: '--', time: '--', cost: '--',
+        detail: 'I will run an internal review checking claims-to-evidence alignment, experimental completeness, writing quality, figure clarity, and overall coherence. Any unsupported claims or missing ablations will be flagged for revision.',
+        metrics: null
+      },
+      {
+        name: 'Update', status: 'pending', metric: '--', time: '--', cost: '--',
+        detail: 'I will incorporate all review feedback: address flagged issues, strengthen weak sections, add any missing experiments, and finalize all materials before handing off to the paper generation phase.',
+        metrics: null
+      }
+    ],
+    summary: 'I am on invention iteration 2. Strategy (hybrid) and plan (14 tasks) are complete. Artifact generation is at 3/5: baseline model (0.847 F1), dataset (2,400 samples), proof verified. The ablation study is running at 67%.',
+    totalTime: '18m 10s', totalCost: '$6.80'
+  },
+  {
+    id: 'paper', label: 'Paper Generation', color: COLORS.paper,
+    metric: 'Pending', progress: 0.0,
+    steps: [
+      {
+        name: 'Structure', status: 'pending', metric: '--', time: '--', cost: '--',
+        detail: 'I will generate the paper outline: 8 sections, 6 figure placements, 4 table specs, and an appendix plan. Everything will follow NeurIPS 2024 formatting with a 9-page main body.',
+        metrics: null
+      },
+      {
+        name: 'Visualizations', status: 'pending', metric: '--', time: '--', cost: '--',
+        detail: 'I will create all figures: architecture diagram, training curves, ablation heatmaps, benchmark comparisons, and qualitative examples. Each exported as both SVG and PDF for maximum flexibility.',
+        metrics: null
+      },
+      {
+        name: 'Full Draft', status: 'pending', metric: '--', time: '--', cost: '--',
+        detail: 'I will assemble the complete paper integrating all sections, figures, tables, and 40+ references. The narrative will flow from motivation through results to broader implications, targeting top-venue quality.',
+        metrics: null
+      },
+      {
+        name: 'LaTeX Build', status: 'pending', metric: '--', time: '--', cost: '--',
+        detail: 'I will compile everything into LaTeX using the NeurIPS 2024 template, including proper bibliography, supplementary appendix, and reproducibility checklist. Clean compilation with zero warnings is the target.',
+        metrics: null
+      },
+      {
+        name: 'Final Check', status: 'pending', metric: '--', time: '--', cost: '--',
+        detail: 'I will do a final pass: grammar and style, citation consistency, figure resolution (min 300 DPI), page limit compliance, and anonymous submission verification.',
+        metrics: null
+      }
+    ],
+    summary: 'Paper generation is waiting for the invention loop to finish. I will produce a structured outline, 6 publication-quality visualizations, complete draft, LaTeX build, and a final quality check.',
+    totalTime: '--', totalCost: '--'
+  }
+];
+
+// ── State ──
+let selMod = 2;
+let selStep = 2;
+let particles = [];
+let animId = null;
+
+// ── Utilities ──
+function hexToRgb(hex) {
+  const h = hex.replace('#', '');
+  return [parseInt(h.substring(0,2),16), parseInt(h.substring(2,4),16), parseInt(h.substring(4,6),16)];
+}
+
+function lerpColor(a, b, t) {
+  const ra = hexToRgb(a), rb = hexToRgb(b);
+  return `rgb(${Math.round(ra[0]+(rb[0]-ra[0])*t)},${Math.round(ra[1]+(rb[1]-ra[1])*t)},${Math.round(ra[2]+(rb[2]-ra[2])*t)})`;
+}
+
+// ── Ring ──
+function drawRing() {
+  const c = document.getElementById('ringCanvas');
+  const ctx = c.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  c.width = 200 * dpr; c.height = 200 * dpr;
+  ctx.scale(dpr, dpr);
+  const cx = 100, cy = 100, r = 40, lw = 6;
+
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.strokeStyle = '#262b36'; ctx.lineWidth = lw; ctx.stroke();
+
+  const total = MODULES.reduce((s, m) => s + m.steps.length, 0);
+  const gap = 0.04;
+  let angle = -Math.PI / 2;
+
+  MODULES.forEach((mod, mi) => {
+    const sweep = (mod.steps.length / total) * (Math.PI * 2 - gap * MODULES.length);
+    const startA = angle + gap / 2;
+    const endA = startA + sweep * mod.progress;
+    const fullEnd = startA + sweep;
+
+    ctx.beginPath(); ctx.arc(cx, cy, r, startA, fullEnd);
+    ctx.strokeStyle = mod.color + '22'; ctx.lineWidth = lw; ctx.lineCap = 'round'; ctx.stroke();
+
+    if (mod.progress > 0) {
+      const grad = ctx.createLinearGradient(
+        cx + r * Math.cos(startA), cy + r * Math.sin(startA),
+        cx + r * Math.cos(endA), cy + r * Math.sin(endA)
+      );
+      grad.addColorStop(0, mod.color + 'aa'); grad.addColorStop(1, mod.color);
+      ctx.beginPath(); ctx.arc(cx, cy, r, startA, endA);
+      ctx.strokeStyle = grad; ctx.lineWidth = lw; ctx.lineCap = 'round'; ctx.stroke();
+
+      if (mod.progress < 1 && mod.progress > 0) {
+        const ex = cx + r * Math.cos(endA), ey = cy + r * Math.sin(endA);
+        const glow = ctx.createRadialGradient(ex, ey, 0, ex, ey, 9);
+        glow.addColorStop(0, mod.color + 'dd'); glow.addColorStop(0.5, mod.color + '44'); glow.addColorStop(1, mod.color + '00');
+        ctx.beginPath(); ctx.arc(ex, ey, 9, 0, Math.PI * 2); ctx.fillStyle = glow; ctx.fill();
+        ctx.beginPath(); ctx.arc(ex, ey, 2.5, 0, Math.PI * 2); ctx.fillStyle = mod.color; ctx.fill();
+      }
+    }
+
+    if (mi === selMod) {
+      ctx.beginPath(); ctx.arc(cx, cy, r, startA, startA + sweep);
+      ctx.strokeStyle = mod.color + '30'; ctx.lineWidth = lw + 5; ctx.lineCap = 'round'; ctx.stroke();
+    }
+
+    angle += sweep + gap;
+  });
+}
+
+// ── Sidebar modules with tinted sections ──
+function buildSidebar() {
+  const el = document.getElementById('sidebarModules');
+  el.innerHTML = '';
+
+  MODULES.forEach((mod, mi) => {
+    const section = document.createElement('div');
+    section.className = `sidebar-section ${TINTS[mod.id]}` + (mi === selMod ? ' selected' : '');
+
+    const header = document.createElement('div');
+    header.className = 'section-header' + (mi === selMod ? ' active' : '');
+    const pct = Math.round(mod.progress * 100);
+    header.innerHTML = `
+      <div class="section-dot" style="background:${mod.color};color:${mod.color}"></div>
+      <span class="section-name">${mod.label}</span>
+      <span class="section-pct">${pct}%</span>`;
+    header.onclick = () => { selMod = mi; selStep = 0; render(); };
+    section.appendChild(header);
+
+    const subs = document.createElement('div');
+    subs.className = 'sub-items';
+    mod.steps.forEach((step, si) => {
+      const item = document.createElement('div');
+      item.className = 'sub-item' + (mi === selMod && si === selStep ? ' selected' : '');
+      const dotColor = step.status === 'pending' ? '#3a4050' : mod.color;
+      const glowClass = step.status === 'active' ? ' glow' : '';
+      item.innerHTML = `
+        <div class="sub-item-dot${glowClass}" style="background:${dotColor};color:${mod.color}"></div>
+        <span>${step.name}</span>`;
+      item.onclick = (e) => { e.stopPropagation(); selMod = mi; selStep = si; render(); };
+      subs.appendChild(item);
+    });
+    section.appendChild(subs);
+    el.appendChild(section);
+  });
+}
+
+function buildSidebarStats() {
+  const el = document.getElementById('sidebarStats');
+  const totalSteps = MODULES.reduce((s, m) => s + m.steps.length, 0);
+  const doneSteps = MODULES.reduce((s, m) => s + m.steps.filter(st => st.status === 'done').length, 0);
+  const activeSteps = MODULES.reduce((s, m) => s + m.steps.filter(st => st.status === 'active').length, 0);
+  el.innerHTML = `
+    <div class="sidebar-stat"><span class="stat-label">Steps</span><span class="stat-val">${doneSteps} / ${totalSteps}</span></div>
+    <div class="sidebar-stat"><span class="stat-label">Active</span><span class="stat-val" style="color:var(--blue)">${activeSteps}</span></div>
+    <div class="sidebar-stat"><span class="stat-label">Elapsed</span><span class="stat-val">56m 50s</span></div>
+    <div class="sidebar-stat"><span class="stat-label">Cost</span><span class="stat-val">$19.56</span></div>`;
+}
+
+// ── Row 1: Module cards ──
+function buildRow1() {
+  const el = document.getElementById('row1');
+  el.innerHTML = '';
+
+  MODULES.forEach((mod, i) => {
+    const card = document.createElement('div');
+    card.className = 'mod-card';
+    if (i === selMod) card.classList.add('selected');
+    if (mod.steps.some(s => s.status === 'active')) card.classList.add('active');
+
+    card.style.borderLeftColor = mod.color;
+    card.style.setProperty('--accent-color', mod.color + '55');
+    card.style.setProperty('--glow-color', mod.color + '55');
+
+    if (i === selMod) {
+      card.style.boxShadow = `0 0 16px -4px ${mod.color}55, inset 0 0 0 1px ${mod.color}33`;
+      card.style.borderColor = mod.color + '55';
+      card.style.borderLeftColor = mod.color;
+    }
+
+    card.innerHTML = `
+      <div class="mc-glow" style="box-shadow:0 0 20px -4px ${mod.color}44"></div>
+      <div class="mc-name">${mod.label}</div>
+      <div class="mc-metric" style="color:${mod.color}">${mod.metric}</div>
+      <div class="mc-bar" style="width:${mod.progress * 100}%;background:${mod.color}"></div>`;
+    card.onclick = () => { selMod = i; selStep = 0; render(); };
+    el.appendChild(card);
+  });
+}
+
+// ── Particles ──
+function initParticles() {
+  particles = [];
+  const cards = document.querySelectorAll('.mod-card');
+  if (cards.length < 2) return;
+  const wrap = document.querySelector('.row1-wrap').getBoundingClientRect();
+
+  for (let i = 0; i < cards.length - 1; i++) {
+    const ra = cards[i].getBoundingClientRect();
+    const rb = cards[i + 1].getBoundingClientRect();
+    const ax = ra.right - wrap.left, ay = ra.top + ra.height / 2 - wrap.top;
+    const bx = rb.left - wrap.left, by = rb.top + rb.height / 2 - wrap.top;
+    const modA = MODULES[i], modB = MODULES[i + 1];
+    const bothDone = modA.progress >= 1 && modB.progress >= 1;
+    const anyActive = modA.steps.some(s => s.status === 'active') || modB.steps.some(s => s.status === 'active');
+    const count = bothDone ? 2 : anyActive ? 4 : 0;
+    const speed = bothDone ? 0.0018 : 0.0045;
+    const isPending = !bothDone && !anyActive;
+
+    for (let p = 0; p < count; p++) {
+      particles.push({ ax, ay, bx, by, t: p / count, speed: speed + (Math.random() * 0.001 - 0.0005), colorA: modA.color, colorB: modB.color, idx: i, size: 2 + Math.random() });
+    }
+    if (isPending) {
+      particles.push({ ax, ay, bx, by, dashed: true, colorA: modA.color, colorB: modB.color, idx: i });
+    }
+  }
+}
+
+function animateParticles() {
+  const canvas = document.getElementById('particleCanvas');
+  const wrap = document.querySelector('.row1-wrap');
+  if (!wrap) return;
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = wrap.offsetWidth * dpr; canvas.height = wrap.offsetHeight * dpr;
+  canvas.style.width = wrap.offsetWidth + 'px'; canvas.style.height = wrap.offsetHeight + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, wrap.offsetWidth, wrap.offsetHeight);
+
+  const drawn = new Set();
+  particles.forEach(p => {
+    if (drawn.has(p.idx)) return;
+    drawn.add(p.idx);
+    const mx = (p.ax + p.bx) / 2, my = Math.min(p.ay, p.by) - 10;
+    ctx.beginPath(); ctx.moveTo(p.ax, p.ay); ctx.quadraticCurveTo(mx, my, p.bx, p.by);
+    if (p.dashed) { ctx.setLineDash([4, 7]); ctx.strokeStyle = '#262b36'; }
+    else { ctx.setLineDash([]); ctx.strokeStyle = '#262b3680'; }
+    ctx.lineWidth = 1.5; ctx.stroke(); ctx.setLineDash([]);
+  });
+
+  particles.forEach(p => {
+    if (p.dashed) return;
+    p.t += p.speed; if (p.t > 1) p.t -= 1;
+    const t = p.t;
+    const mx = (p.ax + p.bx) / 2, my = Math.min(p.ay, p.by) - 10;
+    const x = (1-t)*(1-t)*p.ax + 2*(1-t)*t*mx + t*t*p.bx;
+    const y = (1-t)*(1-t)*p.ay + 2*(1-t)*t*my + t*t*p.by;
+    const c = lerpColor(p.colorA, p.colorB, t);
+    const glow = ctx.createRadialGradient(x, y, 0, x, y, 11);
+    glow.addColorStop(0, c.replace('rgb','rgba').replace(')',',0.4)'));
+    glow.addColorStop(1, c.replace('rgb','rgba').replace(')',',0)'));
+    ctx.beginPath(); ctx.arc(x, y, 11, 0, Math.PI * 2); ctx.fillStyle = glow; ctx.fill();
+    ctx.beginPath(); ctx.arc(x, y, p.size, 0, Math.PI * 2); ctx.fillStyle = c; ctx.fill();
+  });
+
+  animId = requestAnimationFrame(animateParticles);
+}
+
+// ── Beam connector ──
+function drawBeam() {
+  const canvas = document.getElementById('beamCanvas');
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.parentElement.offsetWidth - 56;
+  canvas.width = w * dpr; canvas.height = 24 * dpr;
+  canvas.style.width = w + 'px'; canvas.style.height = '24px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr); ctx.clearRect(0, 0, w, 24);
+
+  const cards = document.querySelectorAll('.mod-card');
+  const dots = document.querySelectorAll('.dot-wrap');
+  if (!cards[selMod] || !dots[selStep]) return;
+  const wr = canvas.getBoundingClientRect();
+  const cr = cards[selMod].getBoundingClientRect();
+  const dr = dots[selStep].getBoundingClientRect();
+  const x1 = cr.left + cr.width / 2 - wr.left;
+  const x2 = dr.left + dr.width / 2 - wr.left;
+  const mod = MODULES[selMod];
+
+  const grad = ctx.createLinearGradient(x1, 0, x2, 24);
+  grad.addColorStop(0, mod.color + 'cc'); grad.addColorStop(0.5, mod.color + '55'); grad.addColorStop(1, mod.color + 'cc');
+  ctx.beginPath(); ctx.moveTo(x1, 0); ctx.quadraticCurveTo((x1+x2)/2, 12, x2, 24);
+  ctx.strokeStyle = grad; ctx.lineWidth = 2; ctx.stroke();
+
+  ctx.save(); ctx.shadowColor = mod.color; ctx.shadowBlur = 10;
+  ctx.beginPath(); ctx.moveTo(x1, 0); ctx.quadraticCurveTo((x1+x2)/2, 12, x2, 24);
+  ctx.strokeStyle = mod.color + '28'; ctx.lineWidth = 7; ctx.stroke(); ctx.restore();
+}
+
+// ── Row 2: sub-module dots ──
+function buildRow2() {
+  const el = document.getElementById('row2');
+  el.innerHTML = '';
+  const mod = MODULES[selMod];
+
+  mod.steps.forEach((step, i) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'dot-wrap';
+    const dot = document.createElement('div');
+    dot.className = 'dot-circle';
+    dot.style.backgroundColor = step.status === 'pending' ? '#3a4050' : mod.color;
+    dot.style.color = mod.color;
+    if (step.status === 'active') dot.classList.add('glow');
+    if (i === selStep) dot.classList.add('sel');
+    const label = document.createElement('div');
+    label.className = 'dot-label';
+    label.textContent = step.name;
+    if (i === selStep) label.style.color = '#e0e3ea';
+    wrap.appendChild(dot); wrap.appendChild(label);
+    wrap.onclick = () => { selStep = i; render(); };
+    el.appendChild(wrap);
+  });
+}
+
+// ── Content ──
+function statusChip(status) {
+  const bg = status === 'done' ? '#22c55e' : status === 'active' ? '#3b82f6' : '#555';
+  const label = status === 'done' ? 'Complete' : status === 'active' ? 'Running' : 'Pending';
+  return `<span class="step-status-chip" style="background:${bg}22;color:${bg}">${label}</span>`;
+}
+
+function buildContent() {
+  const el = document.getElementById('content');
+  const mod = MODULES[selMod];
+  const step = mod.steps[selStep];
+  if (!step) return;
+
+  let html = '';
+  html += `<div class="tag-badge" style="background:${mod.color}22;color:${mod.color}">${mod.label}</div>`;
+  html += `<h2>${step.name}</h2>`;
+  html += `<div class="step-status-line">${statusChip(step.status)}<span style="color:var(--muted);font-size:11px">Step ${selStep+1} of ${mod.steps.length}</span></div>`;
+  html += `<p class="summary">${mod.summary}</p>`;
+
+  if (step.metrics) {
+    html += '<div class="metric-row">';
+    Object.entries(step.metrics).forEach(([k, v]) => {
+      html += `<div class="metric-pill"><span class="metric-pill-label">${k}</span><span class="metric-pill-val" style="color:${mod.color}">${v}</span></div>`;
+    });
+    html += '</div>';
+  }
+
+  if (step.items) {
+    step.items.forEach((item, idx) => {
+      const isActive = item.status === 'active';
+      const isDone = item.status === 'done';
+      const statusBg = isDone ? '#22c55e22' : isActive ? '#3b82f622' : '#262b36';
+      const statusColor = isDone ? '#22c55e' : isActive ? '#3b82f6' : '#7c8294';
+      const statusIcon = isDone ? '&#10003;' : isActive ? '&#9654;' : '&#9679;';
+      const metaTag = isDone ? `<span class="detail-meta-tag" style="background:#22c55e18;color:#22c55e">Done</span>`
+        : isActive ? `<span class="detail-meta-tag" style="background:#3b82f618;color:#3b82f6">Live</span>`
+        : `<span class="detail-meta-tag" style="background:#262b36;color:#7c8294">Queue</span>`;
+
+      html += `<div class="detail-card${isActive ? ' active-item' : ''}" data-idx="${idx}">
+        <div class="detail-header" onclick="toggleDetail(this)">
+          <div class="detail-status" style="background:${statusBg};color:${statusColor}">${statusIcon}</div>
+          <div class="detail-name">${item.name}</div>
+          <div class="detail-meta">${metaTag}<span>${item.metric}</span><span>${item.time}</span><span>${item.cost}</span></div>
+          <div class="detail-chevron">&#9656;</div>
+        </div>`;
+
+      if (isActive && item.progressPct != null) {
+        html += `<div style="padding:0 14px 6px"><div class="detail-mini-bar"><div class="detail-mini-bar-fill" style="width:${item.progressPct*100}%;background:var(--blue);color:var(--blue)"></div></div></div>`;
+      }
+
+      html += `<div class="detail-body"><div class="detail-body-inner">${item.detail}</div></div></div>`;
+    });
+  } else {
+    const isDone = step.status === 'done';
+    const isActive = step.status === 'active';
+    const statusBg = isDone ? '#22c55e22' : isActive ? '#3b82f622' : '#262b36';
+    const statusColor = isDone ? '#22c55e' : isActive ? '#3b82f6' : '#7c8294';
+    const statusIcon = isDone ? '&#10003;' : isActive ? '&#9654;' : '&#9679;';
+
+    html += `<div class="detail-card${isActive ? ' active-item' : ''}">
+      <div class="detail-header" onclick="toggleDetail(this)">
+        <div class="detail-status" style="background:${statusBg};color:${statusColor}">${statusIcon}</div>
+        <div class="detail-name">${step.name}</div>
+        <div class="detail-meta"><span>${step.metric}</span><span>${step.time}</span><span>${step.cost}</span></div>
+        <div class="detail-chevron">&#9656;</div>
+      </div>
+      <div class="detail-body"><div class="detail-body-inner">${step.detail}</div></div>
+    </div>`;
+  }
+
+  const isLive = mod.steps.some(s => s.status === 'active');
+  const timeClass = isLive ? 'ft-val timer-live' : 'ft-val';
+  html += `<div class="content-footer">
+    <span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg><span class="${timeClass}">${mod.totalTime}</span></span>
+    <span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg><span class="ft-val">${mod.totalCost}</span></span>
+    <span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg><span class="ft-val">${Math.round(mod.progress*100)}% complete</span></span>
+  </div>`;
+
+  el.innerHTML = html;
+}
+
+function toggleDetail(header) {
+  const card = header.parentElement;
+  const body = card.querySelector('.detail-body');
+  const chev = card.querySelector('.detail-chevron');
+  const inner = body.querySelector('.detail-body-inner');
+  if (body.style.maxHeight && body.style.maxHeight !== '0px') {
+    body.style.maxHeight = '0px'; chev.classList.remove('open');
+  } else {
+    body.style.maxHeight = inner.scrollHeight + 16 + 'px'; chev.classList.add('open');
+  }
+}
+
+// ── Master render ──
+function render() {
+  const mod = MODULES[selMod];
+  if (selStep >= mod.steps.length) selStep = mod.steps.length - 1;
+  if (selStep < 0) selStep = 0;
+  drawRing(); buildSidebar(); buildSidebarStats(); buildRow1(); buildRow2(); buildContent();
+  requestAnimationFrame(() => { initParticles(); drawBeam(); });
+}
+
+// ── Keyboard nav ──
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowUp') { e.preventDefault(); selMod = (selMod - 1 + MODULES.length) % MODULES.length; selStep = 0; render(); }
+  else if (e.key === 'ArrowDown') { e.preventDefault(); selMod = (selMod + 1) % MODULES.length; selStep = 0; render(); }
+  else if (e.key === 'ArrowLeft') { e.preventDefault(); selStep = Math.max(0, selStep - 1); render(); }
+  else if (e.key === 'ArrowRight') { e.preventDefault(); selStep = Math.min(MODULES[selMod].steps.length - 1, selStep + 1); render(); }
+});
+
+let resizeTimer;
+window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => render(), 50); });
+
+render();
+animateParticles();
+</script>
+</body>
+</html>

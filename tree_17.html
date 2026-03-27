@@ -1,0 +1,1220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Tree Dashboard with Live Feed</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --slate-950: #0c0f1a; --slate-900: #111425; --slate-850: #151930;
+  --slate-800: #1a1e38; --slate-750: #1f2340; --slate-700: #262b4a;
+  --slate-600: #363c5e; --slate-500: #4a5178; --slate-400: #6b7298;
+  --slate-300: #8e94b4; --slate-200: #b0b5cc; --slate-100: #d4d8e8;
+  --slate-50:  #eceef5;
+  --bg: var(--slate-950); --surface: var(--slate-900);
+  --surface-2: var(--slate-850); --surface-3: var(--slate-800);
+  --border: var(--slate-750); --border-dim: var(--slate-800);
+  --text-100: var(--slate-50); --text-200: var(--slate-200);
+  --text-300: var(--slate-300); --text-400: var(--slate-400);
+  --text-500: var(--slate-500);
+  --green: #34d399; --green-dim: rgba(52,211,153,0.12); --green-glow: rgba(52,211,153,0.25);
+  --blue: #5b8af5; --blue-dim: rgba(91,138,245,0.10); --blue-glow: rgba(91,138,245,0.25);
+  --purple: #a78bfa; --purple-dim: rgba(167,139,250,0.10); --purple-glow: rgba(167,139,250,0.25);
+  --amber: #fbbf24; --amber-dim: rgba(251,191,36,0.10); --amber-glow: rgba(251,191,36,0.20);
+  --red: #f87171; --red-dim: rgba(248,113,113,0.10);
+  --teal: #2dd4bf; --teal-dim: rgba(45,212,191,0.10);
+  --radius: 6px; --radius-lg: 10px; --transition: 180ms ease;
+  --sidebar-w: 280px; --topbar-h: 48px; --feed-w: 340px;
+}
+html { font-size: 14px; }
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  background: var(--bg); color: var(--text-200); line-height: 1.5;
+  overflow: hidden; height: 100vh; -webkit-font-smoothing: antialiased;
+}
+.shell { display: flex; height: 100vh; }
+
+/* ── Sidebar ───────────────────────────────────────────────── */
+.sidebar {
+  width: var(--sidebar-w); min-width: var(--sidebar-w); background: var(--surface);
+  border-right: 1px solid var(--border-dim); display: flex; flex-direction: column;
+  z-index: 10; flex-shrink: 0;
+}
+.sidebar-header {
+  padding: 14px 18px 12px; border-bottom: 1px solid var(--border-dim);
+  display: flex; align-items: center; gap: 10px; flex-shrink: 0;
+}
+.brand { font-weight: 700; font-size: 0.78rem; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-400); }
+.brand-accent { color: var(--blue); }
+.sidebar-sep { width: 1px; height: 16px; background: var(--border); }
+.run-id-badge { font-size: 0.68rem; font-weight: 500; color: var(--text-300); font-variant-numeric: tabular-nums; }
+
+/* ── Tree ──────────────────────────────────────────────────── */
+.tree-container { flex: 1; overflow-y: auto; overflow-x: hidden; position: relative; padding: 16px 0 20px; }
+.tree-container::-webkit-scrollbar { width: 4px; }
+.tree-container::-webkit-scrollbar-track { background: transparent; }
+.tree-container::-webkit-scrollbar-thumb { background: var(--slate-700); border-radius: 2px; }
+.tree-svg-wrap { position: relative; width: 100%; min-height: 100%; }
+.tree-paths { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+.tree-paths path { fill: none; stroke-width: 1.5; stroke-linecap: round; }
+.tree-paths path.path-done { stroke: var(--green); opacity: 0.35; }
+.tree-paths path.path-active { stroke: var(--blue); stroke-dasharray: 6 4; opacity: 0.5; animation: treeDash 1.4s linear infinite; }
+.tree-paths path.path-pending { stroke: var(--slate-600); stroke-dasharray: 2 5; opacity: 0.25; }
+@keyframes treeDash { to { stroke-dashoffset: -20; } }
+.tree-particle-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; }
+.tree-nodes { position: relative; z-index: 5; }
+
+/* Root node */
+.tree-root { display: flex; align-items: center; gap: 10px; padding: 8px 18px; margin: 0 12px 0; cursor: pointer; border-radius: var(--radius); transition: background var(--transition); }
+.tree-root:hover { background: var(--surface-2); }
+.tree-root-icon {
+  width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(circle at 35% 35%, var(--slate-700), var(--slate-850));
+  border: 1.5px solid var(--slate-600); font-size: 14px; flex-shrink: 0; position: relative;
+}
+.tree-root-icon::after {
+  content: ''; position: absolute; inset: -5px; border-radius: 50%;
+  border: 1px solid rgba(91, 138, 245, 0.12); animation: rootRing 4s ease-in-out infinite;
+}
+@keyframes rootRing {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50% { opacity: 0.2; transform: scale(1.08); }
+}
+.tree-root-info { display: flex; flex-direction: column; gap: 1px; }
+.tree-root-name { font-size: 0.82rem; font-weight: 600; color: var(--text-100); }
+.tree-root-meta { font-size: 0.64rem; color: var(--text-400); font-variant-numeric: tabular-nums; }
+
+/* Module nodes (36px) */
+.tree-module {
+  display: flex; align-items: center; height: 36px; padding: 0 18px 0 0;
+  margin: 2px 12px 2px 0; margin-left: 32px; cursor: pointer; position: relative;
+  border-radius: 0 var(--radius) var(--radius) 0; transition: background var(--transition); user-select: none;
+}
+.tree-module:hover { background: var(--surface-2); }
+.tree-module.active { background: var(--surface-2); }
+.tree-module.active::before { content: ''; position: absolute; left: 0; top: 4px; bottom: 4px; width: 2.5px; border-radius: 0 2px 2px 0; }
+.tree-module.active[data-status="done"]::before { background: var(--green); }
+.tree-module.active[data-status="running"]::before { background: var(--blue); }
+.tree-module.active[data-status="pending"]::before { background: var(--slate-500); }
+.tree-module-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; margin-right: 10px; margin-left: 14px; }
+.tree-module-dot.done { background: var(--green); box-shadow: 0 0 6px var(--green-glow); }
+.tree-module-dot.running { background: var(--blue); box-shadow: 0 0 6px var(--blue-glow); animation: dotPulse 2s ease-in-out infinite; }
+.tree-module-dot.pending { background: var(--slate-500); opacity: 0.5; }
+@keyframes dotPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.75); }
+}
+.tree-module-label { font-size: 0.78rem; font-weight: 500; color: var(--text-200); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tree-module[data-status="pending"] .tree-module-label { color: var(--text-400); font-weight: 400; }
+.tree-module.active .tree-module-label { color: var(--text-100); }
+.tree-module-time { font-size: 0.64rem; color: var(--text-500); font-variant-numeric: tabular-nums; flex-shrink: 0; margin-left: 8px; }
+
+/* Sub-module nodes (36px) */
+.tree-sub {
+  display: flex; align-items: center; height: 36px; padding: 0 14px 0 0;
+  margin: 1px 12px 1px 0; margin-left: 58px; cursor: pointer; position: relative;
+  border-radius: 0 var(--radius) var(--radius) 0; transition: background var(--transition); user-select: none;
+}
+.tree-sub:hover { background: var(--surface-2); }
+.tree-sub.active { background: rgba(91, 138, 245, 0.06); }
+.tree-sub-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; margin-right: 9px; margin-left: 10px; }
+.tree-sub-dot.done { background: var(--green); }
+.tree-sub-dot.running { background: var(--blue); animation: dotPulse 2s ease-in-out infinite; }
+.tree-sub-dot.pending { background: var(--slate-600); opacity: 0.5; }
+.tree-sub-label { font-size: 0.72rem; font-weight: 400; color: var(--text-300); flex: 1; white-space: nowrap; }
+.tree-sub.active .tree-sub-label { color: var(--blue); font-weight: 500; }
+.tree-sub[data-status="done"] .tree-sub-label { color: var(--text-300); }
+.tree-sub[data-status="pending"] .tree-sub-label { color: var(--text-500); }
+.tree-sub-time { font-size: 0.62rem; color: var(--text-500); font-variant-numeric: tabular-nums; flex-shrink: 0; margin-left: 6px; }
+
+/* ── Sidebar Footer ── */
+.sidebar-footer { padding: 10px 18px; border-top: 1px solid var(--border-dim); font-size: 0.64rem; color: var(--text-500); display: flex; justify-content: space-between; flex-shrink: 0; }
+.sidebar-footer .cost { font-weight: 600; color: var(--green); font-variant-numeric: tabular-nums; }
+
+/* ── Main Area ── */
+.main-area { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; }
+.topbar {
+  height: var(--topbar-h); background: var(--surface); border-bottom: 1px solid var(--border-dim);
+  display: flex; align-items: center; padding: 0 24px; gap: 16px; z-index: 5; flex-shrink: 0;
+}
+.topbar-breadcrumb { display: flex; align-items: center; gap: 8px; font-size: 0.78rem; }
+.topbar-module { font-weight: 500; color: var(--text-300); }
+.topbar-chevron { color: var(--text-500); font-size: 0.68rem; }
+.topbar-sub { font-weight: 600; color: var(--text-100); }
+.topbar-right { margin-left: auto; display: flex; align-items: center; gap: 16px; font-size: 0.72rem; color: var(--text-400); }
+.topbar-elapsed { font-variant-numeric: tabular-nums; color: var(--text-300); font-weight: 500; }
+.topbar-tokens { font-variant-numeric: tabular-nums; }
+.topbar-tokens .val { color: var(--text-200); font-weight: 500; }
+.content-grid { flex: 1; display: flex; overflow: hidden; }
+.content-main { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 20px 24px 40px; min-width: 0; }
+.content-main::-webkit-scrollbar { width: 4px; }
+.content-main::-webkit-scrollbar-track { background: transparent; }
+.content-main::-webkit-scrollbar-thumb { background: var(--slate-700); border-radius: 2px; }
+
+/* ── Live Feed Panel ───────────────────────────────────────── */
+.feed-panel { width: var(--feed-w); min-width: var(--feed-w); background: var(--surface); border-left: 1px solid var(--border-dim); display: flex; flex-direction: column; flex-shrink: 0; }
+.feed-header { padding: 12px 16px 10px; border-bottom: 1px solid var(--border-dim); display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+.feed-live-badge {
+  display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 8px; border-radius: 100px;
+  background: rgba(248,113,113,0.08); border: 1px solid rgba(248,113,113,0.15);
+  font-size: 0.64rem; font-weight: 600; color: var(--red); text-transform: uppercase; letter-spacing: 0.06em;
+}
+.feed-live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--red); animation: livePulse 1.6s ease-in-out infinite; }
+@keyframes livePulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(248,113,113,0.4); }
+  50% { opacity: 0.6; box-shadow: 0 0 6px 2px rgba(248,113,113,0.3); }
+}
+.feed-title { font-size: 0.72rem; font-weight: 500; color: var(--text-300); }
+.feed-count { margin-left: auto; font-size: 0.62rem; color: var(--text-500); font-variant-numeric: tabular-nums; }
+.feed-body { flex: 1; overflow-y: auto; padding: 0; }
+.feed-body::-webkit-scrollbar { width: 3px; }
+.feed-body::-webkit-scrollbar-track { background: transparent; }
+.feed-body::-webkit-scrollbar-thumb { background: var(--slate-700); border-radius: 2px; }
+.feed-event { display: flex; gap: 10px; padding: 9px 16px; border-bottom: 1px solid var(--border-dim); transition: opacity 0.4s ease, transform 0.4s ease, background 0.3s ease; position: relative; }
+.feed-event:hover { background: var(--surface-2); }
+.feed-event.entering { opacity: 0; transform: translateY(-10px); }
+.feed-event.new-entry { animation: feedFadeIn 0.5s ease forwards; }
+@keyframes feedFadeIn {
+  0%   { opacity: 0; transform: translateY(-12px); background: rgba(91,138,245,0.06); }
+  60%  { background: rgba(91,138,245,0.04); }
+  100% { opacity: 1; transform: translateY(0); background: transparent; }
+}
+.feed-event-time { flex-shrink: 0; width: 46px; font-size: 0.62rem; font-weight: 500; color: var(--text-500); font-variant-numeric: tabular-nums; padding-top: 1px; }
+.feed-event-indicator { flex-shrink: 0; display: flex; flex-direction: column; align-items: center; gap: 0; padding-top: 5px; }
+.feed-event-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.feed-event-dot.green { background: var(--green); }
+.feed-event-dot.blue  { background: var(--blue); }
+.feed-event-dot.amber { background: var(--amber); }
+.feed-event-dot.red   { background: var(--red); }
+.feed-event-dot.teal  { background: var(--teal); }
+.feed-event-dot.purple { background: var(--purple); }
+.feed-event-line { width: 1px; flex: 1; min-height: 8px; background: var(--border-dim); margin-top: 4px; }
+.feed-event:last-child .feed-event-line { display: none; }
+.feed-event-content { flex: 1; min-width: 0; }
+.feed-event-msg { font-size: 0.72rem; color: var(--text-200); line-height: 1.5; word-break: break-word; }
+.feed-event-source { font-size: 0.60rem; color: var(--text-500); margin-top: 2px; }
+.feed-footer { padding: 8px 16px; border-top: 1px solid var(--border-dim); display: flex; justify-content: space-between; font-size: 0.62rem; color: var(--text-500); flex-shrink: 0; }
+.feed-footer .feed-stat-val { color: var(--text-300); font-weight: 500; font-variant-numeric: tabular-nums; }
+
+/* ── Summary Card ── */
+.summary-card { background: var(--surface-2); border: 1px solid var(--border-dim); border-radius: var(--radius-lg); padding: 18px 20px; margin-bottom: 16px; animation: contentFade 250ms ease-out forwards; }
+@keyframes contentFade {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.summary-card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border-dim); }
+.summary-icon { width: 28px; height: 28px; border-radius: var(--radius); display: flex; align-items: center; justify-content: center; font-size: 0.72rem; font-weight: 700; flex-shrink: 0; }
+.summary-title { font-size: 0.82rem; font-weight: 600; color: var(--text-100); }
+.summary-status { margin-left: auto; font-size: 0.62rem; font-weight: 500; padding: 2px 8px; border-radius: 100px; }
+.summary-status.done { background: var(--green-dim); color: var(--green); }
+.summary-status.running { background: var(--blue-dim); color: var(--blue); }
+.summary-status.pending { background: rgba(100,107,138,0.12); color: var(--text-400); }
+.summary-text { font-size: 0.75rem; line-height: 1.65; color: var(--text-300); }
+.summary-text p { margin-bottom: 8px; }
+.summary-text p:last-child { margin-bottom: 0; }
+
+/* ── Stat Row ── */
+.stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
+.stat-tile { background: var(--surface-2); border: 1px solid var(--border-dim); border-radius: var(--radius); padding: 12px 14px; animation: contentFade 250ms ease-out forwards; }
+.stat-tile-label { font-size: 0.62rem; color: var(--text-400); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 4px; }
+.stat-tile-value { font-size: 1.2rem; font-weight: 700; color: var(--text-100); font-variant-numeric: tabular-nums; line-height: 1.1; }
+.stat-tile-bar { height: 3px; border-radius: 2px; background: var(--slate-750); margin-top: 8px; overflow: hidden; }
+.stat-tile-bar-fill { height: 100%; border-radius: 2px; width: 0; transition: width 0.8s cubic-bezier(0.22, 0.61, 0.36, 1); }
+.stat-tile-bar-fill.green  { background: var(--green); }
+.stat-tile-bar-fill.blue   { background: var(--blue); }
+.stat-tile-bar-fill.purple { background: var(--purple); }
+.stat-tile-bar-fill.amber  { background: var(--amber); }
+
+/* ── Items Table ── */
+.items-panel { background: var(--surface-2); border: 1px solid var(--border-dim); border-radius: var(--radius-lg); padding: 14px 0; margin-bottom: 16px; animation: contentFade 250ms ease-out forwards; }
+.items-panel-header { padding: 0 16px 10px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--border-dim); }
+.items-panel-title { font-size: 0.72rem; font-weight: 600; color: var(--text-200); }
+.items-panel-count { font-size: 0.60rem; color: var(--text-500); background: var(--slate-750); padding: 1px 6px; border-radius: 3px; font-variant-numeric: tabular-nums; }
+.item-row { display: flex; align-items: center; gap: 10px; padding: 7px 16px; transition: background var(--transition); position: relative; }
+.item-row:hover { background: var(--surface-3); }
+.item-row.running-row { background: rgba(91,138,245,0.03); }
+.item-row.running-row::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(91,138,245,0.04), transparent);
+  animation: rowShimmer 2.5s ease-in-out infinite;
+}
+@keyframes rowShimmer {
+  0%   { transform: translateX(-100%); }
+  55%  { transform: translateX(100%); }
+  100% { transform: translateX(100%); }
+}
+.item-idx { font-size: 0.62rem; color: var(--text-500); width: 18px; text-align: right; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.item-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+.item-dot.done    { background: var(--green); }
+.item-dot.running { background: var(--blue); }
+.item-dot.pending { background: var(--text-500); }
+.item-name { font-size: 0.74rem; color: var(--text-200); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.item-row.running-row .item-name { color: var(--text-100); font-weight: 500; }
+.item-score { font-size: 0.64rem; color: var(--text-400); flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.item-meta { font-size: 0.62rem; color: var(--text-500); flex-shrink: 0; font-variant-numeric: tabular-nums; width: 42px; text-align: right; }
+
+/* ── Chips ── */
+.chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.chip { font-size: 0.62rem; padding: 2px 8px; border-radius: 4px; background: var(--surface-3); color: var(--text-400); border: 1px solid var(--border-dim); }
+.chip.accent { background: var(--blue-dim); color: var(--blue); border-color: rgba(91,138,245,0.15); }
+
+/* ── Historical ── */
+.historical-badge {
+  display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 8px; border-radius: 100px;
+  background: rgba(52,211,153,0.06); border: 1px solid rgba(52,211,153,0.12);
+  font-size: 0.64rem; font-weight: 500; color: var(--green); letter-spacing: 0.02em;
+}
+.historical-badge-icon { font-size: 0.70rem; }
+
+/* ── Bottom Bar ── */
+.bottom-bar { height: 32px; background: var(--surface); border-top: 1px solid var(--border-dim); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; font-size: 0.62rem; color: var(--text-500); flex-shrink: 0; z-index: 10; }
+.bottom-bar .bottom-stats { display: flex; gap: 18px; }
+.bottom-bar .bottom-stat-val { color: var(--text-300); font-weight: 500; font-variant-numeric: tabular-nums; }
+.bottom-bar .bottom-hint { color: var(--text-500); }
+.bottom-hint kbd { background: var(--surface-3); padding: 1px 5px; border-radius: 3px; font-family: inherit; font-size: 0.60rem; border: 1px solid var(--border); color: var(--text-400); }
+
+/* ── Empty State ── */
+.empty-state { text-align: center; padding: 40px 20px; color: var(--text-500); font-size: 0.75rem; }
+.empty-state-icon { font-size: 1.8rem; margin-bottom: 10px; opacity: 0.4; }
+
+/* ── Glow Effects for Active Items ─────────────────────────── */
+.tree-module.active[data-status="running"] {
+  background: linear-gradient(90deg, rgba(91,138,245,0.04), var(--surface-2));
+}
+
+.tree-sub.active[data-status="running"]::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 6px; bottom: 6px; width: 2px;
+  background: var(--blue);
+  border-radius: 1px;
+  box-shadow: 0 0 6px var(--blue-glow);
+  animation: subGlowPulse 2.5s ease-in-out infinite;
+}
+
+@keyframes subGlowPulse {
+  0%, 100% { opacity: 0.8; box-shadow: 0 0 4px var(--blue-glow); }
+  50% { opacity: 0.4; box-shadow: 0 0 10px var(--blue-glow); }
+}
+
+/* ── Feed New-Event Highlight Bar ──────────────────────────── */
+.feed-event.new-entry::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0; width: 2px;
+  background: var(--blue);
+  border-radius: 0 1px 1px 0;
+  opacity: 0;
+  animation: entryBarFade 1.5s ease forwards;
+}
+
+@keyframes entryBarFade {
+  0%   { opacity: 0.8; }
+  100% { opacity: 0; }
+}
+
+/* ── Stat Tile Subtle Hover ────────────────────────────────── */
+.stat-tile {
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+.stat-tile:hover {
+  border-color: var(--slate-600);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <!-- ═══════════════════════════════════════════════════════════
+       SIDEBAR: Tree Navigation
+       ═══════════════════════════════════════════════════════════ -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <span class="brand">AI <span class="brand-accent">Inventor</span></span>
+      <span class="sidebar-sep"></span>
+      <span class="run-id-badge">Run #0047</span>
+    </div>
+
+    <div class="tree-container" id="treeContainer">
+      <div class="tree-svg-wrap" id="treeSvgWrap">
+        <svg class="tree-paths" id="treePaths"></svg>
+        <canvas class="tree-particle-canvas" id="treeParticleCanvas"></canvas>
+        <div class="tree-nodes" id="treeNodes">
+          <!-- Rendered by JS -->
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-footer">
+      <span>Elapsed <span class="cost" id="elapsedTime">1h 42m</span></span>
+      <span>Cost <span class="cost" id="totalCost">$18.73</span></span>
+    </div>
+  </aside>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       MAIN AREA: Topbar + Content + Feed
+       ═══════════════════════════════════════════════════════════ -->
+  <div class="main-area">
+    <header class="topbar">
+      <div class="topbar-breadcrumb">
+        <span class="topbar-module" id="topbarModule">Hypothesis Loop</span>
+        <span class="topbar-chevron" id="topbarChevron">&rsaquo;</span>
+        <span class="topbar-sub" id="topbarSub">Review Hypo</span>
+      </div>
+      <div class="topbar-right">
+        <span>Iter <span class="topbar-elapsed">2 / 3</span></span>
+        <span class="topbar-tokens">Tokens <span class="val">2.4M</span></span>
+      </div>
+    </header>
+
+    <div class="content-grid">
+      <!-- Dashboard content -->
+      <div class="content-main" id="contentMain">
+        <!-- Rendered by JS -->
+      </div>
+
+      <!-- Live Activity Feed -->
+      <div class="feed-panel" id="feedPanel">
+        <div class="feed-header" id="feedHeader">
+          <!-- Live badge or historical badge rendered by JS -->
+        </div>
+        <div class="feed-body" id="feedBody">
+          <!-- Events rendered by JS -->
+        </div>
+        <div class="feed-footer" id="feedFooter">
+          <span>Events <span class="feed-stat-val" id="feedEventCount">0</span></span>
+          <span>Rate <span class="feed-stat-val" id="feedRate">~1/4s</span></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="bottom-bar">
+      <div class="bottom-stats">
+        <span>Hypotheses <span class="bottom-stat-val">12</span></span>
+        <span>Inventions <span class="bottom-stat-val">4</span></span>
+        <span>Papers <span class="bottom-stat-val">1</span></span>
+        <span>LLM Calls <span class="bottom-stat-val">347</span></span>
+      </div>
+      <div class="bottom-hint">
+        <kbd>Click</kbd> tree node to navigate
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  /* ═══════════════════════════════════════════════════════════════
+     DATA MODEL
+     Each module has sub-modules. Each has its own activity log.
+     Running modules get a LIVE feed; completed get a static log.
+     ═══════════════════════════════════════════════════════════════ */
+
+  const MODULES = [
+    {
+      id: 'seed',
+      name: 'Seed Hypotheses',
+      icon: 'S',
+      color: '#34d399',
+      status: 'done',
+      timing: '4m 12s',
+      subModules: [
+        { id: 'seed-kg',    label: 'Build KG',       status: 'done', time: '1m 44s' },
+        { id: 'seed-gen',   label: 'Generate Seeds',  status: 'done', time: '1m 31s' },
+        { id: 'seed-dedup', label: 'Dedup & Filter',  status: 'done', time: '0m 57s' },
+      ],
+      summary: `<p>Ingested 2,847 papers across 6 research domains and built a knowledge graph with 14,200 entity-relation triples. Generated 120 seed hypotheses by combining cross-domain entity pairs that share latent structural similarity.</p>
+<p>After deduplication (cosine threshold 0.92) and novelty filtering, 42 candidates remained covering neural arch search, multi-modal grounding, causal reasoning, and program synthesis.</p>`,
+      chips: [
+        { text: '6 domains', accent: false },
+        { text: '14.2k triples', accent: false },
+        { text: '42 candidates', accent: true },
+        { text: 'dedup @ 0.92', accent: false },
+      ],
+      items: [
+        { name: 'Contrastive meta-learning for few-shot synthesis',          status: 'done', score: '8.7', meta: '12.4s' },
+        { name: 'Graph-aware retrieval augmentation via subgraph prompts',   status: 'done', score: '8.2', meta: '8.7s'  },
+        { name: 'Self-supervised alignment of code and natural language',    status: 'done', score: '7.9', meta: '15.1s' },
+        { name: 'Hierarchical attention for multi-document reasoning',       status: 'done', score: '8.5', meta: '9.3s'  },
+        { name: 'Neural architecture search with resource constraints',      status: 'done', score: '7.6', meta: '11.6s' },
+        { name: 'Topology-aware message passing for molecular graphs',       status: 'done', score: '8.1', meta: '10.2s' },
+      ],
+      stats: [
+        { label: 'Papers Ingested',  value: '2,847', pct: 100, bar: 'green'  },
+        { label: 'Seeds Generated',  value: '120',   pct: 100, bar: 'blue'   },
+        { label: 'After Filtering',  value: '42',    pct: 35,  bar: 'purple' },
+      ],
+      activityLog: [
+        { time: '14:17:48', dot: 'blue',  msg: 'Seed Hypotheses module started',                                source: 'system' },
+        { time: '14:18:02', dot: 'blue',  msg: 'Knowledge graph builder started',                               source: 'seed-kg' },
+        { time: '14:18:14', dot: 'teal',  msg: 'Fetching 2,847 papers from Semantic Scholar API',               source: 'seed-kg' },
+        { time: '14:18:41', dot: 'green', msg: 'Paper corpus downloaded (6 domains, 128 MB)',                    source: 'seed-kg' },
+        { time: '14:19:03', dot: 'blue',  msg: 'Extracting entities and relations from abstracts',               source: 'seed-kg' },
+        { time: '14:19:28', dot: 'green', msg: 'KG construction complete: 14,200 triples indexed',               source: 'seed-kg' },
+        { time: '14:19:30', dot: 'blue',  msg: 'Seed generation started: cross-domain entity pairing',           source: 'seed-gen' },
+        { time: '14:19:55', dot: 'teal',  msg: 'Structural similarity computed for 8,400 entity pairs',          source: 'seed-gen' },
+        { time: '14:20:09', dot: 'blue',  msg: 'Generating hypotheses from top-scoring entity combinations',     source: 'seed-gen' },
+        { time: '14:20:18', dot: 'green', msg: '120 seed hypotheses generated',                                  source: 'seed-gen' },
+        { time: '14:20:20', dot: 'blue',  msg: 'Starting dedup pass (cosine threshold 0.92)',                     source: 'seed-dedup' },
+        { time: '14:20:33', dot: 'teal',  msg: 'Computing pairwise similarity matrix (120 x 120)',               source: 'seed-dedup' },
+        { time: '14:20:44', dot: 'amber', msg: '78 duplicates removed (65% overlap detected)',                    source: 'seed-dedup' },
+        { time: '14:20:52', dot: 'blue',  msg: 'Running novelty check against existing literature',               source: 'seed-dedup' },
+        { time: '14:20:58', dot: 'green', msg: 'Novelty filter complete: 42 candidates remain',                  source: 'seed-dedup' },
+        { time: '14:21:00', dot: 'green', msg: 'Seed Hypotheses module complete (4m 12s)',                        source: 'system' },
+      ],
+    },
+    {
+      id: 'hypo',
+      name: 'Hypothesis Loop',
+      icon: 'H',
+      color: '#5b8af5',
+      status: 'running',
+      timing: '6m 41s',
+      subModules: [
+        { id: 'hypo-gen',    label: 'Generate Hypo',  status: 'done',    time: '2m 18s' },
+        { id: 'hypo-review', label: 'Review Hypo',    status: 'running', time: '4m 23s' },
+        { id: 'hypo-refine', label: 'Refine Hypo',    status: 'pending', time: '--'     },
+      ],
+      summary: `<p>Currently reviewing 18 hypotheses that passed initial generation. The review step scores each hypothesis on novelty (0-10), feasibility (0-10), and impact (0-10) using a panel of 3 independent LLM reviewers with calibrated temperature settings.</p>
+<p>So far 11 of 18 have been reviewed. Top scorer: "Sparse MoE for domain transfer" at 8.4/10. Two hypotheses flagged for low feasibility. 7 reviews remain queued.</p>`,
+      chips: [
+        { text: '3 reviewers', accent: false },
+        { text: '11/18 done', accent: true },
+        { text: '2 flagged', accent: false },
+        { text: 'top: 8.4/10', accent: true },
+      ],
+      items: [
+        { name: 'Sparse mixture-of-experts for domain transfer',            status: 'done',    score: '8.4', meta: '22.1s' },
+        { name: 'Differentiable program synthesis via sketch infilling',    status: 'done',    score: '7.9', meta: '18.4s' },
+        { name: 'Causal reasoning in transformer attention heads',          status: 'running', score: '--',  meta: '14.2s' },
+        { name: 'Multi-modal grounding through contrastive decoding',       status: 'running', score: '--',  meta: '6.8s'  },
+        { name: 'Adaptive tokenization for low-resource languages',         status: 'pending', score: '--',  meta: '--'    },
+        { name: 'Energy-based models for structured prediction',            status: 'pending', score: '--',  meta: '--'    },
+        { name: 'Neuro-symbolic reasoning with probabilistic programs',     status: 'pending', score: '--',  meta: '--'    },
+        { name: 'Retrieval-augmented generation with learned reranking',    status: 'pending', score: '--',  meta: '--'    },
+      ],
+      stats: [
+        { label: 'Generated',  value: '18',    pct: 100, bar: 'blue'   },
+        { label: 'Reviewed',   value: '11/18', pct: 61,  bar: 'green'  },
+        { label: 'Flagged',    value: '2',     pct: 11,  bar: 'amber'  },
+      ],
+      activityLog: [
+        { time: '14:24:50', dot: 'blue',  msg: 'Hypothesis Loop module started',                               source: 'system' },
+        { time: '14:25:10', dot: 'blue',  msg: 'Hypothesis generation started with 42 seed candidates',        source: 'hypo-gen' },
+        { time: '14:25:38', dot: 'teal',  msg: 'Expanding seed hypotheses with literature grounding',           source: 'hypo-gen' },
+        { time: '14:26:02', dot: 'green', msg: 'Generated 18 fully-formed hypotheses from seeds',               source: 'hypo-gen' },
+        { time: '14:26:05', dot: 'blue',  msg: 'Review panel initialized: 3 reviewers (T=0.3, 0.5, 0.7)',      source: 'hypo-review' },
+        { time: '14:26:30', dot: 'teal',  msg: 'Batch 1/3: reviewing hypotheses #1-#6',                         source: 'hypo-review' },
+        { time: '14:27:15', dot: 'green', msg: 'Review complete: "Sparse MoE for domain transfer" = 8.4/10',    source: 'hypo-review' },
+        { time: '14:27:42', dot: 'green', msg: 'Review complete: "Differentiable program synthesis" = 7.9/10',  source: 'hypo-review' },
+        { time: '14:28:01', dot: 'amber', msg: 'Reviewer 2 flagged feasibility concern on hypothesis #7',       source: 'hypo-review' },
+        { time: '14:28:33', dot: 'green', msg: 'Review complete: "Graph-aware retrieval" = 7.5/10',             source: 'hypo-review' },
+        { time: '14:29:04', dot: 'blue',  msg: 'Batch 2/3: reviewing hypotheses #7-#12',                        source: 'hypo-review' },
+        { time: '14:29:41', dot: 'amber', msg: 'Token budget: 82% of context window consumed',                  source: 'hypo-review' },
+        { time: '14:30:12', dot: 'green', msg: 'Review complete: "Curriculum learning" = 7.1/10',               source: 'hypo-review' },
+        { time: '14:30:48', dot: 'blue',  msg: 'Reviewer panel consensus reached for hypothesis #4 (3/3)',      source: 'hypo-review' },
+        { time: '14:31:20', dot: 'green', msg: 'Review complete: "Topology-aware message passing" = 8.0/10',    source: 'hypo-review' },
+      ],
+      futureEvents: [
+        { dot: 'blue',  msg: 'Starting review: "Multi-modal grounding via contrastive decoding"',  source: 'hypo-review' },
+        { dot: 'teal',  msg: 'Reviewer 1 evaluating novelty dimension for hypothesis #13',          source: 'hypo-review' },
+        { dot: 'green', msg: 'Review complete: "Causal reasoning in attention heads" = 7.8/10',     source: 'hypo-review' },
+        { dot: 'amber', msg: 'Reviewer 3 notes overlap with existing work on causal probing',       source: 'hypo-review' },
+        { dot: 'blue',  msg: 'Batch 3/3: reviewing hypotheses #13-#18',                             source: 'hypo-review' },
+        { dot: 'green', msg: 'Review complete: "Multi-modal grounding" = 8.1/10',                   source: 'hypo-review' },
+        { dot: 'amber', msg: 'High variance in reviewer scores for hypothesis #15 (std: 2.1)',      source: 'hypo-review' },
+        { dot: 'green', msg: 'Review complete: "Energy-based structured prediction" = 7.3/10',      source: 'hypo-review' },
+        { dot: 'green', msg: 'Review complete: "Neuro-symbolic reasoning" = 8.2/10',                source: 'hypo-review' },
+        { dot: 'green', msg: 'All 18 hypotheses reviewed. Top 5 selected for refinement.',           source: 'hypo-review' },
+      ],
+    },
+    {
+      id: 'invent',
+      name: 'Invention Loop',
+      icon: 'I',
+      color: '#a78bfa',
+      status: 'pending',
+      timing: '--',
+      subModules: [
+        { id: 'inv-strat', label: 'Gen Strategy',   status: 'pending', time: '--' },
+        { id: 'inv-plan',  label: 'Gen Plan',       status: 'pending', time: '--' },
+        { id: 'inv-text',  label: 'Gen Paper Text', status: 'pending', time: '--' },
+        { id: 'inv-rev',   label: 'Review Paper',   status: 'pending', time: '--' },
+      ],
+      summary: `<p>Waiting for hypothesis loop to finalize reviewed hypotheses. Once top-ranked hypotheses are available, will generate invention strategies, detailed experimental plans, and draft paper text for each selected hypothesis.</p>
+<p>This loop typically runs 2-3 refinement iterations per hypothesis, including strategy generation, plan detailing, full-text drafting, and automated review.</p>`,
+      chips: [
+        { text: 'queued', accent: false },
+        { text: '2-3 iterations', accent: false },
+        { text: 'auto-review', accent: false },
+      ],
+      items: [],
+      stats: [
+        { label: 'Strategies', value: '0', pct: 0, bar: 'blue'   },
+        { label: 'Plans',      value: '0', pct: 0, bar: 'green'  },
+        { label: 'Drafts',     value: '0', pct: 0, bar: 'purple' },
+      ],
+      activityLog: [],
+      futureEvents: [],
+    },
+    {
+      id: 'paper',
+      name: 'Paper & Repo',
+      icon: 'P',
+      color: '#fbbf24',
+      status: 'pending',
+      timing: '--',
+      subModules: [
+        { id: 'pap-demo', label: 'Gen Demos',  status: 'pending', time: '--' },
+        { id: 'pap-viz',  label: 'Gen Viz',    status: 'pending', time: '--' },
+        { id: 'pap-full', label: 'Full Paper', status: 'pending', time: '--' },
+      ],
+      summary: `<p>Pending upstream completion. This module generates artifact demos (runnable Python notebooks), visualizations (3-5 figures per paper), and compiles the final camera-ready PDF with LaTeX.</p>
+<p>A GitHub repository will be created with demo code, data scripts, and a README. Expected output: 1 paper + 1 repo per accepted hypothesis.</p>`,
+      chips: [
+        { text: 'queued', accent: false },
+        { text: '3-5 figures', accent: false },
+        { text: 'LaTeX output', accent: false },
+        { text: 'GitHub repo', accent: false },
+      ],
+      items: [],
+      stats: [
+        { label: 'Demos',   value: '0', pct: 0, bar: 'blue'   },
+        { label: 'Figures', value: '0', pct: 0, bar: 'green'  },
+        { label: 'Papers',  value: '0', pct: 0, bar: 'purple' },
+      ],
+      activityLog: [],
+      futureEvents: [],
+    },
+  ];
+
+  /* ═══════════════════════════════════════════════════════════════
+     STATE
+     ═══════════════════════════════════════════════════════════════ */
+  let activeModuleId = 'hypo';
+  let activeSubId    = 'hypo-review';
+  let futureEventIdx = {};      /* per-module index into futureEvents */
+  let feedEventTotal = 0;
+  let liveTimerHandle = null;
+
+  MODULES.forEach(m => {
+    futureEventIdx[m.id] = 0;
+    feedEventTotal += m.activityLog.length;
+  });
+
+  /* ═══════════════════════════════════════════════════════════════
+     TREE RENDERING (Sidebar)
+     ═══════════════════════════════════════════════════════════════ */
+  function renderTree() {
+    const nodesEl = document.getElementById('treeNodes');
+    nodesEl.innerHTML = '';
+
+    /* Root node */
+    const rootHtml = `
+      <div class="tree-root" data-id="root">
+        <div class="tree-root-icon">&#x1F9E0;</div>
+        <div class="tree-root-info">
+          <div class="tree-root-name">ssl-low-resource-v3</div>
+          <div class="tree-root-meta">4 modules &middot; 14 sub-steps</div>
+        </div>
+      </div>`;
+    nodesEl.insertAdjacentHTML('beforeend', rootHtml);
+
+    /* Module + sub-module nodes */
+    MODULES.forEach(mod => {
+      const isActive = mod.id === activeModuleId;
+      const modHtml = `
+        <div class="tree-module ${isActive ? 'active' : ''}"
+             data-id="${mod.id}" data-status="${mod.status}">
+          <span class="tree-module-dot ${mod.status}"></span>
+          <span class="tree-module-label">${mod.name}</span>
+          <span class="tree-module-time">${mod.timing}</span>
+        </div>`;
+      nodesEl.insertAdjacentHTML('beforeend', modHtml);
+
+      /* Sub-modules */
+      mod.subModules.forEach(sub => {
+        const isSubActive = sub.id === activeSubId && isActive;
+        const subHtml = `
+          <div class="tree-sub ${isSubActive ? 'active' : ''}"
+               data-id="${sub.id}" data-module="${mod.id}"
+               data-status="${sub.status}">
+            <span class="tree-sub-dot ${sub.status}"></span>
+            <span class="tree-sub-label">${sub.label}</span>
+            <span class="tree-sub-time">${sub.time}</span>
+          </div>`;
+        nodesEl.insertAdjacentHTML('beforeend', subHtml);
+      });
+    });
+
+    /* Attach click handlers */
+    nodesEl.querySelectorAll('.tree-module').forEach(el => {
+      el.addEventListener('click', () => {
+        const modId = el.dataset.id;
+        const mod = MODULES.find(m => m.id === modId);
+        selectNode(modId, mod?.subModules[0]?.id || '');
+      });
+    });
+    nodesEl.querySelectorAll('.tree-sub').forEach(el => {
+      el.addEventListener('click', () => {
+        selectNode(el.dataset.module, el.dataset.id);
+      });
+    });
+
+    /* Rebuild paths after DOM settle */
+    requestAnimationFrame(() => {
+      buildTreePaths();
+      resizeParticleCanvas();
+      initParticles();
+    });
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     TREE PATHS (SVG bezier curves)
+     ═══════════════════════════════════════════════════════════════ */
+  let pathDataCache = [];
+
+  function buildTreePaths() {
+    const svg = document.getElementById('treePaths');
+    const wrap = document.getElementById('treeSvgWrap');
+    const nodes = document.getElementById('treeNodes');
+
+    /* Size SVG to cover full tree */
+    const wrapRect = wrap.getBoundingClientRect();
+    const nodesRect = nodes.getBoundingClientRect();
+    const h = Math.max(nodesRect.height + 40, wrapRect.height);
+    svg.setAttribute('width', wrapRect.width);
+    svg.setAttribute('height', h);
+    wrap.style.minHeight = h + 'px';
+
+    svg.innerHTML = '';
+    pathDataCache = [];
+
+    const allNodes = nodes.querySelectorAll('.tree-root, .tree-module, .tree-sub');
+    const containerRect = wrap.getBoundingClientRect();
+
+    /* Build parent-child connections */
+    let prevModuleEl = nodes.querySelector('.tree-root');
+    const moduleEls = nodes.querySelectorAll('.tree-module');
+    const subEls = nodes.querySelectorAll('.tree-sub');
+
+    /* Root -> each module */
+    const rootRect = prevModuleEl.getBoundingClientRect();
+    const rootCx = rootRect.left - containerRect.left + 26;
+    const rootCy = rootRect.top - containerRect.top + rootRect.height / 2;
+
+    moduleEls.forEach((modEl, i) => {
+      const modRect = modEl.getBoundingClientRect();
+      const modCx = modRect.left - containerRect.left + 24;
+      const modCy = modRect.top - containerRect.top + modRect.height / 2;
+      const mod = MODULES[i];
+
+      const pathClass = mod.status === 'done' ? 'path-done'
+                      : mod.status === 'running' ? 'path-active'
+                      : 'path-pending';
+
+      /* Bezier from previous node to this module */
+      const fromX = rootCx;
+      const fromY = i === 0 ? rootCy + 16 : rootCy + 16;
+      const toX = modCx;
+      const toY = modCy;
+
+      const cp1x = fromX;
+      const cp1y = fromY + (toY - fromY) * 0.5;
+      const cp2x = toX;
+      const cp2y = toY - (toY - fromY) * 0.3;
+
+      const d = `M${fromX},${fromY} C${cp1x},${cp1y} ${cp2x},${cp2y} ${toX},${toY}`;
+      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      path.setAttribute('d', d);
+      path.classList.add(pathClass);
+      svg.appendChild(path);
+
+      if (mod.status === 'running' || mod.status === 'done') {
+        pathDataCache.push({ d, status: mod.status, color: mod.color });
+      }
+
+      /* Module -> each sub-module */
+      mod.subModules.forEach((sub, si) => {
+        const subSelector = `.tree-sub[data-id="${sub.id}"]`;
+        const subEl = nodes.querySelector(subSelector);
+        if (!subEl) return;
+
+        const subRect = subEl.getBoundingClientRect();
+        const subCx = subRect.left - containerRect.left + 20;
+        const subCy = subRect.top - containerRect.top + subRect.height / 2;
+
+        const subPathClass = sub.status === 'done' ? 'path-done'
+                           : sub.status === 'running' ? 'path-active'
+                           : 'path-pending';
+
+        const sfx = modCx + 10;
+        const sfy = modCy;
+        const stx = subCx;
+        const sty = subCy;
+        const scp1x = sfx;
+        const scp1y = sfy + (sty - sfy) * 0.6;
+        const scp2x = stx;
+        const scp2y = sty - (sty - sfy) * 0.2;
+
+        const sd = `M${sfx},${sfy} C${scp1x},${scp1y} ${scp2x},${scp2y} ${stx},${sty}`;
+        const spath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        spath.setAttribute('d', sd);
+        spath.classList.add(subPathClass);
+        svg.appendChild(spath);
+
+        if (sub.status === 'running') {
+          pathDataCache.push({ d: sd, status: sub.status, color: mod.color });
+        }
+      });
+    });
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     TREE PATH PARTICLES (Canvas)
+     ═══════════════════════════════════════════════════════════════ */
+  const pCanvas = document.getElementById('treeParticleCanvas');
+  const pCtx = pCanvas.getContext('2d');
+  let particles = [];
+  let pAnimId = null;
+
+  function resizeParticleCanvas() {
+    const wrap = document.getElementById('treeSvgWrap');
+    const rect = wrap.getBoundingClientRect();
+    pCanvas.width = rect.width * (window.devicePixelRatio || 1);
+    pCanvas.height = rect.height * (window.devicePixelRatio || 1);
+    pCanvas.style.width = rect.width + 'px';
+    pCanvas.style.height = rect.height + 'px';
+    pCtx.setTransform(window.devicePixelRatio || 1, 0, 0, window.devicePixelRatio || 1, 0, 0);
+  }
+
+  function parseSVGPath(d) {
+    /* Extract M and C coords from "M x,y C x1,y1 x2,y2 x3,y3" */
+    const parts = d.replace(/[MC]/g, '|').split('|').filter(Boolean);
+    if (parts.length < 2) return null;
+    const start = parts[0].trim().split(',').map(Number);
+    const cParts = parts[1].trim().split(/[\s,]+/).map(Number);
+    if (cParts.length < 6) return null;
+    return {
+      p0: { x: start[0], y: start[1] },
+      p1: { x: cParts[0], y: cParts[1] },
+      p2: { x: cParts[2], y: cParts[3] },
+      p3: { x: cParts[4], y: cParts[5] },
+    };
+  }
+
+  function bezierAt(t, p) {
+    const u = 1 - t;
+    return {
+      x: u*u*u*p.p0.x + 3*u*u*t*p.p1.x + 3*u*t*t*p.p2.x + t*t*t*p.p3.x,
+      y: u*u*u*p.p0.y + 3*u*u*t*p.p1.y + 3*u*t*t*p.p2.y + t*t*t*p.p3.y,
+    };
+  }
+
+  function initParticles() {
+    particles = [];
+    pathDataCache.forEach((pd, pi) => {
+      const parsed = parseSVGPath(pd.d);
+      if (!parsed) return;
+      const count = pd.status === 'running' ? 3 : 1;
+      for (let i = 0; i < count; i++) {
+        particles.push({
+          path: parsed,
+          color: pd.color,
+          progress: (i / count) + Math.random() * 0.1,
+          speed: 0.004 + Math.random() * 0.003,
+          size: 1.5 + Math.random() * 1,
+          opacity: 0.5 + Math.random() * 0.3,
+        });
+      }
+    });
+  }
+
+  function drawParticles() {
+    pCtx.clearRect(0, 0, pCanvas.width / (window.devicePixelRatio || 1),
+                         pCanvas.height / (window.devicePixelRatio || 1));
+
+    particles.forEach(p => {
+      p.progress += p.speed;
+      if (p.progress >= 1) p.progress = 0;
+
+      const pos = bezierAt(p.progress, p.path);
+      const fade = Math.min(p.progress * 5, (1 - p.progress) * 5, 1);
+      const a = p.opacity * fade;
+
+      /* Core */
+      pCtx.beginPath();
+      pCtx.arc(pos.x, pos.y, p.size, 0, Math.PI * 2);
+      pCtx.fillStyle = hexToRgba(p.color, a);
+      pCtx.fill();
+
+      /* Glow */
+      pCtx.beginPath();
+      pCtx.arc(pos.x, pos.y, p.size * 2.5, 0, Math.PI * 2);
+      pCtx.fillStyle = hexToRgba(p.color, a * 0.15);
+      pCtx.fill();
+    });
+
+    pAnimId = requestAnimationFrame(drawParticles);
+  }
+
+  function hexToRgba(hex, a) {
+    const r = parseInt(hex.slice(1, 3), 16);
+    const g = parseInt(hex.slice(3, 5), 16);
+    const b = parseInt(hex.slice(5, 7), 16);
+    return `rgba(${r},${g},${b},${a})`;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     CONTENT RENDERING (Main dashboard)
+     ═══════════════════════════════════════════════════════════════ */
+  function renderContent() {
+    const area = document.getElementById('contentMain');
+    const mod = MODULES.find(m => m.id === activeModuleId);
+    if (!mod) return;
+
+    /* Topbar breadcrumb */
+    const modEl = document.getElementById('topbarModule');
+    const chevEl = document.getElementById('topbarChevron');
+    const subEl = document.getElementById('topbarSub');
+    modEl.textContent = mod.name;
+
+    const activeSub = mod.subModules.find(s => s.id === activeSubId);
+    if (activeSub) {
+      chevEl.style.display = '';
+      subEl.textContent = activeSub.label;
+    } else {
+      chevEl.style.display = 'none';
+      subEl.textContent = '';
+    }
+
+    /* Stat tiles */
+    const statsHtml = mod.stats.map(st => `
+      <div class="stat-tile">
+        <div class="stat-tile-label">${st.label}</div>
+        <div class="stat-tile-value">${st.value}</div>
+        <div class="stat-tile-bar">
+          <div class="stat-tile-bar-fill ${st.bar}" data-pct="${st.pct}"></div>
+        </div>
+      </div>
+    `).join('');
+
+    /* Summary */
+    const statusLabel = mod.status === 'done' ? 'Complete'
+                      : mod.status === 'running' ? 'Running'
+                      : 'Pending';
+    const chipsHtml = mod.chips.map(c =>
+      `<span class="chip${c.accent ? ' accent' : ''}">${c.text}</span>`
+    ).join('');
+
+    /* Items */
+    let itemsHtml;
+    if (mod.items.length) {
+      const rows = mod.items.map((it, i) => {
+        const runClass = it.status === 'running' ? ' running-row' : '';
+        return `
+          <div class="item-row${runClass}">
+            <span class="item-idx">${i + 1}</span>
+            <span class="item-dot ${it.status}"></span>
+            <span class="item-name">${it.name}</span>
+            <span class="item-score">${it.score}</span>
+            <span class="item-meta">${it.meta}</span>
+          </div>`;
+      }).join('');
+      itemsHtml = `
+        <div class="items-panel">
+          <div class="items-panel-header">
+            <span class="items-panel-title">Items</span>
+            <span class="items-panel-count">${mod.items.length}</span>
+          </div>
+          ${rows}
+        </div>`;
+    } else {
+      itemsHtml = `
+        <div class="items-panel">
+          <div class="items-panel-header">
+            <span class="items-panel-title">Items</span>
+            <span class="items-panel-count">0</span>
+          </div>
+          <div class="empty-state">
+            <div class="empty-state-icon">&#x23F3;</div>
+            Waiting for upstream modules to complete.
+          </div>
+        </div>`;
+    }
+
+    area.innerHTML = `
+      <div class="stat-row">${statsHtml}</div>
+      <div class="summary-card">
+        <div class="summary-card-header">
+          <div class="summary-icon" style="background:${mod.color}12;color:${mod.color}">${mod.icon}</div>
+          <span class="summary-title">${mod.name}${activeSub ? ' \u2014 ' + activeSub.label : ''}</span>
+          <span class="summary-status ${mod.status}">${statusLabel}</span>
+        </div>
+        <div class="summary-text">${mod.summary}</div>
+        <div class="chip-row">${chipsHtml}</div>
+      </div>
+      ${itemsHtml}
+    `;
+
+    /* Animate stat bars after paint */
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        area.querySelectorAll('.stat-tile-bar-fill').forEach(bar => {
+          bar.style.width = bar.dataset.pct + '%';
+        });
+      });
+    });
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     ACTIVITY FEED RENDERING
+     ═══════════════════════════════════════════════════════════════ */
+  function renderFeed() {
+    const mod = MODULES.find(m => m.id === activeModuleId);
+    if (!mod) return;
+
+    const headerEl = document.getElementById('feedHeader');
+    const bodyEl   = document.getElementById('feedBody');
+    const countEl  = document.getElementById('feedEventCount');
+    const rateEl   = document.getElementById('feedRate');
+
+    const isLive = mod.status === 'running';
+    const isDone = mod.status === 'done';
+    const isPending = mod.status === 'pending';
+
+    /* Header badge */
+    if (isLive) {
+      headerEl.innerHTML = `
+        <span class="feed-live-badge">
+          <span class="feed-live-dot"></span>
+          LIVE
+        </span>
+        <span class="feed-title">Activity Feed</span>
+        <span class="feed-count">${mod.activityLog.length} events</span>`;
+      rateEl.textContent = '~1/4s';
+    } else if (isDone) {
+      headerEl.innerHTML = `
+        <span class="historical-badge">
+          <span class="historical-badge-icon">&#x2713;</span>
+          Historical
+        </span>
+        <span class="feed-title">Activity Log</span>
+        <span class="feed-count">${mod.activityLog.length} events</span>`;
+      rateEl.textContent = 'static';
+    } else {
+      headerEl.innerHTML = `
+        <span class="feed-title" style="color:var(--text-500)">Activity Feed</span>
+        <span class="feed-count" style="margin-left:auto">No events</span>`;
+      rateEl.textContent = '--';
+    }
+
+    countEl.textContent = mod.activityLog.length;
+
+    /* Render events */
+    if (isPending || mod.activityLog.length === 0) {
+      bodyEl.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-state-icon">&#x1F4E1;</div>
+          No activity yet. Events will appear<br>when this module starts.
+        </div>`;
+      return;
+    }
+
+    /* Show all events, newest first */
+    const events = [...mod.activityLog].reverse();
+    bodyEl.innerHTML = events.map((ev, i) => `
+      <div class="feed-event" data-idx="${i}">
+        <span class="feed-event-time">${ev.time}</span>
+        <span class="feed-event-indicator">
+          <span class="feed-event-dot ${ev.dot}"></span>
+          <span class="feed-event-line"></span>
+        </span>
+        <span class="feed-event-content">
+          <span class="feed-event-msg">${ev.msg}</span>
+          <span class="feed-event-source">${ev.source}</span>
+        </span>
+      </div>
+    `).join('');
+
+    /* Scroll to top (newest) */
+    bodyEl.scrollTop = 0;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     LIVE FEED: Append new events every 4 seconds
+     ═══════════════════════════════════════════════════════════════ */
+  function startLiveFeed() {
+    stopLiveFeed();
+
+    liveTimerHandle = setInterval(() => {
+      const mod = MODULES.find(m => m.id === activeModuleId);
+      if (!mod || mod.status !== 'running') return;
+      if (!mod.futureEvents || mod.futureEvents.length === 0) return;
+
+      const idx = futureEventIdx[mod.id] || 0;
+      if (idx >= mod.futureEvents.length) {
+        /* Loop back around */
+        futureEventIdx[mod.id] = 0;
+        return;
+      }
+
+      const event = mod.futureEvents[idx];
+      futureEventIdx[mod.id] = idx + 1;
+
+      /* Generate a plausible timestamp */
+      const lastEvent = mod.activityLog[mod.activityLog.length - 1];
+      const newTime = incrementTime(lastEvent ? lastEvent.time : '14:31:00');
+
+      const newEvent = {
+        time: newTime,
+        dot: event.dot,
+        msg: event.msg,
+        source: event.source,
+      };
+
+      mod.activityLog.push(newEvent);
+      feedEventTotal++;
+
+      /* Append to DOM with animation */
+      const bodyEl = document.getElementById('feedBody');
+      const countEl = document.getElementById('feedEventCount');
+      const feedCountSpan = document.querySelector('.feed-count');
+
+      if (!bodyEl || !countEl) return;
+
+      countEl.textContent = feedEventTotal;
+      if (feedCountSpan) {
+        feedCountSpan.textContent = mod.activityLog.length + ' events';
+      }
+
+      /* Create new event DOM element */
+      const eventEl = document.createElement('div');
+      eventEl.className = 'feed-event new-entry';
+      eventEl.innerHTML = `
+        <span class="feed-event-time">${newEvent.time}</span>
+        <span class="feed-event-indicator">
+          <span class="feed-event-dot ${newEvent.dot}"></span>
+          <span class="feed-event-line"></span>
+        </span>
+        <span class="feed-event-content">
+          <span class="feed-event-msg">${newEvent.msg}</span>
+          <span class="feed-event-source">${newEvent.source}</span>
+        </span>`;
+
+      /* Insert at top (newest first) */
+      bodyEl.insertBefore(eventEl, bodyEl.firstChild);
+
+      /* Fix the feed-event-line: remove from new first, add to previous first */
+      const allEvents = bodyEl.querySelectorAll('.feed-event');
+      allEvents.forEach((el, i) => {
+        const line = el.querySelector('.feed-event-line');
+        if (line) {
+          line.style.display = i === allEvents.length - 1 ? 'none' : '';
+        }
+      });
+
+      /* Remove 'new-entry' class after animation completes */
+      setTimeout(() => {
+        eventEl.classList.remove('new-entry');
+      }, 550);
+
+      /* Auto-scroll to top if user hasn't scrolled away */
+      if (bodyEl.scrollTop < 50) {
+        bodyEl.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    }, 4000);
+  }
+
+  function stopLiveFeed() {
+    if (liveTimerHandle) {
+      clearInterval(liveTimerHandle);
+      liveTimerHandle = null;
+    }
+  }
+
+  function incrementTime(timeStr) {
+    /* Increment a HH:MM:SS string by a random 2-8 seconds */
+    const parts = timeStr.split(':').map(Number);
+    let secs = parts[0] * 3600 + parts[1] * 60 + (parts[2] || 0);
+    secs += 2 + Math.floor(Math.random() * 7);
+    const h = Math.floor(secs / 3600) % 24;
+    const m = Math.floor((secs % 3600) / 60);
+    const s = secs % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     NAVIGATION
+     ═══════════════════════════════════════════════════════════════ */
+  function selectNode(modId, subId) {
+    activeModuleId = modId;
+    const mod = MODULES.find(m => m.id === modId);
+    activeSubId = subId || (mod?.subModules[0]?.id ?? '');
+
+    renderTree();
+    renderContent();
+    renderFeed();
+
+    /* Restart or stop live feed depending on module status */
+    if (mod && mod.status === 'running') {
+      startLiveFeed();
+    } else {
+      stopLiveFeed();
+    }
+  }
+
+  /* ═══════════════════════════════════════════════════════════════
+     ELAPSED TIMER
+     ═══════════════════════════════════════════════════════════════ */
+  let elapsedSeconds = 1 * 3600 + 42 * 60;
+
+  function updateElapsed() {
+    elapsedSeconds++;
+    const h = Math.floor(elapsedSeconds / 3600);
+    const m = Math.floor((elapsedSeconds % 3600) / 60);
+    const s = elapsedSeconds % 60;
+    const el = document.getElementById('elapsedTime');
+    if (el) {
+      el.textContent = `${h}h ${String(m).padStart(2, '0')}m`;
+    }
+  }
+
+  setInterval(updateElapsed, 1000);
+
+  /* ═══════════════════════════════════════════════════════════════
+     INIT
+     ═══════════════════════════════════════════════════════════════ */
+  function init() {
+    renderTree();
+    renderContent();
+    renderFeed();
+
+    /* Start live feed if current module is running */
+    const activeMod = MODULES.find(m => m.id === activeModuleId);
+    if (activeMod && activeMod.status === 'running') {
+      startLiveFeed();
+    }
+
+    /* Start particle animation */
+    drawParticles();
+  }
+
+  /* Handle resize */
+  window.addEventListener('resize', () => {
+    buildTreePaths();
+    resizeParticleCanvas();
+    initParticles();
+  });
+
+  init();
+})();
+</script>
+</body>
+</html>

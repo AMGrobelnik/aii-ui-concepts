@@ -1,0 +1,806 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor - Circuit Trace Strip</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #0a0a0f;
+    color: #c8ccd4;
+    font-family: 'Inter', sans-serif;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Circuit Strip ── */
+  .circuit-strip {
+    background: #0a120a;
+    height: 80px;
+    position: relative;
+    overflow: hidden;
+    flex-shrink: 0;
+    border-bottom: 1px solid #1a2a1a;
+  }
+
+  /* Subtle PCB grid texture */
+  .circuit-strip::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(30, 60, 30, 0.12) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(30, 60, 30, 0.12) 1px, transparent 1px);
+    background-size: 12px 12px;
+    pointer-events: none;
+  }
+
+  .circuit-strip::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, #2a4a2a, transparent);
+  }
+
+  .circuit-canvas {
+    width: 100%;
+    height: 100%;
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+
+  /* ── Content Area ── */
+  .content-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 28px 40px;
+  }
+
+  .content-area::-webkit-scrollbar { width: 5px; }
+  .content-area::-webkit-scrollbar-track { background: transparent; }
+  .content-area::-webkit-scrollbar-thumb { background: #1e2030; border-radius: 4px; }
+
+  .step-view {
+    display: none;
+    animation: fadeIn 0.3s ease;
+  }
+  .step-view.active { display: block; }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .step-header {
+    margin-bottom: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid #1a1a2e;
+  }
+  .step-header h1 {
+    font-size: 22px;
+    font-weight: 700;
+    color: #e2e6f0;
+    margin-bottom: 4px;
+  }
+  .step-header .subtitle {
+    font-size: 13px;
+    color: #6a6e7a;
+  }
+
+  /* Status badge */
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-left: 12px;
+    vertical-align: middle;
+  }
+  .status-badge.complete { background: rgba(74, 222, 128, 0.1); color: #4ade80; }
+  .status-badge.active   { background: rgba(96, 165, 250, 0.1); color: #60a5fa; }
+  .status-badge.pending  { background: rgba(100, 100, 120, 0.1); color: #64748b; }
+
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+  }
+  .status-badge.complete .status-dot { background: #4ade80; }
+  .status-badge.active .status-dot   { background: #60a5fa; animation: pulse-dot 1.2s ease infinite; }
+  .status-badge.pending .status-dot  { background: #475569; }
+
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.3; }
+  }
+
+  /* Cards */
+  .card {
+    background: #10101a;
+    border: 1px solid #1a1a2e;
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 16px;
+    transition: border-color 0.2s;
+  }
+  .card:hover { border-color: #2a2a4e; }
+
+  .card-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #8a8ea0;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    margin-bottom: 12px;
+  }
+
+  .card p, .card li {
+    font-size: 14px;
+    line-height: 1.7;
+    color: #b0b4c0;
+  }
+
+  .card ul {
+    list-style: none;
+    padding: 0;
+  }
+  .card ul li {
+    padding: 4px 0 4px 16px;
+    position: relative;
+  }
+  .card ul li::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 12px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #3a3a5e;
+  }
+
+  /* Metric row */
+  .metrics-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .metric-box {
+    background: #10101a;
+    border: 1px solid #1a1a2e;
+    border-radius: 8px;
+    padding: 14px 16px;
+    text-align: center;
+  }
+  .metric-value {
+    font-size: 22px;
+    font-weight: 700;
+    color: #e2e6f0;
+  }
+  .metric-label {
+    font-size: 11px;
+    color: #6a6e7a;
+    margin-top: 2px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+
+  /* Log lines */
+  .log-block {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    line-height: 1.8;
+    color: #7a7e8a;
+    background: #08080e;
+    border-radius: 6px;
+    padding: 14px 16px;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+  .log-block::-webkit-scrollbar { width: 4px; }
+  .log-block::-webkit-scrollbar-thumb { background: #1a1a2e; border-radius: 2px; }
+
+  .log-time  { color: #4ade80; }
+  .log-level { color: #60a5fa; }
+  .log-warn  { color: #fbbf24; }
+  .log-fn    { color: #c084fc; }
+
+  /* Progress bar */
+  .progress-wrap {
+    background: #0c0c16;
+    border-radius: 4px;
+    height: 6px;
+    overflow: hidden;
+    margin: 12px 0;
+  }
+  .progress-bar {
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.6s ease;
+  }
+
+  /* Nav hint */
+  .nav-hint {
+    position: fixed;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: #3a3e4a;
+    pointer-events: none;
+  }
+  .nav-hint kbd {
+    background: #14141e;
+    border: 1px solid #1e2030;
+    border-radius: 4px;
+    padding: 2px 7px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: #5a5e6a;
+  }
+
+  /* Color accents per step */
+  .step-view[data-step="0"] .card { border-left: 2px solid #4ade80; }
+  .step-view[data-step="1"] .card { border-left: 2px solid #c084fc; }
+  .step-view[data-step="2"] .card { border-left: 2px solid #60a5fa; }
+  .step-view[data-step="3"] .card { border-left: 2px solid #64748b; }
+
+  .step-view[data-step="0"] .metric-value { color: #4ade80; }
+  .step-view[data-step="1"] .metric-value { color: #c084fc; }
+  .step-view[data-step="2"] .metric-value { color: #60a5fa; }
+
+  .step-view[data-step="0"] .progress-bar { background: linear-gradient(90deg, #4ade80, #22c55e); }
+  .step-view[data-step="1"] .progress-bar { background: linear-gradient(90deg, #c084fc, #a855f7); }
+  .step-view[data-step="2"] .progress-bar { background: linear-gradient(90deg, #60a5fa, #3b82f6); }
+  .step-view[data-step="3"] .progress-bar { background: linear-gradient(90deg, #475569, #334155); }
+</style>
+</head>
+<body>
+
+<!-- Circuit Strip -->
+<div class="circuit-strip">
+  <canvas class="circuit-canvas" id="circuitCanvas"></canvas>
+</div>
+
+<!-- Content Area -->
+<div class="content-area" id="contentArea">
+
+  <!-- Step 0: Seed -->
+  <div class="step-view active" data-step="0">
+    <div class="step-header">
+      <h1>Seed Hypotheses <span class="status-badge complete"><span class="status-dot"></span>Complete</span></h1>
+      <div class="subtitle">Knowledge graph seeding and initial hypothesis generation</div>
+    </div>
+    <div class="metrics-row">
+      <div class="metric-box"><div class="metric-value">2,847</div><div class="metric-label">KG Nodes</div></div>
+      <div class="metric-box"><div class="metric-value">6,193</div><div class="metric-label">KG Edges</div></div>
+      <div class="metric-box"><div class="metric-value">48</div><div class="metric-label">Seed Hypotheses</div></div>
+      <div class="metric-box"><div class="metric-value">14.2s</div><div class="metric-label">Runtime</div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Knowledge Graph Summary</div>
+      <p>Built from 312 source papers spanning reinforcement learning, causal inference, and program synthesis. Entity extraction identified 2,847 unique concepts with 6,193 relational edges. Clustering revealed 7 dense subgraphs used as seed regions.</p>
+    </div>
+    <div class="card">
+      <div class="card-title">Top Seed Hypotheses</div>
+      <ul>
+        <li>Causal policy gradients via do-calculus interventions on learned world models can reduce sample complexity by orders of magnitude in sparse-reward environments</li>
+        <li>Hierarchical program synthesis using type-directed neural search with incremental verification yields provably correct sub-programs</li>
+        <li>Cross-domain transfer through shared causal structure enables zero-shot generalization between robotics and NLP planning tasks</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-title">Activity Log</div>
+      <div class="log-block">
+<span class="log-time">14:22:01</span> <span class="log-level">INFO </span> <span class="log-fn">build_kg</span> | Loading 312 source documents<br>
+<span class="log-time">14:22:08</span> <span class="log-level">INFO </span> <span class="log-fn">extract</span> | Entity extraction complete: 2847 nodes<br>
+<span class="log-time">14:22:11</span> <span class="log-level">INFO </span> <span class="log-fn">link</span>    | Relation linking complete: 6193 edges<br>
+<span class="log-time">14:22:13</span> <span class="log-level">INFO </span> <span class="log-fn">cluster</span> | Found 7 dense subgraph regions<br>
+<span class="log-time">14:22:15</span> <span class="log-level">INFO </span> <span class="log-fn">seed</span>    | Generated 48 seed hypotheses<br>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 1: Hypothesis -->
+  <div class="step-view" data-step="1">
+    <div class="step-header">
+      <h1>Hypothesis Loop <span class="status-badge complete"><span class="status-dot"></span>Complete</span></h1>
+      <div class="subtitle">Iterative hypothesis refinement and review cycles</div>
+    </div>
+    <div class="metrics-row">
+      <div class="metric-box"><div class="metric-value">48</div><div class="metric-label">Input Hypos</div></div>
+      <div class="metric-box"><div class="metric-value">12</div><div class="metric-label">Survivors</div></div>
+      <div class="metric-box"><div class="metric-value">3</div><div class="metric-label">Review Rounds</div></div>
+      <div class="metric-box"><div class="metric-value">87.4</div><div class="metric-label">Avg Score</div></div>
+    </div>
+    <div class="progress-wrap"><div class="progress-bar" style="width:100%"></div></div>
+    <div class="card">
+      <div class="card-title">Refinement Summary</div>
+      <p>Three iterative review rounds progressively tightened hypothesis quality. Round 1 filtered 48 to 28 based on novelty and feasibility. Round 2 merged overlapping ideas and strengthened theoretical grounding, producing 18 candidates. Final round selected the 12 strongest hypotheses with mean review score 87.4/100.</p>
+    </div>
+    <div class="card">
+      <div class="card-title">Surviving Hypotheses</div>
+      <ul>
+        <li>Causal policy gradients with do-calculus interventions for sparse-reward RL</li>
+        <li>Type-directed hierarchical program synthesis with incremental SMT verification</li>
+        <li>Structural causal model transfer for cross-domain zero-shot planning</li>
+        <li>Neural theorem proving via curriculum learning on synthetic proof obligations</li>
+        <li>Diffusion-based program repair using execution trace conditioning</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-title">Review Scores Distribution</div>
+      <div class="log-block">
+<span class="log-time">Round 1</span> <span class="log-level">FILTER</span> | 48 -> 28 hypotheses (novelty >= 60, feasibility >= 50)<br>
+<span class="log-time">Round 2</span> <span class="log-level">MERGE </span> | 28 -> 18 hypotheses (merged 6 overlapping pairs, dropped 4)<br>
+<span class="log-time">Round 3</span> <span class="log-level">SELECT</span> | 18 -> 12 hypotheses (composite score >= 82)<br>
+<span class="log-time">Final  </span> <span class="log-level">STATS </span> | mean=87.4 median=88.1 std=4.2 min=82.3 max=94.7<br>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Activity Log</div>
+      <div class="log-block">
+<span class="log-time">14:22:16</span> <span class="log-level">INFO </span> <span class="log-fn">review_hypo</span> | Starting review round 1/3<br>
+<span class="log-time">14:22:31</span> <span class="log-level">INFO </span> <span class="log-fn">review_hypo</span> | Round 1 complete: 28 candidates remain<br>
+<span class="log-time">14:22:32</span> <span class="log-level">INFO </span> <span class="log-fn">review_hypo</span> | Starting review round 2/3<br>
+<span class="log-time">14:22:48</span> <span class="log-level">INFO </span> <span class="log-fn">review_hypo</span> | Round 2 complete: 18 candidates remain<br>
+<span class="log-time">14:22:49</span> <span class="log-level">INFO </span> <span class="log-fn">review_hypo</span> | Starting review round 3/3<br>
+<span class="log-time">14:23:02</span> <span class="log-level">INFO </span> <span class="log-fn">review_hypo</span> | Round 3 complete: 12 survivors (mean=87.4)<br>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 2: Invention -->
+  <div class="step-view" data-step="2">
+    <div class="step-header">
+      <h1>Invention Loop <span class="status-badge active"><span class="status-dot"></span>Running</span></h1>
+      <div class="subtitle">Generating plans, paper text, and review iterations</div>
+    </div>
+    <div class="metrics-row">
+      <div class="metric-box"><div class="metric-value">7/12</div><div class="metric-label">Inventions</div></div>
+      <div class="metric-box"><div class="metric-value">2</div><div class="metric-label">Iteration</div></div>
+      <div class="metric-box"><div class="metric-value">4m 18s</div><div class="metric-label">Elapsed</div></div>
+      <div class="metric-box"><div class="metric-value">$2.14</div><div class="metric-label">Cost</div></div>
+    </div>
+    <div class="progress-wrap"><div class="progress-bar" style="width:58%"></div></div>
+    <div class="card">
+      <div class="card-title">Current Invention</div>
+      <p><strong>Causal Policy Gradients via Do-Calculus</strong> -- Generating plan and paper text for hypothesis #7. This invention proposes using structural causal models to define interventional distributions over action spaces, enabling policy gradient estimation with dramatically reduced variance in sparse-reward settings.</p>
+    </div>
+    <div class="card">
+      <div class="card-title">Completed Inventions</div>
+      <ul>
+        <li>Type-directed hierarchical program synthesis -- Score: 91.2</li>
+        <li>SCM transfer for zero-shot planning -- Score: 88.7</li>
+        <li>Neural theorem proving with curriculum -- Score: 86.4</li>
+        <li>Diffusion-based program repair -- Score: 90.1</li>
+        <li>Compositional world models via slot attention -- Score: 85.3</li>
+        <li>Amortized Bayesian optimization for architecture search -- Score: 89.9</li>
+      </ul>
+    </div>
+    <div class="card">
+      <div class="card-title">Activity Log</div>
+      <div class="log-block">
+<span class="log-time">14:27:44</span> <span class="log-level">INFO </span> <span class="log-fn">gen_plan</span>     | Generating research plan for hypo #7<br>
+<span class="log-time">14:28:02</span> <span class="log-level">INFO </span> <span class="log-fn">gen_plan</span>     | Plan generated: 6 sections, 3 experiments<br>
+<span class="log-time">14:28:03</span> <span class="log-level">INFO </span> <span class="log-fn">gen_paper</span>    | Writing paper text (iteration 2/3)<br>
+<span class="log-time">14:28:19</span> <span class="log-warn">WARN </span> <span class="log-fn">review_paper</span> | Section 4 needs stronger empirical baselines<br>
+<span class="log-time">14:28:20</span> <span class="log-level">INFO </span> <span class="log-fn">gen_paper</span>    | Revising section 4 with additional baselines<br>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step 3: Paper -->
+  <div class="step-view" data-step="3">
+    <div class="step-header">
+      <h1>Paper Generation <span class="status-badge pending"><span class="status-dot"></span>Pending</span></h1>
+      <div class="subtitle">Full paper compilation, visualizations, and artifact demos</div>
+    </div>
+    <div class="metrics-row">
+      <div class="metric-box"><div class="metric-value">--</div><div class="metric-label">Papers</div></div>
+      <div class="metric-box"><div class="metric-value">--</div><div class="metric-label">Visualizations</div></div>
+      <div class="metric-box"><div class="metric-value">--</div><div class="metric-label">Demos</div></div>
+      <div class="metric-box"><div class="metric-value">--</div><div class="metric-label">Runtime</div></div>
+    </div>
+    <div class="progress-wrap"><div class="progress-bar" style="width:0%"></div></div>
+    <div class="card">
+      <div class="card-title">Waiting</div>
+      <p>Paper generation will begin after the invention loop completes all 12 hypotheses. This stage compiles full LaTeX papers, generates visualizations and diagrams, and builds interactive artifact demos for each invention.</p>
+    </div>
+    <div class="card">
+      <div class="card-title">Expected Outputs</div>
+      <ul>
+        <li>Full LaTeX paper with abstract, methodology, experiments, and conclusions</li>
+        <li>Auto-generated figures, charts, and architecture diagrams</li>
+        <li>Interactive Python demos showcasing key algorithms</li>
+        <li>Supplementary materials and reproducibility artifacts</li>
+      </ul>
+    </div>
+  </div>
+
+</div>
+
+<!-- Navigation hint -->
+<div class="nav-hint">
+  <kbd>&larr;</kbd> <kbd>&rarr;</kbd> Navigate steps
+</div>
+
+<script>
+// ════════════════════════════════════════════════
+//  Step data
+// ════════════════════════════════════════════════
+const steps = [
+  { id: 'seed',       label: 'SEED',       status: 'complete', ledColor: '#4ade80', ledGlow: '#22c55e' },
+  { id: 'hypothesis', label: 'HYPOTHESIS',  status: 'complete', ledColor: '#c084fc', ledGlow: '#a855f7' },
+  { id: 'invention',  label: 'INVENTION',   status: 'active',   ledColor: '#60a5fa', ledGlow: '#3b82f6' },
+  { id: 'paper',      label: 'PAPER',       status: 'pending',  ledColor: '#334155', ledGlow: '#1e293b' },
+];
+
+let currentStep = 0;
+const views = document.querySelectorAll('.step-view');
+
+// ════════════════════════════════════════════════
+//  Navigation
+// ════════════════════════════════════════════════
+function navigateTo(idx) {
+  if (idx < 0 || idx >= steps.length) return;
+  currentStep = idx;
+  views.forEach((v, i) => v.classList.toggle('active', i === idx));
+  drawCircuit();
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowRight') navigateTo(currentStep + 1);
+  if (e.key === 'ArrowLeft')  navigateTo(currentStep - 1);
+});
+
+// ════════════════════════════════════════════════
+//  Circuit Canvas Drawing
+// ════════════════════════════════════════════════
+const canvas = document.getElementById('circuitCanvas');
+const ctx = canvas.getContext('2d');
+let dpr = window.devicePixelRatio || 1;
+let W, H;
+let animFrame;
+let t = 0;
+
+function resize() {
+  const rect = canvas.parentElement.getBoundingClientRect();
+  W = rect.width;
+  H = rect.height;
+  canvas.width = W * dpr;
+  canvas.height = H * dpr;
+  canvas.style.width = W + 'px';
+  canvas.style.height = H + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+window.addEventListener('resize', () => { resize(); drawCircuit(); });
+
+// Chip geometry
+const CHIP_W = 108;
+const CHIP_H = 38;
+const VIA_R = 4;
+const NOTCH_W = 10;
+const NOTCH_H = 5;
+
+function getChipPositions() {
+  const margin = 60;
+  const usable = W - 2 * margin;
+  const spacing = usable / (steps.length - 1);
+  return steps.map((_, i) => ({
+    cx: margin + i * spacing,
+    cy: H / 2,
+  }));
+}
+
+// Build trace path segments between chips (right-angle routing)
+function getTraceSegments(from, to) {
+  const startX = from.cx + CHIP_W / 2 + 4;
+  const endX = to.cx - CHIP_W / 2 - 4;
+  const midX = (startX + endX) / 2;
+  const bendY = from.cy - 18; // route above
+
+  return [
+    { x: startX, y: from.cy },
+    { x: midX - 6, y: from.cy },   // horizontal out
+    { x: midX - 6, y: bendY },     // vertical up (via here)
+    { x: midX + 6, y: bendY },     // short horizontal jog
+    { x: midX + 6, y: to.cy },     // vertical down (via here)
+    { x: endX, y: to.cy },         // horizontal into next chip
+  ];
+}
+
+function segmentLength(pts) {
+  let len = 0;
+  for (let i = 1; i < pts.length; i++) {
+    len += Math.hypot(pts[i].x - pts[i-1].x, pts[i].y - pts[i-1].y);
+  }
+  return len;
+}
+
+function pointAlongPath(pts, frac) {
+  const totalLen = segmentLength(pts);
+  let target = frac * totalLen;
+  for (let i = 1; i < pts.length; i++) {
+    const dx = pts[i].x - pts[i-1].x;
+    const dy = pts[i].y - pts[i-1].y;
+    const segLen = Math.hypot(dx, dy);
+    if (target <= segLen) {
+      const r = target / segLen;
+      return { x: pts[i-1].x + dx * r, y: pts[i-1].y + dy * r };
+    }
+    target -= segLen;
+  }
+  return pts[pts.length - 1];
+}
+
+// ════════════════════════════════════════════════
+//  Draw
+// ════════════════════════════════════════════════
+function drawCircuit() {
+  ctx.clearRect(0, 0, W, H);
+  const chips = getChipPositions();
+
+  // ── Draw traces ──
+  for (let i = 0; i < steps.length - 1; i++) {
+    const seg = getTraceSegments(chips[i], chips[i + 1]);
+    const fromStatus = steps[i].status;
+    const toStatus = steps[i + 1].status;
+    const isCompleted = (fromStatus === 'complete' && (toStatus === 'complete' || toStatus === 'active'));
+    const isActive = (fromStatus === 'complete' && toStatus === 'active');
+    const isPending = !isCompleted;
+
+    // Trace line
+    ctx.beginPath();
+    ctx.moveTo(seg[0].x, seg[0].y);
+    for (let j = 1; j < seg.length; j++) {
+      ctx.lineTo(seg[j].x, seg[j].y);
+    }
+    ctx.strokeStyle = isPending ? '#1a2a1a' : '#7a5c30';
+    ctx.lineWidth = isPending ? 1.5 : 2.5;
+    ctx.stroke();
+
+    // Glow on completed/active traces
+    if (isCompleted) {
+      ctx.beginPath();
+      ctx.moveTo(seg[0].x, seg[0].y);
+      for (let j = 1; j < seg.length; j++) {
+        ctx.lineTo(seg[j].x, seg[j].y);
+      }
+      ctx.strokeStyle = isActive ? 'rgba(96,165,250,0.15)' : 'rgba(180,140,60,0.12)';
+      ctx.lineWidth = 8;
+      ctx.stroke();
+    }
+
+    // Via circles at bends
+    for (let j = 1; j < seg.length - 1; j++) {
+      // Check if this is a bend (direction changes)
+      const prev = seg[j - 1];
+      const curr = seg[j];
+      const next = seg[j + 1];
+      const d1x = curr.x - prev.x;
+      const d1y = curr.y - prev.y;
+      const d2x = next.x - curr.x;
+      const d2y = next.y - curr.y;
+      const isBend = (Math.abs(d1x) > 0.1 && Math.abs(d2y) > 0.1) ||
+                     (Math.abs(d1y) > 0.1 && Math.abs(d2x) > 0.1);
+      if (isBend) {
+        ctx.beginPath();
+        ctx.arc(curr.x, curr.y, VIA_R, 0, Math.PI * 2);
+        ctx.fillStyle = isPending ? '#0f1f0f' : '#5a4420';
+        ctx.fill();
+        ctx.strokeStyle = isPending ? '#1a2a1a' : '#8a6c30';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // Via inner hole
+        ctx.beginPath();
+        ctx.arc(curr.x, curr.y, 1.5, 0, Math.PI * 2);
+        ctx.fillStyle = isPending ? '#0a120a' : '#3a2c10';
+        ctx.fill();
+      }
+    }
+
+    // Pulse dots traveling along completed/active traces
+    if (isCompleted) {
+      const numPulses = isActive ? 5 : 3;
+      const speed = isActive ? 0.0025 : 0.0012;
+      for (let p = 0; p < numPulses; p++) {
+        const frac = ((t * speed + p / numPulses) % 1 + 1) % 1;
+        const pt = pointAlongPath(seg, frac);
+        const pulseColor = isActive ? steps[i + 1].ledColor : '#c8a050';
+        const pulseGlow = isActive ? steps[i + 1].ledGlow : '#a08040';
+
+        // Glow
+        const grad = ctx.createRadialGradient(pt.x, pt.y, 0, pt.x, pt.y, 10);
+        grad.addColorStop(0, pulseColor + '60');
+        grad.addColorStop(1, pulseGlow + '00');
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, 10, 0, Math.PI * 2);
+        ctx.fillStyle = grad;
+        ctx.fill();
+
+        // Dot
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, 2.5, 0, Math.PI * 2);
+        ctx.fillStyle = pulseColor;
+        ctx.fill();
+      }
+    }
+  }
+
+  // ── Draw chips ──
+  for (let i = 0; i < steps.length; i++) {
+    const step = steps[i];
+    const { cx, cy } = chips[i];
+    const x = cx - CHIP_W / 2;
+    const y = cy - CHIP_H / 2;
+    const isSelected = i === currentStep;
+
+    // Chip body
+    ctx.beginPath();
+    roundRect(ctx, x, y, CHIP_W, CHIP_H, 4);
+    ctx.fillStyle = isSelected ? '#1a1a28' : '#0e0e18';
+    ctx.fill();
+    ctx.strokeStyle = isSelected ? '#3a3a5e' : '#1e1e2e';
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+
+    // Selection highlight
+    if (isSelected) {
+      ctx.save();
+      ctx.shadowColor = step.ledColor;
+      ctx.shadowBlur = 12;
+      ctx.beginPath();
+      roundRect(ctx, x, y, CHIP_W, CHIP_H, 4);
+      ctx.strokeStyle = step.ledColor + '40';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // IC notch at top center
+    ctx.beginPath();
+    ctx.arc(cx, y, NOTCH_W / 2, 0, Math.PI);
+    ctx.fillStyle = '#08080e';
+    ctx.fill();
+
+    // Pin legs (4 per side)
+    const pinLen = 5;
+    const pinGap = CHIP_H / 5;
+    ctx.strokeStyle = '#2a2a3e';
+    ctx.lineWidth = 1.2;
+    for (let p = 1; p <= 4; p++) {
+      const py = y + p * pinGap;
+      // Left pins
+      ctx.beginPath();
+      ctx.moveTo(x, py);
+      ctx.lineTo(x - pinLen, py);
+      ctx.stroke();
+      // Right pins
+      ctx.beginPath();
+      ctx.moveTo(x + CHIP_W, py);
+      ctx.lineTo(x + CHIP_W + pinLen, py);
+      ctx.stroke();
+    }
+
+    // LED indicator (top-right of chip)
+    const ledX = x + CHIP_W - 12;
+    const ledY = y + 10;
+    const ledR = 4;
+
+    if (step.status === 'active') {
+      // Pulsing LED
+      const pulse = 0.5 + 0.5 * Math.sin(t * 0.06);
+      ctx.save();
+      ctx.shadowColor = step.ledColor;
+      ctx.shadowBlur = 8 + pulse * 8;
+      ctx.beginPath();
+      ctx.arc(ledX, ledY, ledR, 0, Math.PI * 2);
+      ctx.fillStyle = step.ledColor;
+      ctx.globalAlpha = 0.5 + pulse * 0.5;
+      ctx.fill();
+      ctx.restore();
+    } else if (step.status === 'complete') {
+      // Steady on LED
+      ctx.save();
+      ctx.shadowColor = step.ledColor;
+      ctx.shadowBlur = 10;
+      ctx.beginPath();
+      ctx.arc(ledX, ledY, ledR, 0, Math.PI * 2);
+      ctx.fillStyle = step.ledColor;
+      ctx.fill();
+      ctx.restore();
+    } else {
+      // Off LED
+      ctx.beginPath();
+      ctx.arc(ledX, ledY, ledR, 0, Math.PI * 2);
+      ctx.fillStyle = '#1a1a28';
+      ctx.fill();
+      ctx.strokeStyle = '#2a2a3e';
+      ctx.lineWidth = 0.8;
+      ctx.stroke();
+    }
+
+    // Chip label
+    ctx.font = '600 10px "JetBrains Mono", monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = isSelected ? '#e2e6f0' : '#6a6e7a';
+    ctx.fillText(step.label, cx - 4, cy - 2);
+
+    // Status text under label
+    const statusText = step.status === 'complete' ? 'DONE' :
+                       step.status === 'active' ? 'RUN' : 'WAIT';
+    ctx.font = '400 8px "JetBrains Mono", monospace';
+    ctx.fillStyle = step.status === 'complete' ? '#4ade8080' :
+                    step.status === 'active' ? '#60a5fa80' : '#47556980';
+    ctx.fillText(statusText, cx - 4, cy + 10);
+  }
+}
+
+// Rounded rect helper
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + w - r, y);
+  ctx.arcTo(x + w, y, x + w, y + r, r);
+  ctx.lineTo(x + w, y + h - r);
+  ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+  ctx.lineTo(x + r, y + h);
+  ctx.arcTo(x, y + h, x, y + h - r, r);
+  ctx.lineTo(x, y + r);
+  ctx.arcTo(x, y, x + r, y, r);
+  ctx.closePath();
+}
+
+// ════════════════════════════════════════════════
+//  Animation Loop
+// ════════════════════════════════════════════════
+function animate() {
+  t++;
+  drawCircuit();
+  animFrame = requestAnimationFrame(animate);
+}
+
+// ════════════════════════════════════════════════
+//  Init
+// ════════════════════════════════════════════════
+resize();
+animate();
+
+// Click on circuit strip to navigate
+canvas.addEventListener('click', (e) => {
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const chips = getChipPositions();
+  let closest = 0;
+  let closestDist = Infinity;
+  chips.forEach((c, i) => {
+    const d = Math.abs(mx - c.cx);
+    if (d < closestDist) { closestDist = d; closest = i; }
+  });
+  if (closestDist < CHIP_W) navigateTo(closest);
+});
+</script>
+</body>
+</html>

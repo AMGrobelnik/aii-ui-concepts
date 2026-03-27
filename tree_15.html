@@ -1,0 +1,1593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Tree with Progress Bars</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ── Reset & Variables ──────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  /* Surfaces */
+  --bg-deep:     #0f1117;
+  --bg-surface:  #161921;
+  --bg-card:     #1c1f2b;
+  --bg-hover:    #242838;
+  --bg-elevated: #282c3c;
+
+  /* Borders */
+  --border:      #2a2e3d;
+  --border-dim:  #1f2333;
+  --border-lite: #333750;
+
+  /* Text hierarchy */
+  --text-100:    #e8eaf0;
+  --text-200:    #b0b4c4;
+  --text-300:    #7a7f94;
+  --text-400:    #545870;
+
+  /* Accents */
+  --accent:      #5b8af5;
+  --accent-dim:  #3a5fb8;
+  --accent-glow: rgba(91, 138, 245, 0.25);
+  --accent-bg:   rgba(91, 138, 245, 0.08);
+
+  /* Semantic colors */
+  --green:       #34d399;
+  --green-dim:   rgba(52, 211, 153, 0.15);
+  --green-glow:  rgba(52, 211, 153, 0.3);
+  --amber:       #fbbf24;
+  --amber-dim:   rgba(251, 191, 36, 0.12);
+  --red:         #f87171;
+  --red-dim:     rgba(248, 113, 113, 0.12);
+  --purple:      #a78bfa;
+  --purple-dim:  rgba(167, 139, 250, 0.12);
+
+  /* Layout */
+  --sidebar-w:   280px;
+  --topbar-h:    48px;
+  --tree-indent: 24px;
+
+  /* Shared tokens */
+  --radius:      8px;
+  --radius-lg:   12px;
+  --transition:  180ms ease;
+}
+
+html { font-size: 14px; }
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  background: var(--bg-deep);
+  color: var(--text-200);
+  line-height: 1.5;
+  overflow: hidden;
+  height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Layout Shell ──────────────────────────────────────────── */
+.shell {
+  display: flex;
+  height: 100vh;
+}
+
+/* ── Sidebar ───────────────────────────────────────────────── */
+.sidebar {
+  width: var(--sidebar-w);
+  min-width: var(--sidebar-w);
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border-dim);
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  z-index: 10;
+}
+
+.sidebar-header {
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--border-dim);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.sidebar-logo {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: linear-gradient(135deg, var(--accent), var(--purple));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.sidebar-brand {
+  flex: 1;
+  min-width: 0;
+}
+
+.sidebar-brand-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-100);
+}
+
+.sidebar-brand-sub {
+  font-size: 0.62rem;
+  color: var(--text-400);
+  letter-spacing: 0.04em;
+}
+
+/* ── Run Info Strip ────────────────────────────────────────── */
+.run-strip {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-dim);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--green);
+  animation: livePulse 2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes livePulse {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 var(--green-glow);
+  }
+  50% {
+    opacity: 0.7;
+    box-shadow: 0 0 8px 3px var(--green-glow);
+  }
+}
+
+.run-strip-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.run-strip-id {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-200);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.run-strip-meta {
+  font-size: 0.6rem;
+  color: var(--text-400);
+  font-variant-numeric: tabular-nums;
+}
+
+.run-strip-cost {
+  font-size: 0.62rem;
+  font-weight: 500;
+  color: var(--text-300);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+/* ── Tree Container ────────────────────────────────────────── */
+.tree-container {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 8px 0;
+}
+
+.tree-container::-webkit-scrollbar { width: 3px; }
+.tree-container::-webkit-scrollbar-track { background: transparent; }
+.tree-container::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 2px;
+}
+
+/* ── Tree Nodes ────────────────────────────────────────────── */
+.tree-node {
+  position: relative;
+}
+
+/* Phase node (top-level) */
+.tree-phase {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+  transition: background var(--transition);
+  user-select: none;
+}
+
+.tree-phase:hover {
+  background: rgba(255,255,255,0.02);
+}
+
+.tree-chevron {
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform 200ms ease;
+  color: var(--text-400);
+  font-size: 0.55rem;
+}
+
+.tree-chevron svg {
+  width: 10px;
+  height: 10px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.tree-node.collapsed .tree-chevron {
+  transform: rotate(-90deg);
+}
+
+.tree-phase-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.6rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.tree-phase-label {
+  flex: 1;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--text-100);
+}
+
+.tree-phase-badge {
+  font-size: 0.58rem;
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.tree-phase-badge.done    { background: var(--green-dim); color: var(--green); }
+.tree-phase-badge.running { background: var(--accent-bg); color: var(--accent); }
+.tree-phase-badge.pending { background: rgba(122,127,148,0.08); color: var(--text-400); }
+
+/* Module node (mid-level) */
+.tree-module {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px 6px calc(14px + var(--tree-indent));
+  cursor: pointer;
+  transition: background var(--transition);
+  user-select: none;
+}
+
+.tree-module:hover {
+  background: rgba(255,255,255,0.02);
+}
+
+.tree-module-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.5rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.tree-module-label {
+  flex: 1;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--text-200);
+}
+
+.tree-module-meta {
+  font-size: 0.58rem;
+  color: var(--text-400);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+/* Active module */
+.tree-module.active {
+  background: var(--accent-bg);
+}
+
+.tree-module.active .tree-module-label {
+  color: var(--text-100);
+  font-weight: 600;
+}
+
+/* ── Sub-Module Rows (38px height, with progress bars) ─────── */
+.sub-module-list {
+  overflow: hidden;
+  transition: max-height 300ms ease, opacity 200ms ease;
+}
+
+.tree-node.collapsed .sub-module-list {
+  max-height: 0 !important;
+  opacity: 0;
+}
+
+.sub-module-row {
+  height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px 0 calc(14px + var(--tree-indent) * 2);
+  cursor: pointer;
+  transition: background var(--transition);
+  user-select: none;
+  position: relative;
+  overflow: hidden;
+}
+
+.sub-module-row:hover {
+  background: rgba(255,255,255,0.025);
+}
+
+/* Active sub-module highlight */
+.sub-module-row.active {
+  background: var(--accent-bg);
+}
+
+/* ── Tree connector lines (vertical + horizontal) ──────────── */
+.sub-module-row::before {
+  content: '';
+  position: absolute;
+  left: calc(14px + var(--tree-indent) * 2 - 14px);
+  top: 0;
+  width: 1px;
+  height: 100%;
+  background: var(--border-dim);
+}
+
+.sub-module-row:last-child::before {
+  height: 50%;
+}
+
+.sub-module-row::after {
+  content: '';
+  position: absolute;
+  left: calc(14px + var(--tree-indent) * 2 - 14px);
+  top: 50%;
+  width: 10px;
+  height: 1px;
+  background: var(--border-dim);
+}
+
+/* Sub-module status dot */
+.sub-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.sub-dot.done    { background: var(--green); }
+.sub-dot.running { background: var(--accent); }
+.sub-dot.pending { background: var(--text-400); opacity: 0.6; }
+
+/* Running dot pulse animation */
+.sub-dot.running {
+  animation: subDotPulse 2s ease-in-out infinite;
+}
+
+@keyframes subDotPulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 var(--accent-glow);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 6px 2px var(--accent-glow);
+    transform: scale(1.3);
+  }
+}
+
+.sub-label {
+  flex: 1;
+  font-size: 0.68rem;
+  color: var(--text-300);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sub-module-row.active .sub-label {
+  color: var(--text-100);
+  font-weight: 500;
+}
+
+.sub-module-row.done-row .sub-label {
+  color: var(--text-300);
+}
+
+.sub-timing {
+  font-size: 0.58rem;
+  color: var(--text-400);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+/* ── Sub-Module Progress Bar (3px, full row width) ─────────── */
+.sub-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--border-dim);
+  overflow: hidden;
+}
+
+.sub-progress-fill {
+  height: 100%;
+  border-radius: 0 1.5px 1.5px 0;
+  transition: width 600ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  position: relative;
+}
+
+/* Completed: full green */
+.sub-progress-fill.done {
+  width: 100%;
+  background: var(--green);
+  opacity: 0.65;
+}
+
+/* Running: partial blue with animated leading edge */
+.sub-progress-fill.running {
+  background: var(--accent);
+  opacity: 0.8;
+}
+
+/* Animated shimmer on running bar's leading edge */
+.sub-progress-fill.running::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: -1px;
+  width: 24px;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255,255,255,0.5),
+    rgba(255,255,255,0.8)
+  );
+  animation: progressEdgePulse 1.4s ease-in-out infinite;
+}
+
+@keyframes progressEdgePulse {
+  0%, 100% { opacity: 0.3; transform: translateX(-4px); }
+  50%      { opacity: 1;   transform: translateX(2px); }
+}
+
+/* Pending: 0% gray (track only visible) */
+.sub-progress-fill.pending {
+  width: 0%;
+  background: var(--text-400);
+  opacity: 0.3;
+}
+
+/* ── Particle Canvas ───────────────────────────────────────── */
+#particleCanvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+
+/* ── Main Area ─────────────────────────────────────────────── */
+.main-area { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; }
+
+/* ── Topbar ────────────────────────────────────────────────── */
+.topbar {
+  height: var(--topbar-h); background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-dim); display: flex;
+  align-items: center; padding: 0 20px; gap: 12px;
+  flex-shrink: 0; position: relative; z-index: 5;
+}
+.topbar-breadcrumb { display: flex; align-items: center; gap: 6px; font-size: 0.74rem; }
+.topbar-bc-segment { color: var(--text-300); font-weight: 500; }
+.topbar-bc-active { color: var(--text-100); font-weight: 600; }
+.topbar-bc-sep { color: var(--text-400); font-size: 0.6rem; }
+.topbar-spacer { flex: 1; }
+.topbar-stats { display: flex; align-items: center; gap: 16px; }
+.topbar-stat { display: flex; align-items: center; gap: 5px; font-size: 0.68rem; }
+.topbar-stat-label { color: var(--text-400); }
+.topbar-stat-value { color: var(--text-200); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* ── Content Area ──────────────────────────────────────────── */
+.content-area {
+  flex: 1; overflow-y: auto; overflow-x: hidden;
+  padding: 20px 24px 40px; position: relative; z-index: 2;
+}
+.content-area::-webkit-scrollbar { width: 5px; }
+.content-area::-webkit-scrollbar-track { background: transparent; }
+.content-area::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* ── Dashboard Stats ───────────────────────────────────────── */
+.dash-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px; }
+.dash-card {
+  background: var(--bg-card); border: 1px solid var(--border-dim);
+  border-radius: var(--radius); padding: 14px 16px; transition: border-color var(--transition);
+}
+.dash-card:hover { border-color: var(--border); }
+.dash-label { font-size: 0.62rem; color: var(--text-400); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 4px; }
+.dash-value { font-size: 1.25rem; font-weight: 700; color: var(--text-100); font-variant-numeric: tabular-nums; }
+.dash-bar-track { width: 100%; height: 3px; background: var(--border-dim); border-radius: 2px; margin-top: 8px; overflow: hidden; }
+.dash-bar-fill { height: 100%; border-radius: 2px; width: 0%; transition: width 800ms cubic-bezier(0.22, 0.61, 0.36, 1); }
+.dash-bar-fill.blue   { background: var(--accent); }
+.dash-bar-fill.green  { background: var(--green); }
+.dash-bar-fill.purple { background: var(--purple); }
+.dash-bar-fill.amber  { background: var(--amber); }
+
+/* ── Detail Panel ──────────────────────────────────────────── */
+.detail-panel {
+  background: var(--bg-card); border: 1px solid var(--border-dim);
+  border-radius: var(--radius-lg); margin-bottom: 16px; overflow: hidden;
+}
+.detail-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 18px; border-bottom: 1px solid var(--border-dim);
+}
+.detail-icon {
+  width: 26px; height: 26px; border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.65rem; font-weight: 600; flex-shrink: 0;
+}
+.detail-title { font-size: 0.82rem; font-weight: 600; color: var(--text-100); flex: 1; }
+.detail-badge { font-size: 0.6rem; font-weight: 500; padding: 2px 8px; border-radius: 4px; }
+.detail-badge.done    { background: var(--green-dim); color: var(--green); }
+.detail-badge.running { background: var(--accent-bg); color: var(--accent); }
+.detail-body { padding: 16px 18px; }
+.detail-text { font-size: 0.78rem; color: var(--text-200); line-height: 1.7; margin-bottom: 12px; }
+.detail-text:last-child { margin-bottom: 0; }
+
+/* ── Hypothesis List Panel ─────────────────────────────────── */
+.hypo-list { display: flex; flex-direction: column; gap: 8px; }
+.hypo-card {
+  background: var(--bg-elevated); border: 1px solid var(--border-dim);
+  border-radius: var(--radius); padding: 12px 14px;
+  transition: border-color var(--transition);
+}
+.hypo-card:hover { border-color: var(--border); }
+.hypo-card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.hypo-rank {
+  font-size: 0.62rem; font-weight: 700; color: var(--accent);
+  background: var(--accent-bg); padding: 2px 6px; border-radius: 4px; flex-shrink: 0;
+}
+.hypo-title { font-size: 0.74rem; font-weight: 600; color: var(--text-100); flex: 1; }
+.hypo-score { font-size: 0.6rem; font-weight: 500; color: var(--green); flex-shrink: 0; }
+.hypo-desc { font-size: 0.7rem; color: var(--text-300); line-height: 1.6; }
+
+/* ── Live Feed Panel ───────────────────────────────────────── */
+.feed-panel {
+  background: var(--bg-card); border: 1px solid var(--border-dim);
+  border-radius: var(--radius-lg); overflow: hidden;
+}
+.feed-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px 16px; border-bottom: 1px solid var(--border-dim);
+}
+.feed-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--green); animation: livePulse 2s ease-in-out infinite;
+}
+.feed-title { font-size: 0.74rem; font-weight: 600; color: var(--text-100); flex: 1; }
+.feed-count { font-size: 0.6rem; color: var(--text-400); font-variant-numeric: tabular-nums; }
+.feed-body { max-height: 240px; overflow-y: auto; padding: 6px 0; }
+.feed-body::-webkit-scrollbar { width: 3px; }
+.feed-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.feed-entry {
+  display: flex; gap: 10px; padding: 6px 16px; font-size: 0.68rem;
+  transition: background var(--transition); animation: feedSlideIn 300ms ease forwards;
+}
+@keyframes feedSlideIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.feed-entry:hover { background: rgba(255,255,255,0.02); }
+.feed-ts {
+  color: var(--text-400); font-variant-numeric: tabular-nums;
+  white-space: nowrap; flex-shrink: 0; min-width: 52px;
+}
+.feed-msg { color: var(--text-300); flex: 1; min-width: 0; }
+.feed-msg .hl { color: var(--accent); font-weight: 500; }
+.feed-msg .ok { color: var(--green); font-weight: 500; }
+
+/* ── Tree Path Particle Canvas (sidebar) ───────────────────── */
+#treeParticleCanvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 20;
+}
+
+/* ── Shimmer sweep on active module row ────────────────────── */
+.tree-module.active::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(91,138,245,0.05),
+    transparent
+  );
+  animation: moduleShimmer 3.5s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes moduleShimmer {
+  0%   { left: -60%; }
+  50%  { left: 120%; }
+  100% { left: 120%; }
+}
+
+/* ── Phase icon colors ─────────────────────────────────────── */
+.phase-icon-seed    { background: var(--green-dim); color: var(--green); }
+.phase-icon-hypo    { background: var(--accent-bg); color: var(--accent); }
+.phase-icon-invent  { background: var(--purple-dim); color: var(--purple); }
+.phase-icon-paper   { background: var(--amber-dim); color: var(--amber); }
+
+.module-icon-done    { background: var(--green-dim); color: var(--green); }
+.module-icon-running { background: var(--accent-bg); color: var(--accent); }
+.module-icon-pending { background: rgba(84,88,112,0.12); color: var(--text-400); }
+
+/* ── Subtle ambient glow on running phase ──────────────────── */
+.tree-phase.phase-running {
+  position: relative;
+}
+
+.tree-phase.phase-running::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--accent);
+  border-radius: 0 2px 2px 0;
+  opacity: 0;
+  animation: phaseEdgePulse 2.5s ease-in-out infinite;
+}
+
+@keyframes phaseEdgePulse {
+  0%, 100% { opacity: 0.2; }
+  50%      { opacity: 0.7; }
+}
+
+/* ── Misc Animations ───────────────────────────────────────── */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-in {
+  animation: fadeInUp 400ms ease forwards;
+}
+
+/* Stagger delays */
+.delay-1 { animation-delay: 80ms; opacity: 0; }
+.delay-2 { animation-delay: 160ms; opacity: 0; }
+.delay-3 { animation-delay: 240ms; opacity: 0; }
+.delay-4 { animation-delay: 320ms; opacity: 0; }
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <!-- ── Sidebar: Tree Navigator ────────────────────────────── -->
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-logo">AI</div>
+      <div class="sidebar-brand">
+        <div class="sidebar-brand-title">AI Inventor</div>
+        <div class="sidebar-brand-sub">Pipeline Monitor</div>
+      </div>
+    </div>
+
+    <div class="run-strip">
+      <div class="live-dot"></div>
+      <div class="run-strip-info">
+        <div class="run-strip-id">run_2026_03_26_nanofiber</div>
+        <div class="run-strip-meta">elapsed 14m 38s</div>
+      </div>
+      <div class="run-strip-cost">$2.47</div>
+    </div>
+
+    <div class="tree-container" id="treeContainer">
+      <canvas id="treeParticleCanvas"></canvas>
+      <!-- Tree is built by JS -->
+    </div>
+  </div>
+
+  <!-- ── Main Content Area ──────────────────────────────────── -->
+  <div class="main-area">
+    <canvas id="particleCanvas"></canvas>
+
+    <div class="topbar">
+      <div class="topbar-breadcrumb">
+        <span class="topbar-bc-segment">Invention Loop</span>
+        <span class="topbar-bc-sep">/</span>
+        <span class="topbar-bc-active">gen_paper_text</span>
+      </div>
+      <div class="topbar-spacer"></div>
+      <div class="topbar-stats">
+        <div class="topbar-stat">
+          <span class="topbar-stat-label">Steps</span>
+          <span class="topbar-stat-value">12/18</span>
+        </div>
+        <div class="topbar-stat">
+          <span class="topbar-stat-label">Tokens</span>
+          <span class="topbar-stat-value">847K</span>
+        </div>
+        <div class="topbar-stat">
+          <span class="topbar-stat-label">Iter</span>
+          <span class="topbar-stat-value">2/3</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="content-area" id="contentArea">
+      <!-- Dashboard stats -->
+      <div class="dash-grid animate-in delay-1">
+        <div class="dash-card">
+          <div class="dash-label">Hypotheses</div>
+          <div class="dash-value">5</div>
+          <div class="dash-bar-track">
+            <div class="dash-bar-fill blue" data-width="100"></div>
+          </div>
+        </div>
+        <div class="dash-card">
+          <div class="dash-label">Iterations</div>
+          <div class="dash-value">2/3</div>
+          <div class="dash-bar-track">
+            <div class="dash-bar-fill purple" data-width="67"></div>
+          </div>
+        </div>
+        <div class="dash-card">
+          <div class="dash-label">Completion</div>
+          <div class="dash-value">67%</div>
+          <div class="dash-bar-track">
+            <div class="dash-bar-fill green" data-width="67"></div>
+          </div>
+        </div>
+        <div class="dash-card">
+          <div class="dash-label">Cost</div>
+          <div class="dash-value">$2.47</div>
+          <div class="dash-bar-track">
+            <div class="dash-bar-fill amber" data-width="49"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Active step detail -->
+      <div class="detail-panel animate-in delay-2">
+        <div class="detail-header">
+          <div class="detail-icon" style="background: var(--accent-bg); color: var(--accent);">P</div>
+          <div class="detail-title">gen_paper_text</div>
+          <div class="detail-badge running">running</div>
+        </div>
+        <div class="detail-body">
+          <div class="detail-text">
+            Generating the main paper text for iteration 2. The model is composing sections covering the proposed nanofiber-enhanced membrane architecture, including methodology, expected results, and discussion of trade-offs against existing polyamide thin-film composites.
+          </div>
+          <div class="detail-text" style="color: var(--text-400); font-size: 0.7rem;">
+            Prompt tokens: 24,819 &middot; Output buffer: ~8,000 &middot; Model: claude-opus-4-20250514
+          </div>
+        </div>
+      </div>
+
+      <!-- Hypothesis summary -->
+      <div class="detail-panel animate-in delay-3">
+        <div class="detail-header">
+          <div class="detail-icon" style="background: var(--purple-dim); color: var(--purple);">H</div>
+          <div class="detail-title">Top Hypotheses</div>
+          <div class="detail-badge done">5 ranked</div>
+        </div>
+        <div class="detail-body"><div class="hypo-list">
+          <div class="hypo-card">
+            <div class="hypo-card-header">
+              <span class="hypo-rank">#1</span>
+              <span class="hypo-title">Electrospun Nanofiber Membranes</span>
+              <span class="hypo-score">92.4</span>
+            </div>
+            <div class="hypo-desc">Aligned PVDF nanofiber scaffolds with TiO2 photocatalytic coating for self-cleaning desalination membranes achieving &gt;98% salt rejection.</div>
+          </div>
+          <div class="hypo-card">
+            <div class="hypo-card-header">
+              <span class="hypo-rank">#2</span>
+              <span class="hypo-title">Graphene Oxide Interlayers</span>
+              <span class="hypo-score">87.1</span>
+            </div>
+            <div class="hypo-desc">Laminated GO nanosheets as selective transport channels between polyamide layers, reducing energy consumption by ~35%.</div>
+          </div>
+          <div class="hypo-card">
+            <div class="hypo-card-header">
+              <span class="hypo-rank">#3</span>
+              <span class="hypo-title">Bio-inspired Aquaporin Channels</span>
+              <span class="hypo-score">84.8</span>
+            </div>
+            <div class="hypo-desc">Synthetic aquaporin analogs embedded in block copolymer matrices for ultra-high permeability RO membranes.</div>
+          </div>
+        </div></div>
+      </div>
+
+      <!-- Live feed -->
+      <div class="feed-panel animate-in delay-4">
+        <div class="feed-header">
+          <div class="feed-dot"></div>
+          <div class="feed-title">Live Feed</div>
+          <div class="feed-count" id="feedCount">12 events</div>
+        </div>
+        <div class="feed-body" id="feedBody">
+          <div class="feed-entry">
+            <span class="feed-ts">14:38</span>
+            <span class="feed-msg"><span class="hl">gen_paper_text</span> started (iter 2)</span>
+          </div>
+          <div class="feed-entry">
+            <span class="feed-ts">14:36</span>
+            <span class="feed-msg"><span class="ok">gen_narrative</span> completed &mdash; 3,412 tokens</span>
+          </div>
+          <div class="feed-entry">
+            <span class="feed-ts">14:32</span>
+            <span class="feed-msg"><span class="ok">gen_plan</span> completed &mdash; structured 8 sections</span>
+          </div>
+          <div class="feed-entry">
+            <span class="feed-ts">14:28</span>
+            <span class="feed-msg"><span class="ok">gen_strategy</span> completed &mdash; 2 strategies selected</span>
+          </div>
+          <div class="feed-entry">
+            <span class="feed-ts">14:24</span>
+            <span class="feed-msg">Invention loop <span class="hl">iteration 2</span> started</span>
+          </div>
+          <div class="feed-entry">
+            <span class="feed-ts">14:22</span>
+            <span class="feed-msg"><span class="ok">review_paper</span> passed &mdash; score 8.4/10</span>
+          </div>
+          <div class="feed-entry">
+            <span class="feed-ts">14:18</span>
+            <span class="feed-msg"><span class="ok">gen_paper_text</span> completed (iter 1) &mdash; 6,280 tokens</span>
+          </div>
+          <div class="feed-entry">
+            <span class="feed-ts">14:12</span>
+            <span class="feed-msg"><span class="ok">gen_narrative</span> completed (iter 1)</span>
+          </div>
+          <div class="feed-entry">
+            <span class="feed-ts">14:08</span>
+            <span class="feed-msg"><span class="ok">gen_plan</span> completed (iter 1)</span>
+          </div>
+          <div class="feed-entry">
+            <span class="feed-ts">14:04</span>
+            <span class="feed-msg"><span class="ok">gen_strategy</span> completed (iter 1)</span>
+          </div>
+          <div class="feed-entry">
+            <span class="feed-ts">14:00</span>
+            <span class="feed-msg">Invention loop <span class="hl">iteration 1</span> started</span>
+          </div>
+          <div class="feed-entry">
+            <span class="feed-ts">13:58</span>
+            <span class="feed-msg"><span class="ok">review_hypo</span> completed &mdash; 5 hypotheses ranked</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ================================================================
+//  PIPELINE DATA — Tree structure with progress info
+// ================================================================
+const PIPELINE = [
+  {
+    id: 'seed',
+    label: 'Seed Hypothesis',
+    icon: 'S',
+    iconClass: 'phase-icon-seed',
+    status: 'done',
+    children: [
+      {
+        id: 'seed_kg',
+        label: 'Invention KG',
+        icon: 'K',
+        status: 'done',
+        subs: [
+          { id: 'fetch_papers', label: 'fetch_papers', status: 'done', progress: 100, time: '1m 12s' },
+          { id: 'build_kg', label: 'build_kg', status: 'done', progress: 100, time: '0m 48s' },
+          { id: 'embed_nodes', label: 'embed_nodes', status: 'done', progress: 100, time: '0m 34s' },
+        ]
+      },
+      {
+        id: 'gen_hypo',
+        label: 'gen_hypo',
+        icon: 'G',
+        status: 'done',
+        subs: [
+          { id: 'sample_subgraph', label: 'sample_subgraph', status: 'done', progress: 100, time: '0m 22s' },
+          { id: 'prompt_gen', label: 'prompt_generation', status: 'done', progress: 100, time: '1m 05s' },
+          { id: 'parse_hypos', label: 'parse_hypotheses', status: 'done', progress: 100, time: '0m 08s' },
+        ]
+      }
+    ]
+  },
+  {
+    id: 'hypo_loop',
+    label: 'Hypothesis Loop',
+    icon: 'H',
+    iconClass: 'phase-icon-hypo',
+    status: 'done',
+    children: [
+      {
+        id: 'gen_hypo_batch',
+        label: 'gen_hypo (x5)',
+        icon: 'G',
+        status: 'done',
+        subs: [
+          { id: 'gen_h1', label: 'hypothesis_1', status: 'done', progress: 100, time: '1m 42s' },
+          { id: 'gen_h2', label: 'hypothesis_2', status: 'done', progress: 100, time: '1m 38s' },
+          { id: 'gen_h3', label: 'hypothesis_3', status: 'done', progress: 100, time: '1m 51s' },
+          { id: 'gen_h4', label: 'hypothesis_4', status: 'done', progress: 100, time: '1m 29s' },
+          { id: 'gen_h5', label: 'hypothesis_5', status: 'done', progress: 100, time: '1m 44s' },
+        ]
+      },
+      {
+        id: 'review_hypo',
+        label: 'review_hypo',
+        icon: 'R',
+        status: 'done',
+        subs: [
+          { id: 'novelty_check', label: 'novelty_check', status: 'done', progress: 100, time: '0m 56s' },
+          { id: 'feasibility', label: 'feasibility_score', status: 'done', progress: 100, time: '0m 48s' },
+          { id: 'rank_hypos', label: 'rank_hypotheses', status: 'done', progress: 100, time: '0m 32s' },
+        ]
+      }
+    ]
+  },
+  {
+    id: 'invention_loop',
+    label: 'Invention Loop',
+    icon: 'I',
+    iconClass: 'phase-icon-invent',
+    status: 'running',
+    children: [
+      {
+        id: 'gen_strategy',
+        label: 'gen_strategy',
+        icon: 'S',
+        status: 'done',
+        subs: [
+          { id: 'analyze_prior', label: 'analyze_prior_art', status: 'done', progress: 100, time: '0m 44s' },
+          { id: 'gen_approaches', label: 'gen_approaches', status: 'done', progress: 100, time: '1m 12s' },
+          { id: 'select_strat', label: 'select_strategy', status: 'done', progress: 100, time: '0m 18s' },
+        ]
+      },
+      {
+        id: 'gen_plan',
+        label: 'gen_plan',
+        icon: 'P',
+        status: 'done',
+        subs: [
+          { id: 'outline_sections', label: 'outline_sections', status: 'done', progress: 100, time: '0m 36s' },
+          { id: 'assign_content', label: 'assign_content', status: 'done', progress: 100, time: '0m 52s' },
+          { id: 'validate_plan', label: 'validate_plan', status: 'done', progress: 100, time: '0m 14s' },
+        ]
+      },
+      {
+        id: 'gen_narrative',
+        label: 'gen_narrative',
+        icon: 'N',
+        status: 'done',
+        subs: [
+          { id: 'draft_narrative', label: 'draft_narrative', status: 'done', progress: 100, time: '2m 06s' },
+          { id: 'refine_flow', label: 'refine_flow', status: 'done', progress: 100, time: '1m 18s' },
+        ]
+      },
+      {
+        id: 'gen_paper_text',
+        label: 'gen_paper_text',
+        icon: 'T',
+        status: 'running',
+        subs: [
+          { id: 'gen_abstract', label: 'gen_abstract', status: 'done', progress: 100, time: '0m 42s' },
+          { id: 'gen_intro', label: 'gen_introduction', status: 'done', progress: 100, time: '1m 08s' },
+          { id: 'gen_methods', label: 'gen_methodology', status: 'running', progress: 62, time: '0m 54s' },
+          { id: 'gen_results', label: 'gen_results', status: 'pending', progress: 0, time: '--' },
+          { id: 'gen_discussion', label: 'gen_discussion', status: 'pending', progress: 0, time: '--' },
+          { id: 'gen_conclusion', label: 'gen_conclusion', status: 'pending', progress: 0, time: '--' },
+        ]
+      },
+      {
+        id: 'review_paper',
+        label: 'review_paper',
+        icon: 'R',
+        status: 'pending',
+        subs: [
+          { id: 'check_coherence', label: 'check_coherence', status: 'pending', progress: 0, time: '--' },
+          { id: 'check_citations', label: 'check_citations', status: 'pending', progress: 0, time: '--' },
+          { id: 'score_quality', label: 'score_quality', status: 'pending', progress: 0, time: '--' },
+        ]
+      },
+      {
+        id: 'revise',
+        label: 'revise',
+        icon: 'V',
+        status: 'pending',
+        subs: [
+          { id: 'apply_feedback', label: 'apply_feedback', status: 'pending', progress: 0, time: '--' },
+          { id: 'polish_text', label: 'polish_text', status: 'pending', progress: 0, time: '--' },
+        ]
+      }
+    ]
+  },
+  {
+    id: 'gen_paper_repo',
+    label: 'Paper Repository',
+    icon: 'R',
+    iconClass: 'phase-icon-paper',
+    status: 'pending',
+    children: [
+      {
+        id: 'gen_artifacts',
+        label: 'gen_artifacts',
+        icon: 'A',
+        status: 'pending',
+        subs: [
+          { id: 'gen_figures', label: 'gen_figures', status: 'pending', progress: 0, time: '--' },
+          { id: 'gen_tables', label: 'gen_tables', status: 'pending', progress: 0, time: '--' },
+          { id: 'gen_demos', label: 'gen_demos', status: 'pending', progress: 0, time: '--' },
+        ]
+      },
+      {
+        id: 'gen_viz',
+        label: 'gen_viz',
+        icon: 'Z',
+        status: 'pending',
+        subs: [
+          { id: 'plot_results', label: 'plot_results', status: 'pending', progress: 0, time: '--' },
+          { id: 'render_diagrams', label: 'render_diagrams', status: 'pending', progress: 0, time: '--' },
+        ]
+      },
+      {
+        id: 'gen_full_paper',
+        label: 'gen_full_paper',
+        icon: 'F',
+        status: 'pending',
+        subs: [
+          { id: 'assemble_latex', label: 'assemble_latex', status: 'pending', progress: 0, time: '--' },
+          { id: 'compile_pdf', label: 'compile_pdf', status: 'pending', progress: 0, time: '--' },
+          { id: 'gen_repo', label: 'gen_repo', status: 'pending', progress: 0, time: '--' },
+        ]
+      }
+    ]
+  }
+];
+
+// ================================================================
+//  BUILD TREE DOM
+// ================================================================
+function buildTree() {
+  const container = document.getElementById('treeContainer');
+  // Keep the canvas
+  const canvas = document.getElementById('treeParticleCanvas');
+
+  // Remove old tree nodes
+  container.querySelectorAll('.tree-node').forEach(n => n.remove());
+
+  PIPELINE.forEach((phase, pi) => {
+    const node = document.createElement('div');
+    node.className = 'tree-node';
+    node.dataset.phaseId = phase.id;
+
+    // Expand running/done phases by default, collapse pending
+    if (phase.status === 'pending') {
+      node.classList.add('collapsed');
+    }
+
+    // Phase row
+    const phaseRow = document.createElement('div');
+    phaseRow.className = 'tree-phase' + (phase.status === 'running' ? ' phase-running' : '');
+    phaseRow.innerHTML = `
+      <div class="tree-chevron">
+        <svg viewBox="0 0 10 10"><polyline points="3,2 7,5 3,8"/></svg>
+      </div>
+      <div class="tree-phase-icon ${phase.iconClass}">${phase.icon}</div>
+      <div class="tree-phase-label">${phase.label}</div>
+      <div class="tree-phase-badge ${phase.status}">${phase.status}</div>
+    `;
+
+    phaseRow.addEventListener('click', () => {
+      node.classList.toggle('collapsed');
+    });
+
+    node.appendChild(phaseRow);
+
+    // Children container
+    const childrenWrap = document.createElement('div');
+    childrenWrap.className = 'sub-module-list';
+
+    phase.children.forEach((mod, mi) => {
+      // Module row
+      const modRow = document.createElement('div');
+      const modStatusClass = mod.status === 'running' ? ' active' : '';
+      const iconClass = mod.status === 'done' ? 'module-icon-done' :
+                        mod.status === 'running' ? 'module-icon-running' : 'module-icon-pending';
+
+      modRow.className = 'tree-module' + modStatusClass;
+      modRow.style.position = 'relative';
+      modRow.dataset.moduleId = mod.id;
+
+      const modTime = mod.subs.reduce((acc, s) => {
+        if (s.time !== '--') return acc; // just skip for display
+        return acc;
+      }, '');
+
+      modRow.innerHTML = `
+        <div class="tree-chevron">
+          <svg viewBox="0 0 10 10"><polyline points="3,2 7,5 3,8"/></svg>
+        </div>
+        <div class="tree-module-icon ${iconClass}">${mod.icon}</div>
+        <div class="tree-module-label">${mod.label}</div>
+        <div class="tree-module-meta">${mod.status === 'done' ? 'done' : mod.status === 'running' ? 'running' : ''}</div>
+      `;
+
+      // Module-level collapse
+      const modNode = document.createElement('div');
+      modNode.className = 'tree-node';
+      modNode.dataset.moduleId = mod.id;
+
+      modRow.addEventListener('click', () => {
+        modNode.classList.toggle('collapsed');
+      });
+
+      modNode.appendChild(modRow);
+
+      // Sub-modules container
+      const subList = document.createElement('div');
+      subList.className = 'sub-module-list';
+
+      mod.subs.forEach((sub, si) => {
+        const subRow = document.createElement('div');
+        const activeClass = sub.status === 'running' ? ' active' :
+                            sub.status === 'done' ? ' done-row' : '';
+        subRow.className = 'sub-module-row' + activeClass;
+        subRow.dataset.subId = sub.id;
+
+        subRow.innerHTML = `
+          <div class="sub-dot ${sub.status}"></div>
+          <div class="sub-label">${sub.label}</div>
+          <div class="sub-timing">${sub.time}</div>
+          <div class="sub-progress">
+            <div class="sub-progress-fill ${sub.status}" style="width: ${sub.progress}%"></div>
+          </div>
+        `;
+
+        subList.appendChild(subRow);
+      });
+
+      // Calculate sub-module list max-height for animation
+      const subCount = mod.subs.length;
+      subList.style.maxHeight = (subCount * 38) + 'px';
+
+      modNode.appendChild(subList);
+      childrenWrap.appendChild(modNode);
+    });
+
+    // Calculate children max-height
+    let totalHeight = 0;
+    phase.children.forEach(mod => {
+      totalHeight += 34; // module row height estimate
+      totalHeight += mod.subs.length * 38;
+    });
+    childrenWrap.style.maxHeight = totalHeight + 'px';
+
+    node.appendChild(childrenWrap);
+    container.appendChild(node);
+  });
+}
+
+buildTree();
+
+// ================================================================
+//  TREE-PATH PARTICLES (travel along the tree connector lines)
+// ================================================================
+const treeCanvas = document.getElementById('treeParticleCanvas');
+const treeCtx = treeCanvas.getContext('2d');
+let treeW, treeH;
+const treeDPR = window.devicePixelRatio || 1;
+
+function resizeTreeCanvas() {
+  const container = document.getElementById('treeContainer');
+  treeW = container.clientWidth;
+  treeH = container.clientHeight;
+  treeCanvas.width = treeW * treeDPR;
+  treeCanvas.height = treeH * treeDPR;
+  treeCanvas.style.width = treeW + 'px';
+  treeCanvas.style.height = treeH + 'px';
+  treeCtx.setTransform(treeDPR, 0, 0, treeDPR, 0, 0);
+}
+
+resizeTreeCanvas();
+
+// Particle class for tree path
+class TreeParticle {
+  constructor() {
+    this.reset();
+  }
+
+  reset() {
+    // Find active/running sub-module rows for particle paths
+    const runningRows = document.querySelectorAll('.sub-module-row.active');
+    const doneRows = document.querySelectorAll('.sub-module-row.done-row');
+    const allRows = [...doneRows, ...runningRows];
+
+    if (allRows.length === 0) {
+      this.active = false;
+      return;
+    }
+
+    this.active = true;
+    const targetRow = allRows[Math.floor(Math.random() * allRows.length)];
+    const rect = targetRow.getBoundingClientRect();
+    const containerRect = document.getElementById('treeContainer').getBoundingClientRect();
+
+    // Start from the phase level, travel down to the sub-module
+    const phaseNode = targetRow.closest('.tree-node[data-phase-id]') ||
+                      targetRow.closest('.tree-container');
+    const phaseRect = phaseNode ? phaseNode.querySelector('.tree-phase')?.getBoundingClientRect() : null;
+
+    const startY = phaseRect ? (phaseRect.top + phaseRect.height / 2 - containerRect.top + document.getElementById('treeContainer').scrollTop) : 0;
+    const endY = rect.top + rect.height / 2 - containerRect.top + document.getElementById('treeContainer').scrollTop;
+
+    this.x = 14 + 6; // align with tree guide line
+    this.startY = startY;
+    this.endY = endY;
+    this.y = this.startY;
+    this.progress = 0;
+    this.speed = 0.004 + Math.random() * 0.006;
+    this.size = 1.5 + Math.random() * 1.5;
+    this.alpha = 0.3 + Math.random() * 0.5;
+
+    const isRunning = targetRow.classList.contains('active');
+    if (isRunning) {
+      this.color = { r: 91, g: 138, b: 245 }; // accent blue
+    } else {
+      this.color = { r: 52, g: 211, b: 153 }; // green
+    }
+  }
+
+  update() {
+    if (!this.active) {
+      this.reset();
+      return;
+    }
+
+    this.progress += this.speed;
+    if (this.progress >= 1) {
+      this.reset();
+      return;
+    }
+
+    // Ease-in-out movement
+    const t = this.progress;
+    const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+    this.y = this.startY + (this.endY - this.startY) * ease;
+
+    // Fade in/out
+    const fadeIn = Math.min(1, t * 5);
+    const fadeOut = Math.min(1, (1 - t) * 5);
+    this.currentAlpha = this.alpha * fadeIn * fadeOut;
+  }
+
+  draw(ctx) {
+    if (!this.active || this.currentAlpha <= 0) return;
+
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(${this.color.r},${this.color.g},${this.color.b},${this.currentAlpha})`;
+    ctx.fill();
+
+    // Glow
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.size * 3, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(${this.color.r},${this.color.g},${this.color.b},${this.currentAlpha * 0.15})`;
+    ctx.fill();
+  }
+}
+
+const treeParticles = [];
+for (let i = 0; i < 12; i++) {
+  const p = new TreeParticle();
+  p.progress = Math.random(); // stagger initial positions
+  treeParticles.push(p);
+}
+
+function animateTreeParticles() {
+  treeCtx.clearRect(0, 0, treeW, treeH);
+
+  for (const p of treeParticles) {
+    p.update();
+    p.draw(treeCtx);
+  }
+
+  requestAnimationFrame(animateTreeParticles);
+}
+
+animateTreeParticles();
+
+// ================================================================
+//  MAIN AREA AMBIENT PARTICLES
+// ================================================================
+const mainCanvas = document.getElementById('particleCanvas');
+const mainCtx = mainCanvas.getContext('2d');
+let mainW, mainH;
+const mainDPR = window.devicePixelRatio || 1;
+
+function resizeMainCanvas() {
+  const area = document.querySelector('.main-area');
+  mainW = area.clientWidth;
+  mainH = area.clientHeight;
+  mainCanvas.width = mainW * mainDPR;
+  mainCanvas.height = mainH * mainDPR;
+  mainCanvas.style.width = mainW + 'px';
+  mainCanvas.style.height = mainH + 'px';
+  mainCtx.setTransform(mainDPR, 0, 0, mainDPR, 0, 0);
+}
+
+resizeMainCanvas();
+
+class AmbientParticle {
+  constructor() {
+    this.reset();
+  }
+
+  reset() {
+    this.x = Math.random() * mainW;
+    this.y = Math.random() * mainH;
+    this.vx = (Math.random() - 0.5) * 0.15;
+    this.vy = (Math.random() - 0.5) * 0.1;
+    this.size = 0.8 + Math.random() * 1.2;
+    this.alpha = 0.05 + Math.random() * 0.12;
+    this.life = 0;
+    this.maxLife = 400 + Math.random() * 600;
+  }
+
+  update() {
+    this.x += this.vx;
+    this.y += this.vy;
+    this.life++;
+
+    if (this.life > this.maxLife || this.x < -10 || this.x > mainW + 10 ||
+        this.y < -10 || this.y > mainH + 10) {
+      this.reset();
+    }
+  }
+
+  draw(ctx) {
+    const fadeIn = Math.min(1, this.life / 60);
+    const fadeOut = Math.min(1, (this.maxLife - this.life) / 60);
+    const a = this.alpha * fadeIn * fadeOut;
+
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(91, 138, 245, ${a})`;
+    ctx.fill();
+  }
+}
+
+const ambientParticles = [];
+for (let i = 0; i < 30; i++) {
+  ambientParticles.push(new AmbientParticle());
+}
+
+function animateAmbient() {
+  mainCtx.clearRect(0, 0, mainW, mainH);
+
+  for (const p of ambientParticles) {
+    p.update();
+    p.draw(mainCtx);
+  }
+
+  requestAnimationFrame(animateAmbient);
+}
+
+animateAmbient();
+
+// ================================================================
+//  RESIZE HANDLER
+// ================================================================
+window.addEventListener('resize', () => {
+  resizeTreeCanvas();
+  resizeMainCanvas();
+});
+
+// ================================================================
+//  ANIMATE DASHBOARD BAR FILLS ON LOAD
+// ================================================================
+setTimeout(() => {
+  document.querySelectorAll('.dash-bar-fill[data-width]').forEach(bar => {
+    bar.style.width = bar.dataset.width + '%';
+  });
+}, 200);
+
+// ================================================================
+//  SIMULATE RUNNING PROGRESS BAR ANIMATION
+// ================================================================
+let runningProgress = 62;
+const runningBar = document.querySelector('[data-sub-id="gen_methods"] .sub-progress-fill.running') ||
+                   document.querySelector('.sub-progress-fill.running');
+
+function simulateProgress() {
+  if (!runningBar) return;
+
+  runningProgress += 0.15 + Math.random() * 0.25;
+  if (runningProgress > 88) runningProgress = 88; // cap before "completion"
+  runningBar.style.width = runningProgress + '%';
+}
+
+setInterval(simulateProgress, 800);
+
+// ================================================================
+//  SIMULATE LIVE FEED ENTRIES
+// ================================================================
+const feedMessages = [
+  { msg: '<span class="hl">gen_methodology</span> writing section 4.2...', ts: '14:39' },
+  { msg: 'Token count: <span class="hl">851K</span> (+4.2K)', ts: '14:39' },
+  { msg: '<span class="hl">gen_methodology</span> composing equations...', ts: '14:40' },
+  { msg: 'Cost update: <span class="hl">$2.51</span>', ts: '14:40' },
+  { msg: '<span class="hl">gen_methodology</span> writing experimental setup...', ts: '14:41' },
+  { msg: 'Token count: <span class="hl">856K</span> (+5.1K)', ts: '14:41' },
+  { msg: '<span class="ok">gen_methodology</span> completed &mdash; 2,847 tokens', ts: '14:42' },
+  { msg: '<span class="hl">gen_results</span> started...', ts: '14:42' },
+];
+
+let feedIdx = 0;
+const feedBody = document.getElementById('feedBody');
+const feedCount = document.getElementById('feedCount');
+let totalFeedCount = 12;
+
+function addFeedEntry() {
+  if (feedIdx >= feedMessages.length) feedIdx = 0;
+
+  const entry = feedMessages[feedIdx++];
+  const div = document.createElement('div');
+  div.className = 'feed-entry';
+  div.innerHTML = `
+    <span class="feed-ts">${entry.ts}</span>
+    <span class="feed-msg">${entry.msg}</span>
+  `;
+
+  feedBody.insertBefore(div, feedBody.firstChild);
+  totalFeedCount++;
+  feedCount.textContent = totalFeedCount + ' events';
+
+  // Remove old entries if too many
+  while (feedBody.children.length > 20) {
+    feedBody.removeChild(feedBody.lastChild);
+  }
+}
+
+setInterval(addFeedEntry, 4500);
+
+// ================================================================
+//  ELAPSED TIME COUNTER
+// ================================================================
+let elapsedSeconds = 14 * 60 + 38;
+
+function updateElapsed() {
+  elapsedSeconds++;
+  const m = Math.floor(elapsedSeconds / 60);
+  const s = elapsedSeconds % 60;
+  const timeStr = `elapsed ${m}m ${s.toString().padStart(2, '0')}s`;
+
+  const metaEl = document.querySelector('.run-strip-meta');
+  if (metaEl) metaEl.textContent = timeStr;
+}
+
+setInterval(updateElapsed, 1000);
+
+// ================================================================
+//  COST TICKER (slowly increasing)
+// ================================================================
+let currentCost = 2.47;
+
+function updateCost() {
+  currentCost += 0.002 + Math.random() * 0.004;
+  const costStr = '$' + currentCost.toFixed(2);
+
+  const costEl = document.querySelector('.run-strip-cost');
+  if (costEl) costEl.textContent = costStr;
+
+  // Update dash card too
+  const dashValues = document.querySelectorAll('.dash-value');
+  if (dashValues.length >= 4) {
+    dashValues[3].textContent = costStr;
+  }
+}
+
+setInterval(updateCost, 3000);
+
+// ================================================================
+//  BREADCRUMB: Update on module click
+// ================================================================
+document.querySelectorAll('.tree-module').forEach(modRow => {
+  modRow.addEventListener('click', (e) => {
+    // Don't interfere with collapse toggle
+    e.stopPropagation();
+
+    const moduleId = modRow.dataset.moduleId;
+    const label = modRow.querySelector('.tree-module-label')?.textContent || '';
+
+    // Find parent phase
+    const phaseNode = modRow.closest('.tree-node[data-phase-id]');
+    const phaseLabel = phaseNode?.querySelector('.tree-phase-label')?.textContent || '';
+
+    // Update breadcrumb
+    const bc = document.querySelector('.topbar-breadcrumb');
+    if (bc) {
+      bc.innerHTML = `
+        <span class="topbar-bc-segment">${phaseLabel}</span>
+        <span class="topbar-bc-sep">/</span>
+        <span class="topbar-bc-active">${label}</span>
+      `;
+    }
+
+    // Toggle collapse on the module's parent tree-node
+    const parentNode = modRow.closest('.tree-node[data-module-id]');
+    if (parentNode) {
+      parentNode.classList.toggle('collapsed');
+    }
+  });
+});
+
+// Scroll tree to show running module on load
+setTimeout(() => {
+  const activeModule = document.querySelector('.tree-module.active');
+  if (activeModule) {
+    activeModule.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+}, 500);
+</script>
+
+</body>
+</html>

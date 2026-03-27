@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Single-Row Pipeline</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0c0e14; --bg-strip: #10131b; --border: #1a1e2e;
+    --text: #c8cdd8; --text-dim: #5a6178; --text-bright: #eef0f6;
+    --accent: #6e8efb; --accent-dim: #2a3a6a;
+    --green: #34d399; --green-dim: #1a5c42;
+    --amber: #fbbf24; --rose: #f87171;
+    --ring-done: #6e8efb; --ring-active: #34d399; --ring-future: #2a2f42;
+    --dot-done: #4a5578; --dot-active: #34d399; --dot-future: #1e2235;
+    --strip-h: 80px; --content-pad: 28px;
+  }
+  html { font-size: 14px; }
+  body {
+    font-family: 'SF Mono', 'Cascadia Code', 'JetBrains Mono', 'Fira Code', monospace;
+    background: var(--bg); color: var(--text);
+    height: 100vh; display: flex; flex-direction: column;
+    overflow: hidden; user-select: none;
+  }
+
+  /* ── Top Strip ───────────────────────────────────────── */
+  .strip-wrapper {
+    flex: 0 0 var(--strip-h); background: var(--bg-strip);
+    border-bottom: 1px solid var(--border);
+    position: relative; z-index: 10; display: flex; align-items: center;
+  }
+  .strip-scroll {
+    overflow-x: auto; overflow-y: hidden; width: 100%; height: 100%;
+    scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+    scroll-behavior: smooth;
+  }
+  .strip-scroll::-webkit-scrollbar { height: 4px; }
+  .strip-scroll::-webkit-scrollbar-track { background: transparent; }
+  .strip-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  .strip {
+    display: flex; align-items: center; height: 100%;
+    padding: 0 40px; gap: 0; width: max-content; min-width: 100%;
+  }
+  .strip-bg-line {
+    position: absolute; top: 50%; left: 40px; right: 40px;
+    height: 1px; background: var(--border); z-index: 0; pointer-events: none;
+  }
+
+  /* ── Node base ───────────────────────────────────────── */
+  .node {
+    position: relative; z-index: 2; cursor: pointer; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    transition: transform 0.15s ease; outline: none;
+  }
+  .node:hover { transform: scale(1.25); }
+  .node.selected { transform: scale(1.3); }
+
+  /* ── Ring (module marker) ────────────────────────────── */
+  .node-ring { width: 40px; height: 40px; margin: 0 6px; }
+  .node-ring svg { width: 40px; height: 40px; }
+  .ring-outer { fill: none; stroke-width: 2; transition: stroke 0.3s ease, filter 0.3s ease; }
+  .ring-diamond { transition: fill 0.3s ease, filter 0.3s ease; }
+  .node-ring.done .ring-outer   { stroke: var(--ring-done); }
+  .node-ring.done .ring-diamond { fill: var(--ring-done); }
+  .node-ring.active .ring-outer   { stroke: var(--ring-active); filter: drop-shadow(0 0 6px var(--ring-active)); }
+  .node-ring.active .ring-diamond { fill: var(--ring-active); filter: drop-shadow(0 0 4px var(--ring-active)); }
+  .node-ring.future .ring-outer   { stroke: var(--ring-future); }
+  .node-ring.future .ring-diamond { fill: var(--ring-future); }
+  .node-ring.selected .ring-outer { stroke-width: 2.5; filter: drop-shadow(0 0 8px var(--accent)); }
+
+  .ring-label {
+    position: absolute; bottom: -18px; left: 50%; transform: translateX(-50%);
+    font-size: 0.65rem; letter-spacing: 0.05em; text-transform: uppercase;
+    white-space: nowrap; color: var(--text-dim);
+    opacity: 0; transition: opacity 0.2s ease; pointer-events: none;
+  }
+  .node-ring:hover .ring-label, .node-ring.selected .ring-label { opacity: 1; }
+  .node-ring.active .ring-label { opacity: 0.7; color: var(--ring-active); }
+
+  /* ── Dot (sub-module step) ───────────────────────────── */
+  .node-dot { margin: 0 8px; }
+  .dot-circle { border-radius: 50%; transition: all 0.25s ease; }
+  .node-dot.done .dot-circle   { width: 8px; height: 8px; background: var(--dot-done); }
+  .node-dot.active .dot-circle {
+    width: 12px; height: 12px; background: var(--dot-active);
+    box-shadow: 0 0 10px var(--dot-active), 0 0 20px rgba(52,211,153,0.25);
+    animation: dot-pulse 2.2s ease-in-out infinite;
+  }
+  .node-dot.future .dot-circle { width: 8px; height: 8px; background: var(--dot-future); }
+  .node-dot.selected .dot-circle {
+    box-shadow: 0 0 0 3px var(--accent-dim), 0 0 12px rgba(110,142,251,0.3);
+  }
+  @keyframes dot-pulse {
+    0%, 100% { box-shadow: 0 0 10px var(--dot-active), 0 0 20px rgba(52,211,153,0.25); }
+    50%      { box-shadow: 0 0 16px var(--dot-active), 0 0 32px rgba(52,211,153,0.4); }
+  }
+  .dot-tooltip {
+    position: absolute; bottom: -18px; left: 50%; transform: translateX(-50%);
+    font-size: 0.6rem; white-space: nowrap; color: var(--text-dim);
+    opacity: 0; transition: opacity 0.15s ease; pointer-events: none;
+  }
+  .node-dot:hover .dot-tooltip, .node-dot.selected .dot-tooltip { opacity: 1; }
+  .node-dot.active .dot-tooltip { opacity: 0.8; color: var(--dot-active); }
+
+  /* ── Content Area ────────────────────────────────────── */
+  .content-wrapper {
+    flex: 1; overflow-y: auto; padding: var(--content-pad);
+    scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+  }
+  .content-wrapper::-webkit-scrollbar { width: 6px; }
+  .content-wrapper::-webkit-scrollbar-track { background: transparent; }
+  .content-wrapper::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  .content-panel { max-width: 960px; margin: 0 auto; animation: fadeIn 0.25s ease; }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .panel-header {
+    display: flex; align-items: baseline; gap: 12px;
+    margin-bottom: 20px; padding-bottom: 14px; border-bottom: 1px solid var(--border);
+  }
+  .panel-title { font-size: 1.15rem; color: var(--text-bright); font-weight: 600; }
+  .panel-badge {
+    font-size: 0.7rem; padding: 2px 8px; border-radius: 3px;
+    text-transform: uppercase; letter-spacing: 0.06em; font-weight: 500;
+  }
+  .badge-done   { background: var(--accent-dim); color: var(--accent); }
+  .badge-active { background: var(--green-dim);  color: var(--green); }
+  .badge-future { background: #1a1e2e; color: var(--text-dim); }
+  .panel-meta { font-size: 0.75rem; color: var(--text-dim); margin-bottom: 18px; line-height: 1.7; }
+  .panel-meta span { color: var(--text); }
+  .panel-section { margin-bottom: 22px; }
+  .panel-section-title {
+    font-size: 0.72rem; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--text-dim); margin-bottom: 8px;
+  }
+  .panel-body { font-size: 0.85rem; line-height: 1.65; color: var(--text); }
+  .panel-body code {
+    background: #181c28; padding: 1px 5px; border-radius: 3px;
+    font-size: 0.8rem; color: var(--accent);
+  }
+  .module-steps-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 10px; margin-top: 10px;
+  }
+  .module-step-card {
+    background: #13162080; border: 1px solid var(--border); border-radius: 6px;
+    padding: 10px 14px; cursor: pointer;
+    transition: border-color 0.2s ease, background 0.2s ease;
+  }
+  .module-step-card:hover { border-color: var(--accent-dim); background: #181c2a; }
+  .module-step-card .step-name { font-size: 0.8rem; color: var(--text-bright); margin-bottom: 4px; }
+  .module-step-card .step-status { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.05em; }
+  .module-step-card .step-status.done   { color: var(--accent); }
+  .module-step-card .step-status.active { color: var(--green); }
+  .module-step-card .step-status.future { color: var(--text-dim); }
+  .module-progress { margin-top: 14px; height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
+  .module-progress-bar { height: 100%; border-radius: 2px; transition: width 0.5s ease; }
+  .module-progress-bar.done   { background: var(--accent); }
+  .module-progress-bar.active { background: var(--green); }
+  .step-log {
+    background: #0a0c12; border: 1px solid var(--border); border-radius: 6px;
+    padding: 14px 18px; font-size: 0.78rem; line-height: 1.7;
+    color: var(--text-dim); max-height: 260px; overflow-y: auto;
+    scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+  }
+  .step-log .log-line { margin-bottom: 3px; }
+  .step-log .log-ts  { color: var(--green); }
+  .step-log .log-lvl { color: var(--amber); }
+  .step-log .log-fn  { color: var(--accent); }
+  .step-log .log-msg { color: var(--text); }
+  .kv-grid { display: grid; grid-template-columns: 140px 1fr; gap: 4px 14px; font-size: 0.8rem; }
+  .kv-key   { color: var(--text-dim); text-align: right; }
+  .kv-value { color: var(--text); }
+
+  /* ── Hint bar ────────────────────────────────────────── */
+  .hint-bar {
+    flex: 0 0 28px; background: var(--bg-strip); border-top: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    gap: 24px; font-size: 0.65rem; color: var(--text-dim);
+  }
+  .hint-bar kbd {
+    display: inline-block; background: #181c28; border: 1px solid var(--border);
+    border-radius: 3px; padding: 0 5px; font-size: 0.62rem;
+    color: var(--text); margin: 0 2px;
+  }
+</style>
+</head>
+<body>
+
+<div class="strip-wrapper">
+  <div class="strip-scroll" id="stripScroll">
+    <div class="strip-bg-line"></div>
+    <div class="strip" id="strip"></div>
+  </div>
+</div>
+
+<div class="content-wrapper">
+  <div class="content-panel" id="contentPanel"></div>
+</div>
+
+<div class="hint-bar">
+  <span><kbd>&larr;</kbd><kbd>&rarr;</kbd> step</span>
+  <span><kbd>Shift</kbd>+<kbd>&larr;</kbd><kbd>&rarr;</kbd> module</span>
+  <span><kbd>Enter</kbd> expand</span>
+</div>
+
+<script>
+// ================================================================
+// DATA
+// ================================================================
+const L = (ts, fn, msg, lvl="INFO") => ({ ts, lvl, fn, msg });
+
+const PIPELINE = [
+  { id: "seed", label: "Seed", fullLabel: "Seed Hypotheses", state: "done",
+    description: "Generates initial research hypotheses from the invention knowledge graph, seeding the exploration space for the hypothesis refinement loop.",
+    steps: [
+      { id: "seed_load_kg", label: "Load KG", fullLabel: "Load Invention Knowledge Graph",
+        state: "done", duration: "2.3s",
+        description: "Loads and validates the invention knowledge graph from disk. Parses entity nodes, relationship edges, and prior-art references into the working context.",
+        log: [
+          L("14:02:11", "load_kg", "Loading knowledge graph from pools/invention_kg.json"),
+          L("14:02:12", "load_kg", "Parsed 847 entities, 2,314 edges"),
+          L("14:02:13", "validate", "Graph integrity check passed"),
+        ]},
+      { id: "seed_extract", label: "Extract", fullLabel: "Extract Seed Concepts",
+        state: "done", duration: "8.1s",
+        description: "Identifies high-potential concept clusters from the KG using betweenness centrality and novelty scoring.",
+        log: [
+          L("14:02:14", "extract_seeds", "Running betweenness centrality on concept subgraph"),
+          L("14:02:18", "extract_seeds", "Identified 23 high-centrality clusters"),
+          L("14:02:21", "novelty_score", "Novelty scoring complete \u2014 top cluster: 0.87"),
+        ]},
+      { id: "seed_gen", label: "Generate", fullLabel: "Generate Initial Hypotheses",
+        state: "done", duration: "34.7s",
+        description: "Calls the LLM to produce initial hypothesis drafts from each seed cluster, with title, mechanism sketch, and falsifiability criteria.",
+        log: [
+          L("14:02:22", "gen_hypo", "Generating hypotheses for 23 seed clusters (batch)"),
+          L("14:02:40", "gen_hypo", "Batch complete \u2014 23/23 hypotheses generated"),
+          L("14:02:55", "gen_hypo", "Token usage: 41,280 in / 18,430 out"),
+        ]},
+      { id: "seed_dedup", label: "Dedup", fullLabel: "Deduplicate Hypotheses",
+        state: "done", duration: "5.2s",
+        description: "Embeds all generated hypotheses and removes near-duplicates using cosine similarity thresholding.",
+        log: [
+          L("14:02:56", "dedup", "Embedding 23 hypotheses (text-embedding-3-small)"),
+          L("14:02:59", "dedup", "Cosine threshold 0.92 \u2014 removed 5 duplicates"),
+          L("14:03:01", "dedup", "18 unique hypotheses remain"),
+        ]},
+    ]},
+  { id: "hypo", label: "Hypothesis", fullLabel: "Hypothesis Loop", state: "done",
+    description: "Iteratively refines hypotheses through LLM-driven review and revision cycles until convergence or the iteration budget is exhausted.",
+    steps: [
+      { id: "hypo_select", label: "Select", fullLabel: "Select Hypothesis Batch",
+        state: "done", duration: "1.8s",
+        description: "Selects the next batch of hypotheses for review based on priority scoring \u2014 combining novelty, feasibility, and iteration count.",
+        log: [
+          L("14:05:02", "select_batch", "Priority scoring 18 hypotheses"),
+          L("14:05:03", "select_batch", "Selected batch of 6 (top priority)"),
+        ]},
+      { id: "hypo_review", label: "Review", fullLabel: "Review Hypotheses",
+        state: "done", duration: "47.3s",
+        description: "Each hypothesis is reviewed by the LLM against criteria: novelty over prior art, internal consistency, testability, and mechanistic clarity.",
+        log: [
+          L("14:05:04", "review_hypo", "Reviewing 6 hypotheses (parallel agents)"),
+          L("14:05:30", "review_hypo", "4/6 passed review, 2 flagged for revision"),
+          L("14:05:50", "review_hypo", "Token usage: 52,100 in / 24,800 out"),
+        ]},
+      { id: "hypo_revise", label: "Revise", fullLabel: "Revise Flagged Hypotheses",
+        state: "done", duration: "22.6s",
+        description: "Flagged hypotheses are revised incorporating review feedback, addressing specific weaknesses identified in the review pass.",
+        log: [
+          L("14:05:51", "revise_hypo", "Revising 2 flagged hypotheses"),
+          L("14:06:08", "revise_hypo", "Revision complete \u2014 both passed re-check"),
+          L("14:06:13", "revise_hypo", "Iteration 3/5 \u2014 convergence reached for batch"),
+        ]},
+      { id: "hypo_rank", label: "Rank", fullLabel: "Rank Final Hypotheses",
+        state: "done", duration: "12.4s",
+        description: "Ranks all accepted hypotheses using a pairwise comparison tournament (Swiss-system). Produces the final ordered list.",
+        log: [
+          L("14:06:14", "rank_hypo", "Swiss-system tournament: 6 hypotheses, 3 rounds"),
+          L("14:06:22", "rank_hypo", "Final ranking complete \u2014 top: 'Adaptive Retrieval Gating'"),
+          L("14:06:26", "rank_hypo", "Elo spread: 1620-1380"),
+        ]},
+      { id: "hypo_persist", label: "Persist", fullLabel: "Persist Hypothesis Results",
+        state: "done", duration: "0.8s",
+        description: "Writes the ranked hypothesis list and all metadata to the artifact store for downstream consumption.",
+        log: [
+          L("14:06:27", "persist", "Writing 6 hypotheses to artifact store"),
+          L("14:06:27", "persist", "Artifact: runs/run_042/hypotheses.json (18.4 KB)"),
+        ]},
+    ]},
+  { id: "invention", label: "Invention", fullLabel: "Invention Loop", state: "active",
+    description: "Takes the top-ranked hypothesis and develops it into a full invention: strategy, detailed plan, paper text, and iterative review/revision.",
+    steps: [
+      { id: "inv_strategy", label: "Strategy", fullLabel: "Generate Invention Strategy",
+        state: "done", duration: "28.9s",
+        description: "Generates the high-level invention strategy: research framing, key contributions, experimental approach, and differentiation from prior work.",
+        log: [
+          L("14:08:01", "gen_strategy", "Generating strategy for 'Adaptive Retrieval Gating'"),
+          L("14:08:18", "gen_strategy", "Strategy draft complete \u2014 3 key contributions identified"),
+          L("14:08:29", "gen_strategy", "Token usage: 28,400 in / 12,600 out"),
+        ]},
+      { id: "inv_plan", label: "Plan", fullLabel: "Generate Detailed Plan",
+        state: "done", duration: "41.2s",
+        description: "Produces a section-by-section plan including figure descriptions, algorithm pseudocode outlines, and theorem statements.",
+        log: [
+          L("14:08:30", "gen_plan", "Planning paper structure (8 sections)"),
+          L("14:08:55", "gen_plan", "Plan includes: 4 figures, 2 algorithms, 1 theorem"),
+          L("14:09:11", "gen_plan", "Section plan validated against strategy"),
+        ]},
+      { id: "inv_draft", label: "Draft", fullLabel: "Generate Paper Text",
+        state: "done", duration: "124.5s",
+        description: "Generates the full paper draft following the plan. Each section is produced sequentially with cross-references maintained.",
+        log: [
+          L("14:09:12", "gen_paper", "Drafting 8 sections sequentially"),
+          L("14:10:15", "gen_paper", "Sections 1-4 complete (Introduction through Method)"),
+          L("14:11:01", "gen_paper", "Sections 5-8 complete (Experiments through Conclusion)"),
+          L("14:11:16", "gen_paper", "Draft: 6,847 words, 34 citations"),
+        ]},
+      { id: "inv_review", label: "Review", fullLabel: "Review Paper Draft",
+        state: "active", duration: null,
+        description: "Reviews the paper draft for technical correctness, logical flow, completeness of arguments, and consistency with the original hypothesis.",
+        log: [
+          L("14:11:17", "review_paper", "Starting paper review (iteration 1/3)"),
+          L("14:11:30", "review_paper", "Checking technical claims against method section..."),
+          L("14:11:42", "review_paper", "Reviewing experimental design completeness..."),
+        ]},
+      { id: "inv_revise", label: "Revise", fullLabel: "Revise Paper Draft",
+        state: "future", duration: null,
+        description: "Applies review feedback to revise the paper draft. Addresses flagged issues, strengthens weak arguments, and improves clarity.",
+        log: []},
+      { id: "inv_converge", label: "Converge", fullLabel: "Check Convergence",
+        state: "future", duration: null,
+        description: "Evaluates whether the paper meets acceptance criteria or needs another review-revise cycle.",
+        log: []},
+    ]},
+  { id: "paper", label: "Paper", fullLabel: "Generate Paper Repo", state: "future",
+    description: "Produces the final paper repository: LaTeX source, figures, visualizations, artifact demos, and a structured output directory ready for submission.",
+    steps: [
+      { id: "paper_latex", label: "LaTeX", fullLabel: "Generate LaTeX Source",
+        state: "future", duration: null,
+        description: "Converts the finalized paper text into properly formatted LaTeX, including bibliography, cross-references, and figure placements.",
+        log: []},
+      { id: "paper_demos", label: "Demos", fullLabel: "Generate Artifact Demos",
+        state: "future", duration: null,
+        description: "Creates runnable demo scripts that reproduce key results and visualizations from the paper.",
+        log: []},
+      { id: "paper_viz", label: "Viz", fullLabel: "Generate Visualizations",
+        state: "future", duration: null,
+        description: "Generates publication-quality figures and plots described in the paper plan. Outputs SVG/PDF files.",
+        log: []},
+      { id: "paper_compile", label: "Compile", fullLabel: "Compile Full Paper",
+        state: "future", duration: null,
+        description: "Compiles the LaTeX source into a PDF, verifying all references resolve and figures render correctly.",
+        log: []},
+      { id: "paper_package", label: "Package", fullLabel: "Package Repository",
+        state: "future", duration: null,
+        description: "Bundles everything into a clean repository: paper PDF, LaTeX source, demos, visualizations, and a README.",
+        log: []},
+    ]},
+];
+
+// ================================================================
+// BUILD THE STRIP
+// ================================================================
+const strip = document.getElementById("strip");
+const allNodes = [];
+let selectedIdx = -1;
+
+function createRingSVG() {
+  const ns = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(ns, "svg");
+  svg.setAttribute("viewBox", "0 0 40 40");
+  svg.setAttribute("width", "40");
+  svg.setAttribute("height", "40");
+  const circle = document.createElementNS(ns, "circle");
+  circle.setAttribute("cx", "20"); circle.setAttribute("cy", "20");
+  circle.setAttribute("r", "16"); circle.classList.add("ring-outer");
+  svg.appendChild(circle);
+  const diamond = document.createElementNS(ns, "polygon");
+  diamond.setAttribute("points", "20,10 30,20 20,30 10,20");
+  diamond.classList.add("ring-diamond");
+  svg.appendChild(diamond);
+  return svg;
+}
+
+PIPELINE.forEach((mod, mi) => {
+  // Ring node for the module
+  const ringEl = document.createElement("div");
+  ringEl.className = `node node-ring ${mod.state}`;
+  ringEl.setAttribute("tabindex", "-1");
+  ringEl.setAttribute("role", "button");
+  ringEl.setAttribute("aria-label", mod.fullLabel);
+  ringEl.appendChild(createRingSVG());
+  const ringLabel = document.createElement("div");
+  ringLabel.className = "ring-label";
+  ringLabel.textContent = mod.label;
+  ringEl.appendChild(ringLabel);
+  strip.appendChild(ringEl);
+  allNodes.push({ el: ringEl, type: "ring", moduleIdx: mi, state: mod.state });
+
+  // Dots for each sub-step
+  mod.steps.forEach((step, si) => {
+    const dotEl = document.createElement("div");
+    dotEl.className = `node node-dot ${step.state}`;
+    dotEl.setAttribute("tabindex", "-1");
+    dotEl.setAttribute("role", "button");
+    dotEl.setAttribute("aria-label", step.fullLabel);
+    const c = document.createElement("div");
+    c.className = "dot-circle";
+    dotEl.appendChild(c);
+    const tt = document.createElement("div");
+    tt.className = "dot-tooltip";
+    tt.textContent = step.label;
+    dotEl.appendChild(tt);
+    strip.appendChild(dotEl);
+    allNodes.push({ el: dotEl, type: "dot", moduleIdx: mi, stepIdx: si, state: step.state });
+  });
+});
+
+// ================================================================
+// SELECTION & CONTENT RENDERING
+// ================================================================
+const contentPanel = document.getElementById("contentPanel");
+
+function selectNode(idx) {
+  if (idx < 0 || idx >= allNodes.length) return;
+  if (selectedIdx >= 0 && selectedIdx < allNodes.length)
+    allNodes[selectedIdx].el.classList.remove("selected");
+  selectedIdx = idx;
+  const node = allNodes[idx];
+  node.el.classList.add("selected");
+  // Center on selected node
+  const sc = document.getElementById("stripScroll");
+  const cw = sc.getBoundingClientRect().width;
+  const target = node.el.offsetLeft + node.el.offsetWidth / 2 - cw / 2;
+  sc.scrollTo({ left: target, behavior: "smooth" });
+  renderContent(node);
+}
+
+function renderContent(node) {
+  const mod = PIPELINE[node.moduleIdx];
+  if (node.type === "ring") renderModuleSummary(mod);
+  else renderStepDetail(mod, mod.steps[node.stepIdx]);
+}
+
+function stateLabel(s) { return s === "done" ? "complete" : s === "active" ? "running" : "pending"; }
+function badgeClass(s)  { return s === "done" ? "badge-done" : s === "active" ? "badge-active" : "badge-future"; }
+
+function renderModuleSummary(mod) {
+  const doneN = mod.steps.filter(s => s.state === "done").length;
+  const activeN = mod.steps.filter(s => s.state === "active").length;
+  const pct = Math.round(((doneN + activeN * 0.5) / mod.steps.length) * 100);
+  const pState = mod.state === "done" ? "done" : "active";
+  const dur = mod.steps.filter(s => s.duration).reduce((a, s) => a + parseFloat(s.duration), 0);
+  const durStr = dur > 0 ? dur.toFixed(1) + "s" : "--";
+
+  contentPanel.innerHTML = `
+    <div class="panel-header">
+      <div class="panel-title">${mod.fullLabel}</div>
+      <div class="panel-badge ${badgeClass(mod.state)}">${stateLabel(mod.state)}</div>
+    </div>
+    <div class="panel-meta"><div class="kv-grid">
+      <div class="kv-key">Module</div><div class="kv-value">${mod.label}</div>
+      <div class="kv-key">Steps</div><div class="kv-value">${doneN}/${mod.steps.length} complete</div>
+      <div class="kv-key">Elapsed</div><div class="kv-value">${durStr}</div>
+      <div class="kv-key">Status</div><div class="kv-value">${stateLabel(mod.state)}</div>
+    </div></div>
+    <div class="panel-section">
+      <div class="panel-section-title">Description</div>
+      <div class="panel-body">${mod.description}</div>
+    </div>
+    <div class="panel-section">
+      <div class="panel-section-title">Steps</div>
+      <div class="module-steps-grid">
+        ${mod.steps.map((s, si) => `
+          <div class="module-step-card" data-module="${mod.id}" data-step-idx="${si}">
+            <div class="step-name">${s.fullLabel}</div>
+            <div class="step-status ${s.state}">${stateLabel(s.state)}${s.duration ? ' \u00b7 ' + s.duration : ''}</div>
+          </div>`).join("")}
+      </div>
+    </div>
+    <div class="module-progress">
+      <div class="module-progress-bar ${pState}" style="width:${pct}%"></div>
+    </div>`;
+
+  contentPanel.querySelectorAll(".module-step-card").forEach(card => {
+    card.addEventListener("click", () => {
+      const mi = PIPELINE.findIndex(m => m.id === card.dataset.module);
+      const ti = allNodes.findIndex(n => n.type === "dot" && n.moduleIdx === mi && n.stepIdx === parseInt(card.dataset.stepIdx));
+      if (ti >= 0) selectNode(ti);
+    });
+  });
+}
+
+function renderStepDetail(mod, step) {
+  const logHtml = step.log.length > 0
+    ? step.log.map(l => `<div class="log-line"><span class="log-ts">${l.ts}</span>|<span class="log-lvl">${l.lvl.padEnd(5)}</span>|<span class="log-fn">${l.fn}</span>| <span class="log-msg">${l.msg}</span></div>`).join("")
+    : '<div class="log-line"><span class="log-msg">No log output yet.</span></div>';
+
+  contentPanel.innerHTML = `
+    <div class="panel-header">
+      <div class="panel-title">${step.fullLabel}</div>
+      <div class="panel-badge ${badgeClass(step.state)}">${stateLabel(step.state)}</div>
+    </div>
+    <div class="panel-meta"><div class="kv-grid">
+      <div class="kv-key">Module</div><div class="kv-value">${mod.fullLabel}</div>
+      <div class="kv-key">Step</div><div class="kv-value"><code>${step.id}</code></div>
+      <div class="kv-key">Duration</div><div class="kv-value">${step.duration || "in progress..."}</div>
+      <div class="kv-key">Status</div><div class="kv-value">${stateLabel(step.state)}</div>
+    </div></div>
+    <div class="panel-section">
+      <div class="panel-section-title">Description</div>
+      <div class="panel-body">${step.description}</div>
+    </div>
+    <div class="panel-section">
+      <div class="panel-section-title">Output Log</div>
+      <div class="step-log">${logHtml}</div>
+    </div>`;
+}
+
+// ================================================================
+// CLICK HANDLERS
+// ================================================================
+allNodes.forEach((node, idx) => {
+  node.el.addEventListener("click", () => selectNode(idx));
+});
+
+// ================================================================
+// KEYBOARD NAVIGATION
+// ================================================================
+document.addEventListener("keydown", (e) => {
+  if (e.key === "ArrowRight" && !e.shiftKey) {
+    e.preventDefault();
+    selectNode(Math.min(selectedIdx + 1, allNodes.length - 1));
+  } else if (e.key === "ArrowLeft" && !e.shiftKey) {
+    e.preventDefault();
+    selectNode(Math.max(selectedIdx - 1, 0));
+  } else if (e.key === "ArrowRight" && e.shiftKey) {
+    e.preventDefault();
+    for (let i = selectedIdx + 1; i < allNodes.length; i++)
+      if (allNodes[i].type === "ring") { selectNode(i); break; }
+  } else if (e.key === "ArrowLeft" && e.shiftKey) {
+    e.preventDefault();
+    for (let i = selectedIdx - 1; i >= 0; i--)
+      if (allNodes[i].type === "ring") { selectNode(i); break; }
+  } else if (e.key === "Enter") {
+    e.preventDefault();
+    if (selectedIdx >= 0 && allNodes[selectedIdx].type === "ring") {
+      const next = selectedIdx + 1;
+      if (next < allNodes.length && allNodes[next].type === "dot") selectNode(next);
+    }
+  }
+});
+
+// ================================================================
+// AUTO-SELECT: center on the active dot
+// ================================================================
+requestAnimationFrame(() => {
+  requestAnimationFrame(() => {
+    let idx = allNodes.findIndex(n => n.type === "dot" && n.state === "active");
+    if (idx < 0) idx = allNodes.findIndex(n => n.type === "ring" && n.state === "active");
+    if (idx < 0) idx = 0;
+    selectNode(idx);
+  });
+});
+</script>
+</body>
+</html>

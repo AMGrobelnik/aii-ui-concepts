@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor - Split Pane</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0c0e14; --bg-card: rgba(20,24,36,0.85); --bg-panel: #12151f;
+    --border: rgba(255,255,255,0.06); --border-adv: rgba(255,255,255,0.10);
+    --text: #e2e4ea; --text-dim: #6b7084; --text-muted: #444a60;
+    --accent: #5b8af5; --accent-glow: rgba(91,138,245,0.35);
+    --green: #34d399; --green-dim: rgba(52,211,153,0.15);
+    --purple: #a78bfa; --purple-glow: rgba(167,139,250,0.25);
+    --orange: #f59e0b; --red: #ef4444;
+    --glass: rgba(255,255,255,0.03); --glass-border: rgba(255,255,255,0.07);
+    --radius: 10px; --radius-sm: 6px;
+  }
+  body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
+
+  /* ── Top Bar ── */
+  .topbar { display: flex; align-items: center; height: 48px; padding: 0 20px; background: var(--bg-panel); border-bottom: 1px solid var(--border); flex-shrink: 0; gap: 12px; z-index: 10; }
+  .topbar .run-name { font-weight: 600; font-size: 14px; white-space: nowrap; }
+  .topbar .run-tag { font-size: 10px; background: var(--green-dim); color: var(--green); padding: 2px 8px; border-radius: 99px; font-weight: 500; }
+  .breadcrumb { display: none; font-size: 12px; color: var(--text-dim); margin-left: 8px; }
+  .breadcrumb span { color: var(--text-muted); margin: 0 4px; }
+  .topbar-spacer { flex: 1; }
+
+  /* Mode Toggle */
+  .mode-toggle { display: flex; background: rgba(255,255,255,0.06); border-radius: 99px; padding: 2px; cursor: pointer; flex-shrink: 0; }
+  .mode-toggle .pill { padding: 5px 14px; border-radius: 99px; font-size: 11px; font-weight: 500; color: var(--text-dim); transition: all 0.3s; user-select: none; }
+  .mode-toggle .pill.active { background: var(--accent); color: #fff; box-shadow: 0 2px 10px var(--accent-glow); }
+
+  /* ── Main Layout ── */
+  .main { display: flex; flex: 1; overflow: hidden; transition: all 0.4s ease; }
+
+  /* ── Left Pane ── */
+  .pane-left { display: flex; flex-direction: column; transition: width 0.4s ease; overflow: hidden; flex-shrink: 0; }
+  body.simple .pane-left { width: 35%; }
+  body.advanced .pane-left { width: 25%; border-right: 1px solid var(--border-adv); }
+
+  /* Divider (simple mode subtle line) */
+  .divider-v { width: 1px; flex-shrink: 0; transition: all 0.3s; }
+  body.simple .divider-v { background: linear-gradient(to bottom, transparent 5%, rgba(255,255,255,0.05) 30%, rgba(255,255,255,0.05) 70%, transparent 95%); }
+  body.advanced .divider-v { width: 4px; background: var(--border-adv); cursor: col-resize; }
+  body.advanced .divider-v:hover { background: var(--accent); }
+
+  /* ── Center Pane ── */
+  .pane-center { flex: 1; display: flex; flex-direction: column; overflow: hidden; transition: all 0.4s ease; }
+
+  /* ── Right Pane (advanced only) ── */
+  .pane-right { display: flex; flex-direction: column; overflow: hidden; transition: width 0.4s ease, opacity 0.3s ease; }
+  body.simple .pane-right { width: 0; opacity: 0; pointer-events: none; }
+  body.advanced .pane-right { width: 30%; opacity: 1; border-left: 1px solid var(--border-adv); }
+
+  .divider-v2 { width: 0; flex-shrink: 0; transition: all 0.3s; }
+  body.advanced .divider-v2 { width: 4px; background: var(--border-adv); cursor: col-resize; }
+  body.advanced .divider-v2:hover { background: var(--accent); }
+
+  /* ── Stats Bar ── */
+  .statsbar { display: flex; align-items: center; height: 32px; padding: 0 20px; background: var(--bg-panel); border-top: 1px solid var(--border); flex-shrink: 0; gap: 24px; font-size: 11px; color: var(--text-dim); }
+  .statsbar .stat-val { color: var(--text); font-weight: 500; margin-left: 4px; }
+  .statsbar .stat-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); display: inline-block; margin-right: 6px; animation: pulse-dot 2s infinite; }
+  @keyframes pulse-dot { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+  body.advanced .statsbar { height: 38px; gap: 32px; }
+
+  /* ── Vertical Pipeline (simple) ── */
+  .pipeline-v { flex: 1; padding: 28px 24px 16px; overflow-y: auto; }
+  .pipeline-v::-webkit-scrollbar { width: 0; }
+  .pipe-stage { position: relative; padding-left: 40px; padding-bottom: 8px; }
+  .pipe-stage:last-child { padding-bottom: 0; }
+
+  /* Connection line */
+  .pipe-stage::before { content: ''; position: absolute; left: 14px; top: 32px; bottom: 0; width: 2px; background: var(--border); }
+  .pipe-stage:last-child::before { display: none; }
+  .pipe-stage.done::before { background: linear-gradient(to bottom, var(--green), var(--green)); box-shadow: 0 0 8px rgba(52,211,153,0.2); }
+  .pipe-stage.active::before { background: linear-gradient(to bottom, var(--accent), var(--border)); box-shadow: 0 0 10px var(--accent-glow); }
+
+  /* Node circle */
+  .pipe-node { position: absolute; left: 5px; top: 6px; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; z-index: 1; border: 2px solid; transition: all 0.3s; }
+  .pipe-stage.done .pipe-node { background: var(--green-dim); border-color: var(--green); color: var(--green); }
+  .pipe-stage.active .pipe-node { background: rgba(91,138,245,0.15); border-color: var(--accent); color: var(--accent); animation: pulse-node 2s infinite; }
+  .pipe-stage.pending .pipe-node { background: rgba(255,255,255,0.03); border-color: var(--text-muted); color: var(--text-muted); }
+  @keyframes pulse-node { 0%,100% { box-shadow: 0 0 0 0 var(--accent-glow); } 50% { box-shadow: 0 0 0 8px transparent; } }
+
+  /* Simple mode glow lines */
+  body.simple .pipe-stage.done::before { box-shadow: 0 0 12px rgba(52,211,153,0.3); }
+  body.simple .pipe-stage.active::before { box-shadow: 0 0 16px var(--accent-glow); }
+  body.simple .pipe-stage.active .pipe-node { box-shadow: 0 0 20px var(--accent-glow); }
+
+  .pipe-label { font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+  .pipe-sublabel { font-size: 11px; color: var(--text-dim); }
+  .pipe-card { cursor: pointer; padding: 8px 0; border-radius: var(--radius-sm); transition: background 0.2s; }
+  .pipe-card:hover { background: rgba(255,255,255,0.02); }
+  .pipe-stage.active .pipe-card { cursor: default; }
+
+  /* Expanded activity (inline in active stage, simple mode) */
+  .stage-activity { margin-top: 10px; padding: 12px 14px; background: var(--glass); border: 1px solid var(--glass-border); border-radius: var(--radius); backdrop-filter: blur(12px); }
+  .stage-activity .act-title { font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--accent); font-weight: 600; margin-bottom: 6px; }
+  .stage-activity .act-desc { font-size: 12px; color: var(--text-dim); line-height: 1.5; }
+  .act-progress { margin-top: 8px; height: 3px; background: rgba(255,255,255,0.06); border-radius: 99px; overflow: hidden; }
+  .act-progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--purple)); border-radius: 99px; transition: width 0.5s; }
+
+  /* Run controls */
+  .run-controls { padding: 16px 24px; display: flex; gap: 8px; flex-shrink: 0; flex-wrap: wrap; }
+  .btn { padding: 7px 16px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 500; border: none; cursor: pointer; font-family: inherit; transition: all 0.2s; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-primary:hover { background: #6d99ff; }
+  .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text-dim); }
+  .btn-outline:hover { border-color: var(--text-dim); color: var(--text); }
+  .btn-danger { background: transparent; border: 1px solid rgba(239,68,68,0.3); color: var(--red); }
+  .btn-danger:hover { background: rgba(239,68,68,0.1); }
+  .mode-selector { display: flex; gap: 4px; width: 100%; margin-top: 4px; }
+  .mode-selector .btn { flex: 1; font-size: 11px; padding: 5px 0; text-align: center; }
+  .mode-selector .btn.sel { background: rgba(91,138,245,0.12); border-color: var(--accent); color: var(--accent); }
+
+  /* ── Sub-tree (advanced, in left pane) ── */
+  .subtree { padding: 0 24px 16px; font-size: 11px; display: none; overflow-y: auto; flex: 1; }
+  body.advanced .subtree { display: block; }
+  .subtree-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-muted); margin-bottom: 8px; font-weight: 600; }
+  .subtree-item { display: flex; align-items: center; gap: 6px; padding: 3px 0 3px 12px; color: var(--text-dim); border-left: 1px solid var(--border); margin-left: 2px; }
+  .subtree-item .st-icon { font-size: 10px; width: 14px; text-align: center; }
+  .subtree-item.st-done .st-icon { color: var(--green); }
+  .subtree-item.st-active .st-icon { color: var(--accent); }
+  .subtree-item.st-pending .st-icon { color: var(--text-muted); }
+  .subtree-item.st-active { color: var(--text); font-weight: 500; }
+
+  /* ── Right Pane Content — Simple Mode Cards ── */
+  .simple-content { flex: 1; overflow-y: auto; padding: 24px; }
+  .simple-content::-webkit-scrollbar { width: 4px; }
+  .simple-content::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 99px; }
+  body.advanced .simple-content { display: none; }
+
+  .glass-card { background: var(--bg-card); border: 1px solid var(--glass-border); border-radius: var(--radius); padding: 20px; backdrop-filter: blur(16px); margin-bottom: 16px; transition: border-color 0.2s, box-shadow 0.2s; }
+  .glass-card:hover { border-color: rgba(255,255,255,0.1); box-shadow: 0 4px 24px rgba(0,0,0,0.2); }
+  .card-title { font-size: 12px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-dim); margin-bottom: 12px; font-weight: 600; }
+
+  /* Hypothesis Card */
+  .hypo-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
+  .hypo-name { font-size: 16px; font-weight: 600; line-height: 1.3; }
+  .gauge { position: relative; width: 52px; height: 52px; flex-shrink: 0; }
+  .gauge svg { transform: rotate(-90deg); }
+  .gauge-bg { fill: none; stroke: rgba(255,255,255,0.06); stroke-width: 4; }
+  .gauge-fill { fill: none; stroke: var(--green); stroke-width: 4; stroke-linecap: round; stroke-dasharray: 138.2; stroke-dashoffset: 22.1; transition: stroke-dashoffset 0.8s; }
+  .gauge-val { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; color: var(--green); }
+  .hypo-abstract { font-size: 12px; color: var(--text-dim); line-height: 1.6; }
+  .hypo-tags { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+  .hypo-tag { font-size: 10px; padding: 2px 8px; border-radius: 99px; background: rgba(167,139,250,0.1); color: var(--purple); font-weight: 500; }
+
+  /* Artifacts */
+  .artifact-row { display: flex; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); gap: 10px; font-size: 12px; }
+  .artifact-row:last-child { border-bottom: none; }
+  .art-type { width: 24px; height: 24px; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; font-size: 11px; flex-shrink: 0; }
+  .art-type.code { background: rgba(91,138,245,0.12); color: var(--accent); }
+  .art-type.viz { background: rgba(167,139,250,0.12); color: var(--purple); }
+  .art-type.doc { background: rgba(52,211,153,0.12); color: var(--green); }
+  .art-name { flex: 1; font-weight: 500; }
+  .art-status { font-size: 10px; padding: 2px 8px; border-radius: 99px; font-weight: 500; }
+  .art-status.done { background: var(--green-dim); color: var(--green); }
+  .art-status.running { background: rgba(91,138,245,0.12); color: var(--accent); }
+  .art-status.pending { background: rgba(255,255,255,0.04); color: var(--text-muted); }
+
+  /* Paper Preview */
+  .paper-preview { display: flex; gap: 16px; align-items: flex-start; }
+  .paper-thumb { width: 80px; height: 104px; background: linear-gradient(135deg, #1a1e2e, #1e2338); border: 1px solid var(--border); border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 20px; color: var(--text-muted); }
+  .paper-meta { flex: 1; }
+  .paper-meta h4 { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  .paper-stat { font-size: 11px; color: var(--text-dim); margin-bottom: 3px; }
+  .paper-stat b { color: var(--text); font-weight: 500; }
+  .paper-link { display: inline-block; margin-top: 8px; font-size: 11px; color: var(--accent); text-decoration: none; font-weight: 500; }
+  .paper-link:hover { text-decoration: underline; }
+
+  /* ── Advanced Center Pane ── */
+  .adv-center { flex: 1; display: none; flex-direction: column; overflow: hidden; }
+  body.advanced .adv-center { display: flex; }
+
+  .tabs { display: flex; border-bottom: 1px solid var(--border-adv); padding: 0 16px; flex-shrink: 0; }
+  .tab { padding: 10px 16px; font-size: 12px; font-weight: 500; color: var(--text-dim); cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  .tab-content { flex: 1; overflow-y: auto; padding: 16px; }
+  .tab-content::-webkit-scrollbar { width: 4px; }
+  .tab-content::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 99px; }
+
+  /* Data table */
+  .data-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .data-table th { text-align: left; padding: 8px 12px; font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); border-bottom: 1px solid var(--border-adv); }
+  .data-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .data-table tr:hover td { background: rgba(255,255,255,0.015); }
+
+  /* ── Right Pane (advanced) ── */
+  .right-section { display: flex; flex-direction: column; overflow: hidden; }
+  .right-section + .right-section { border-top: 1px solid var(--border-adv); }
+
+  /* Panel header (advanced) */
+  .panel-hdr { display: flex; align-items: center; height: 28px; padding: 0 12px; background: rgba(255,255,255,0.02); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .panel-hdr .ph-title { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-dim); flex: 1; }
+  .panel-hdr .ph-grip { color: var(--text-muted); font-size: 10px; letter-spacing: 2px; cursor: grab; }
+  body.simple .panel-hdr { display: none; }
+
+  /* Feedback */
+  .feedback-body { padding: 12px; flex: 1; display: flex; flex-direction: column; }
+  .feedback-body textarea { flex: 1; background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px; font-family: inherit; font-size: 12px; color: var(--text); resize: none; outline: none; transition: border-color 0.2s; min-height: 60px; }
+  .feedback-body textarea:focus { border-color: var(--accent); }
+  .feedback-actions { display: flex; gap: 6px; margin-top: 8px; }
+
+  /* Logs */
+  .logs-body { flex: 1; overflow-y: auto; padding: 8px 12px; font-family: 'JetBrains Mono', 'SF Mono', 'Consolas', monospace; font-size: 11px; line-height: 1.6; }
+  .logs-body::-webkit-scrollbar { width: 4px; }
+  .logs-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 99px; }
+  .log-line { white-space: nowrap; }
+  .log-ts { color: var(--text-muted); }
+  .log-info { color: var(--accent); }
+  .log-ok { color: var(--green); }
+  .log-warn { color: var(--orange); }
+  .log-agent { color: var(--purple); }
+
+  /* Add panel button */
+  .add-panel-btn { display: flex; align-items: center; justify-content: center; padding: 8px; color: var(--text-muted); font-size: 11px; cursor: pointer; border-top: 1px solid var(--border); gap: 4px; transition: color 0.2s; flex-shrink: 0; }
+  .add-panel-btn:hover { color: var(--accent); }
+
+  /* ── Adv pipeline compact ── */
+  body.advanced .pipeline-v { padding: 16px 24px 8px; flex: 0; }
+  body.advanced .pipe-stage { padding-bottom: 4px; }
+  body.advanced .pipe-card { padding: 4px 0; }
+  body.advanced .pipe-label { font-size: 12px; }
+  body.advanced .stage-activity { display: none; }
+  body.advanced .pipe-node { width: 16px; height: 16px; font-size: 8px; left: 7px; top: 6px; }
+  body.advanced .pipe-stage::before { left: 14px; top: 26px; }
+
+  /* Transitions */
+  .fade-enter { animation: fadeUp 0.35s ease; }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+</style>
+</head>
+<body class="simple">
+
+<!-- Top Bar -->
+<div class="topbar">
+  <div class="run-name">ssl-low-resource-v3</div>
+  <div class="run-tag">RUNNING</div>
+  <div class="breadcrumb" id="breadcrumb">
+    Pipeline<span>/</span>Invention Loop<span>/</span>Iter 2<span>/</span>Gen Artifacts
+  </div>
+  <div class="topbar-spacer"></div>
+  <div class="mode-toggle" id="modeToggle">
+    <div class="pill active" data-mode="simple">Simple</div>
+    <div class="pill" data-mode="advanced">Advanced</div>
+  </div>
+</div>
+
+<!-- Main Layout -->
+<div class="main">
+  <!-- Left Pane -->
+  <div class="pane-left">
+    <div class="pipeline-v" id="pipelineV">
+      <!-- Stage 1: Seed Hypothesis -->
+      <div class="pipe-stage done">
+        <div class="pipe-node">&#10003;</div>
+        <div class="pipe-card">
+          <div class="pipe-label">Seed Hypothesis</div>
+          <div class="pipe-sublabel">Knowledge graph built &middot; 14 papers ingested</div>
+        </div>
+      </div>
+      <!-- Stage 2: Hypothesis Loop -->
+      <div class="pipe-stage done">
+        <div class="pipe-node">&#10003;</div>
+        <div class="pipe-card">
+          <div class="pipe-label">Hypothesis Loop</div>
+          <div class="pipe-sublabel">3 iterations &middot; Score: 8.4/10</div>
+        </div>
+      </div>
+      <!-- Stage 3: Invention Loop (active) -->
+      <div class="pipe-stage active">
+        <div class="pipe-node">3</div>
+        <div class="pipe-card">
+          <div class="pipe-label">Invention Loop</div>
+          <div class="pipe-sublabel">Iteration 2 &middot; Generating artifacts</div>
+        </div>
+        <div class="stage-activity" id="stageActivity">
+          <div class="act-title">Current Activity</div>
+          <div class="act-desc">Generating Python demo for cross-lingual embedding alignment module. Agent working on visualization code.</div>
+          <div class="act-progress"><div class="act-progress-fill" style="width:65%"></div></div>
+        </div>
+      </div>
+      <!-- Stage 4: Paper Generation -->
+      <div class="pipe-stage pending">
+        <div class="pipe-node">4</div>
+        <div class="pipe-card">
+          <div class="pipe-label">Paper Generation</div>
+          <div class="pipe-sublabel">Pending</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Sub-tree (advanced only) -->
+    <div class="subtree" id="subtree">
+      <div class="subtree-title">Invention Loop &mdash; Iteration 2</div>
+      <div class="subtree-item st-done"><span class="st-icon">&#10003;</span>Gen Strategy</div>
+      <div class="subtree-item st-done"><span class="st-icon">&#10003;</span>Gen Plan</div>
+      <div class="subtree-item st-active"><span class="st-icon">&#9654;</span>Gen Artifacts</div>
+      <div class="subtree-item st-pending"><span class="st-icon">&#9675;</span>Gen Paper Text</div>
+      <div class="subtree-item st-pending"><span class="st-icon">&#9675;</span>Review Paper</div>
+    </div>
+
+    <!-- Run Controls -->
+    <div class="run-controls">
+      <button class="btn btn-outline" title="Pause">&#10074;&#10074; Pause</button>
+      <button class="btn btn-danger" title="Stop">&#9724; Stop</button>
+      <div class="mode-selector">
+        <button class="btn btn-outline sel">Autonomous</button>
+        <button class="btn btn-outline">Step-by-step</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider-v"></div>
+
+  <!-- Center Pane -->
+  <div class="pane-center">
+    <!-- Simple mode: stacked cards -->
+    <div class="simple-content" id="simpleContent">
+      <!-- Hypothesis Card -->
+      <div class="glass-card fade-enter">
+        <div class="card-title">Hypothesis</div>
+        <div class="hypo-header">
+          <div>
+            <div class="hypo-name">Cross-Lingual Self-Supervised Representations via Phoneme-Aligned Contrastive Learning</div>
+          </div>
+          <div class="gauge">
+            <svg width="52" height="52" viewBox="0 0 52 52">
+              <circle class="gauge-bg" cx="26" cy="26" r="22"/>
+              <circle class="gauge-fill" cx="26" cy="26" r="22"/>
+            </svg>
+            <div class="gauge-val">8.4</div>
+          </div>
+        </div>
+        <div class="hypo-abstract">A novel contrastive learning framework that leverages phoneme-level alignments across languages to learn shared speech representations, enabling effective transfer to low-resource languages with as few as 10 minutes of labeled data.</div>
+        <div class="hypo-tags">
+          <span class="hypo-tag">self-supervised</span>
+          <span class="hypo-tag">contrastive learning</span>
+          <span class="hypo-tag">cross-lingual</span>
+          <span class="hypo-tag">low-resource</span>
+        </div>
+      </div>
+
+      <!-- Artifacts Card -->
+      <div class="glass-card fade-enter">
+        <div class="card-title">Artifacts</div>
+        <div class="artifact-row">
+          <div class="art-type code">Py</div>
+          <div class="art-name">contrastive_encoder.py</div>
+          <div class="art-status done">Complete</div>
+        </div>
+        <div class="artifact-row">
+          <div class="art-type code">Py</div>
+          <div class="art-name">phoneme_aligner.py</div>
+          <div class="art-status done">Complete</div>
+        </div>
+        <div class="artifact-row">
+          <div class="art-type viz">Viz</div>
+          <div class="art-name">embedding_tsne.py</div>
+          <div class="art-status running">Running</div>
+        </div>
+        <div class="artifact-row">
+          <div class="art-type viz">Viz</div>
+          <div class="art-name">transfer_heatmap.py</div>
+          <div class="art-status pending">Queued</div>
+        </div>
+        <div class="artifact-row">
+          <div class="art-type doc">Tex</div>
+          <div class="art-name">results_table.tex</div>
+          <div class="art-status pending">Queued</div>
+        </div>
+      </div>
+
+      <!-- Paper Preview Card -->
+      <div class="glass-card fade-enter">
+        <div class="card-title">Paper Preview</div>
+        <div class="paper-preview">
+          <div class="paper-thumb">&#128196;</div>
+          <div class="paper-meta">
+            <h4>Cross-Lingual SSL for Low-Resource ASR</h4>
+            <div class="paper-stat">Sections: <b>7 / 8</b></div>
+            <div class="paper-stat">Figures: <b>3 / 5</b></div>
+            <div class="paper-stat">References: <b>32</b></div>
+            <div class="paper-stat">Status: <b style="color:var(--orange)">Draft (Iter 1)</b></div>
+            <a class="paper-link" href="#">Open in viewer &rarr;</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Advanced mode: tabs -->
+    <div class="adv-center" id="advCenter">
+      <div class="tabs" id="tabBar">
+        <div class="tab" data-tab="hypothesis">Hypothesis</div>
+        <div class="tab active" data-tab="artifacts">Artifacts</div>
+        <div class="tab" data-tab="paper">Paper</div>
+        <div class="tab" data-tab="reviews">Reviews</div>
+      </div>
+      <div class="tab-content" id="tabContent">
+        <!-- Artifacts table (default tab) -->
+        <table class="data-table" id="artifactTable">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Type</th>
+              <th>Step</th>
+              <th>Lines</th>
+              <th>Status</th>
+              <th>Time</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="font-weight:500">contrastive_encoder.py</td>
+              <td><span style="color:var(--accent)">Code</span></td>
+              <td>Gen Artifacts</td>
+              <td>342</td>
+              <td><span class="art-status done">Complete</span></td>
+              <td style="color:var(--text-dim)">2m 14s</td>
+            </tr>
+            <tr>
+              <td style="font-weight:500">phoneme_aligner.py</td>
+              <td><span style="color:var(--accent)">Code</span></td>
+              <td>Gen Artifacts</td>
+              <td>218</td>
+              <td><span class="art-status done">Complete</span></td>
+              <td style="color:var(--text-dim)">1m 48s</td>
+            </tr>
+            <tr>
+              <td style="font-weight:500">embedding_tsne.py</td>
+              <td><span style="color:var(--purple)">Viz</span></td>
+              <td>Gen Viz</td>
+              <td>156</td>
+              <td><span class="art-status running">Running</span></td>
+              <td style="color:var(--text-dim)">0m 52s</td>
+            </tr>
+            <tr>
+              <td style="font-weight:500">transfer_heatmap.py</td>
+              <td><span style="color:var(--purple)">Viz</span></td>
+              <td>Gen Viz</td>
+              <td>&mdash;</td>
+              <td><span class="art-status pending">Queued</span></td>
+              <td style="color:var(--text-dim)">&mdash;</td>
+            </tr>
+            <tr>
+              <td style="font-weight:500">results_table.tex</td>
+              <td><span style="color:var(--green)">Doc</span></td>
+              <td>Gen Paper</td>
+              <td>&mdash;</td>
+              <td><span class="art-status pending">Queued</span></td>
+              <td style="color:var(--text-dim)">&mdash;</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="divider-v2"></div>
+
+  <!-- Right Pane (advanced only) -->
+  <div class="pane-right" id="paneRight">
+    <!-- Feedback Panel -->
+    <div class="right-section" style="flex:0 0 45%;">
+      <div class="panel-hdr"><span class="ph-title">Feedback</span><span class="ph-grip">&middot;&middot;&middot;&middot;</span></div>
+      <div class="feedback-body">
+        <textarea placeholder="Provide feedback on the current step... (e.g., 'Focus more on low-resource scenario with Yoruba and Igbo')"></textarea>
+        <div class="feedback-actions">
+          <button class="btn btn-primary" style="font-size:11px; padding:5px 12px;">Submit</button>
+          <button class="btn btn-outline" style="font-size:11px; padding:5px 12px;">&#8634; Rewind to checkpoint</button>
+        </div>
+      </div>
+    </div>
+    <!-- Logs Panel -->
+    <div class="right-section" style="flex:1;">
+      <div class="panel-hdr"><span class="ph-title">Logs</span><span class="ph-grip">&middot;&middot;&middot;&middot;</span></div>
+      <div class="logs-body" id="logsBody">
+        <div class="log-line"><span class="log-ts">14:32:01</span> <span class="log-info">INFO </span> Starting invention loop iteration 2</div>
+        <div class="log-line"><span class="log-ts">14:32:02</span> <span class="log-ok"> OK  </span> Strategy generated: phoneme-contrastive-align</div>
+        <div class="log-line"><span class="log-ts">14:32:18</span> <span class="log-ok"> OK  </span> Plan approved (5 artifacts, 2 viz)</div>
+        <div class="log-line"><span class="log-ts">14:33:05</span> <span class="log-agent">AGENT</span> Spawned gen_artifact worker: contrastive_encoder.py</div>
+        <div class="log-line"><span class="log-ts">14:35:19</span> <span class="log-ok"> OK  </span> contrastive_encoder.py written (342 lines)</div>
+        <div class="log-line"><span class="log-ts">14:35:20</span> <span class="log-agent">AGENT</span> Spawned gen_artifact worker: phoneme_aligner.py</div>
+        <div class="log-line"><span class="log-ts">14:37:08</span> <span class="log-ok"> OK  </span> phoneme_aligner.py written (218 lines)</div>
+        <div class="log-line"><span class="log-ts">14:37:09</span> <span class="log-agent">AGENT</span> Spawned gen_viz worker: embedding_tsne.py</div>
+        <div class="log-line"><span class="log-ts">14:37:42</span> <span class="log-info">INFO </span> Generating t-SNE visualization for embedding space</div>
+        <div class="log-line"><span class="log-ts">14:38:01</span> <span class="log-warn">WARN </span> High token usage on embedding_tsne.py (12.4k tokens)</div>
+      </div>
+    </div>
+    <!-- Add panel button -->
+    <div class="add-panel-btn">+ Add panel</div>
+  </div>
+</div>
+
+<!-- Stats Bar -->
+<div class="statsbar" id="statsBar">
+  <div><span class="stat-dot"></span>Runtime: <span class="stat-val" id="statRuntime">47m 23s</span></div>
+  <div>Cost: <span class="stat-val" id="statCost">$4.82</span></div>
+  <div>Tokens: <span class="stat-val" id="statTokens">284k in / 62k out</span></div>
+  <div id="statExtra" style="display:none">Agents: <span class="stat-val">3 active</span></div>
+  <div id="statExtra2" style="display:none">Iter: <span class="stat-val">2 / 3</span></div>
+  <div id="statExtra3" style="display:none">Cache: <span class="stat-val">78% hit</span></div>
+</div>
+
+<script>
+(function() {
+  const body = document.body;
+  const modeToggle = document.getElementById('modeToggle');
+  const pills = modeToggle.querySelectorAll('.pill');
+  const breadcrumb = document.getElementById('breadcrumb');
+  const statsExtras = [document.getElementById('statExtra'), document.getElementById('statExtra2'), document.getElementById('statExtra3')];
+
+  // Tab data for advanced mode
+  const tabData = {
+    hypothesis: `
+      <div style="max-width:640px">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:16px">
+          <div>
+            <div style="font-size:16px;font-weight:600;margin-bottom:4px">Cross-Lingual Self-Supervised Representations via Phoneme-Aligned Contrastive Learning</div>
+            <div style="font-size:11px;color:var(--text-dim)">Iteration 3 &middot; Reviewed 2 times</div>
+          </div>
+          <div class="gauge" style="flex-shrink:0">
+            <svg width="52" height="52" viewBox="0 0 52 52"><circle class="gauge-bg" cx="26" cy="26" r="22"/><circle class="gauge-fill" cx="26" cy="26" r="22"/></svg>
+            <div class="gauge-val">8.4</div>
+          </div>
+        </div>
+        <div style="font-size:12px;color:var(--text-dim);line-height:1.6;margin-bottom:16px">A novel contrastive learning framework that leverages phoneme-level alignments across languages to learn shared speech representations, enabling effective transfer to low-resource languages with as few as 10 minutes of labeled data.</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px">
+          <span class="hypo-tag">self-supervised</span><span class="hypo-tag">contrastive learning</span><span class="hypo-tag">cross-lingual</span><span class="hypo-tag">low-resource</span>
+        </div>
+        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;font-weight:600">Iteration History</div>
+        <div style="font-size:12px;line-height:2;color:var(--text-dim)">
+          <div>Iter 1: 7.1/10 &mdash; Lacked novelty in alignment approach</div>
+          <div>Iter 2: 7.9/10 &mdash; Improved contrastive objective, weak baselines</div>
+          <div style="color:var(--text)">Iter 3: 8.4/10 &mdash; Added phoneme-level grounding, strong results</div>
+        </div>
+      </div>`,
+    artifacts: null, // Keep existing table
+    paper: `
+      <div style="display:flex;gap:24px;align-items:flex-start">
+        <div class="paper-thumb" style="width:120px;height:156px;font-size:28px">&#128196;</div>
+        <div style="flex:1">
+          <h3 style="font-size:15px;font-weight:600;margin-bottom:8px">Cross-Lingual SSL for Low-Resource ASR</h3>
+          <div style="font-size:12px;color:var(--text-dim);line-height:2">
+            <div>Sections: <b style="color:var(--text)">7 / 8</b> &mdash; Missing: Conclusion</div>
+            <div>Figures: <b style="color:var(--text)">3 / 5</b> &mdash; 2 visualizations pending</div>
+            <div>Tables: <b style="color:var(--text)">2</b></div>
+            <div>References: <b style="color:var(--text)">32</b></div>
+            <div>Word count: <b style="color:var(--text)">4,218</b></div>
+            <div>Status: <b style="color:var(--orange)">Draft (Iteration 1)</b></div>
+          </div>
+          <a class="paper-link" href="#" style="margin-top:12px">Open full preview &rarr;</a>
+        </div>
+      </div>`,
+    reviews: `
+      <div style="max-width:640px">
+        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:12px;font-weight:600">Paper Reviews &mdash; Iteration 1</div>
+        <div style="margin-bottom:16px;padding:14px;background:var(--glass);border:1px solid var(--glass-border);border-radius:var(--radius)">
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+            <span style="font-size:12px;font-weight:600">Novelty</span><span style="font-size:12px;color:var(--green);font-weight:600">7/10</span>
+          </div>
+          <div style="font-size:12px;color:var(--text-dim);line-height:1.5">Phoneme alignment is known but the contrastive formulation across language families is underexplored. Approach is novel enough for a workshop paper.</div>
+        </div>
+        <div style="margin-bottom:16px;padding:14px;background:var(--glass);border:1px solid var(--glass-border);border-radius:var(--radius)">
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+            <span style="font-size:12px;font-weight:600">Methodology</span><span style="font-size:12px;color:var(--orange);font-weight:600">6/10</span>
+          </div>
+          <div style="font-size:12px;color:var(--text-dim);line-height:1.5">Baseline comparisons are weak. Needs wav2vec 2.0 XLSR comparison. Training details underspecified for the alignment head.</div>
+        </div>
+        <div style="padding:14px;background:var(--glass);border:1px solid var(--glass-border);border-radius:var(--radius)">
+          <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+            <span style="font-size:12px;font-weight:600">Presentation</span><span style="font-size:12px;color:var(--green);font-weight:600">8/10</span>
+          </div>
+          <div style="font-size:12px;color:var(--text-dim);line-height:1.5">Well-structured. Figures are clear. Abstract could be tighter. Related work section is comprehensive.</div>
+        </div>
+      </div>`
+  };
+
+  // Mode toggle
+  function setMode(mode) {
+    body.className = mode;
+    pills.forEach(p => p.classList.toggle('active', p.dataset.mode === mode));
+    breadcrumb.style.display = mode === 'advanced' ? 'block' : 'none';
+    statsExtras.forEach(el => el.style.display = mode === 'advanced' ? '' : 'none');
+  }
+
+  modeToggle.addEventListener('click', function(e) {
+    const pill = e.target.closest('.pill');
+    if (!pill) return;
+    setMode(pill.dataset.mode);
+  });
+
+  // Tab switching (advanced)
+  const tabBar = document.getElementById('tabBar');
+  const tabContent = document.getElementById('tabContent');
+  const artifactTableHTML = tabContent.innerHTML;
+
+  tabBar.addEventListener('click', function(e) {
+    const tab = e.target.closest('.tab');
+    if (!tab) return;
+    tabBar.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    const key = tab.dataset.tab;
+    if (key === 'artifacts') {
+      tabContent.innerHTML = artifactTableHTML;
+    } else if (tabData[key]) {
+      tabContent.innerHTML = '<div class="fade-enter">' + tabData[key] + '</div>';
+    }
+  });
+
+  // Run control mode selector
+  const modeSelBtns = document.querySelectorAll('.mode-selector .btn');
+  modeSelBtns.forEach(btn => {
+    btn.addEventListener('click', function() {
+      modeSelBtns.forEach(b => b.classList.remove('sel'));
+      this.classList.add('sel');
+    });
+  });
+
+  // Simulated log stream
+  const logsBody = document.getElementById('logsBody');
+  const logMessages = [
+    ['INFO ', 'log-info', 'Computing contrastive loss for batch 128/256'],
+    ['AGENT', 'log-agent', 'embedding_tsne.py: layout pass 2 of 3'],
+    [' OK  ', 'log-ok', 'Alignment head checkpoint saved'],
+    ['INFO ', 'log-info', 'Token budget: 214k / 300k remaining'],
+    ['AGENT', 'log-agent', 'Refining axis labels for t-SNE plot'],
+    ['WARN ', 'log-warn', 'Retry on embedding_tsne.py (rate limit, 2s backoff)'],
+    [' OK  ', 'log-ok', 'embedding_tsne.py visualization generated'],
+    ['AGENT', 'log-agent', 'Spawned gen_viz worker: transfer_heatmap.py'],
+    ['INFO ', 'log-info', 'Loading transfer evaluation matrix (12 languages)'],
+    [' OK  ', 'log-ok', 'Heatmap data prepared: 12x12 WER reduction grid'],
+  ];
+  let logIdx = 0;
+  let baseMinute = 38;
+  let baseSec = 15;
+
+  setInterval(function() {
+    if (logIdx >= logMessages.length) return;
+    const [level, cls, msg] = logMessages[logIdx];
+    baseSec += Math.floor(Math.random() * 12) + 3;
+    if (baseSec >= 60) { baseMinute++; baseSec -= 60; }
+    const ts = '14:' + String(baseMinute).padStart(2, '0') + ':' + String(baseSec).padStart(2, '0');
+    const line = document.createElement('div');
+    line.className = 'log-line';
+    line.innerHTML = '<span class="log-ts">' + ts + '</span> <span class="' + cls + '">' + level + '</span> ' + msg;
+    logsBody.appendChild(line);
+    logsBody.scrollTop = logsBody.scrollHeight;
+    logIdx++;
+  }, 3500);
+
+  // Runtime counter
+  let runtimeSec = 47 * 60 + 23;
+  setInterval(function() {
+    runtimeSec++;
+    const m = Math.floor(runtimeSec / 60);
+    const s = runtimeSec % 60;
+    document.getElementById('statRuntime').textContent = m + 'm ' + String(s).padStart(2, '0') + 's';
+  }, 1000);
+
+  // Cost ticker
+  let cost = 4.82;
+  setInterval(function() {
+    cost += 0.01 + Math.random() * 0.02;
+    document.getElementById('statCost').textContent = '$' + cost.toFixed(2);
+  }, 8000);
+
+  // Pipeline stage click (simple mode — show a brief flash)
+  document.querySelectorAll('.pipe-card').forEach(card => {
+    card.addEventListener('click', function() {
+      if (body.className !== 'simple') return;
+      const stage = this.closest('.pipe-stage');
+      if (stage.classList.contains('active')) return;
+      // Visual click feedback
+      this.style.background = 'rgba(91,138,245,0.06)';
+      setTimeout(() => { this.style.background = ''; }, 300);
+    });
+  });
+
+  // Feedback submit
+  document.querySelector('.feedback-actions .btn-primary').addEventListener('click', function() {
+    const ta = document.querySelector('.feedback-body textarea');
+    if (!ta.value.trim()) return;
+    this.textContent = 'Sent';
+    this.style.background = 'var(--green)';
+    setTimeout(() => {
+      this.textContent = 'Submit';
+      this.style.background = '';
+      ta.value = '';
+    }, 1500);
+  });
+})();
+</script>
+</body>
+</html>

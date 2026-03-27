@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Timeline Focus</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0a0f;
+    --panel-bg: #0f1117;
+    --panel-border: #1e2130;
+    --header-bg: #161924;
+    --blue: #3b82f6;
+    --purple: #8b5cf6;
+    --green: #22c55e;
+    --yellow: #eab308;
+    --red: #ef4444;
+    --gray: #4b5563;
+    --text: #e2e8f0;
+    --text-dim: #94a3b8;
+    --text-muted: #64748b;
+    --radius: 10px;
+    --transition: 0.45s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+    line-height: 1.5;
+  }
+
+  /* ── Mode Toggle ── */
+  .mode-toggle {
+    position: fixed; top: 16px; right: 20px; z-index: 100;
+    display: flex; align-items: center; gap: 10px;
+    background: var(--panel-bg); border: 1px solid var(--panel-border);
+    border-radius: 8px; padding: 6px 14px; font-size: 12px;
+    font-weight: 500; user-select: none;
+  }
+  .mode-toggle span { color: var(--text-muted); transition: color var(--transition); }
+  .mode-toggle span.active { color: var(--text); }
+  .toggle-track {
+    width: 36px; height: 20px; border-radius: 10px;
+    background: var(--gray); cursor: pointer; position: relative;
+    transition: background var(--transition);
+  }
+  .toggle-track.on { background: var(--purple); }
+  .toggle-thumb {
+    width: 16px; height: 16px; border-radius: 50%;
+    background: #fff; position: absolute; top: 2px; left: 2px;
+    transition: transform var(--transition);
+  }
+  .toggle-track.on .toggle-thumb { transform: translateX(16px); }
+
+  /* ── Panel Shell ── */
+  .panel {
+    background: var(--panel-bg);
+    border-radius: var(--radius);
+    overflow: hidden;
+    transition: opacity var(--transition), transform var(--transition),
+                border-color var(--transition), box-shadow var(--transition);
+  }
+  body.simple .panel {
+    border: none;
+    box-shadow: 0 2px 20px rgba(0,0,0,0.35);
+  }
+  body.advanced .panel {
+    border: 1px solid var(--panel-border);
+    box-shadow: none;
+  }
+  .panel-header {
+    height: 28px; background: var(--header-bg);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 10px; overflow: hidden;
+    transition: height var(--transition), opacity var(--transition);
+  }
+  body.simple .panel-header { height: 0; opacity: 0; pointer-events: none; }
+  body.advanced .panel-header { height: 28px; opacity: 1; }
+  .panel-title {
+    font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.6px;
+    color: var(--text-muted);
+  }
+  .grip-dots {
+    display: grid; grid-template-columns: repeat(2, 4px);
+    grid-template-rows: repeat(3, 4px); gap: 2px;
+  }
+  .grip-dots span {
+    width: 3px; height: 3px; border-radius: 50%;
+    background: var(--text-muted); opacity: 0.5;
+  }
+  .panel-body { padding: 16px; }
+
+  /* ── App Shell ── */
+  .app {
+    padding: 20px 28px 60px;
+    transition: padding-right var(--transition);
+  }
+  body.advanced .app { padding-right: 340px; }
+
+  /* ── Run Controls (floating) ── */
+  .run-controls-float {
+    position: fixed; top: 16px; right: 180px; z-index: 90;
+    display: flex; gap: 6px; align-items: center;
+    transition: right var(--transition);
+  }
+  body.advanced .run-controls-float { right: 500px; }
+  .run-controls-float .rc-btn {
+    border: none; border-radius: 6px; padding: 5px 12px;
+    font-size: 11px; font-weight: 600; cursor: pointer;
+    font-family: inherit; transition: filter 0.2s;
+  }
+  .run-controls-float .rc-btn:hover { filter: brightness(1.2); }
+  .rc-btn.start { background: var(--green); color: #000; }
+  .rc-btn.pause { background: var(--yellow); color: #000; }
+  .rc-btn.stop  { background: var(--red); color: #fff; }
+  .rc-mode-sel {
+    font-size: 11px; background: var(--header-bg); color: var(--text-dim);
+    border: 1px solid var(--panel-border); border-radius: 6px;
+    padding: 4px 8px; font-family: inherit; cursor: pointer;
+    appearance: none; -webkit-appearance: none;
+  }
+
+  /* ── 1. Pipeline Progress ── */
+  .pipeline-row {
+    display: flex; align-items: center; justify-content: center;
+    gap: 0; padding: 20px 16px; position: relative;
+  }
+  body.simple .pipeline-row { padding: 28px 16px 32px; }
+  .stage-node {
+    display: flex; flex-direction: column; align-items: center;
+    position: relative; z-index: 1; flex: 0 0 auto;
+  }
+  .stage-dot {
+    width: 38px; height: 38px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; font-weight: 700; transition: all 0.3s;
+    position: relative;
+  }
+  .stage-dot.completed { background: var(--green); color: #000; }
+  .stage-dot.active {
+    background: var(--blue); color: #fff;
+    box-shadow: 0 0 20px rgba(59,130,246,0.5), 0 0 40px rgba(59,130,246,0.2);
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+  .stage-dot.pending { background: var(--gray); color: var(--text-muted); }
+  @keyframes pulse-glow {
+    0%, 100% { box-shadow: 0 0 20px rgba(59,130,246,0.5), 0 0 40px rgba(59,130,246,0.2); }
+    50% { box-shadow: 0 0 28px rgba(59,130,246,0.7), 0 0 56px rgba(59,130,246,0.3); }
+  }
+  body.simple .stage-dot.active {
+    box-shadow: 0 0 24px rgba(59,130,246,0.6), 0 0 60px rgba(59,130,246,0.25);
+  }
+  .stage-label {
+    margin-top: 8px; font-size: 11px; font-weight: 500;
+    color: var(--text-dim); white-space: nowrap;
+  }
+  .stage-sub {
+    font-size: 10px; color: var(--blue); margin-top: 2px;
+    font-weight: 500;
+  }
+  .stage-connector {
+    width: 80px; height: 2px; background: var(--panel-border);
+    position: relative; top: -14px; flex-shrink: 0;
+  }
+  .stage-connector.done { background: var(--green); }
+  .stage-connector.active {
+    background: linear-gradient(90deg, var(--green), var(--blue));
+  }
+
+  /* ── 2. Current Activity ── */
+  .activity-body { text-align: center; }
+  body.advanced .activity-body { text-align: left; }
+  .activity-main {
+    display: flex; align-items: center; gap: 10px;
+    justify-content: center;
+  }
+  body.advanced .activity-main { justify-content: flex-start; }
+  .activity-spinner {
+    width: 16px; height: 16px; border: 2px solid var(--panel-border);
+    border-top-color: var(--blue); border-radius: 50%;
+    animation: spin 0.8s linear infinite; flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .activity-text { font-size: 14px; font-weight: 500; }
+  .activity-stats {
+    margin-top: 8px; font-size: 12px; color: var(--text-muted);
+  }
+
+  /* ── 3. Hypothesis Card ── */
+  .hypo-title { font-size: 14px; font-weight: 600; margin-bottom: 10px; line-height: 1.4; }
+  .hypo-row { display: flex; align-items: flex-start; gap: 16px; }
+  .hypo-gauge {
+    width: 56px; height: 56px; flex-shrink: 0; position: relative;
+  }
+  .hypo-gauge svg { width: 56px; height: 56px; transform: rotate(-90deg); }
+  .hypo-gauge-bg { fill: none; stroke: var(--panel-border); stroke-width: 4; }
+  .hypo-gauge-fg { fill: none; stroke: var(--blue); stroke-width: 4; stroke-linecap: round; }
+  .hypo-gauge-val {
+    position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; font-size: 13px; font-weight: 700;
+  }
+  .hypo-abstract { font-size: 12px; color: var(--text-dim); line-height: 1.55; }
+  .hypo-adv-row {
+    margin-top: 12px; display: flex; gap: 12px; align-items: center;
+    overflow: hidden; transition: height var(--transition), opacity var(--transition),
+    margin-top var(--transition);
+  }
+  body.simple .hypo-adv-row { height: 0; opacity: 0; margin-top: 0; }
+  body.advanced .hypo-adv-row { height: auto; opacity: 1; }
+  .hypo-iter-sel {
+    font-size: 11px; background: var(--header-bg); color: var(--text-dim);
+    border: 1px solid var(--panel-border); border-radius: 5px;
+    padding: 3px 8px; font-family: inherit;
+  }
+  .hypo-review-badge {
+    font-size: 11px; background: rgba(34,197,94,0.15); color: var(--green);
+    padding: 3px 8px; border-radius: 5px; font-weight: 600;
+  }
+
+  /* ── 4. Artifacts Panel ── */
+  .artifact-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 7px 0; border-bottom: 1px solid var(--panel-border);
+  }
+  .artifact-row:last-child { border-bottom: none; }
+  .artifact-icon { font-size: 14px; flex-shrink: 0; width: 20px; text-align: center; }
+  .artifact-title { font-size: 12px; font-weight: 500; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .artifact-badge {
+    font-size: 10px; padding: 2px 7px; border-radius: 4px;
+    font-weight: 600; flex-shrink: 0; text-transform: uppercase;
+  }
+  .badge-done { background: rgba(34,197,94,0.15); color: var(--green); }
+  .badge-running { background: rgba(59,130,246,0.15); color: var(--blue); }
+  .badge-pending { background: rgba(75,85,99,0.2); color: var(--text-muted); }
+  .artifact-meta {
+    font-size: 10px; color: var(--text-muted); flex-shrink: 0;
+    display: none;
+  }
+  body.advanced .artifact-meta { display: block; }
+  .artifacts-more {
+    font-size: 11px; color: var(--blue); margin-top: 6px;
+    cursor: pointer; display: none;
+  }
+  body.simple .artifacts-more.has-more { display: block; }
+  .artifact-list { max-height: none; overflow: visible; }
+  body.advanced .artifact-list { max-height: 260px; overflow-y: auto; }
+
+  /* ── 5. Paper Preview ── */
+  .paper-thumb {
+    width: 100%; height: 90px; background: #1a1d2a; border-radius: 6px;
+    padding: 10px; margin-bottom: 10px; display: flex; flex-direction: column;
+    gap: 4px; overflow: hidden;
+  }
+  .paper-thumb-title {
+    width: 70%; height: 6px; background: var(--text-muted); border-radius: 2px; opacity: 0.4;
+  }
+  .paper-thumb-line {
+    width: 100%; height: 3px; background: var(--text-muted); border-radius: 1px; opacity: 0.15;
+  }
+  .paper-thumb-line.short { width: 60%; }
+  .paper-meta { font-size: 12px; color: var(--text-dim); }
+  .paper-meta span { margin-right: 14px; }
+  .paper-view {
+    font-size: 12px; color: var(--blue); margin-top: 8px;
+    cursor: pointer; display: inline-block; text-decoration: none;
+  }
+  .paper-view:hover { text-decoration: underline; }
+
+  /* ── 6. Feedback Panel ── */
+  .feedback-ta {
+    width: 100%; min-height: 80px; background: var(--bg); color: var(--text);
+    border: 1px solid var(--panel-border); border-radius: 6px;
+    padding: 8px 10px; font-size: 12px; font-family: inherit;
+    resize: vertical;
+  }
+  .feedback-ta:focus { outline: none; border-color: var(--purple); }
+  .feedback-actions { display: flex; gap: 8px; margin-top: 10px; align-items: center; }
+  .fb-btn {
+    border: none; border-radius: 6px; padding: 6px 14px;
+    font-size: 11px; font-weight: 600; cursor: pointer;
+    font-family: inherit;
+  }
+  .fb-submit { background: var(--purple); color: #fff; }
+  .fb-submit:hover { filter: brightness(1.15); }
+  .fb-rerun { background: transparent; color: var(--blue); border: 1px solid var(--blue); }
+  .fb-rerun:hover { background: rgba(59,130,246,0.1); }
+  .fb-checkpoint {
+    font-size: 11px; background: var(--header-bg); color: var(--text-dim);
+    border: 1px solid var(--panel-border); border-radius: 5px;
+    padding: 4px 8px; font-family: inherit; flex: 1;
+  }
+
+  /* ── 7. Stats Bar ── */
+  .stats-bar {
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 80;
+    height: 32px; background: var(--header-bg);
+    border-top: 1px solid var(--panel-border);
+    display: flex; align-items: center; padding: 0 24px;
+    gap: 24px; font-size: 11px; color: var(--text-muted);
+    transition: height var(--transition);
+  }
+  .stats-bar .stat-val { color: var(--text-dim); font-weight: 500; margin-left: 4px; }
+  .stat-detail { display: none; }
+  body.advanced .stat-detail { display: inline; }
+
+  /* ── 9. Logs Panel ── */
+  .log-list {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 11px; line-height: 1.65;
+    max-height: 100%; overflow-y: auto;
+  }
+  .log-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .log-ts { color: var(--text-muted); }
+  .log-sev-info { color: var(--blue); }
+  .log-sev-warn { color: var(--yellow); }
+  .log-sev-err  { color: var(--red); }
+  .log-sev-dbg  { color: var(--text-muted); }
+  .log-msg { color: var(--text-dim); }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    position: fixed; top: 0; right: 0; bottom: 32px; width: 310px;
+    background: var(--panel-bg); border-left: 1px solid var(--panel-border);
+    display: flex; flex-direction: column; z-index: 50;
+    transform: translateX(100%); opacity: 0;
+    transition: transform var(--transition), opacity var(--transition);
+  }
+  body.advanced .sidebar { transform: translateX(0); opacity: 1; }
+  .sidebar-header {
+    height: 36px; display: flex; align-items: center;
+    justify-content: space-between; padding: 0 12px;
+    border-bottom: 1px solid var(--panel-border);
+    font-size: 11px; font-weight: 600; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .sidebar-add-btn {
+    width: 22px; height: 22px; border-radius: 5px;
+    background: var(--header-bg); border: 1px solid var(--panel-border);
+    color: var(--text-muted); font-size: 14px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    position: relative;
+  }
+  .sidebar-add-btn:hover { color: var(--text); border-color: var(--blue); }
+  .add-dropdown {
+    position: absolute; top: 28px; right: 0;
+    background: var(--panel-bg); border: 1px solid var(--panel-border);
+    border-radius: 6px; padding: 4px 0; min-width: 160px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+    display: none; z-index: 200;
+  }
+  .add-dropdown.show { display: block; }
+  .add-dropdown-item {
+    padding: 6px 12px; font-size: 11px; color: var(--text-dim);
+    cursor: pointer; font-weight: 400; text-transform: none;
+    letter-spacing: 0;
+  }
+  .add-dropdown-item:hover { background: var(--header-bg); color: var(--text); }
+  .sidebar-section { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+  .sidebar-section:first-of-type { flex: 0 0 42%; }
+  .sidebar-section:last-of-type  { flex: 1; border-top: 1px solid var(--panel-border); }
+  .sidebar-section .panel { border-radius: 0; border: none; flex: 1; display: flex; flex-direction: column; }
+  .sidebar-section .panel-body { flex: 1; overflow-y: auto; }
+
+  /* ── Layout Containers ── */
+  .simple-layout, .advanced-layout { transition: opacity var(--transition); }
+  body.simple  .advanced-layout { display: none; }
+  body.advanced .simple-layout  { display: none; }
+
+  .simple-cards {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 20px; max-width: 1060px; margin: 0 auto;
+  }
+  .simple-center {
+    max-width: 640px; margin: 0 auto 24px; text-align: center;
+  }
+  .simple-pipeline { max-width: 800px; margin: 0 auto 28px; }
+
+  .adv-top-row {
+    display: flex; align-items: stretch; gap: 0; margin-bottom: 16px;
+  }
+  .adv-top-row .panel { flex: 1; }
+  .adv-top-row .adv-rc {
+    display: flex; align-items: center; gap: 6px;
+    padding: 0 16px; flex-shrink: 0;
+  }
+  .adv-main { display: flex; flex-direction: column; gap: 16px; }
+  .adv-tabs {
+    display: flex; gap: 0; border-bottom: 1px solid var(--panel-border);
+    margin-bottom: 0;
+  }
+  .adv-tab {
+    padding: 8px 18px; font-size: 12px; font-weight: 500;
+    color: var(--text-muted); cursor: pointer; border-bottom: 2px solid transparent;
+    transition: color 0.2s, border-color 0.2s;
+  }
+  .adv-tab:hover { color: var(--text-dim); }
+  .adv-tab.active { color: var(--text); border-bottom-color: var(--blue); }
+  .adv-tab-content { display: none; padding: 16px; }
+  .adv-tab-content.active { display: block; }
+
+  /* scrollbar */
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--panel-border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--gray); }
+
+  /* run name */
+  .run-name {
+    position: fixed; top: 18px; left: 24px; z-index: 90;
+    font-size: 13px; font-weight: 600; color: var(--text-dim);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .run-dot {
+    width: 7px; height: 7px; border-radius: 50%; background: var(--green);
+    animation: blink 1.5s ease-in-out infinite;
+  }
+  @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+</style>
+</head>
+<body class="simple">
+
+<!-- Run Name -->
+<div class="run-name"><span class="run-dot"></span> ssl-low-resource-v3</div>
+
+<!-- Mode Toggle -->
+<div class="mode-toggle">
+  <span class="label-simple active">Simple</span>
+  <div class="toggle-track" id="modeToggle" onclick="toggleMode()">
+    <div class="toggle-thumb"></div>
+  </div>
+  <span class="label-adv">Advanced</span>
+</div>
+
+<!-- Run Controls (floating) -->
+<div class="run-controls-float">
+  <button class="rc-btn pause" title="Pause">&#9646;&#9646;</button>
+  <button class="rc-btn stop" title="Stop">&#9632;</button>
+  <select class="rc-mode-sel">
+    <option>Autonomous</option>
+    <option>Step-by-Step</option>
+  </select>
+</div>
+
+<!-- ═══════════ SIMPLE MODE LAYOUT ═══════════ -->
+<div class="app">
+  <div class="simple-layout">
+    <!-- Pipeline Progress -->
+    <div class="simple-pipeline">
+      <div class="panel" id="pipelineSimple">
+        <div class="panel-header">
+          <span class="panel-title">Pipeline Progress</span>
+          <div class="grip-dots"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+        </div>
+        <div class="panel-body">
+          <div class="pipeline-row" id="pipelineRowSimple"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Current Activity -->
+    <div class="simple-center">
+      <div class="panel" id="activitySimple">
+        <div class="panel-header">
+          <span class="panel-title">Current Activity</span>
+          <div class="grip-dots"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+        </div>
+        <div class="panel-body activity-body">
+          <div class="activity-main">
+            <div class="activity-spinner"></div>
+            <span class="activity-text">Running experiment: Baseline comparison</span>
+          </div>
+          <div class="activity-stats">4 artifacts done &middot; 2 running &middot; $12.47</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3 Cards -->
+    <div class="simple-cards">
+      <!-- Hypothesis -->
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">Hypothesis</span>
+          <div class="grip-dots"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+        </div>
+        <div class="panel-body">
+          <div class="hypo-title">Cross-lingual Contrastive Pre-training with Synthetic Code-Switching</div>
+          <div class="hypo-row">
+            <div class="hypo-gauge">
+              <svg viewBox="0 0 56 56">
+                <circle class="hypo-gauge-bg" cx="28" cy="28" r="24" />
+                <circle class="hypo-gauge-fg" cx="28" cy="28" r="24"
+                  stroke-dasharray="150.8"
+                  stroke-dashoffset="24.1" />
+              </svg>
+              <div class="hypo-gauge-val">8.4</div>
+            </div>
+            <div class="hypo-abstract">Leveraging synthetic code-switched utterances as contrastive anchors during multilingual pre-training to improve zero-shot cross-lingual transfer, particularly for low-resource languages lacking parallel corpora.</div>
+          </div>
+          <div class="hypo-adv-row">
+            <select class="hypo-iter-sel"><option>Iteration 2</option><option>Iteration 1</option></select>
+            <span class="hypo-review-badge">Review: 7.9</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Artifacts (compact) -->
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">Artifacts</span>
+          <div class="grip-dots"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+        </div>
+        <div class="panel-body">
+          <div class="artifact-list" id="artifactListSimple"></div>
+          <div class="artifacts-more has-more" id="artifactsMore">+2 more artifacts</div>
+        </div>
+      </div>
+
+      <!-- Paper Preview -->
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">Paper Preview</span>
+          <div class="grip-dots"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+        </div>
+        <div class="panel-body">
+          <div class="paper-thumb">
+            <div class="paper-thumb-title"></div>
+            <div style="height:4px"></div>
+            <div class="paper-thumb-line"></div>
+            <div class="paper-thumb-line"></div>
+            <div class="paper-thumb-line short"></div>
+            <div class="paper-thumb-line"></div>
+            <div class="paper-thumb-line"></div>
+            <div class="paper-thumb-line short"></div>
+          </div>
+          <div class="paper-meta">
+            <span>Draft Iter 2</span>
+            <span>4,200 words</span>
+            <span>4 figures</span>
+          </div>
+          <a href="#" class="paper-view">View Full &rarr;</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════ ADVANCED MODE LAYOUT ═══════════ -->
+  <div class="advanced-layout">
+    <!-- Pipeline + Run Controls -->
+    <div class="adv-top-row">
+      <div class="panel" style="flex:1">
+        <div class="panel-header">
+          <span class="panel-title">Pipeline Progress</span>
+          <div class="grip-dots"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+        </div>
+        <div class="panel-body" style="padding:12px 16px;">
+          <div class="pipeline-row" id="pipelineRowAdv" style="padding:4px 0; justify-content:flex-start;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Current Activity -->
+    <div class="panel" style="margin-bottom:16px;">
+      <div class="panel-header">
+        <span class="panel-title">Current Activity</span>
+        <div class="grip-dots"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+      </div>
+      <div class="panel-body activity-body">
+        <div class="activity-main">
+          <div class="activity-spinner"></div>
+          <span class="activity-text">Running experiment: Baseline comparison</span>
+        </div>
+        <div class="activity-stats">4 artifacts done &middot; 2 running &middot; $12.47</div>
+      </div>
+    </div>
+
+    <!-- Tabbed Content -->
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Details</span>
+        <div class="grip-dots"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+      </div>
+      <div class="adv-tabs">
+        <div class="adv-tab active" data-tab="hypo">Hypothesis</div>
+        <div class="adv-tab" data-tab="artifacts">Artifacts</div>
+        <div class="adv-tab" data-tab="paper">Paper Preview</div>
+      </div>
+      <div class="adv-tab-content active" data-tab="hypo">
+        <div class="hypo-title">Cross-lingual Contrastive Pre-training with Synthetic Code-Switching</div>
+        <div class="hypo-row">
+          <div class="hypo-gauge">
+            <svg viewBox="0 0 56 56">
+              <circle class="hypo-gauge-bg" cx="28" cy="28" r="24" />
+              <circle class="hypo-gauge-fg" cx="28" cy="28" r="24"
+                stroke-dasharray="150.8" stroke-dashoffset="24.1" />
+            </svg>
+            <div class="hypo-gauge-val">8.4</div>
+          </div>
+          <div class="hypo-abstract">Leveraging synthetic code-switched utterances as contrastive anchors during multilingual pre-training to improve zero-shot cross-lingual transfer, particularly for low-resource languages lacking parallel corpora.</div>
+        </div>
+        <div class="hypo-adv-row" style="height:auto;opacity:1;margin-top:12px;">
+          <select class="hypo-iter-sel"><option>Iteration 2</option><option>Iteration 1</option></select>
+          <span class="hypo-review-badge">Review: 7.9</span>
+        </div>
+      </div>
+      <div class="adv-tab-content" data-tab="artifacts">
+        <div class="artifact-list" id="artifactListAdv"></div>
+      </div>
+      <div class="adv-tab-content" data-tab="paper">
+        <div class="paper-thumb">
+          <div class="paper-thumb-title"></div>
+          <div style="height:4px"></div>
+          <div class="paper-thumb-line"></div>
+          <div class="paper-thumb-line"></div>
+          <div class="paper-thumb-line short"></div>
+          <div class="paper-thumb-line"></div>
+          <div class="paper-thumb-line"></div>
+          <div class="paper-thumb-line short"></div>
+        </div>
+        <div class="paper-meta">
+          <span>Draft Iter 2</span>
+          <span>4,200 words</span>
+          <span>4 figures</span>
+        </div>
+        <a href="#" class="paper-view">View Full &rarr;</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ SIDEBAR (Advanced only) ═══════════ -->
+<div class="sidebar">
+  <div class="sidebar-header">
+    <span>Sidebar</span>
+    <div class="sidebar-add-btn" id="addPanelBtn" onclick="toggleAddDropdown()">
+      +
+      <div class="add-dropdown" id="addDropdown">
+        <div class="add-dropdown-item">Pipeline Progress</div>
+        <div class="add-dropdown-item">Current Activity</div>
+        <div class="add-dropdown-item">Hypothesis Card</div>
+        <div class="add-dropdown-item">Artifacts Panel</div>
+        <div class="add-dropdown-item">Paper Preview</div>
+        <div class="add-dropdown-item">Stats Bar</div>
+        <div class="add-dropdown-item">Run Controls</div>
+      </div>
+    </div>
+  </div>
+  <div class="sidebar-section">
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Feedback</span>
+        <div class="grip-dots"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+      </div>
+      <div class="panel-body">
+        <textarea class="feedback-ta" placeholder="Provide feedback on the current hypothesis or artifacts..."></textarea>
+        <div class="feedback-actions">
+          <button class="fb-btn fb-submit">Submit</button>
+          <select class="fb-checkpoint">
+            <option>Checkpoint: Hypo Iter 2</option>
+            <option>Checkpoint: Hypo Iter 1</option>
+            <option>Checkpoint: Seed</option>
+          </select>
+          <button class="fb-btn fb-rerun">Re-run</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="sidebar-section">
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Logs</span>
+        <div class="grip-dots"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+      </div>
+      <div class="panel-body" style="padding:10px 12px;">
+        <div class="log-list" id="logList"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ STATS BAR ═══════════ -->
+<div class="stats-bar">
+  <span>Runtime<span class="stat-val">02:34:17</span></span>
+  <span>Cost<span class="stat-val">$12.47</span></span>
+  <span>Tokens<span class="stat-val">1.24M<span class="stat-detail"> (1.02M in / 220K out)</span></span></span>
+  <span>Iterations<span class="stat-val">2 / 3</span></span>
+  <span>Artifacts<span class="stat-val">4 done &middot; 2 running</span></span>
+</div>
+
+<script>
+// ── Data ──
+const STAGES = [
+  { label: 'Seed Hypo',       status: 'completed', sub: '' },
+  { label: 'Hypo Loop',       status: 'completed', sub: '' },
+  { label: 'Invention Loop',  status: 'active',    sub: 'Iter 2/3 \u2022 Gen Artifacts' },
+  { label: 'Paper Repo',      status: 'pending',   sub: '' },
+];
+
+const ARTIFACTS = [
+  { icon: '\u{1F9EA}', title: 'Baseline comparison experiment',       status: 'done',    iter: 'Iter 1', metrics: 'BLEU 34.2', cost: '$2.10' },
+  { icon: '\u{1F9EA}', title: 'Code-switch augmentation experiment',  status: 'running',  iter: 'Iter 2', metrics: '--',        cost: '$1.80' },
+  { icon: '\u{1F4BE}', title: 'Synthetic code-switch dataset (50K)',  status: 'done',    iter: 'Iter 1', metrics: '50K pairs',  cost: '$0.45' },
+  { icon: '\u{1F4CA}', title: 'Cross-lingual transfer eval suite',   status: 'done',    iter: 'Iter 2', metrics: '12 langs',   cost: '$0.90' },
+  { icon: '\u{1F4DD}', title: 'Contrastive loss convergence proof',  status: 'running',  iter: 'Iter 2', metrics: '--',        cost: '$0.60' },
+];
+
+const LOGS = [
+  { ts: '14:32:01', sev: 'info', msg: 'Invention loop iteration 2 started' },
+  { ts: '14:32:03', sev: 'info', msg: 'Loading hypothesis: cross-lingual-contrastive-v2' },
+  { ts: '14:32:15', sev: 'dbg',  msg: 'Resolved 3 artifact templates from plan' },
+  { ts: '14:32:18', sev: 'info', msg: 'Spawning experiment: baseline_comparison (gpu=A100)' },
+  { ts: '14:33:42', sev: 'info', msg: 'Experiment baseline_comparison completed (BLEU=34.2)' },
+  { ts: '14:33:44', sev: 'warn', msg: 'Token budget at 78% \u2014 consider pruning context' },
+  { ts: '14:34:01', sev: 'info', msg: 'Spawning experiment: code_switch_augmentation' },
+  { ts: '14:35:12', sev: 'dbg',  msg: 'Checkpoint saved: hypo_loop_iter2_artifacts' },
+  { ts: '14:35:30', sev: 'info', msg: 'Dataset generation complete: 50K synthetic pairs' },
+  { ts: '14:36:17', sev: 'err',  msg: 'Eval suite timeout on lang=gu (retrying 1/3)' },
+];
+
+// ── Render Pipeline Row ──
+function renderPipeline(containerId) {
+  const el = document.getElementById(containerId);
+  el.innerHTML = '';
+  STAGES.forEach((s, i) => {
+    if (i > 0) {
+      const conn = document.createElement('div');
+      conn.className = 'stage-connector';
+      if (STAGES[i - 1].status === 'completed' && s.status === 'completed') conn.classList.add('done');
+      else if (STAGES[i - 1].status === 'completed' && s.status === 'active') conn.classList.add('active');
+      el.appendChild(conn);
+    }
+    const node = document.createElement('div');
+    node.className = 'stage-node';
+    const num = i + 1;
+    node.innerHTML = `
+      <div class="stage-dot ${s.status}">${num}</div>
+      <div class="stage-label">${s.label}</div>
+      ${s.sub ? `<div class="stage-sub">${s.sub}</div>` : ''}
+    `;
+    el.appendChild(node);
+  });
+}
+
+// ── Render Artifacts ──
+function renderArtifacts(containerId, limit) {
+  const el = document.getElementById(containerId);
+  el.innerHTML = '';
+  const items = limit ? ARTIFACTS.slice(0, limit) : ARTIFACTS;
+  items.forEach(a => {
+    const badgeCls = a.status === 'done' ? 'badge-done' : a.status === 'running' ? 'badge-running' : 'badge-pending';
+    const row = document.createElement('div');
+    row.className = 'artifact-row';
+    row.innerHTML = `
+      <span class="artifact-icon">${a.icon}</span>
+      <span class="artifact-title">${a.title}</span>
+      <span class="artifact-meta">${a.iter} &middot; ${a.metrics} &middot; ${a.cost}</span>
+      <span class="artifact-badge ${badgeCls}">${a.status}</span>
+    `;
+    el.appendChild(row);
+  });
+}
+
+// ── Render Logs ──
+function renderLogs() {
+  const el = document.getElementById('logList');
+  el.innerHTML = '';
+  LOGS.forEach(l => {
+    const line = document.createElement('div');
+    line.className = 'log-line';
+    const sevCls = `log-sev-${l.sev}`;
+    line.innerHTML = `<span class="log-ts">${l.ts}</span> <span class="${sevCls}">[${l.sev.toUpperCase().padEnd(4)}]</span> <span class="log-msg">${l.msg}</span>`;
+    el.appendChild(line);
+  });
+}
+
+// ── Mode Toggle ──
+function toggleMode() {
+  const body = document.body;
+  const track = document.getElementById('modeToggle');
+  const labelSimple = document.querySelector('.label-simple');
+  const labelAdv = document.querySelector('.label-adv');
+
+  if (body.classList.contains('simple')) {
+    body.classList.remove('simple');
+    body.classList.add('advanced');
+    track.classList.add('on');
+    labelSimple.classList.remove('active');
+    labelAdv.classList.add('active');
+  } else {
+    body.classList.remove('advanced');
+    body.classList.add('simple');
+    track.classList.remove('on');
+    labelAdv.classList.remove('active');
+    labelSimple.classList.add('active');
+  }
+}
+
+// ── Tabs ──
+document.querySelectorAll('.adv-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.adv-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.adv-tab-content').forEach(c => c.classList.remove('active'));
+    tab.classList.add('active');
+    document.querySelector(`.adv-tab-content[data-tab="${tab.dataset.tab}"]`).classList.add('active');
+  });
+});
+
+// ── Add Panel Dropdown ──
+function toggleAddDropdown() {
+  document.getElementById('addDropdown').classList.toggle('show');
+}
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.sidebar-add-btn')) {
+    document.getElementById('addDropdown').classList.remove('show');
+  }
+});
+
+// ── Init ──
+renderPipeline('pipelineRowSimple');
+renderPipeline('pipelineRowAdv');
+renderArtifacts('artifactListSimple', 3);
+renderArtifacts('artifactListAdv');
+renderLogs();
+</script>
+</body>
+</html>

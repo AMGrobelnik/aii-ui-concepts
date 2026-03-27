@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — River View</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0a0a0f;
+    --bg-card: rgba(18, 18, 28, 0.78);
+    --text: #e2e2ea;
+    --text-dim: #6a6a7a;
+    --green: #3ecf8e;
+    --purple: #a78bfa;
+    --blue: #60a5fa;
+    --orange: #f59e0b;
+  }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: var(--bg); color: var(--text);
+    min-height: 100vh; overflow-x: hidden;
+  }
+
+  /* --- topo background --- */
+  .topo-bg { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+  .topo-bg svg { width: 100%; height: 100%; opacity: 0.035; }
+
+  /* --- top bar --- */
+  .top-bar {
+    position: fixed; top: 0; left: 0; right: 0; height: 52px;
+    background: rgba(10,10,15,0.88); backdrop-filter: blur(14px);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 28px; z-index: 100;
+  }
+  .top-bar .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 14px; }
+  .top-bar .brand .dot {
+    width: 8px; height: 8px; border-radius: 50%; background: var(--blue);
+    box-shadow: 0 0 8px rgba(96,165,250,0.35);
+    animation: pulseDot 2s ease-in-out infinite;
+  }
+  .top-bar .stats { display: flex; align-items: center; gap: 22px; font-size: 13px; color: var(--text-dim); }
+  .top-bar .stats .v { color: var(--text); font-weight: 500; margin-left: 4px; }
+  @keyframes pulseDot { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(.8)} }
+
+  /* --- river area --- */
+  .river-wrap { position: relative; width: 100%; max-width: 720px; margin: 0 auto; padding: 68px 0 80px; z-index: 1; }
+  .river-svg { width: 100%; height: auto; display: block; overflow: visible; }
+
+  /* --- module labels (SVG text) --- */
+  .mod-label { font-family: 'Inter', sans-serif; font-weight: 600; font-size: 15px; }
+  .mod-meta  { font-family: 'Inter', sans-serif; font-weight: 400; font-size: 12px; fill: var(--text-dim); }
+
+  /* --- waypoints --- */
+  .wp { cursor: pointer; }
+  .wp:hover circle { transform-origin: center; transform: scale(1.35); }
+  .wp-lbl { font-family: 'Inter', sans-serif; font-size: 10px; font-weight: 500; text-anchor: middle; pointer-events: none; }
+
+  /* --- detail card --- */
+  .detail-card {
+    position: absolute; width: 268px;
+    background: var(--bg-card); backdrop-filter: blur(18px);
+    border: 1px solid rgba(255,255,255,0.08); border-radius: 12px;
+    padding: 16px 18px; z-index: 50;
+    opacity: 0; pointer-events: none; transform: translateY(6px);
+    transition: opacity .22s ease, transform .22s ease;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+  }
+  .detail-card.show { opacity: 1; pointer-events: auto; transform: translateY(0); }
+  .detail-card .ct { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+  .detail-card .cm { font-size: 11px; color: var(--text-dim); margin-bottom: 10px; }
+  .detail-card .cm .run { color: var(--blue); }
+  .detail-card .cm .ok { color: var(--green); }
+  .detail-card .cp { font-size: 11px; color: var(--text-dim); margin-bottom: 8px; }
+  .detail-card .ci { display: flex; flex-direction: column; gap: 5px; }
+  .detail-card .ci .r { font-size: 11px; display: flex; align-items: flex-start; gap: 6px; line-height: 1.4; }
+  .detail-card .ci .r .ic { flex-shrink: 0; width: 14px; text-align: center; }
+  .detail-card .ci .r.d .ic { color: var(--green); }
+  .detail-card .ci .r.a .ic { color: var(--blue); }
+  .detail-card .ci .r.p .ic { color: var(--text-dim); }
+  .detail-card .ci .r.d { color: var(--text); }
+  .detail-card .ci .r.a { color: #fff; }
+  .detail-card .ci .r.p { color: var(--text-dim); }
+
+  .conn-line { position: fixed; pointer-events: none; z-index: 49; opacity: 0; transition: opacity .22s ease; }
+  .conn-line.show { opacity: 1; }
+
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div class="topo-bg" id="topo"></div>
+
+<div class="top-bar">
+  <div class="brand">
+    <div class="dot"></div>
+    <span>AI Inventor</span>
+    <span style="color:var(--text-dim);font-weight:400;margin-left:6px">Neuro-Symbolic Concept Grounding</span>
+  </div>
+  <div class="stats">
+    <span>Run<span class="v">#run-2847</span></span>
+    <span>Elapsed<span class="v" id="elapsed">1h 42m 00s</span></span>
+    <span>Cost<span class="v">$18.73</span></span>
+    <span>Iter<span class="v">2 / 3</span></span>
+  </div>
+</div>
+
+<div class="river-wrap" id="wrap">
+  <svg class="river-svg" id="svg" viewBox="0 0 720 2400"></svg>
+</div>
+
+<div class="detail-card" id="card"></div>
+<svg class="conn-line" id="conn" width="0" height="0"></svg>
+
+<script>
+/* ================================================================
+   MOCK DATA
+   ================================================================ */
+const DATA = {
+  modules: [
+    { id:"seed", name:"Seed Hypothesis", color:"#3ecf8e", status:"complete", icon:"\u2713", meta:"",
+      subs:[[{id:"kg_fetch",l:"KG Fetch",s:"complete"},{id:"gen_seed",l:"Gen Seed",s:"complete"}]],
+      det:{
+        kg_fetch:{t:"KG Fetch",m:"\u2713 Complete | 2m 14s | $0.42",items:[
+          {s:"d",t:"Fetched 312 papers from Semantic Scholar"},
+          {s:"d",t:"Built citation graph (1,847 edges)"},
+          {s:"d",t:"Extracted 89 concept nodes"}]},
+        gen_seed:{t:"Gen Seed",m:"\u2713 Complete | 4m 31s | $1.18",items:[
+          {s:"d",t:"Generated 12 candidate hypotheses"},
+          {s:"d",t:"Cross-referenced with knowledge graph"},
+          {s:"d",t:"Selected top-3 seeds by novelty score"}]},
+      }},
+    { id:"hypo", name:"Hypothesis Loop", color:"#a78bfa", status:"complete", icon:"\u2713", meta:"3 iterations",
+      subs:[
+        [{id:"gh1",l:"Gen H",s:"complete"},{id:"rv1",l:"Review",s:"complete"}],
+        [{id:"gh2",l:"Gen H",s:"complete"},{id:"rv2",l:"Review",s:"complete"}],
+        [{id:"gh3",l:"Gen H",s:"complete"},{id:"rv3",l:"Review",s:"complete"}],
+      ],
+      det:{
+        gh1:{t:"Gen Hypothesis \u2014 Iter 1",m:"\u2713 Complete | 3m 05s | $0.87",items:[
+          {s:"d",t:"Generated hypothesis v1 from seed concepts"},{s:"d",t:"Novelty score: 0.72"}]},
+        rv1:{t:"Review \u2014 Iter 1",m:"\u2713 Complete | 2m 48s | $0.65",items:[
+          {s:"d",t:"Identified 3 weaknesses in formulation"},{s:"d",t:"Suggested scope narrowing"}]},
+        gh2:{t:"Gen Hypothesis \u2014 Iter 2",m:"\u2713 Complete | 2m 51s | $0.79",items:[
+          {s:"d",t:"Refined hypothesis with review feedback"},{s:"d",t:"Novelty score: 0.81"}]},
+        rv2:{t:"Review \u2014 Iter 2",m:"\u2713 Complete | 2m 12s | $0.58",items:[
+          {s:"d",t:"Approved core mechanism"},{s:"d",t:"Minor notation suggestions"}]},
+        gh3:{t:"Gen Hypothesis \u2014 Iter 3",m:"\u2713 Complete | 2m 33s | $0.71",items:[
+          {s:"d",t:"Final hypothesis locked"},{s:"d",t:"Novelty score: 0.86"}]},
+        rv3:{t:"Review \u2014 Iter 3",m:"\u2713 Complete | 1m 47s | $0.52",items:[
+          {s:"d",t:"Approved \u2014 no further revisions"}]},
+      }},
+    { id:"inv", name:"Invention Loop", color:"#60a5fa", status:"active", icon:"\u25b6", meta:"Iteration 2/3",
+      subs:[
+        [{id:"s1",l:"Strat",s:"complete"},{id:"p1",l:"Plan",s:"complete"},{id:"a1",l:"Art",s:"complete"},
+         {id:"t1",l:"Paper",s:"complete"},{id:"r1",l:"Review",s:"complete"},{id:"u1",l:"Upd H",s:"complete"}],
+        [{id:"s2",l:"Strat",s:"complete"},{id:"p2",l:"Plan",s:"complete"},{id:"a2",l:"Art",s:"active"},
+         {id:"t2",l:"Paper",s:"pending"},{id:"r2",l:"Review",s:"pending"},{id:"u2",l:"Upd H",s:"pending"}],
+        [{id:"s3",l:"Strat",s:"pending"},{id:"p3",l:"Plan",s:"pending"},{id:"a3",l:"Art",s:"pending"},
+         {id:"t3",l:"Paper",s:"pending"},{id:"r3",l:"Review",s:"pending"},{id:"u3",l:"Upd H",s:"pending"}],
+      ],
+      det:{
+        s1:{t:"Strategy \u2014 Iter 1",m:"\u2713 Complete | 3m 22s | $0.91",items:[
+          {s:"d",t:"Defined experimental strategy"},{s:"d",t:"Selected contrastive evaluation approach"}]},
+        p1:{t:"Plan \u2014 Iter 1",m:"\u2713 Complete | 4m 08s | $1.12",items:[
+          {s:"d",t:"Generated 5 artifact specifications"},{s:"d",t:"Defined evaluation metrics"}]},
+        a1:{t:"Artifacts \u2014 Iter 1",m:"\u2713 Complete | 18m 44s | $4.87",items:[
+          {s:"d",t:"Contrastive baseline (acc 0.832)"},{s:"d",t:"Multilingual pairs (1,800 examples)"},
+          {s:"d",t:"Convergence proof (verified)"},{s:"d",t:"Ablation study (5 conditions)"},
+          {s:"d",t:"Cross-lingual eval (F1 0.791)"}]},
+        t1:{t:"Paper Text \u2014 Iter 1",m:"\u2713 Complete | 8m 15s | $2.14",items:[
+          {s:"d",t:"Draft generated (12 pages)"},{s:"d",t:"Tables and figures integrated"}]},
+        r1:{t:"Review \u2014 Iter 1",m:"\u2713 Complete | 3m 41s | $0.93",items:[
+          {s:"d",t:"Score: 6/10 \u2014 needs stronger baselines"},{s:"d",t:"Requested additional ablation"}]},
+        u1:{t:"Update Hypothesis \u2014 Iter 1",m:"\u2713 Complete | 1m 55s | $0.48",items:[
+          {s:"d",t:"Updated hypothesis with review feedback"},{s:"d",t:"Strengthened grounding mechanism claim"}]},
+        s2:{t:"Strategy \u2014 Iter 2",m:"\u2713 Complete | 2m 58s | $0.82",items:[
+          {s:"d",t:"Revised strategy for stronger baselines"},{s:"d",t:"Added cross-domain transfer experiments"}]},
+        p2:{t:"Plan \u2014 Iter 2",m:"\u2713 Complete | 3m 42s | $1.05",items:[
+          {s:"d",t:"Expanded artifact list to 5 items"},{s:"d",t:"Added ablation over embedding dims"}]},
+        a2:{t:"Artifacts \u2014 Iteration 2",m:"\u25b6 Running | 12m 08s | $5.41",pr:"3/5 complete",items:[
+          {s:"d",t:"Contrastive baseline (acc 0.847)"},{s:"d",t:"Multilingual pairs (2,400 examples)"},
+          {s:"d",t:"Convergence proof (verified)"},{s:"a",t:"Ablation study (running)"},
+          {s:"p",t:"Cross-lingual eval (pending)"}]},
+        t2:{t:"Paper Text \u2014 Iter 2",m:"Pending",items:[]},
+        r2:{t:"Review \u2014 Iter 2",m:"Pending",items:[]},
+        u2:{t:"Update Hypothesis \u2014 Iter 2",m:"Pending",items:[]},
+        s3:{t:"Strategy \u2014 Iter 3",m:"Pending",items:[]},
+        p3:{t:"Plan \u2014 Iter 3",m:"Pending",items:[]},
+        a3:{t:"Artifacts \u2014 Iter 3",m:"Pending",items:[]},
+        t3:{t:"Paper Text \u2014 Iter 3",m:"Pending",items:[]},
+        r3:{t:"Review \u2014 Iter 3",m:"Pending",items:[]},
+        u3:{t:"Update Hypothesis \u2014 Iter 3",m:"Pending",items:[]},
+      }},
+    { id:"paper", name:"Paper & Repo", color:"#f59e0b", status:"pending", icon:"\u25cb", meta:"",
+      subs:[[{id:"comp",l:"Compile",s:"pending"},{id:"viz",l:"Gen Viz",s:"pending"},{id:"repo",l:"Gen Repo",s:"pending"}]],
+      det:{
+        comp:{t:"Compile Paper",m:"Pending",items:[]},
+        viz:{t:"Generate Visualizations",m:"Pending",items:[]},
+        repo:{t:"Generate Repository",m:"Pending",items:[]},
+      }},
+  ]
+};
+
+/* ================================================================
+   TOPO BACKGROUND
+   ================================================================ */
+(function initTopo(){
+  let s = `<svg viewBox="0 0 1200 1200" xmlns="http://www.w3.org/2000/svg">`;
+  for(let i=0;i<20;i++){
+    const cx=150+Math.random()*900, cy=150+Math.random()*900;
+    for(let r=35;r<280;r+=24+Math.random()*18){
+      s+=`<ellipse cx="${cx}" cy="${cy}" rx="${r+Math.random()*18-9}" ry="${r*(0.65+Math.random()*0.7)}" fill="none" stroke="#fff" stroke-width="0.5" opacity="0.45"/>`;
+    }
+  }
+  document.getElementById("topo").innerHTML = s + `</svg>`;
+})();
+
+/* ================================================================
+   PATH UTILITIES
+   ================================================================ */
+// Build a smooth SVG path through an ordered set of points using Catmull-Rom -> cubic bezier conversion.
+function catmullRomPath(pts){
+  if(pts.length<2) return "";
+  // Duplicate first/last for open curve
+  const P = [pts[0], ...pts, pts[pts.length-1]];
+  let d = `M${pts[0].x.toFixed(1)},${pts[0].y.toFixed(1)}`;
+  const alpha = 0.5; // centripetal
+  for(let i=0;i<pts.length-1;i++){
+    const p0=P[i], p1=P[i+1], p2=P[i+2], p3=P[i+3];
+    const cp1x = p1.x + (p2.x - p0.x) / 6;
+    const cp1y = p1.y + (p2.y - p0.y) / 6;
+    const cp2x = p2.x - (p3.x - p1.x) / 6;
+    const cp2y = p2.y - (p3.y - p1.y) / 6;
+    d += ` C${cp1x.toFixed(1)},${cp1y.toFixed(1)} ${cp2x.toFixed(1)},${cp2y.toFixed(1)} ${p2.x.toFixed(1)},${p2.y.toFixed(1)}`;
+  }
+  return d;
+}
+
+// Interpolate position along a polyline at parameter t in [0,1]
+function lerpPath(pts, t){
+  if(pts.length<2) return pts[0] || {x:0,y:0};
+  // Compute cumulative arc lengths
+  const lens = [0];
+  for(let i=1;i<pts.length;i++){
+    const dx=pts[i].x-pts[i-1].x, dy=pts[i].y-pts[i-1].y;
+    lens.push(lens[i-1]+Math.sqrt(dx*dx+dy*dy));
+  }
+  const total = lens[lens.length-1];
+  const target = t * total;
+  for(let i=1;i<lens.length;i++){
+    if(lens[i]>=target){
+      const segLen = lens[i]-lens[i-1];
+      const lt = segLen>0 ? (target-lens[i-1])/segLen : 0;
+      return { x: pts[i-1].x+(pts[i].x-pts[i-1].x)*lt, y: pts[i-1].y+(pts[i].y-pts[i-1].y)*lt };
+    }
+  }
+  return pts[pts.length-1];
+}
+
+// Normal direction (perpendicular) at parameter t -- positive = right of flow direction
+function normalAt(pts, t){
+  const dt = 0.005;
+  const a = lerpPath(pts, Math.max(0, t-dt));
+  const b = lerpPath(pts, Math.min(1, t+dt));
+  const dx = b.x-a.x, dy = b.y-a.y;
+  const len = Math.sqrt(dx*dx+dy*dy) || 1;
+  return { x: -dy/len, y: dx/len }; // right-hand normal
+}
+
+/* ================================================================
+   BUILD RIVER GEOMETRY
+   ================================================================ */
+function buildRiver(){
+  const W = 720, cx = W/2;
+  const segs = []; // {mod, iterIdx, pts}
+  const wpPos = {};  // key -> {x, y}
+  const modY = {};
+  let y = 70;
+
+  // Helper: push a waypoint position offset from path
+  function placeWP(key, pts, t, offsetDist){
+    const p = lerpPath(pts, t);
+    const n = normalAt(pts, t);
+    wpPos[key] = { x: p.x + n.x * offsetDist, y: p.y + n.y * offsetDist };
+  }
+
+  /* --- Seed Hypothesis --- */
+  const sy = y;
+  const seedPts = [
+    {x:cx, y}, {x:cx+50, y:y+55}, {x:cx+90, y:y+120},
+    {x:cx+70, y:y+185}, {x:cx+30, y:y+230}
+  ];
+  placeWP("kg_fetch|0", seedPts, 0.32, -30);
+  placeWP("gen_seed|0", seedPts, 0.72, -30);
+  segs.push({mod:"seed", iterIdx:0, pts:seedPts});
+  y += 230;
+  modY.seed = {s:sy, e:y, lx:cx-165, ly:sy+95, side:"left"};
+
+  /* --- Transition to hypo --- */
+  const t1end = {x:cx-20, y:y+65};
+  segs.push({mod:"_t", iterIdx:-1, pts:[seedPts[seedPts.length-1], {x:cx+10, y:y+30}, t1end]});
+  y += 65;
+
+  /* --- Hypothesis Loop (3 S-curves) --- */
+  const hy = y;
+  for(let i=0;i<3;i++){
+    const dir = (i%2===0) ? -1 : 1;
+    const prev = segs[segs.length-1].pts;
+    const entry = prev[prev.length-1];
+    const amp = 125;
+    const h = 165;
+    const pts = [
+      entry,
+      {x:cx+dir*amp*0.45, y:y+h*0.18},
+      {x:cx+dir*amp, y:y+h*0.42},
+      {x:cx+dir*amp*0.7, y:y+h*0.68},
+      {x:cx+dir*amp*0.15, y:y+h*0.88},
+      {x:cx-dir*25, y:y+h},
+    ];
+    const wpOff = dir * 32;
+    placeWP(`${DATA.modules[1].subs[i][0].id}|${i}`, pts, 0.3, wpOff);
+    placeWP(`${DATA.modules[1].subs[i][1].id}|${i}`, pts, 0.72, wpOff);
+    segs.push({mod:"hypo", iterIdx:i, pts});
+    y += h;
+  }
+  modY.hypo = {s:hy, e:y, lx:cx+175, ly:hy+110, side:"right"};
+
+  /* --- Transition to invention --- */
+  const lastH = segs[segs.length-1].pts;
+  const t2start = lastH[lastH.length-1];
+  const t2end = {x:cx+20, y:y+80};
+  segs.push({mod:"_t", iterIdx:-1, pts:[t2start, {x:cx-5, y:y+40}, t2end]});
+  y += 80;
+
+  /* --- Invention Loop (3 large loops) --- */
+  const iy = y;
+  for(let i=0;i<3;i++){
+    const dir = (i%2===0) ? 1 : -1;
+    const lH = 310;
+    const amp = 168;
+    const prev = segs[segs.length-1].pts;
+    const entry = prev[prev.length-1];
+    const pts = [
+      entry,
+      {x:cx+dir*amp*0.35, y:y+lH*0.07},
+      {x:cx+dir*amp*0.85, y:y+lH*0.16},
+      {x:cx+dir*amp, y:y+lH*0.28},
+      {x:cx+dir*amp*0.75, y:y+lH*0.42},
+      {x:cx+dir*amp*0.15, y:y+lH*0.52},
+      {x:cx-dir*amp*0.5, y:y+lH*0.60},
+      {x:cx-dir*amp*0.78, y:y+lH*0.72},
+      {x:cx-dir*amp*0.55, y:y+lH*0.84},
+      {x:cx-dir*15, y:y+lH*0.95},
+      {x:cx-dir*25, y:y+lH},
+    ];
+    const subIds = DATA.modules[2].subs[i];
+    const tVals = [0.08, 0.2, 0.36, 0.54, 0.72, 0.88];
+    for(let s=0;s<6;s++){
+      // Offset on the outer side of the loop curve
+      const wpT = tVals[s];
+      const off = (wpT < 0.5) ? dir * 34 : -dir * 34;
+      placeWP(`${subIds[s].id}|${i}`, pts, wpT, off);
+    }
+    segs.push({mod:"inv", iterIdx:i, pts});
+    y += lH;
+    if(i<2){
+      const last = pts[pts.length-1];
+      const conn = [{x:last.x, y:y}, {x:cx, y:y+28}, {x:cx+(i%2===0?-1:1)*18, y:y+50}];
+      segs.push({mod:"inv_c", iterIdx:i, pts:conn});
+      y += 50;
+    }
+  }
+  modY.inv = {s:iy, e:y, lx:cx-215, ly:iy+200, side:"left"};
+
+  /* --- Transition to paper --- */
+  const lastI = segs[segs.length-1].pts;
+  const t3s = lastI[lastI.length-1];
+  const t3e = {x:cx, y:y+70};
+  segs.push({mod:"_t", iterIdx:-1, pts:[t3s, {x:cx+8, y:y+35}, t3e]});
+  y += 70;
+
+  /* --- Paper & Repo --- */
+  const py = y;
+  const prPts = [{x:cx, y}, {x:cx+18, y:y+55}, {x:cx+8, y:y+120}, {x:cx-5, y:y+180}, {x:cx, y:y+210}];
+  placeWP("comp|0", prPts, 0.22, 30);
+  placeWP("viz|0",  prPts, 0.52, 30);
+  placeWP("repo|0", prPts, 0.82, 30);
+  segs.push({mod:"paper", iterIdx:0, pts:prPts});
+  y += 210;
+  modY.paper = {s:py, e:y, lx:cx+140, ly:py+80, side:"right"};
+
+  return {segs, wpPos, modY, totalH: y+50};
+}
+
+/* ================================================================
+   SEGMENT STATE
+   ================================================================ */
+const modMap = {}; DATA.modules.forEach(m => modMap[m.id] = m);
+function segState(seg){
+  const mid = seg.mod === "inv_c" ? "inv" : seg.mod;
+  const mod = modMap[mid];
+  if(!mod) return "trans";
+  if(mod.status==="complete") return "done";
+  if(mod.status==="pending") return "pend";
+  const it = mod.subs[seg.iterIdx];
+  if(!it) return "pend";
+  if(it.every(s=>s.s==="complete")) return "done";
+  if(it.every(s=>s.s==="pending")) return "pend";
+  return "act";
+}
+
+/* ================================================================
+   RENDER
+   ================================================================ */
+function render(){
+  const {segs, wpPos, modY, totalH} = buildRiver();
+  const svg = document.getElementById("svg");
+  svg.setAttribute("viewBox", `0 0 720 ${totalH}`);
+
+  const mc = {seed:"#3ecf8e", hypo:"#a78bfa", inv:"#60a5fa", paper:"#f59e0b", inv_c:"#60a5fa"};
+  let defs = `<defs>
+    <filter id="gS"><feGaussianBlur stdDeviation="14" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <filter id="gM"><feGaussianBlur stdDeviation="8" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>`;
+
+  let glow="", bank="", river="", parts="", wps="", labels="";
+
+  // --- Draw segments ---
+  segs.forEach((seg,idx) => {
+    const d = catmullRomPath(seg.pts);
+    const st = segState(seg);
+    const c = mc[seg.mod] || "#555";
+
+    if(st==="done"){
+      glow  += `<path d="${d}" fill="none" stroke="${c}" stroke-width="42" stroke-opacity="0.1" stroke-linecap="round" filter="url(#gS)"/>`;
+      bank  += `<path d="${d}" fill="none" stroke="${c}" stroke-width="36" stroke-opacity="0.05" stroke-linecap="round"/>`;
+      river += `<path d="${d}" fill="none" stroke="${c}" stroke-width="22" stroke-opacity="0.82" stroke-linecap="round"/>`;
+      river += `<path d="${d}" fill="none" stroke="#fff" stroke-width="3" stroke-opacity="0.12" stroke-linecap="round"/>`;
+    } else if(st==="act"){
+      glow  += `<path d="${d}" fill="none" stroke="${c}" stroke-width="48" stroke-opacity="0.12" stroke-linecap="round" filter="url(#gS)">
+                  <animate attributeName="stroke-opacity" values="0.06;0.18;0.06" dur="2.5s" repeatCount="indefinite"/></path>`;
+      bank  += `<path d="${d}" fill="none" stroke="${c}" stroke-width="36" stroke-opacity="0.07" stroke-linecap="round"/>`;
+      river += `<path d="${d}" fill="none" stroke="${c}" stroke-width="22" stroke-opacity="0.65" stroke-linecap="round">
+                  <animate attributeName="stroke-opacity" values="0.5;0.82;0.5" dur="2.5s" repeatCount="indefinite"/></path>`;
+      river += `<path d="${d}" fill="none" stroke="#fff" stroke-width="4" stroke-opacity="0.08" stroke-linecap="round"/>`;
+      // Particles
+      for(let p=0;p<6;p++){
+        const dl = (p*0.55).toFixed(2);
+        parts += `<circle r="2.5" fill="#fff" opacity="0">
+          <animateMotion dur="3.2s" begin="${dl}s" repeatCount="indefinite" path="${d}"/>
+          <animate attributeName="opacity" values="0;0.65;0.65;0" dur="3.2s" begin="${dl}s" repeatCount="indefinite"/>
+        </circle>`;
+      }
+    } else if(st==="pend"){
+      bank  += `<path d="${d}" fill="none" stroke="${c}" stroke-width="32" stroke-opacity="0.025" stroke-linecap="round"/>`;
+      river += `<path d="${d}" fill="none" stroke="${c}" stroke-width="18" stroke-opacity="0.14" stroke-linecap="round" stroke-dasharray="6 14"/>`;
+    } else {
+      river += `<path d="${d}" fill="none" stroke="#444" stroke-width="16" stroke-opacity="0.25" stroke-linecap="round"/>`;
+    }
+  });
+
+  // --- Draw waypoints ---
+  DATA.modules.forEach(mod => {
+    mod.subs.forEach((iter, iIdx) => {
+      iter.forEach(sub => {
+        const key = `${sub.id}|${iIdx}`;
+        const pos = wpPos[key];
+        if(!pos) return;
+        const R = 6;
+        const px = pos.x.toFixed(1), py = pos.y.toFixed(1);
+
+        if(sub.s==="complete"){
+          wps += `<g class="wp" data-id="${sub.id}" data-mod="${mod.id}" data-i="${iIdx}">
+            <circle cx="${px}" cy="${py}" r="${R+7}" fill="${mod.color}" opacity="0.1"/>
+            <circle cx="${px}" cy="${py}" r="${R}" fill="${mod.color}" stroke="${mod.color}" stroke-width="1.5" opacity="0.88"/>
+            <text x="${px}" y="${(pos.y-14).toFixed(1)}" class="wp-lbl" fill="${mod.color}" opacity="0.85">${sub.l}</text>
+          </g>`;
+        } else if(sub.s==="active"){
+          wps += `<g class="wp" data-id="${sub.id}" data-mod="${mod.id}" data-i="${iIdx}">
+            <circle cx="${px}" cy="${py}" r="18" fill="${mod.color}" opacity="0.08">
+              <animate attributeName="r" values="12;20;12" dur="2s" repeatCount="indefinite"/>
+              <animate attributeName="opacity" values="0.12;0.04;0.12" dur="2s" repeatCount="indefinite"/>
+            </circle>
+            <circle cx="${px}" cy="${py}" r="${R}" fill="#fff" stroke="${mod.color}" stroke-width="2">
+              <animate attributeName="r" values="${R};${R+2};${R}" dur="2s" repeatCount="indefinite"/>
+            </circle>
+            <text x="${px}" y="${(pos.y-16).toFixed(1)}" class="wp-lbl" fill="#fff" font-weight="600">${sub.l}</text>
+          </g>`;
+        } else {
+          wps += `<g class="wp" data-id="${sub.id}" data-mod="${mod.id}" data-i="${iIdx}">
+            <circle cx="${px}" cy="${py}" r="${R}" fill="none" stroke="${mod.color}" stroke-width="1" opacity="0.28"/>
+            <text x="${px}" y="${(pos.y-12).toFixed(1)}" class="wp-lbl" fill="${mod.color}" opacity="0.3">${sub.l}</text>
+          </g>`;
+        }
+      });
+    });
+  });
+
+  // --- Module labels (as SVG text for stable positioning) ---
+  DATA.modules.forEach(mod => {
+    const r = modY[mod.id]; if(!r) return;
+    const op = mod.status==="pending" ? 0.35 : 1;
+    const anchor = r.side==="left" ? "end" : "start";
+    labels += `<text x="${r.lx}" y="${r.ly}" class="mod-label" fill="${mod.color}" text-anchor="${anchor}" opacity="${op}">
+      ${mod.name} <tspan style="font-weight:400;font-size:13px">${mod.icon}</tspan>
+    </text>`;
+    if(mod.meta){
+      labels += `<text x="${r.lx}" y="${r.ly+20}" class="mod-meta" text-anchor="${anchor}" opacity="${op}">${mod.meta}</text>`;
+    }
+  });
+
+  svg.innerHTML = defs + glow + bank + river + parts + wps + labels;
+
+  // --- Click handlers ---
+  svg.querySelectorAll(".wp").forEach(wp => {
+    wp.addEventListener("click", e => { e.stopPropagation(); showCard(wp); });
+  });
+
+  // Scroll to active
+  setTimeout(()=>{
+    const ir = modY.inv;
+    if(!ir) return;
+    const rect = svg.getBoundingClientRect();
+    const scale = rect.width / 720;
+    window.scrollTo({top: ir.s * scale - 180, behavior:"smooth"});
+  }, 350);
+}
+
+/* ================================================================
+   DETAIL CARD
+   ================================================================ */
+function showCard(el){
+  const id = el.dataset.id, mid = el.dataset.mod;
+  const mod = modMap[mid]; if(!mod) return;
+  const det = mod.det[id]; if(!det) return;
+  const card = document.getElementById("card");
+
+  const sc = det.m.startsWith("\u25b6") ? "run" : det.m.startsWith("\u2713") ? "ok" : "";
+  let h = `<div class="ct" style="color:${mod.color}">${det.t}</div>`;
+  h += `<div class="cm"><span class="${sc}">${det.m}</span></div>`;
+  if(det.pr) h += `<div class="cp">${det.pr}</div>`;
+  if(det.items.length){
+    h += `<div class="ci">`;
+    det.items.forEach(it => {
+      const ic = it.s==="d" ? "\u2713" : it.s==="a" ? "\u25b6" : "\u25cb";
+      const cls = it.s==="d" ? "d" : it.s==="a" ? "a" : "p";
+      h += `<div class="r ${cls}"><span class="ic">${ic}</span><span>${it.t}</span></div>`;
+    });
+    h += `</div>`;
+  } else {
+    h += `<div class="ci"><div class="r p"><span class="ic">\u25cb</span><span>Waiting for previous steps</span></div></div>`;
+  }
+  card.innerHTML = h;
+
+  // Position
+  const circ = el.querySelector("circle");
+  const svgEl = document.getElementById("svg");
+  const sr = svgEl.getBoundingClientRect();
+  const scale = sr.width / 720;
+  const wpX = sr.left + parseFloat(circ.getAttribute("cx")) * scale;
+  const wpY = sr.top + parseFloat(circ.getAttribute("cy")) * scale + window.scrollY;
+
+  const cw = 268, mid_x = window.innerWidth / 2;
+  let cl = wpX > mid_x ? wpX - cw - 36 : wpX + 36;
+  let ct = wpY - 50;
+  cl = Math.max(14, Math.min(cl, window.innerWidth - cw - 14));
+  ct = Math.max(66, ct);
+
+  card.style.left = cl+"px"; card.style.top = ct+"px";
+  card.style.borderColor = mod.color+"22";
+  card.classList.add("show");
+
+  // Connector
+  const conn = document.getElementById("conn");
+  const wpSX = wpX, wpSY = sr.top + parseFloat(circ.getAttribute("cy")) * scale;
+  const cSX = wpX > mid_x ? cl + cw : cl;
+  const cSY = ct + 28 - window.scrollY;
+  const sw = Math.abs(wpSX - cSX) + 20, sh = Math.abs(wpSY - cSY) + 20;
+  const mx = Math.min(wpSX, cSX) - 10, my = Math.min(wpSY, cSY) - 10;
+  conn.style.left = mx+"px"; conn.style.top = my+"px";
+  conn.setAttribute("width", sw); conn.setAttribute("height", sh);
+  conn.innerHTML = `<line x1="${wpSX-mx}" y1="${wpSY-my}" x2="${cSX-mx}" y2="${cSY-my}" stroke="${mod.color}" stroke-width="1" stroke-opacity="0.25" stroke-dasharray="4 3"/>`;
+  conn.classList.add("show");
+}
+
+function hideCard(){
+  document.getElementById("card").classList.remove("show");
+  document.getElementById("conn").classList.remove("show");
+}
+document.addEventListener("click", e => {
+  if(!e.target.closest(".wp") && !e.target.closest(".detail-card")) hideCard();
+});
+
+/* ================================================================
+   RESIZE + CLOCK
+   ================================================================ */
+let rT; window.addEventListener("resize", ()=>{ clearTimeout(rT); rT=setTimeout(render,150); });
+
+let sec = 3600 + 42*60;
+setInterval(()=>{
+  sec++;
+  const h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=sec%60;
+  document.getElementById("elapsed").textContent = `${h}h ${String(m).padStart(2,"0")}m ${String(s).padStart(2,"0")}s`;
+}, 1000);
+
+/* ================================================================
+   INIT
+   ================================================================ */
+render();
+</script>
+</body>
+</html>

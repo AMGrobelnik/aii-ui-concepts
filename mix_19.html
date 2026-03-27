@@ -1,0 +1,1583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Pipeline Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0f1219;
+    --bg-deep: #0a0d13;
+    --surface: #151a24;
+    --surface-2: #1b2030;
+    --surface-3: #212737;
+    --border: #1e2536;
+    --border-light: #2a3248;
+    --text: #b8bfcd;
+    --text-dim: #5f6b7a;
+    --text-bright: #e8ecf2;
+    --text-muted: #3d4555;
+    --green: #34d399;
+    --green-dim: rgba(52,211,153,.10);
+    --green-glow: rgba(52,211,153,.30);
+    --purple: #a78bfa;
+    --purple-dim: rgba(167,139,250,.10);
+    --purple-glow: rgba(167,139,250,.30);
+    --blue: #60a5fa;
+    --blue-dim: rgba(96,165,250,.10);
+    --blue-glow: rgba(96,165,250,.35);
+    --amber: #fbbf24;
+    --amber-dim: rgba(251,191,36,.10);
+    --amber-glow: rgba(251,191,36,.30);
+    --gray: #6b7280;
+    --gray-dim: rgba(107,114,128,.10);
+    --sidebar-w: 260px;
+    --ring-color: var(--blue);
+    --ring-glow-color: var(--blue-glow);
+  }
+
+  html, body {
+    height: 100%;
+    overflow: hidden;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body { display: flex; }
+
+  /* ================================================================
+     SIDEBAR
+     ================================================================ */
+  .sidebar {
+    width: var(--sidebar-w);
+    min-width: var(--sidebar-w);
+    height: 100vh;
+    background: var(--bg-deep);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px 16px 16px;
+    gap: 14px;
+    position: relative;
+    z-index: 10;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .sidebar::-webkit-scrollbar { width: 3px; }
+  .sidebar::-webkit-scrollbar-track { background: transparent; }
+  .sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .sidebar-title {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 1.4px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    padding-bottom: 2px;
+  }
+
+  /* ================================================================
+     MAIN RING — reactive to module selection
+     ================================================================ */
+  .ring-wrapper {
+    position: relative;
+    width: 160px;
+    height: 160px;
+    flex-shrink: 0;
+    margin: 4px 0;
+  }
+
+  .ring-glow {
+    position: absolute;
+    inset: -24px;
+    border-radius: 50%;
+    pointer-events: none;
+    opacity: 0;
+    filter: blur(20px);
+    transition: opacity .6s ease, background .6s ease;
+  }
+
+  .ring-glow.visible { opacity: .22; }
+
+  .ring-svg {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    z-index: 2;
+  }
+
+  .ring-track {
+    fill: none;
+    stroke: var(--border);
+    stroke-width: 5;
+  }
+
+  .ring-fill-arc {
+    fill: none;
+    stroke-width: 7;
+    stroke-linecap: round;
+    transition: stroke-dashoffset .6s cubic-bezier(.33,1,.68,1),
+                stroke .6s ease,
+                filter .6s ease;
+  }
+
+  /* Rotating dashed outline ring */
+  .ring-dashed-outline {
+    fill: none;
+    stroke-width: 1.5;
+    stroke-dasharray: 6 4;
+    opacity: .35;
+    transition: stroke .6s ease;
+    animation: dashRotate 20s linear infinite;
+  }
+
+  @keyframes dashRotate {
+    from { stroke-dashoffset: 0; }
+    to { stroke-dashoffset: -340; }
+  }
+
+  /* Inner decorative ring */
+  .ring-inner-deco {
+    fill: none;
+    stroke-width: 1;
+    stroke-dasharray: 2 8;
+    opacity: .15;
+    transition: stroke .6s ease;
+    animation: dashRotateSlow 35s linear infinite reverse;
+  }
+
+  @keyframes dashRotateSlow {
+    from { stroke-dashoffset: 0; }
+    to { stroke-dashoffset: -250; }
+  }
+
+  .ring-center-text {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 3;
+    pointer-events: none;
+  }
+
+  .ring-pct {
+    font-size: 30px;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -1.5px;
+    transition: color .6s ease;
+  }
+
+  .ring-pct-unit {
+    font-size: 15px;
+    font-weight: 600;
+    opacity: .5;
+    transition: color .6s ease;
+  }
+
+  .ring-label {
+    font-size: 9.5px;
+    text-transform: uppercase;
+    letter-spacing: .9px;
+    margin-top: 3px;
+    transition: color .6s ease;
+    color: var(--text-dim);
+  }
+
+  .ring-module-name {
+    font-size: 8px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-top: 6px;
+    padding: 2px 8px;
+    border-radius: 3px;
+    transition: background .6s ease, color .6s ease;
+  }
+
+  /* ================================================================
+     COLORED CONNECTOR LINES between ring and module list
+     ================================================================ */
+  .connector-lines {
+    width: 100%;
+    height: 16px;
+    position: relative;
+    overflow: visible;
+  }
+
+  .connector-lines svg {
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+  }
+
+  .connector-line {
+    fill: none;
+    stroke-width: 1.2;
+    opacity: .3;
+    transition: opacity .4s ease, stroke .4s ease;
+  }
+
+  .connector-line.active {
+    opacity: .7;
+    stroke-width: 1.8;
+  }
+
+  /* ================================================================
+     MODULE CARDS
+     ================================================================ */
+  .module-list {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .mod-card {
+    width: 100%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: all .25s ease;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .mod-card:hover { background: var(--surface-2); border-color: var(--border-light); }
+
+  .mod-card.selected {
+    border-color: var(--border-light);
+    background: var(--surface-2);
+  }
+
+  .mod-card .mc-row {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+  }
+
+  .mod-card .mc-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    transition: box-shadow .4s ease;
+  }
+
+  .mod-card.selected .mc-dot { box-shadow: 0 0 8px 2px currentColor; }
+
+  .mod-card .mc-name {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--text-dim);
+    flex: 1;
+    transition: color .25s;
+  }
+
+  .mod-card.selected .mc-name,
+  .mod-card:hover .mc-name { color: var(--text-bright); }
+
+  .mod-card .mc-pct {
+    font-size: 10px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    transition: color .25s;
+  }
+
+  .mod-card .mc-status {
+    font-size: 8.5px;
+    font-weight: 600;
+    letter-spacing: .5px;
+    text-transform: uppercase;
+    padding: 1px 6px;
+    border-radius: 4px;
+  }
+
+  .mod-card .mc-bar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 2px;
+    border-radius: 0 0 0 9px;
+    transition: width .6s ease;
+  }
+
+  .mod-card .mc-glow {
+    position: absolute;
+    inset: -1px;
+    border-radius: 9px;
+    opacity: 0;
+    transition: opacity .35s;
+    pointer-events: none;
+  }
+
+  .mod-card.selected .mc-glow { opacity: 1; }
+
+  .mod-card.active::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -80%;
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,.025), transparent);
+    animation: cardShimmer 3.5s ease-in-out infinite;
+  }
+
+  @keyframes cardShimmer {
+    0% { left: -80%; }
+    100% { left: 150%; }
+  }
+
+  /* ================================================================
+     COLLAPSIBLE SUB-MODULES
+     ================================================================ */
+  .sub-modules-wrapper {
+    width: 100%;
+    overflow: hidden;
+    transition: max-height .5s cubic-bezier(.33,1,.68,1), opacity .4s ease;
+    max-height: 0;
+    opacity: 0;
+  }
+
+  .sub-modules-wrapper.expanded {
+    max-height: 400px;
+    opacity: 1;
+  }
+
+  .sub-modules {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 6px 0 2px;
+  }
+
+  .collapse-toggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 4px 0;
+    cursor: pointer;
+    font-size: 9px;
+    font-weight: 600;
+    color: var(--text-muted);
+    letter-spacing: .6px;
+    text-transform: uppercase;
+    transition: color .25s;
+    user-select: none;
+  }
+
+  .collapse-toggle:hover { color: var(--text-dim); }
+
+  .collapse-toggle .chevron {
+    display: inline-block;
+    transition: transform .35s ease;
+    font-size: 8px;
+  }
+
+  .collapse-toggle.open .chevron { transform: rotate(180deg); }
+
+  .sub-module {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 10px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all .2s;
+    font-size: 10.5px;
+    color: var(--text-dim);
+  }
+
+  .sub-module:hover { background: var(--surface); color: var(--text); }
+  .sub-module.selected { background: var(--surface-2); color: var(--text-bright); font-weight: 600; }
+
+  .sub-module .sm-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    transition: all .25s;
+  }
+
+  .sub-module.selected .sm-dot {
+    box-shadow: 0 0 6px 1px currentColor;
+    width: 7px;
+    height: 7px;
+  }
+
+  .sub-module.active .sm-dot { animation: subPulse 2s ease-in-out infinite; }
+
+  @keyframes subPulse {
+    0%, 100% { box-shadow: 0 0 4px 1px currentColor; }
+    50% { box-shadow: 0 0 10px 3px currentColor; }
+  }
+
+  .sub-module .sm-label { flex: 1; }
+
+  .sub-module .sm-status {
+    font-size: 8px;
+    font-weight: 600;
+    letter-spacing: .4px;
+    text-transform: uppercase;
+    opacity: .7;
+  }
+
+  /* Particle canvas */
+  #sidebarParticles {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: var(--sidebar-w);
+    height: 100%;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  /* ================================================================
+     MAIN CONTENT
+     ================================================================ */
+  .main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .topbar {
+    display: flex;
+    align-items: center;
+    padding: 14px 28px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    gap: 14px;
+  }
+
+  .topbar-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-bright);
+    flex: 1;
+  }
+
+  .topbar-badge {
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .5px;
+    text-transform: uppercase;
+    transition: all .4s ease;
+  }
+
+  .topbar-time {
+    font-size: 11px;
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .kbd {
+    display: inline-block;
+    padding: 1px 5px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    background: var(--surface);
+    font-family: 'Inter', monospace;
+    font-size: 9px;
+    color: var(--text-dim);
+  }
+
+  /* Two-column layout */
+  .two-col {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+  }
+
+  .col-left {
+    width: 58%;
+    overflow-y: auto;
+    padding: 22px 24px 32px 28px;
+    border-right: 1px solid var(--border);
+  }
+
+  .col-right {
+    width: 42%;
+    overflow-y: auto;
+    padding: 22px 24px 32px 20px;
+  }
+
+  .col-left::-webkit-scrollbar,
+  .col-right::-webkit-scrollbar { width: 4px; }
+  .col-left::-webkit-scrollbar-track,
+  .col-right::-webkit-scrollbar-track { background: transparent; }
+  .col-left::-webkit-scrollbar-thumb,
+  .col-right::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .panel {
+    display: none;
+    animation: panelIn .35s ease;
+  }
+
+  .panel.visible { display: block; }
+
+  @keyframes panelIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ---- Summary block ---- */
+  .summary-block { margin-bottom: 22px; }
+
+  .summary-heading {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .summary-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    flex-shrink: 0;
+    transition: background .4s, color .4s;
+  }
+
+  .summary-heading h2 {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--text-bright);
+  }
+
+  .summary-text {
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--text);
+    padding: 14px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    position: relative;
+  }
+
+  .summary-text .accent-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 3px;
+    height: 100%;
+    border-radius: 10px 0 0 10px;
+    transition: background .4s ease;
+  }
+
+  .summary-text p { margin-bottom: 8px; }
+  .summary-text p:last-child { margin-bottom: 0; }
+
+  /* ---- Item list ---- */
+  .item-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .item-list-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: .8px;
+    margin-bottom: 6px;
+  }
+
+  .item-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    transition: all .2s;
+    cursor: default;
+  }
+
+  .item-card:hover { border-color: var(--border-light); background: var(--surface-2); }
+
+  .item-card.active-item {
+    border-left: 3px solid var(--blue);
+    box-shadow: -2px 0 12px -4px var(--blue-glow);
+  }
+
+  .item-card h4 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-bright);
+    margin-bottom: 4px;
+  }
+
+  .item-card p {
+    font-size: 11.5px;
+    color: var(--text-dim);
+    line-height: 1.55;
+  }
+
+  .item-card .item-tags {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+    flex-wrap: wrap;
+  }
+
+  .item-card .item-tag {
+    font-size: 9.5px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: var(--surface-2);
+    color: var(--text-dim);
+    letter-spacing: .3px;
+  }
+
+  .item-card .item-progress {
+    margin-top: 8px;
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .item-card .item-progress-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width .6s ease;
+  }
+
+  /* ---- Right column: stats + activity ---- */
+  .stat-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    transition: all .2s;
+  }
+
+  .stat-card:hover { border-color: var(--border-light); }
+
+  .stat-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+
+  .stat-info { flex: 1; }
+
+  .stat-value {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-bright);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+  }
+
+  .stat-label {
+    font-size: 10px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: .6px;
+    margin-top: 1px;
+  }
+
+  /* ---- Activity table ---- */
+  .activity-section { margin-top: 0; }
+
+  .activity-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: .8px;
+    margin-bottom: 10px;
+  }
+
+  .activity-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .activity-table th {
+    font-size: 9.5px;
+    font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    padding: 9px 12px;
+    text-align: left;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .activity-table th:last-child,
+  .activity-table td:last-child { text-align: right; }
+
+  .activity-table td {
+    font-size: 12px;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .activity-table tr:last-child td { border-bottom: none; }
+  .activity-table tr:hover td { background: rgba(255,255,255,.012); }
+
+  .activity-table .at-step {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 500;
+  }
+
+  .activity-table .at-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .activity-table .at-dim { color: var(--text-dim); font-size: 11px; }
+
+  /* Running pulse */
+  @keyframes runPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: .4; }
+  }
+
+  .pulse-live { animation: runPulse 1.8s ease-in-out infinite; }
+
+  /* Empty state */
+  .empty-state {
+    padding: 40px 20px;
+    text-align: center;
+    border: 1px dashed var(--border);
+    border-radius: 10px;
+    margin-top: 12px;
+  }
+
+  .empty-state .es-icon {
+    font-size: 28px;
+    opacity: .25;
+    margin-bottom: 10px;
+  }
+
+  .empty-state p {
+    font-size: 12px;
+    color: var(--text-dim);
+    line-height: 1.6;
+  }
+
+  /* ---- Mini sparkline in stat card ---- */
+  .mini-spark {
+    width: 60px;
+    height: 28px;
+    flex-shrink: 0;
+  }
+
+  .mini-spark polyline {
+    fill: none;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  /* ---- Divider ---- */
+  .sidebar-divider {
+    width: 80%;
+    height: 1px;
+    background: var(--border);
+    margin: 2px 0;
+    flex-shrink: 0;
+  }
+
+  /* ---- Pipeline mini-step bar under topbar ---- */
+  .pipeline-steps-bar {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    padding: 0 28px;
+    height: 32px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-deep);
+    flex-shrink: 0;
+  }
+
+  .ps-step {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: .4px;
+    color: var(--text-muted);
+    height: 100%;
+    position: relative;
+    transition: color .3s;
+  }
+
+  .ps-step.done { color: var(--text-dim); }
+  .ps-step.active { color: var(--text-bright); }
+
+  .ps-step .ps-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .ps-step.active .ps-dot { animation: subPulse 2s ease-in-out infinite; }
+
+  .ps-step::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 10%;
+    width: 80%;
+    height: 2px;
+    border-radius: 2px 2px 0 0;
+    transition: background .3s;
+  }
+
+  .ps-step.active::after { background: var(--blue); }
+  .ps-step.done::after { background: var(--green); opacity: .3; }
+</style>
+</head>
+<body>
+
+<!-- ================================================================
+     SIDEBAR
+     ================================================================ -->
+<aside class="sidebar" id="sidebar">
+  <canvas id="sidebarParticles"></canvas>
+
+  <div class="sidebar-title">AI Inventor</div>
+
+  <!-- Big Reactive Ring -->
+  <div class="ring-wrapper" id="ringWrapper">
+    <div class="ring-glow visible" id="ringGlow"
+      style="background:radial-gradient(circle,var(--blue) 0%,transparent 70%)"></div>
+    <svg class="ring-svg" viewBox="0 0 160 160">
+      <!-- Outer dashed outline (rotates) -->
+      <circle class="ring-dashed-outline" id="ringDashed"
+        cx="80" cy="80" r="74"
+        stroke="var(--blue)"/>
+      <!-- Track -->
+      <circle class="ring-track" cx="80" cy="80" r="62"/>
+      <!-- Fill arc — dynamic -->
+      <circle class="ring-fill-arc" id="ringFillArc"
+        cx="80" cy="80" r="62"
+        stroke="var(--blue)"
+        stroke-dasharray="389.56"
+        stroke-dashoffset="226"
+        transform="rotate(-90 80 80)"
+        style="filter:drop-shadow(0 0 4px var(--blue-glow))"/>
+      <!-- Inner decorative ring -->
+      <circle class="ring-inner-deco" id="ringInnerDeco"
+        cx="80" cy="80" r="50"
+        stroke="var(--blue)"/>
+    </svg>
+    <div class="ring-center-text">
+      <div class="ring-pct" id="ringPct" style="color:var(--blue)">
+        42<span class="ring-pct-unit" style="color:var(--blue)">%</span>
+      </div>
+      <div class="ring-label" id="ringLabel">Progress</div>
+      <div class="ring-module-name" id="ringModuleName"
+        style="background:var(--blue-dim);color:var(--blue)">Invention</div>
+    </div>
+  </div>
+
+  <!-- Colored connector lines -->
+  <div class="connector-lines" id="connectorLines">
+    <svg viewBox="0 0 228 16" preserveAspectRatio="none">
+      <line class="connector-line" id="conn0" x1="114" y1="0" x2="40" y2="16" stroke="var(--green)"/>
+      <line class="connector-line" id="conn1" x1="114" y1="0" x2="80" y2="16" stroke="var(--purple)"/>
+      <line class="connector-line active" id="conn2" x1="114" y1="0" x2="140" y2="16" stroke="var(--blue)"/>
+      <line class="connector-line" id="conn3" x1="114" y1="0" x2="190" y2="16" stroke="var(--gray)"/>
+    </svg>
+  </div>
+
+  <!-- Module cards -->
+  <div class="module-list" id="moduleList">
+    <!-- Seed -->
+    <div class="mod-card selected" data-mod="0" onclick="selectModule(0)">
+      <div class="mc-glow" style="box-shadow:inset 0 0 20px -6px var(--green-glow),0 0 12px -4px var(--green-glow)"></div>
+      <div class="mc-row">
+        <div class="mc-dot" style="background:var(--green);color:var(--green)"></div>
+        <div class="mc-name">Seed</div>
+        <div class="mc-pct" style="color:var(--green)">100%</div>
+        <div class="mc-status" style="background:var(--green-dim);color:var(--green)">Done</div>
+      </div>
+      <div class="mc-bar" style="width:100%;background:var(--green)"></div>
+    </div>
+    <!-- Hypothesis -->
+    <div class="mod-card" data-mod="1" onclick="selectModule(1)">
+      <div class="mc-glow" style="box-shadow:inset 0 0 20px -6px var(--purple-glow),0 0 12px -4px var(--purple-glow)"></div>
+      <div class="mc-row">
+        <div class="mc-dot" style="background:var(--purple);color:var(--purple)"></div>
+        <div class="mc-name">Hypothesis</div>
+        <div class="mc-pct" style="color:var(--purple)">100%</div>
+        <div class="mc-status" style="background:var(--purple-dim);color:var(--purple)">Done</div>
+      </div>
+      <div class="mc-bar" style="width:100%;background:var(--purple)"></div>
+    </div>
+    <!-- Invention -->
+    <div class="mod-card active" data-mod="2" onclick="selectModule(2)">
+      <div class="mc-glow" style="box-shadow:inset 0 0 20px -6px var(--blue-glow),0 0 12px -4px var(--blue-glow)"></div>
+      <div class="mc-row">
+        <div class="mc-dot" style="background:var(--blue);color:var(--blue)"></div>
+        <div class="mc-name">Invention</div>
+        <div class="mc-pct" style="color:var(--blue)">42%</div>
+        <div class="mc-status pulse-live" style="background:var(--blue-dim);color:var(--blue)">Running</div>
+      </div>
+      <div class="mc-bar" style="width:42%;background:linear-gradient(90deg,var(--blue),#818cf8)"></div>
+    </div>
+    <!-- Paper -->
+    <div class="mod-card" data-mod="3" onclick="selectModule(3)">
+      <div class="mc-glow" style="box-shadow:inset 0 0 20px -6px rgba(107,114,128,.15),0 0 12px -4px rgba(107,114,128,.1)"></div>
+      <div class="mc-row">
+        <div class="mc-dot" style="background:var(--gray);color:var(--gray)"></div>
+        <div class="mc-name">Paper</div>
+        <div class="mc-pct" style="color:var(--gray)">0%</div>
+        <div class="mc-status" style="background:var(--gray-dim);color:var(--gray)">Pending</div>
+      </div>
+      <div class="mc-bar" style="width:0%;background:var(--gray)"></div>
+    </div>
+  </div>
+
+  <!-- Collapse toggle -->
+  <div class="collapse-toggle" id="collapseToggle" onclick="toggleSubModules()">
+    <span class="chevron">&#9660;</span>
+    <span id="collapseLabel">Show Steps</span>
+  </div>
+
+  <!-- Collapsible sub-modules -->
+  <div class="sub-modules-wrapper" id="subModulesWrapper">
+    <div class="sub-modules" id="subModules"></div>
+  </div>
+
+  <div class="sidebar-divider"></div>
+
+  <!-- Sidebar footer stats -->
+  <div style="width:100%;display:flex;flex-direction:column;gap:6px;padding:2px 4px;">
+    <div style="display:flex;justify-content:space-between;font-size:10px;">
+      <span style="color:var(--text-dim)">Total Cost</span>
+      <span style="color:var(--text);font-weight:600;font-variant-numeric:tabular-nums">$19.56</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:10px;">
+      <span style="color:var(--text-dim)">Elapsed</span>
+      <span style="color:var(--text);font-weight:600;font-variant-numeric:tabular-nums" id="footerClock">56m 50s</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:10px;">
+      <span style="color:var(--text-dim)">Tokens</span>
+      <span style="color:var(--text);font-weight:600;font-variant-numeric:tabular-nums">779K</span>
+    </div>
+  </div>
+</aside>
+
+<!-- ================================================================
+     MAIN CONTENT
+     ================================================================ -->
+<div class="main">
+  <!-- Top bar -->
+  <div class="topbar">
+    <div class="topbar-title" id="topbarTitle">Seed Hypotheses</div>
+    <div class="topbar-badge" id="topbarBadge" style="background:var(--green-dim);color:var(--green)">Complete</div>
+    <div class="topbar-time">
+      <span class="kbd">&larr;</span><span class="kbd">&rarr;</span> navigate &nbsp;|&nbsp;
+      <span id="topbarClock" style="font-variant-numeric:tabular-nums">56m 50s elapsed</span>
+    </div>
+  </div>
+
+  <!-- Pipeline steps bar -->
+  <div class="pipeline-steps-bar" id="pipelineStepsBar"></div>
+
+  <!-- Two-column content -->
+  <div class="two-col">
+    <div class="col-left" id="colLeft"></div>
+    <div class="col-right" id="colRight"></div>
+  </div>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  /* ============================
+     DATA MODEL
+     ============================ */
+  const COLORS = {
+    seed:       { main: '#34d399', dim: 'rgba(52,211,153,.10)',  glow: 'rgba(52,211,153,.30)' },
+    hypothesis: { main: '#a78bfa', dim: 'rgba(167,139,250,.10)', glow: 'rgba(167,139,250,.30)' },
+    invention:  { main: '#60a5fa', dim: 'rgba(96,165,250,.10)',  glow: 'rgba(96,165,250,.35)' },
+    paper:      { main: '#6b7280', dim: 'rgba(107,114,128,.10)', glow: 'rgba(107,114,128,.20)' }
+  };
+
+  const MODULES = [
+    {
+      id: 'seed', label: 'Seed Hypotheses', color: COLORS.seed,
+      status: 'Complete', statusColor: 'green', progress: 100,
+      steps: [
+        { name: 'Fetch Papers',   status: 'done',   statusLabel: 'Done' },
+        { name: 'Extract Claims', status: 'done',   statusLabel: 'Done' },
+        { name: 'Build KG',       status: 'done',   statusLabel: 'Done' },
+        { name: 'Find Gaps',      status: 'done',   statusLabel: 'Done' }
+      ],
+      summary: "I fetched 847 papers from Semantic Scholar across three research domains: geometric deep learning, attention mechanisms, and cross-modal transfer. After deduplication and relevance filtering, 312 high-quality candidates remained. From these I extracted 2,841 claims using structured output parsing with confidence scoring, averaging 9.1 claims per paper. I then constructed a knowledge graph with 1,204 concept nodes and 3,847 directed edges representing causal and compositional relationships. Gap analysis over the graph identified 12 research gaps, ranked by a composite novelty score. The top-scoring gap -- \"cross-modal transfer without aligned pretraining\" -- scored 0.94 and became the primary seed for hypothesis generation.",
+      items: [
+        { title: 'Cross-Modal Transfer Gap', desc: 'Transfer learning between modalities without requiring aligned pretraining data. Novelty score 0.94.', tags: ['Score: 0.94', 'Top Gap', 'Feasible'] },
+        { title: 'Geometric Attention Sparsity', desc: 'Exploiting geometric structure for efficient attention computation in high-dimensional spaces.', tags: ['Score: 0.88', 'Novel'] },
+        { title: 'Spectral Bridge Operators', desc: 'Using spectral methods to bridge domain-specific representations without explicit alignment.', tags: ['Score: 0.85', 'Theoretical'] },
+        { title: 'Adaptive Topology Routing', desc: 'Dynamic routing through learned topological structures for multi-task inference.', tags: ['Score: 0.81', 'Feasible'] }
+      ],
+      stats: { duration: '16m 46s', cost: '$3.03', messages: '48', tokens: '124K' },
+      activity: [
+        { step: 'Fetch Papers',   time: '4m 12s', cost: '$0.00', msgs: '6',  tokens: '8K',  color: COLORS.seed.main },
+        { step: 'Extract Claims', time: '6m 38s', cost: '$1.24', msgs: '18', tokens: '52K', color: COLORS.seed.main },
+        { step: 'Build KG',       time: '3m 05s', cost: '$0.87', msgs: '12', tokens: '34K', color: COLORS.seed.main },
+        { step: 'Find Gaps',      time: '2m 51s', cost: '$0.92', msgs: '12', tokens: '30K', color: COLORS.seed.main }
+      ]
+    },
+    {
+      id: 'hypothesis', label: 'Hypothesis Loop', color: COLORS.hypothesis,
+      status: 'Complete', statusColor: 'purple', progress: 100,
+      steps: [
+        { name: 'Gen Initial',   status: 'done', statusLabel: 'Done' },
+        { name: 'Review R1',     status: 'done', statusLabel: 'Done' },
+        { name: 'Refine',        status: 'done', statusLabel: 'Done' },
+        { name: 'Review R2',     status: 'done', statusLabel: 'Done' },
+        { name: 'Final Select',  status: 'done', statusLabel: 'Done' },
+        { name: 'Polish',        status: 'done', statusLabel: 'Done' }
+      ],
+      summary: "I generated 24 initial hypotheses from the top 6 research gaps, producing 4 candidates per gap. Each included a proposed mechanism, testable prediction, and falsifiability criteria. The first review round scored them on novelty, feasibility, and impact, yielding a mean composite of 6.2/10. Eight hypotheses fell below the 5.0 threshold and were eliminated. I refined the surviving 16 based on structured feedback, strengthening experimental designs and adding formal notation. The second review pass raised the mean to 7.8/10 under stricter criteria. A pairwise comparison tournament selected the final three: \"Geometric Attention Bridges\" (8.4), \"Spectral Transfer Kernels\" (8.1), and \"Adaptive Modality Fusion\" (7.9). The winner received a final polish pass with 12 citation links and a refined 150-word abstract.",
+      items: [
+        { title: 'Geometric Attention Bridges', desc: 'Leveraging geometric structure to bridge cross-modal attention without aligned pretraining. Tournament winner.', tags: ['Score: 8.4', 'Winner', 'Novel'], progress: 100, progressColor: COLORS.hypothesis.main },
+        { title: 'Spectral Transfer Kernels', desc: 'Spectral decomposition of transfer operators for domain-agnostic representation bridging.', tags: ['Score: 8.1', 'Runner-up'], progress: 100, progressColor: COLORS.hypothesis.main },
+        { title: 'Adaptive Modality Fusion', desc: 'Adaptive gating mechanism for flexible multi-modal fusion with learned importance weighting.', tags: ['Score: 7.9', 'Third'], progress: 100, progressColor: COLORS.hypothesis.main }
+      ],
+      stats: { duration: '21m 54s', cost: '$9.73', messages: '142', tokens: '387K' },
+      activity: [
+        { step: 'Gen Initial',    time: '3m 22s', cost: '$1.58', msgs: '24', tokens: '68K', color: COLORS.hypothesis.main },
+        { step: 'Review Round 1', time: '5m 14s', cost: '$2.31', msgs: '32', tokens: '94K', color: COLORS.hypothesis.main },
+        { step: 'Refine',         time: '4m 08s', cost: '$1.89', msgs: '28', tokens: '76K', color: COLORS.hypothesis.main },
+        { step: 'Review Round 2', time: '4m 52s', cost: '$2.14', msgs: '30', tokens: '82K', color: COLORS.hypothesis.main },
+        { step: 'Final Select',   time: '2m 30s', cost: '$1.05', msgs: '16', tokens: '40K', color: COLORS.hypothesis.main },
+        { step: 'Polish',         time: '1m 48s', cost: '$0.76', msgs: '12', tokens: '27K', color: COLORS.hypothesis.main }
+      ]
+    },
+    {
+      id: 'invention', label: 'Invention Loop', color: COLORS.invention,
+      status: 'Running', statusColor: 'blue', progress: 42,
+      steps: [
+        { name: 'Strategy',   status: 'done',    statusLabel: 'Done' },
+        { name: 'Plan',       status: 'done',    statusLabel: 'Done' },
+        { name: 'Artifacts',  status: 'active',  statusLabel: 'Running' },
+        { name: 'Paper Text', status: 'pending', statusLabel: 'Pending' },
+        { name: 'Review',     status: 'pending', statusLabel: 'Pending' },
+        { name: 'Update',     status: 'pending', statusLabel: 'Pending' }
+      ],
+      summary: "I am currently in iteration 2 of the invention loop, working on the \"Geometric Attention Bridges\" hypothesis. I evaluated three invention strategies -- compositional, ablative, and hybrid -- and selected the hybrid approach for its novelty-to-effort ratio of 0.82. The execution plan decomposes the work into 14 sub-tasks across theory (4), implementation (6), and evaluation (4) tracks. Artifact generation is at 3 out of 5: the baseline transformer model achieved 0.847 F1 with geometric attention disabled, the synthetic dataset pipeline produced 2,400 paired samples validated by 3 human annotators (Cohen's kappa = 0.91), and the formal proof module verified all three core lemmas. The ablation study is actively running at 67% completion, exploring 6 hyperparameter dimensions. The evaluation suite is queued next.",
+      items: [
+        { title: 'Baseline Model', desc: 'Standard transformer without geometric attention. Achieved 0.847 F1, establishing the performance floor for ablations.', tags: ['Done', '0.847 F1', '3m 22s'], progress: 100, progressColor: COLORS.invention.main },
+        { title: 'Dataset Pipeline', desc: '2,400 paired samples across 3 difficulty tiers. Validated with human annotators (kappa = 0.91).', tags: ['Done', '2,400 samples', '2m 56s'], progress: 100, progressColor: COLORS.invention.main },
+        { title: 'Proof Module', desc: 'Formal verification of core geometric attention theorem. All 3 lemmas verified via Lean4-style checking.', tags: ['Done', 'Verified', '2m 18s'], progress: 100, progressColor: COLORS.invention.main },
+        { title: 'Ablation Study', desc: 'Exploring 6 hyperparameter dimensions: heads, depth, basis, LR, dropout, seq length. Currently at 67%.', tags: ['Running', '4/6 dims', '3m 32s'], progress: 67, progressColor: '#60a5fa', isActive: true },
+        { title: 'Evaluation Suite', desc: '4 benchmarks planned: CrossModal-100, GeoAttention-Bench, TransferQA, ModalBridge-v2.', tags: ['Pending'], progress: 0, progressColor: COLORS.invention.main }
+      ],
+      stats: { duration: '18m 10s', cost: '$6.80', messages: '96', tokens: '268K' },
+      activity: [
+        { step: 'Strategy',       time: '2m 44s',  cost: '$1.12', msgs: '14', tokens: '38K',  color: COLORS.invention.main },
+        { step: 'Plan',           time: '3m 18s',  cost: '$1.45', msgs: '18', tokens: '52K',  color: COLORS.invention.main },
+        { step: 'Artifacts (3/5)',time: '12m 08s', cost: '$4.23', msgs: '64', tokens: '178K', color: COLORS.invention.main, active: true },
+        { step: 'Paper Text',     time: '--',      cost: '--',    msgs: '--', tokens: '--',   color: '#3d4555', pending: true },
+        { step: 'Review',         time: '--',      cost: '--',    msgs: '--', tokens: '--',   color: '#3d4555', pending: true },
+        { step: 'Update',         time: '--',      cost: '--',    msgs: '--', tokens: '--',   color: '#3d4555', pending: true }
+      ]
+    },
+    {
+      id: 'paper', label: 'Paper Generation', color: COLORS.paper,
+      status: 'Pending', statusColor: 'gray', progress: 0,
+      steps: [
+        { name: 'Structure',      status: 'pending', statusLabel: 'Pending' },
+        { name: 'Demos',          status: 'pending', statusLabel: 'Pending' },
+        { name: 'Visualizations', status: 'pending', statusLabel: 'Pending' },
+        { name: 'Full Draft',     status: 'pending', statusLabel: 'Pending' },
+        { name: 'LaTeX Build',    status: 'pending', statusLabel: 'Pending' }
+      ],
+      summary: "This phase has not started yet. Once the invention loop completes its final review pass, I will begin assembling the paper. The plan is to generate an 8-section outline following NeurIPS 2024 formatting guidelines, produce 6 publication-quality visualizations (architecture diagram, training curves, ablation heatmaps, benchmark comparisons, and qualitative examples), draft the full text with 40+ references, compile to LaTeX, and perform a final quality check covering grammar, citation consistency, figure resolution, and page-limit compliance. Estimated total time: approximately 25-30 minutes at current throughput.",
+      items: [],
+      stats: { duration: '--', cost: '--', messages: '--', tokens: '--' },
+      activity: [
+        { step: 'Structure',      time: '--', cost: '--', msgs: '--', tokens: '--', color: '#3d4555', pending: true },
+        { step: 'Demos',          time: '--', cost: '--', msgs: '--', tokens: '--', color: '#3d4555', pending: true },
+        { step: 'Visualizations', time: '--', cost: '--', msgs: '--', tokens: '--', color: '#3d4555', pending: true },
+        { step: 'Full Draft',     time: '--', cost: '--', msgs: '--', tokens: '--', color: '#3d4555', pending: true },
+        { step: 'LaTeX Build',    time: '--', cost: '--', msgs: '--', tokens: '--', color: '#3d4555', pending: true }
+      ]
+    }
+  ];
+
+  /* ============================
+     STATE
+     ============================ */
+  let selMod = 2;       // Start on Invention (the active module)
+  let selStep = -1;
+  let subExpanded = false;
+
+  /* ============================
+     DOM REFS
+     ============================ */
+  const colLeft = document.getElementById('colLeft');
+  const colRight = document.getElementById('colRight');
+  const subModules = document.getElementById('subModules');
+  const subWrapper = document.getElementById('subModulesWrapper');
+  const topbarTitle = document.getElementById('topbarTitle');
+  const topbarBadge = document.getElementById('topbarBadge');
+  const moduleCards = document.querySelectorAll('.mod-card');
+  const ringFillArc = document.getElementById('ringFillArc');
+  const ringDashed = document.getElementById('ringDashed');
+  const ringInnerDeco = document.getElementById('ringInnerDeco');
+  const ringGlow = document.getElementById('ringGlow');
+  const ringPct = document.getElementById('ringPct');
+  const ringLabel = document.getElementById('ringLabel');
+  const ringModuleName = document.getElementById('ringModuleName');
+  const collapseToggle = document.getElementById('collapseToggle');
+  const collapseLabel = document.getElementById('collapseLabel');
+  const pipelineBar = document.getElementById('pipelineStepsBar');
+  const connectors = [
+    document.getElementById('conn0'),
+    document.getElementById('conn1'),
+    document.getElementById('conn2'),
+    document.getElementById('conn3')
+  ];
+
+  const CIRC = 2 * Math.PI * 62; // ~389.56
+
+  /* ============================
+     RING UPDATE — the core reactive behavior
+     ============================ */
+  function updateRing(modIdx) {
+    const mod = MODULES[modIdx];
+    const pct = mod.progress;
+    const filledLen = (pct / 100) * CIRC;
+    const offset = CIRC - filledLen;
+
+    // Arc fill
+    ringFillArc.style.strokeDashoffset = offset;
+    ringFillArc.setAttribute('stroke', mod.color.main);
+    ringFillArc.style.filter = `drop-shadow(0 0 4px ${mod.color.glow})`;
+
+    // Dashed outline
+    ringDashed.setAttribute('stroke', mod.color.main);
+
+    // Inner deco ring
+    ringInnerDeco.setAttribute('stroke', mod.color.main);
+
+    // Glow
+    ringGlow.style.background = `radial-gradient(circle, ${mod.color.main} 0%, transparent 70%)`;
+
+    // Center text
+    ringPct.innerHTML = `${pct}<span class="ring-pct-unit" style="color:${mod.color.main}">%</span>`;
+    ringPct.style.color = mod.color.main;
+
+    ringLabel.textContent = pct === 100 ? 'Complete' : pct === 0 ? 'Waiting' : 'Progress';
+
+    ringModuleName.textContent = mod.label.split(' ')[0];
+    ringModuleName.style.background = mod.color.dim;
+    ringModuleName.style.color = mod.color.main;
+
+    // Connector lines
+    connectors.forEach((c, i) => {
+      c.classList.toggle('active', i === modIdx);
+    });
+  }
+
+  /* ============================
+     RENDER: Pipeline steps bar
+     ============================ */
+  function renderPipelineBar() {
+    const mod = MODULES[selMod];
+    let html = '';
+    mod.steps.forEach((s) => {
+      const cls = s.status === 'done' ? 'done' : s.status === 'active' ? 'active' : '';
+      const dotColor = s.status === 'pending' ? 'var(--text-muted)' :
+                       s.status === 'active' ? mod.color.main : 'var(--green)';
+      html += `<div class="ps-step ${cls}">
+        <span class="ps-dot" style="background:${dotColor};color:${dotColor}"></span>
+        ${s.name}
+      </div>`;
+    });
+    pipelineBar.innerHTML = html;
+  }
+
+  /* ============================
+     RENDER: Sub-modules in sidebar
+     ============================ */
+  function renderSubModules() {
+    const mod = MODULES[selMod];
+    let html = '';
+    mod.steps.forEach((s, i) => {
+      const isSel = (i === selStep);
+      const isActive = s.status === 'active';
+      const isPending = s.status === 'pending';
+      const dotColor = isPending ? '#3d4555' : mod.color.main;
+      const statusColor = isActive ? mod.color.main : (isPending ? '#3d4555' : '#34d399');
+      html += `<div class="sub-module${isSel ? ' selected' : ''}${isActive ? ' active' : ''}"
+        data-step="${i}" onclick="selectStep(${i})"
+        style="opacity:${isPending ? '.4' : '1'}">
+        <div class="sm-dot" style="background:${dotColor};color:${dotColor}"></div>
+        <div class="sm-label">${s.name}</div>
+        <div class="sm-status" style="color:${statusColor}">${s.statusLabel}</div>
+      </div>`;
+    });
+    subModules.innerHTML = html;
+  }
+
+  /* ============================
+     RENDER: Left column
+     ============================ */
+  function renderLeft() {
+    const mod = MODULES[selMod];
+    const iconMap = { seed: '&#9670;', hypothesis: '&#9733;', invention: '&#9881;', paper: '&#9998;' };
+
+    let html = `<div class="summary-block">
+      <div class="summary-heading">
+        <div class="summary-icon" style="background:${mod.color.dim};color:${mod.color.main}">${iconMap[mod.id]}</div>
+        <h2>${mod.label}</h2>
+      </div>
+      <div class="summary-text">
+        <div class="accent-bar" style="background:${mod.color.main}"></div>
+        <p>${mod.summary}</p>
+      </div>
+    </div>`;
+
+    if (mod.items.length > 0) {
+      const listTitle = mod.id === 'seed' ? 'Research Gaps' :
+                        mod.id === 'hypothesis' ? 'Top Hypotheses' :
+                        mod.id === 'invention' ? 'Artifacts' : 'Outputs';
+      html += `<div class="item-list-title">${listTitle}</div><div class="item-list">`;
+      mod.items.forEach(item => {
+        const activeClass = item.isActive ? ' active-item' : '';
+        html += `<div class="item-card${activeClass}">
+          <h4>${item.title}</h4>
+          <p>${item.desc}</p>`;
+        if (item.progress !== undefined) {
+          html += `<div class="item-progress"><div class="item-progress-fill" style="width:${item.progress}%;background:${item.progressColor || mod.color.main}"></div></div>`;
+        }
+        if (item.tags) {
+          html += `<div class="item-tags">${item.tags.map(t => `<span class="item-tag">${t}</span>`).join('')}</div>`;
+        }
+        html += `</div>`;
+      });
+      html += `</div>`;
+    } else if (mod.id === 'paper') {
+      html += `<div class="empty-state">
+        <div class="es-icon">&#9998;</div>
+        <p>Paper generation will begin after the invention loop completes its final review pass.<br>
+        <span style="opacity:.6;font-size:11px">Estimated start: after iteration 3 review</span></p>
+      </div>`;
+    }
+
+    colLeft.innerHTML = html;
+  }
+
+  /* ============================
+     RENDER: Right column
+     ============================ */
+  function renderRight() {
+    const mod = MODULES[selMod];
+    const isRunning = mod.status === 'Running';
+
+    const statIcons = [
+      { icon: '&#9202;', label: 'Duration', key: 'duration', bg: 'var(--blue-dim)',   fg: 'var(--blue)' },
+      { icon: '&#36;',   label: 'Cost',     key: 'cost',     bg: 'var(--green-dim)',  fg: 'var(--green)' },
+      { icon: '&#9993;', label: 'Messages', key: 'messages', bg: 'var(--purple-dim)', fg: 'var(--purple)' },
+      { icon: '&#9641;', label: 'Tokens',   key: 'tokens',   bg: 'var(--amber-dim)',  fg: 'var(--amber)' }
+    ];
+
+    let html = `<div class="stat-stack">`;
+    statIcons.forEach(si => {
+      const val = mod.stats[si.key];
+      const pulseClass = (isRunning && si.key === 'duration') ? ' pulse-live' : '';
+      html += `<div class="stat-card">
+        <div class="stat-icon" style="background:${si.bg};color:${si.fg}">${si.icon}</div>
+        <div class="stat-info">
+          <div class="stat-value${pulseClass}">${val}</div>
+          <div class="stat-label">${si.label}</div>
+        </div>
+        ${generateSparkSVG(si.fg, mod.id)}
+      </div>`;
+    });
+    html += `</div>`;
+
+    html += `<div class="activity-section">
+      <div class="activity-title">Activity Breakdown</div>
+      <table class="activity-table">
+        <thead><tr>
+          <th>Step</th><th>Time</th><th>Cost</th><th>Msgs</th><th>Tokens</th>
+        </tr></thead><tbody>`;
+    mod.activity.forEach(a => {
+      const dimClass = a.pending ? ' at-dim' : '';
+      const rowStyle = a.active ? `background:rgba(96,165,250,.04)` : '';
+      html += `<tr style="${rowStyle}">
+        <td><div class="at-step${dimClass}">
+          <span class="at-dot" style="background:${a.color}${a.active ? ';box-shadow:0 0 6px ' + a.color : ''}"></span>
+          ${a.step}${a.active ? ' <span class="pulse-live" style="color:var(--blue);font-size:9px;font-weight:600">LIVE</span>' : ''}
+        </div></td>
+        <td class="${dimClass}">${a.time}</td>
+        <td class="${dimClass}">${a.cost}</td>
+        <td class="${dimClass}">${a.msgs}</td>
+        <td class="${dimClass}">${a.tokens}</td>
+      </tr>`;
+    });
+    html += `</tbody></table></div>`;
+
+    colRight.innerHTML = html;
+  }
+
+  /* Mini sparkline generator */
+  function generateSparkSVG(color, modId) {
+    const seeds = {
+      seed:       [[0,18],[10,14],[20,16],[30,8],[40,10],[50,4],[60,2]],
+      hypothesis: [[0,20],[10,16],[20,18],[30,12],[40,8],[50,6],[60,3]],
+      invention:  [[0,22],[10,20],[20,16],[30,18],[40,12],[50,8],[60,10]],
+      paper:      [[0,14],[10,14],[20,14],[30,14],[40,14],[50,14],[60,14]]
+    };
+    const pts = (seeds[modId] || seeds.seed).map(p => p.join(',')).join(' ');
+    return `<svg class="mini-spark" viewBox="0 0 60 28">
+      <polyline points="${pts}" stroke="${color}" opacity=".5"/>
+    </svg>`;
+  }
+
+  /* ============================
+     RENDER: Topbar
+     ============================ */
+  function renderTopbar() {
+    const mod = MODULES[selMod];
+    topbarTitle.textContent = mod.label;
+    const colorMap = {
+      green:  { bg: 'var(--green-dim)',  fg: 'var(--green)' },
+      purple: { bg: 'var(--purple-dim)', fg: 'var(--purple)' },
+      blue:   { bg: 'var(--blue-dim)',   fg: 'var(--blue)' },
+      gray:   { bg: 'var(--gray-dim)',   fg: 'var(--gray)' }
+    };
+    const c = colorMap[mod.statusColor];
+    topbarBadge.style.background = c.bg;
+    topbarBadge.style.color = c.fg;
+    topbarBadge.textContent = mod.status;
+    if (mod.status === 'Running') {
+      topbarBadge.classList.add('pulse-live');
+    } else {
+      topbarBadge.classList.remove('pulse-live');
+    }
+  }
+
+  /* ============================
+     MODULE SELECTION
+     ============================ */
+  window.selectModule = function(idx) {
+    if (idx < 0 || idx >= MODULES.length) return;
+    selMod = idx;
+    selStep = -1;
+    moduleCards.forEach((c, i) => c.classList.toggle('selected', i === idx));
+
+    // Animate the ring to new module
+    updateRing(idx);
+
+    renderAll();
+    colLeft.scrollTop = 0;
+    colRight.scrollTop = 0;
+  };
+
+  window.selectStep = function(idx) {
+    selStep = (selStep === idx) ? -1 : idx;
+    renderSubModules();
+  };
+
+  window.toggleSubModules = function() {
+    subExpanded = !subExpanded;
+    subWrapper.classList.toggle('expanded', subExpanded);
+    collapseToggle.classList.toggle('open', subExpanded);
+    collapseLabel.textContent = subExpanded ? 'Hide Steps' : 'Show Steps';
+  };
+
+  function renderAll() {
+    renderTopbar();
+    renderPipelineBar();
+    renderSubModules();
+    renderLeft();
+    renderRight();
+  }
+
+  /* ============================
+     KEYBOARD NAVIGATION
+     ============================ */
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      selectModule(Math.min(selMod + 1, MODULES.length - 1));
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      selectModule(Math.max(selMod - 1, 0));
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+      toggleSubModules();
+    }
+  });
+
+  /* ============================
+     PARTICLE SYSTEM
+     ============================ */
+  const pCanvas = document.getElementById('sidebarParticles');
+  const pCtx = pCanvas.getContext('2d');
+  let particles = [];
+
+  function resizeParticleCanvas() {
+    const sb = document.getElementById('sidebar');
+    pCanvas.width = sb.offsetWidth;
+    pCanvas.height = sb.offsetHeight;
+  }
+
+  function spawnParticle() {
+    const mod = MODULES[selMod];
+    const palette = [mod.color.main, mod.color.glow, '#ffffff'];
+    const color = palette[Math.floor(Math.random() * palette.length)];
+    const side = Math.random();
+    let x, y, vx, vy;
+    if (side < 0.5) {
+      // Spawn from ring area
+      x = pCanvas.width * 0.5 + (Math.random() - 0.5) * 80;
+      y = 60 + Math.random() * 100;
+      vx = (Math.random() - 0.5) * 0.4;
+      vy = -(0.2 + Math.random() * 0.5);
+    } else {
+      // Spawn from bottom
+      x = 10 + Math.random() * (pCanvas.width - 20);
+      y = pCanvas.height - 10;
+      vx = (Math.random() - 0.5) * 0.3;
+      vy = -(0.4 + Math.random() * 0.6);
+    }
+    particles.push({
+      x: x, y: y,
+      vx: vx, vy: vy,
+      r: 0.8 + Math.random() * 1.5,
+      life: 1,
+      decay: 0.004 + Math.random() * 0.008,
+      color: color
+    });
+  }
+
+  function animateParticles() {
+    pCtx.clearRect(0, 0, pCanvas.width, pCanvas.height);
+    particles = particles.filter(p => p.life > 0);
+    particles.forEach(p => {
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vx *= 0.998;
+      p.life -= p.decay;
+      pCtx.beginPath();
+      pCtx.arc(p.x, p.y, p.r * p.life, 0, Math.PI * 2);
+      pCtx.fillStyle = p.color;
+      pCtx.globalAlpha = p.life * 0.45;
+      pCtx.fill();
+      pCtx.globalAlpha = 1;
+    });
+    requestAnimationFrame(animateParticles);
+  }
+
+  resizeParticleCanvas();
+  window.addEventListener('resize', resizeParticleCanvas);
+  setInterval(spawnParticle, 200);
+  animateParticles();
+
+  /* ============================
+     RING ENTRANCE ANIMATION
+     ============================ */
+  function animateRingEntrance() {
+    const target = ringFillArc.style.strokeDashoffset;
+    ringFillArc.style.transition = 'none';
+    ringFillArc.style.strokeDashoffset = CIRC;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        ringFillArc.style.transition = 'stroke-dashoffset 1.2s cubic-bezier(.33,1,.68,1), stroke .6s ease, filter .6s ease';
+        ringFillArc.style.strokeDashoffset = target;
+      });
+    });
+  }
+
+  /* ============================
+     ELAPSED TIME TICKER
+     ============================ */
+  let elapsed = 56 * 60 + 50;
+  function tickClock() {
+    elapsed++;
+    const m = Math.floor(elapsed / 60);
+    const s = elapsed % 60;
+    const str = `${m}m ${s < 10 ? '0' : ''}${s}s`;
+    document.getElementById('topbarClock').textContent = str + ' elapsed';
+    document.getElementById('footerClock').textContent = str;
+  }
+  setInterval(tickClock, 1000);
+
+  /* ============================
+     INIT
+     ============================ */
+  updateRing(selMod);
+  renderAll();
+
+  // Delay entrance animation slightly for visual effect
+  setTimeout(animateRingEntrance, 100);
+
+})();
+</script>
+</body>
+</html>

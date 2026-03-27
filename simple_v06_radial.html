@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Radial View</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0c14;
+    --surface: rgba(255,255,255,0.04);
+    --glass: rgba(255,255,255,0.06);
+    --glass-border: rgba(255,255,255,0.10);
+    --text: #e2e8f0;
+    --text-dim: #64748b;
+    --green: #34d399;
+    --purple: #a78bfa;
+    --blue: #60a5fa;
+    --orange: #fb923c;
+    --green-glow: rgba(52,211,153,0.35);
+    --purple-glow: rgba(167,139,250,0.35);
+    --blue-glow: rgba(96,165,250,0.35);
+    --orange-glow: rgba(251,146,60,0.35);
+  }
+
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Top bar ── */
+  .top-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 24px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--glass-border);
+    flex-shrink: 0;
+    z-index: 10;
+  }
+  .top-bar .brand {
+    font-weight: 600; font-size: 14px;
+    letter-spacing: 0.5px; color: var(--text-dim);
+  }
+  .top-bar .brand span { color: var(--blue); }
+  .top-bar .meta {
+    display: flex; gap: 20px; font-size: 12px; color: var(--text-dim);
+  }
+  .top-bar .meta > span { display: flex; align-items: center; gap: 5px; }
+  .top-bar .meta .val { color: var(--text); font-weight: 500; }
+
+  /* ── Main area ── */
+  .main-area {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* ambient glow behind visualization */
+  .main-area::before {
+    content: '';
+    position: absolute;
+    width: 650px; height: 650px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(96,165,250,0.06) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  /* ── Circle container: holds SVG + absolutely-positioned HTML nodes ── */
+  .circle-wrap {
+    position: relative;
+    width: 700px; height: 700px;
+    flex-shrink: 0;
+  }
+
+  .circle-wrap svg {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  /* ── Central orb ── */
+  .central-orb {
+    position: absolute;
+    width: 140px; height: 140px;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    background: radial-gradient(circle at 40% 35%,
+      rgba(96,165,250,0.25) 0%,
+      rgba(96,165,250,0.08) 50%,
+      rgba(10,12,20,0.9) 100%);
+    border: 1.5px solid rgba(96,165,250,0.25);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    z-index: 5;
+    animation: orbPulse 4s ease-in-out infinite;
+    box-shadow: 0 0 40px rgba(96,165,250,0.12), inset 0 0 30px rgba(96,165,250,0.05);
+    transition: opacity 0.3s;
+  }
+  @keyframes orbPulse {
+    0%, 100% { box-shadow: 0 0 40px rgba(96,165,250,0.12), inset 0 0 30px rgba(96,165,250,0.05); }
+    50% { box-shadow: 0 0 60px rgba(96,165,250,0.2), inset 0 0 40px rgba(96,165,250,0.1); }
+  }
+  .central-orb .run-name {
+    font-size: 11px; font-weight: 600; color: var(--blue);
+    letter-spacing: 0.3px; margin-bottom: 4px;
+  }
+  .central-orb .iteration { font-size: 10px; color: var(--text-dim); }
+
+  /* ── Detail card (center overlay) ── */
+  .detail-card {
+    position: absolute;
+    width: 310px;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(15,18,30,0.94);
+    backdrop-filter: blur(24px);
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    padding: 22px;
+    z-index: 10;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.25s;
+    box-shadow: 0 0 60px rgba(0,0,0,0.5);
+  }
+  .detail-card.visible { opacity: 1; pointer-events: auto; }
+  .dc-header {
+    display: flex; align-items: flex-start;
+    justify-content: space-between; margin-bottom: 14px;
+  }
+  .dc-title { font-size: 13px; font-weight: 600; }
+  .dc-close {
+    width: 24px; height: 24px; border-radius: 6px;
+    border: 1px solid var(--glass-border);
+    background: var(--glass); color: var(--text-dim);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; font-size: 14px; flex-shrink: 0;
+    margin-left: 10px; transition: background 0.15s;
+  }
+  .dc-close:hover { background: rgba(255,255,255,0.12); }
+  .dc-status-row {
+    display: flex; gap: 12px; font-size: 11px;
+    color: var(--text-dim); margin-bottom: 14px; flex-wrap: wrap;
+  }
+  .dc-status-row > span { display: flex; align-items: center; gap: 4px; }
+  .dc-status-row .val { color: var(--text); font-weight: 500; }
+  .dc-body { font-size: 11px; line-height: 1.7; color: var(--text-dim); }
+  .dc-body .item { padding: 3px 0; display: flex; align-items: flex-start; gap: 6px; }
+
+  /* ── Module node ── */
+  .module-node {
+    position: absolute;
+    width: 80px; height: 80px;
+    border-radius: 50%;
+    background: rgba(15,18,30,0.88);
+    backdrop-filter: blur(12px);
+    border: 1.5px solid var(--glass-border);
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    cursor: pointer; z-index: 4;
+    transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1),
+                border-color 0.3s, box-shadow 0.3s, opacity 0.3s;
+    transform: translate(-50%, -50%);
+  }
+  .module-node:hover { transform: translate(-50%, -50%) scale(1.08); }
+  .module-node.selected { transform: translate(-50%, -50%) scale(1.14); }
+  .module-node.dimmed { opacity: 0.25; }
+  .module-node .m-icon { font-size: 20px; margin-bottom: 2px; }
+  .module-node .m-status { font-size: 10px; margin-top: 1px; }
+  .module-node .m-label {
+    position: absolute; bottom: -22px;
+    font-size: 10px; font-weight: 500;
+    white-space: nowrap; color: var(--text-dim);
+    transition: color 0.3s;
+  }
+  .module-node.selected .m-label { color: var(--text); }
+
+  .module-node[data-color="green"]  { border-color: var(--green);  box-shadow: 0 0 22px var(--green-glow); }
+  .module-node[data-color="purple"] { border-color: var(--purple); box-shadow: 0 0 22px var(--purple-glow); }
+  .module-node[data-color="blue"]   { border-color: var(--blue);   box-shadow: 0 0 22px var(--blue-glow); }
+  .module-node[data-color="orange"] { border-color: var(--orange); box-shadow: 0 0 22px var(--orange-glow); }
+  .module-node.dimmed { box-shadow: none !important; }
+
+  /* active ring pulse */
+  .module-node[data-status="active"]::after {
+    content: '';
+    position: absolute; inset: -6px;
+    border-radius: 50%;
+    border: 1.5px solid var(--blue);
+    animation: ringPulse 2s ease-in-out infinite;
+  }
+  @keyframes ringPulse {
+    0%, 100% { opacity: 0.25; transform: scale(1); }
+    50% { opacity: 0.7; transform: scale(1.07); }
+  }
+
+  /* ── Sub-module node ── */
+  .sub-node {
+    position: absolute;
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    background: rgba(15,18,30,0.88);
+    backdrop-filter: blur(10px);
+    border: 1.5px solid var(--glass-border);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; z-index: 3;
+    font-size: 9px; font-weight: 600;
+    color: var(--text-dim);
+    transform: translate(-50%, -50%) scale(0);
+    opacity: 0; pointer-events: none;
+    transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1),
+                opacity 0.25s, border-color 0.3s, box-shadow 0.3s;
+  }
+  .sub-node.visible {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1; pointer-events: auto;
+  }
+  .sub-node:hover { transform: translate(-50%, -50%) scale(1.14); }
+  .sub-node .s-label {
+    position: absolute; bottom: -17px;
+    font-size: 8px; font-weight: 500;
+    white-space: nowrap; color: var(--text-dim);
+  }
+  .sub-node[data-sub-status="done"]   { border-color: var(--green);  color: var(--green); }
+  .sub-node[data-sub-status="active"] { border-color: var(--blue);   color: var(--blue); }
+  .sub-node[data-sub-status="active"]::after {
+    content: '';
+    position: absolute; inset: -5px;
+    border-radius: 50%;
+    border: 1px solid var(--blue);
+    animation: ringPulse 2s ease-in-out infinite;
+  }
+
+  /* ── Iteration selector ── */
+  .iter-selector {
+    position: absolute; z-index: 6;
+    display: flex; gap: 2px;
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+    border-radius: 8px; padding: 3px;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.25s;
+    transform: translate(-50%, 0);
+  }
+  .iter-selector.visible { opacity: 1; pointer-events: auto; }
+  .iter-selector button {
+    width: 28px; height: 24px;
+    border-radius: 5px; border: none;
+    background: transparent;
+    color: var(--text-dim);
+    font-size: 11px; font-weight: 600;
+    font-family: 'Inter', sans-serif;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  .iter-selector button:hover { background: rgba(255,255,255,0.08); }
+  .iter-selector button.active { background: var(--blue); color: #fff; }
+
+  /* ── Bottom stats ── */
+  .bottom-bar {
+    display: flex; align-items: center; justify-content: center;
+    gap: 32px; padding: 10px 24px;
+    background: var(--surface);
+    border-top: 1px solid var(--glass-border);
+    font-size: 11px; color: var(--text-dim);
+    flex-shrink: 0; z-index: 10;
+  }
+  .bottom-bar .stat { display: flex; align-items: center; gap: 5px; }
+  .bottom-bar .stat .val { color: var(--text); font-weight: 500; }
+
+  /* ── SVG arc styles ── */
+  .arc-line {
+    fill: none; stroke-width: 2;
+    transition: opacity 0.3s;
+  }
+  .arc-line.done  { filter: drop-shadow(0 0 4px currentColor); opacity: 0.7; }
+  .arc-line.active {
+    stroke-dasharray: 8 4;
+    animation: dashFlow 1.5s linear infinite;
+    filter: drop-shadow(0 0 5px currentColor);
+    opacity: 0.8;
+  }
+  .arc-line.pending { stroke-dasharray: 3 6; opacity: 0.2; }
+  .arc-line.dimmed { opacity: 0.07; }
+
+  .sub-arc {
+    fill: none; stroke-width: 1.2;
+    opacity: 0; transition: opacity 0.35s;
+  }
+  .sub-arc.visible { opacity: 0.45; }
+
+  @keyframes dashFlow { to { stroke-dashoffset: -24; } }
+
+  /* ── Responsive ── */
+  @media (max-height: 720px) {
+    .circle-wrap { width: 560px; height: 560px; }
+  }
+  @media (max-width: 780px) {
+    .circle-wrap { width: 520px; height: 520px; }
+    .top-bar .meta { gap: 12px; font-size: 11px; }
+    .bottom-bar { gap: 16px; font-size: 10px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Top bar -->
+<div class="top-bar">
+  <div class="brand"><span>AI</span> INVENTOR</div>
+  <div class="meta">
+    <span>Run <span class="val">ssl-low-resource-v3</span></span>
+    <span>Elapsed <span class="val">1h 47m</span></span>
+    <span>Cost <span class="val">$31.82</span></span>
+  </div>
+</div>
+
+<!-- Main visualization -->
+<div class="main-area" id="mainArea">
+  <div class="circle-wrap" id="circleWrap">
+    <!-- SVG arc layer — viewBox matches container px size, set dynamically -->
+    <svg id="arcSvg" xmlns="http://www.w3.org/2000/svg"></svg>
+
+    <!-- Central orb -->
+    <div class="central-orb" id="centralOrb">
+      <div class="run-name">ssl-low-resource-v3</div>
+      <div class="iteration">Iteration 2 / 3</div>
+    </div>
+
+    <!-- Detail card -->
+    <div class="detail-card" id="detailCard">
+      <div class="dc-header">
+        <div class="dc-title" id="dcTitle"></div>
+        <div class="dc-close" id="dcClose">&times;</div>
+      </div>
+      <div class="dc-status-row" id="dcStatus"></div>
+      <div class="dc-body" id="dcBody"></div>
+    </div>
+
+    <!-- Iteration selector -->
+    <div class="iter-selector" id="iterSelector">
+      <button data-iter="1">1</button>
+      <button data-iter="2" class="active">2</button>
+      <button data-iter="3">3</button>
+    </div>
+  </div>
+</div>
+
+<!-- Bottom stats -->
+<div class="bottom-bar">
+  <div class="stat">Hypotheses <span class="val">3</span></div>
+  <div class="stat">Invention iter <span class="val">2 / 3</span></div>
+  <div class="stat">Artifacts <span class="val">3 / 5</span></div>
+  <div class="stat">LLM calls <span class="val">142</span></div>
+  <div class="stat">Tokens <span class="val">2.1M</span></div>
+</div>
+
+<script>
+/* ================================================================
+   AI Inventor — Radial / Circular Layout
+   All coordinates are relative to the circle-wrap container.
+   Center = (W/2, H/2). SVG viewBox matches container dimensions.
+   ================================================================ */
+
+// ── Color map ──
+const C = {
+  green: '#34d399', purple: '#a78bfa',
+  blue:  '#60a5fa', orange: '#fb923c',
+  dim:   '#334155',
+};
+
+// ── Mock data ──
+const MODULES = [
+  {
+    id: 'seed_hypo', label: 'Seed Hypothesis', icon: '\u{1F4A1}',
+    color: 'green', status: 'done', statusIcon: '\u2713', angle: 270,
+    subs: [
+      { id: 'kg_build', label: 'KG Build', abbr: 'KG',   status: 'done' },
+      { id: 'kg_query', label: 'KG Query', abbr: 'QRY',  status: 'done' },
+      { id: 'gen_seed', label: 'Gen Seed', abbr: 'SEED', status: 'done' },
+    ],
+    details: {
+      kg_build: { title: 'Knowledge Graph Build', st: '\u2713 Complete', t: '8m 12s', cost: '$1.20',
+        body: '<div class="item">\u2713 847 entities extracted from 23 papers</div><div class="item">\u2713 2,341 relationships mapped</div><div class="item">\u2713 Graph density: 0.73</div>' },
+      kg_query: { title: 'Knowledge Graph Query', st: '\u2713 Complete', t: '3m 04s', cost: '$0.85',
+        body: '<div class="item">\u2713 12 seed concepts identified</div><div class="item">\u2713 Cross-domain links: 4 promising</div>' },
+      gen_seed: { title: 'Generate Seed Hypothesis', st: '\u2713 Complete', t: '5m 31s', cost: '$1.92',
+        body: '<div class="item">\u2713 SSL contrastive objective for low-resource NER</div><div class="item">\u2713 Novelty score: 0.82</div><div class="item">\u2713 Feasibility score: 0.91</div>' },
+    }
+  },
+  {
+    id: 'hypo_loop', label: 'Hypothesis Loop', icon: '\u{1F504}',
+    color: 'purple', status: 'done', statusIcon: '\u2713', angle: 0,
+    subs: [
+      { id: 'gen_h1', label: 'Gen H1', abbr: 'H1', status: 'done' },
+      { id: 'rev_1',  label: 'Rev 1',  abbr: 'R1', status: 'done' },
+      { id: 'gen_h2', label: 'Gen H2', abbr: 'H2', status: 'done' },
+      { id: 'rev_2',  label: 'Rev 2',  abbr: 'R2', status: 'done' },
+      { id: 'gen_h3', label: 'Gen H3', abbr: 'H3', status: 'done' },
+      { id: 'rev_3',  label: 'Rev 3',  abbr: 'R3', status: 'done' },
+    ],
+    details: {
+      gen_h1: { title: 'Generate Hypothesis 1', st: '\u2713 Complete', t: '4m 22s', cost: '$1.45',
+        body: '<div class="item">\u2713 SSL contrastive learning for low-resource NER</div><div class="item">\u2713 Token-level augmentation via back-translation</div>' },
+      rev_1: { title: 'Review 1', st: '\u2713 Complete', t: '3m 18s', cost: '$1.12',
+        body: '<div class="item">\u2713 Reviewer score: 6/10</div><div class="item">! Needs stronger baselines</div><div class="item">! Clarify multilingual scope</div>' },
+      gen_h2: { title: 'Generate Hypothesis 2', st: '\u2713 Complete', t: '5m 01s', cost: '$1.68',
+        body: '<div class="item">\u2713 Added cross-lingual contrastive pairs</div><div class="item">\u2713 Included 3 baseline comparisons</div>' },
+      rev_2: { title: 'Review 2', st: '\u2713 Complete', t: '3m 42s', cost: '$1.23',
+        body: '<div class="item">\u2713 Reviewer score: 8/10</div><div class="item">\u2713 Strong experimental design</div><div class="item">! Minor: add convergence analysis</div>' },
+      gen_h3: { title: 'Generate Hypothesis 3', st: '\u2713 Complete', t: '4m 55s', cost: '$1.71',
+        body: '<div class="item">\u2713 Final hypothesis with convergence proof</div><div class="item">\u2713 5 experimental conditions defined</div>' },
+      rev_3: { title: 'Review 3 (Final)', st: '\u2713 Complete', t: '3m 11s', cost: '$1.08',
+        body: '<div class="item">\u2713 Reviewer score: 9/10</div><div class="item">\u2713 Accepted \u2014 ready for invention</div>' },
+    }
+  },
+  {
+    id: 'invention_loop', label: 'Invention Loop', icon: '\u2699\uFE0F',
+    color: 'blue', status: 'active', statusIcon: '\u25B6', angle: 90,
+    hasIter: true,
+    iterations: {
+      1: [
+        { id: 'strat_1', label: 'Strategy', abbr: 'STR', status: 'done' },
+        { id: 'plan_1',  label: 'Plan',     abbr: 'PLN', status: 'done' },
+        { id: 'art_1',   label: 'Artifacts', abbr: 'ART', status: 'done' },
+        { id: 'paper_1', label: 'Paper',    abbr: 'PAP', status: 'done' },
+        { id: 'rev_p1',  label: 'Review',   abbr: 'REV', status: 'done' },
+        { id: 'upd_1',   label: 'Upd Hypo', abbr: 'UPD', status: 'done' },
+      ],
+      2: [
+        { id: 'strat_2', label: 'Strategy', abbr: 'STR', status: 'done' },
+        { id: 'plan_2',  label: 'Plan',     abbr: 'PLN', status: 'done' },
+        { id: 'art_2',   label: 'Artifacts', abbr: 'ART', status: 'active' },
+        { id: 'paper_2', label: 'Paper',    abbr: 'PAP', status: 'pending' },
+        { id: 'rev_p2',  label: 'Review',   abbr: 'REV', status: 'pending' },
+        { id: 'upd_2',   label: 'Upd Hypo', abbr: 'UPD', status: 'pending' },
+      ],
+      3: [
+        { id: 'strat_3', label: 'Strategy', abbr: 'STR', status: 'pending' },
+        { id: 'plan_3',  label: 'Plan',     abbr: 'PLN', status: 'pending' },
+        { id: 'art_3',   label: 'Artifacts', abbr: 'ART', status: 'pending' },
+        { id: 'paper_3', label: 'Paper',    abbr: 'PAP', status: 'pending' },
+        { id: 'rev_p3',  label: 'Review',   abbr: 'REV', status: 'pending' },
+        { id: 'upd_3',   label: 'Upd Hypo', abbr: 'UPD', status: 'pending' },
+      ]
+    },
+    details: {
+      strat_1: { title: 'Strategy \u2014 Iter 1', st: '\u2713 Complete', t: '3m 45s', cost: '$1.31',
+        body: '<div class="item">\u2713 Contrastive SSL with token-level alignment</div><div class="item">\u2713 3 language pairs selected</div>' },
+      plan_1: { title: 'Plan \u2014 Iter 1', st: '\u2713 Complete', t: '4m 12s', cost: '$1.55',
+        body: '<div class="item">\u2713 5 experiment blocks defined</div><div class="item">\u2713 Resource budget: 8 GPU-hours</div>' },
+      art_1: { title: 'Artifacts \u2014 Iter 1', st: '\u2713 Complete', t: '18m 32s', cost: '$6.20',
+        body: '<div class="item">\u2713 Contrastive baseline (acc 0.812)</div><div class="item">\u2713 Multilingual pairs (1,800 examples)</div><div class="item">\u2713 Ablation study (3 conditions)</div>' },
+      paper_1: { title: 'Paper \u2014 Iter 1', st: '\u2713 Complete', t: '6m 08s', cost: '$2.14',
+        body: '<div class="item">\u2713 6-page draft generated</div><div class="item">\u2713 3 figures, 4 tables</div>' },
+      rev_p1: { title: 'Review \u2014 Iter 1', st: '\u2713 Complete', t: '4m 33s', cost: '$1.47',
+        body: '<div class="item">\u2713 Score: 5/10</div><div class="item">! Missing convergence proof</div><div class="item">! Baselines too weak</div>' },
+      upd_1: { title: 'Update Hypo \u2014 Iter 1', st: '\u2713 Complete', t: '2m 55s', cost: '$0.98',
+        body: '<div class="item">\u2713 Added convergence requirement</div><div class="item">\u2713 Strengthened baseline list</div>' },
+      strat_2: { title: 'Strategy \u2014 Iter 2', st: '\u2713 Complete', t: '3m 22s', cost: '$1.18',
+        body: '<div class="item">\u2713 Cross-lingual contrastive + convergence proof</div><div class="item">\u2713 5 language pairs, stronger baselines</div>' },
+      plan_2: { title: 'Plan \u2014 Iter 2', st: '\u2713 Complete', t: '4m 48s', cost: '$1.62',
+        body: '<div class="item">\u2713 5 artifact blocks planned</div><div class="item">\u2713 Convergence proof methodology defined</div>' },
+      art_2: { title: 'Generate Artifacts \u2014 Iter 2', st: '\u25B6 Running', t: '12m 08s', cost: '$5.41',
+        body: '<div class="item"><span style="color:#34d399">\u2713</span> Contrastive baseline (acc 0.847)</div><div class="item"><span style="color:#34d399">\u2713</span> Multilingual pairs (2,400 examples)</div><div class="item"><span style="color:#34d399">\u2713</span> Convergence proof (verified)</div><div class="item"><span style="color:#60a5fa">\u25B6</span> Ablation study (running...)</div><div class="item"><span style="color:#64748b">\u25CB</span> Cross-lingual evaluation</div>' },
+      paper_2: { title: 'Paper \u2014 Iter 2', st: '\u25CB Pending', t: '--', cost: '--',
+        body: '<div class="item">\u25CB Waiting for artifacts</div>' },
+      rev_p2: { title: 'Review \u2014 Iter 2', st: '\u25CB Pending', t: '--', cost: '--',
+        body: '<div class="item">\u25CB Waiting for paper</div>' },
+      upd_2: { title: 'Update Hypo \u2014 Iter 2', st: '\u25CB Pending', t: '--', cost: '--',
+        body: '<div class="item">\u25CB Waiting for review</div>' },
+      strat_3: { title: 'Strategy \u2014 Iter 3', st: '\u25CB Pending', t: '--', cost: '--',
+        body: '<div class="item">\u25CB Not started</div>' },
+      plan_3: { title: 'Plan \u2014 Iter 3', st: '\u25CB Pending', t: '--', cost: '--',
+        body: '<div class="item">\u25CB Not started</div>' },
+      art_3: { title: 'Artifacts \u2014 Iter 3', st: '\u25CB Pending', t: '--', cost: '--',
+        body: '<div class="item">\u25CB Not started</div>' },
+      paper_3: { title: 'Paper \u2014 Iter 3', st: '\u25CB Pending', t: '--', cost: '--',
+        body: '<div class="item">\u25CB Not started</div>' },
+      rev_p3: { title: 'Review \u2014 Iter 3', st: '\u25CB Pending', t: '--', cost: '--',
+        body: '<div class="item">\u25CB Not started</div>' },
+      upd_3: { title: 'Update Hypo \u2014 Iter 3', st: '\u25CB Pending', t: '--', cost: '--',
+        body: '<div class="item">\u25CB Not started</div>' },
+    }
+  },
+  {
+    id: 'paper_repo', label: 'Paper & Repo', icon: '\u{1F4C4}',
+    color: 'orange', status: 'pending', statusIcon: '\u25CB', angle: 180,
+    subs: [
+      { id: 'gen_demos', label: 'Demos',      abbr: 'DEM', status: 'pending' },
+      { id: 'gen_viz',   label: 'Viz',        abbr: 'VIZ', status: 'pending' },
+      { id: 'gen_paper', label: 'Full Paper', abbr: 'PAP', status: 'pending' },
+      { id: 'gen_repo',  label: 'Repo',       abbr: 'REP', status: 'pending' },
+    ],
+    details: {
+      gen_demos: { title: 'Generate Demos', st: '\u25CB Pending', t: '--', cost: '--',
+        body: '<div class="item">\u25CB Waiting for invention loop</div>' },
+      gen_viz: { title: 'Generate Visualizations', st: '\u25CB Pending', t: '--', cost: '--',
+        body: '<div class="item">\u25CB Waiting for invention loop</div>' },
+      gen_paper: { title: 'Generate Full Paper', st: '\u25CB Pending', t: '--', cost: '--',
+        body: '<div class="item">\u25CB Waiting for invention loop</div>' },
+      gen_repo: { title: 'Generate Repository', st: '\u25CB Pending', t: '--', cost: '--',
+        body: '<div class="item">\u25CB Waiting for invention loop</div>' },
+    }
+  }
+];
+
+// ── State ──
+let selModule = null;
+let selIter = 2;
+let detailOpen = false;
+
+// ── DOM ──
+const wrap       = document.getElementById('circleWrap');
+const svg        = document.getElementById('arcSvg');
+const centralOrb = document.getElementById('centralOrb');
+const detailCard = document.getElementById('detailCard');
+const dcTitle    = document.getElementById('dcTitle');
+const dcStatus   = document.getElementById('dcStatus');
+const dcBody     = document.getElementById('dcBody');
+const dcClose    = document.getElementById('dcClose');
+const iterSel    = document.getElementById('iterSelector');
+
+// ── Geometry helpers ──
+function getSize() {
+  const w = wrap.offsetWidth;
+  const h = wrap.offsetHeight;
+  return { w, h, cx: w / 2, cy: h / 2 };
+}
+
+function polarXY(angleDeg, radius, s) {
+  const rad = (angleDeg - 90) * Math.PI / 180;
+  return { x: s.cx + radius * Math.cos(rad), y: s.cy + radius * Math.sin(rad) };
+}
+
+function modRadius(s) { return Math.min(s.w, s.h) * 0.27; }
+function subRadius(s) { return Math.min(s.w, s.h) * 0.44; }
+
+// ── SVG helpers ──
+function svgEl(tag, attrs) {
+  const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+  return el;
+}
+
+// ── Build everything ──
+const modEls = {};
+const subEls = [];
+
+function buildModules() {
+  const s = getSize();
+  svg.setAttribute('viewBox', `0 0 ${s.w} ${s.h}`);
+
+  MODULES.forEach(mod => {
+    // Create DOM node
+    const el = document.createElement('div');
+    el.className = 'module-node';
+    el.dataset.id = mod.id;
+    el.dataset.color = mod.color;
+    el.dataset.status = mod.status;
+    el.innerHTML = `<span class="m-icon">${mod.icon}</span>` +
+                   `<span class="m-status">${mod.statusIcon}</span>` +
+                   `<span class="m-label">${mod.label}</span>`;
+    el.addEventListener('click', e => { e.stopPropagation(); clickModule(mod.id); });
+    wrap.appendChild(el);
+    modEls[mod.id] = el;
+  });
+  positionModules();
+  drawModuleArcs();
+}
+
+function positionModules() {
+  const s = getSize();
+  const r = modRadius(s);
+  MODULES.forEach(mod => {
+    const p = polarXY(mod.angle, r, s);
+    modEls[mod.id].style.left = p.x + 'px';
+    modEls[mod.id].style.top  = p.y + 'px';
+  });
+}
+
+function drawModuleArcs() {
+  // Remove old module arcs
+  svg.querySelectorAll('.arc-line').forEach(el => el.remove());
+
+  const s = getSize();
+  const r = modRadius(s);
+
+  MODULES.forEach(mod => {
+    const p = polarXY(mod.angle, r, s);
+    let cls = 'arc-line';
+    if (mod.status === 'done') cls += ' done';
+    else if (mod.status === 'active') cls += ' active';
+    else cls += ' pending';
+    if (selModule && selModule !== mod.id) cls += ' dimmed';
+
+    const line = svgEl('line', {
+      x1: s.cx, y1: s.cy,
+      x2: p.x,  y2: p.y,
+      stroke: C[mod.color],
+      class: cls
+    });
+    svg.appendChild(line);
+  });
+}
+
+// ── Sub-modules ──
+function clearSubs() {
+  subEls.forEach(el => el.remove());
+  subEls.length = 0;
+  svg.querySelectorAll('.sub-arc').forEach(el => el.remove());
+}
+
+function showSubs() {
+  clearSubs();
+  if (!selModule) return;
+
+  const mod = MODULES.find(m => m.id === selModule);
+  if (!mod) return;
+
+  let subs = mod.hasIter ? (mod.iterations[selIter] || []) : (mod.subs || []);
+  const s = getSize();
+  const mr = modRadius(s);
+  const sr = subRadius(s);
+  const modPos = polarXY(mod.angle, mr, s);
+
+  // Spread arc
+  const spread = Math.min(22 * subs.length, 110);
+  const start = mod.angle - spread / 2;
+  const step = subs.length > 1 ? spread / (subs.length - 1) : 0;
+
+  subs.forEach((sub, i) => {
+    const ang = subs.length === 1 ? mod.angle : start + step * i;
+    const p = polarXY(ang, sr, s);
+
+    // SVG connector
+    const line = svgEl('line', {
+      x1: modPos.x, y1: modPos.y,
+      x2: p.x, y2: p.y,
+      stroke: C[mod.color],
+      class: 'sub-arc'
+    });
+    svg.appendChild(line);
+    subEls.push(line);
+
+    // HTML node
+    const el = document.createElement('div');
+    el.className = 'sub-node';
+    el.dataset.subStatus = sub.status;
+    el.innerHTML = `<span>${sub.abbr}</span><span class="s-label">${sub.label}</span>`;
+    el.style.left = p.x + 'px';
+    el.style.top  = p.y + 'px';
+    el.addEventListener('click', e => { e.stopPropagation(); openDetail(sub.id); });
+    wrap.appendChild(el);
+    subEls.push(el);
+
+    // Staggered entrance
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        el.classList.add('visible');
+        line.classList.add('visible');
+      }, 45 * i);
+    });
+  });
+}
+
+// ── Iteration selector positioning ──
+function positionIterSel() {
+  if (!selModule) { iterSel.classList.remove('visible'); return; }
+  const mod = MODULES.find(m => m.id === selModule);
+  if (!mod || !mod.hasIter) { iterSel.classList.remove('visible'); return; }
+
+  const s = getSize();
+  const p = polarXY(mod.angle, modRadius(s), s);
+  iterSel.style.left = p.x + 'px';
+  iterSel.style.top  = (p.y + 52) + 'px';
+  iterSel.classList.add('visible');
+}
+
+// ── Module click ──
+function clickModule(id) {
+  if (detailOpen) closeDetail();
+  if (selModule === id) { selModule = null; refresh(); return; }
+  selModule = id;
+  const mod = MODULES.find(m => m.id === id);
+  if (mod && mod.hasIter) { selIter = 2; updateIterBtns(); }
+  refresh();
+}
+
+// ── Iteration buttons ──
+iterSel.querySelectorAll('button').forEach(btn => {
+  btn.addEventListener('click', e => {
+    e.stopPropagation();
+    selIter = parseInt(btn.dataset.iter);
+    updateIterBtns();
+    showSubs();
+  });
+});
+function updateIterBtns() {
+  iterSel.querySelectorAll('button').forEach(b =>
+    b.classList.toggle('active', parseInt(b.dataset.iter) === selIter));
+}
+
+// ── Detail card ──
+function openDetail(subId) {
+  const mod = MODULES.find(m => m.id === selModule);
+  if (!mod) return;
+  const d = mod.details[subId];
+  if (!d) return;
+
+  dcTitle.textContent = d.title;
+  dcTitle.style.color = C[mod.color];
+  dcStatus.innerHTML =
+    `<span>Status <span class="val">${d.st}</span></span>` +
+    `<span>Time <span class="val">${d.t}</span></span>` +
+    `<span>Cost <span class="val">${d.cost}</span></span>`;
+  dcBody.innerHTML = d.body;
+
+  detailOpen = true;
+  centralOrb.style.opacity = '0';
+  detailCard.classList.add('visible');
+  detailCard.style.borderColor = C[mod.color];
+}
+function closeDetail() {
+  detailOpen = false;
+  detailCard.classList.remove('visible');
+  centralOrb.style.opacity = '1';
+}
+dcClose.addEventListener('click', e => { e.stopPropagation(); closeDetail(); });
+
+// ── Click-away to deselect ──
+document.getElementById('mainArea').addEventListener('click', e => {
+  // Only fire if clicking the empty main area itself
+  if (e.target === e.currentTarget || e.target === wrap) {
+    selModule = null;
+    closeDetail();
+    refresh();
+  }
+});
+
+// ── Refresh ──
+function refresh() {
+  MODULES.forEach(mod => {
+    const el = modEls[mod.id];
+    el.classList.toggle('selected', selModule === mod.id);
+    el.classList.toggle('dimmed', selModule !== null && selModule !== mod.id);
+  });
+  drawModuleArcs();
+  showSubs();
+  positionIterSel();
+}
+
+// ── Init + resize ──
+function init() {
+  buildModules();
+}
+
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    const s = getSize();
+    svg.setAttribute('viewBox', `0 0 ${s.w} ${s.h}`);
+    positionModules();
+    drawModuleArcs();
+    if (selModule) { showSubs(); positionIterSel(); }
+  }, 60);
+});
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
+</script>
+</body>
+</html>

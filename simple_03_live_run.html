@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Live Run</title>
+<style>
+  *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+  :root{
+    --bg:#0a0a0f;
+    --surface:#111118;
+    --surface-2:#16161f;
+    --border:#1e1e2a;
+    --blue:#3b82f6;
+    --purple:#8b5cf6;
+    --green:#22c55e;
+    --text:#e2e2ef;
+    --text-dim:#6b6b80;
+    --text-muted:#44445a;
+  }
+  html,body{height:100%;font-family:'Inter','SF Pro Display',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);overflow-x:hidden}
+
+  /* ── Ambient particles ── */
+  #particles{position:fixed;inset:0;pointer-events:none;z-index:0}
+
+  /* ── Layout ── */
+  .page{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;min-height:100vh;padding:40px 32px 60px}
+
+  /* ── Header ── */
+  .header{text-align:center;margin-bottom:56px;max-width:700px}
+  .run-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 16px;border-radius:100px;background:rgba(59,130,246,0.08);border:1px solid rgba(59,130,246,0.15);margin-bottom:20px;font-size:13px;color:var(--blue);letter-spacing:0.03em}
+  .run-badge .dot{width:7px;height:7px;border-radius:50%;background:var(--blue);animation:pulse-dot 1.6s ease-in-out infinite}
+  .run-badge .elapsed{color:var(--text-dim);margin-left:4px}
+  .header h1{font-size:26px;font-weight:600;letter-spacing:-0.02em;line-height:1.35;background:linear-gradient(135deg,var(--text) 0%,rgba(226,226,239,0.7) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+  @keyframes pulse-dot{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.75)}}
+
+  /* ── Pipeline diagram ── */
+  .pipeline{display:flex;align-items:center;gap:0;margin-bottom:56px;position:relative}
+  .pipeline-connector{width:64px;height:2px;position:relative;flex-shrink:0}
+  .pipeline-connector .track{position:absolute;inset:0;background:var(--border);border-radius:1px}
+  .pipeline-connector .fill{position:absolute;top:0;left:0;height:100%;border-radius:1px;transition:width .6s ease}
+  .pipeline-connector.done .fill{width:100%;background:linear-gradient(90deg,var(--green),var(--green))}
+  .pipeline-connector.active .fill{width:55%;background:linear-gradient(90deg,var(--green),var(--blue));animation:connector-pulse 2.4s ease-in-out infinite}
+  .pipeline-connector.pending .fill{width:0}
+  @keyframes connector-pulse{0%,100%{opacity:1}50%{opacity:.55}}
+
+  /* ── Node ── */
+  .node{display:flex;flex-direction:column;align-items:center;gap:12px;flex-shrink:0;position:relative}
+  .node-ring{width:72px;height:72px;border-radius:50%;display:flex;align-items:center;justify-content:center;position:relative;transition:all .3s}
+
+  /* Completed */
+  .node.done .node-ring{background:rgba(34,197,94,0.06);border:2px solid rgba(34,197,94,0.35);box-shadow:0 0 20px rgba(34,197,94,0.1),0 0 40px rgba(34,197,94,0.04)}
+  .node.done .node-icon{color:var(--green);font-size:22px}
+  .node.done .node-label{color:var(--text)}
+
+  /* Active */
+  .node.active .node-ring{background:rgba(59,130,246,0.06);border:2px solid rgba(59,130,246,0.5);box-shadow:0 0 30px rgba(59,130,246,0.15),0 0 60px rgba(139,92,246,0.07)}
+  .node.active .node-ring::before{content:'';position:absolute;inset:-6px;border-radius:50%;border:1.5px solid transparent;border-top-color:var(--blue);border-right-color:var(--purple);animation:spin 2.8s linear infinite}
+  .node.active .node-ring::after{content:'';position:absolute;inset:-12px;border-radius:50%;border:1px solid transparent;border-bottom-color:rgba(139,92,246,0.3);border-left-color:rgba(59,130,246,0.2);animation:spin-reverse 4s linear infinite}
+  .node.active .node-icon{color:var(--blue);font-size:20px;animation:icon-breathe 2.4s ease-in-out infinite}
+  .node.active .node-label{color:var(--blue);font-weight:500}
+  .node.active .node-sub{color:var(--text-dim);font-size:11px;max-width:150px;text-align:center;line-height:1.45;letter-spacing:0.01em}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes spin-reverse{to{transform:rotate(-360deg)}}
+  @keyframes icon-breathe{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.7;transform:scale(.92)}}
+
+  /* Pending */
+  .node.pending .node-ring{background:transparent;border:2px dashed var(--border)}
+  .node.pending .node-icon{color:var(--text-muted);font-size:18px}
+  .node.pending .node-label{color:var(--text-muted)}
+
+  .node-label{font-size:12.5px;letter-spacing:0.02em;font-weight:400}
+
+  /* Node number badge */
+  .node-num{position:absolute;top:-6px;right:-4px;width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;background:var(--surface);border:1px solid var(--border);color:var(--text-muted)}
+  .node.done .node-num{border-color:rgba(34,197,94,0.25);color:var(--green)}
+  .node.active .node-num{border-color:rgba(59,130,246,0.35);color:var(--blue);background:var(--surface)}
+
+  /* ── Active glow orb (behind active node) ── */
+  .active-glow{position:absolute;width:160px;height:160px;border-radius:50%;background:radial-gradient(circle,rgba(59,130,246,0.1) 0%,rgba(139,92,246,0.04) 50%,transparent 70%);animation:glow-breathe 3s ease-in-out infinite;pointer-events:none;z-index:-1}
+  @keyframes glow-breathe{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.15);opacity:.6}}
+
+  /* ── Activity card ── */
+  .activity-card{width:100%;max-width:580px;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px 32px;margin-bottom:48px;position:relative;overflow:hidden}
+  .activity-card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(59,130,246,0.25),rgba(139,92,246,0.2),transparent)}
+  .activity-label{font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-bottom:12px}
+  .activity-title{font-size:15px;font-weight:500;color:var(--text);line-height:1.5;margin-bottom:24px}
+
+  /* Organic wave indicator */
+  .wave-container{height:40px;display:flex;align-items:center;justify-content:center;gap:4px;margin-bottom:24px}
+  .wave-bar{width:3px;border-radius:3px;background:linear-gradient(180deg,var(--blue),var(--purple));animation:wave 1.4s ease-in-out infinite}
+  .wave-bar:nth-child(1){height:12px;animation-delay:0s}
+  .wave-bar:nth-child(2){height:20px;animation-delay:.12s}
+  .wave-bar:nth-child(3){height:28px;animation-delay:.24s}
+  .wave-bar:nth-child(4){height:36px;animation-delay:.36s}
+  .wave-bar:nth-child(5){height:28px;animation-delay:.48s}
+  .wave-bar:nth-child(6){height:20px;animation-delay:.6s}
+  .wave-bar:nth-child(7){height:12px;animation-delay:.72s}
+  .wave-bar:nth-child(8){height:20px;animation-delay:.84s}
+  .wave-bar:nth-child(9){height:28px;animation-delay:.96s}
+  .wave-bar:nth-child(10){height:18px;animation-delay:1.08s}
+  .wave-bar:nth-child(11){height:10px;animation-delay:1.2s}
+  @keyframes wave{0%,100%{transform:scaleY(1);opacity:.7}50%{transform:scaleY(1.8);opacity:1}}
+
+  /* Expanding circles (inside the card, behind the wave) */
+  .circles-container{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:0}
+  .exp-circle{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);border-radius:50%;border:1px solid rgba(59,130,246,0.08);animation:expand 4s ease-out infinite}
+  .exp-circle:nth-child(1){animation-delay:0s}
+  .exp-circle:nth-child(2){animation-delay:1.33s}
+  .exp-circle:nth-child(3){animation-delay:2.66s}
+  @keyframes expand{0%{width:10px;height:10px;opacity:.5}100%{width:300px;height:300px;opacity:0}}
+
+  .activity-stats{display:flex;gap:24px;position:relative;z-index:1}
+  .stat{font-size:12.5px;color:var(--text-dim);display:flex;align-items:center;gap:6px}
+  .stat .dot{width:5px;height:5px;border-radius:50%}
+  .stat .dot.green{background:var(--green)}
+  .stat .dot.blue{background:var(--blue);animation:pulse-dot 1.6s ease-in-out infinite}
+  .stat .dot.purple{background:var(--purple)}
+
+  /* ── Milestone feed ── */
+  .feed{width:100%;max-width:580px}
+  .feed-title{font-size:11px;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-bottom:16px}
+  .milestone{display:flex;align-items:flex-start;gap:12px;padding:14px 18px;background:var(--surface);border:1px solid var(--border);border-radius:12px;margin-bottom:8px;transition:all .3s;animation:fade-up .5s ease-out both}
+  .milestone:nth-child(2){animation-delay:.08s}
+  .milestone:nth-child(3){animation-delay:.16s}
+  .milestone:nth-child(4){animation-delay:.24s}
+  .milestone:nth-child(5){animation-delay:.32s}
+  @keyframes fade-up{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+  .milestone-icon{flex-shrink:0;width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:11px;margin-top:1px}
+  .milestone-icon.check{background:rgba(34,197,94,0.1);color:var(--green)}
+  .milestone-icon.arrow{background:rgba(59,130,246,0.1);color:var(--blue)}
+  .milestone-icon.active{background:rgba(139,92,246,0.1);color:var(--purple)}
+  .milestone-text{font-size:13px;color:var(--text-dim);line-height:1.5}
+  .milestone-text strong{color:var(--text);font-weight:500}
+  .milestone-time{margin-left:auto;font-size:11px;color:var(--text-muted);flex-shrink:0;padding-top:2px}
+
+  /* ── Responsive ── */
+  @media(max-width:720px){
+    .page{padding:24px 16px 40px}
+    .pipeline{flex-wrap:wrap;justify-content:center;gap:12px}
+    .pipeline-connector{width:32px}
+    .activity-card{padding:20px}
+    .activity-stats{flex-wrap:wrap;gap:12px}
+  }
+</style>
+</head>
+<body>
+
+<canvas id="particles"></canvas>
+
+<div class="page">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="run-badge">
+      <span class="dot"></span>
+      Running
+      <span class="elapsed" id="elapsed">02:34:17</span>
+    </div>
+    <h1>Self-Supervised Learning for Low-Resource Languages</h1>
+  </div>
+
+  <!-- Pipeline Diagram -->
+  <div class="pipeline" id="pipeline">
+    <!-- Node 1: Seed Hypothesis (done) -->
+    <div class="node done">
+      <div class="node-ring">
+        <span class="node-num">1</span>
+        <span class="node-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        </span>
+      </div>
+      <span class="node-label">Seed Hypothesis</span>
+    </div>
+
+    <div class="pipeline-connector done"><div class="track"></div><div class="fill"></div></div>
+
+    <!-- Node 2: Hypothesis Refinement (done) -->
+    <div class="node done">
+      <div class="node-ring">
+        <span class="node-num">2</span>
+        <span class="node-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        </span>
+      </div>
+      <span class="node-label">Hypothesis Refinement</span>
+    </div>
+
+    <div class="pipeline-connector active"><div class="track"></div><div class="fill"></div></div>
+
+    <!-- Node 3: Invention Loop (active) -->
+    <div class="node active">
+      <div class="active-glow"></div>
+      <div class="node-ring">
+        <span class="node-num">3</span>
+        <span class="node-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"/></svg>
+        </span>
+      </div>
+      <span class="node-label">Invention Loop</span>
+      <span class="node-sub">Iteration 2/3 &middot; Generating Artifacts</span>
+    </div>
+
+    <div class="pipeline-connector pending"><div class="track"></div><div class="fill"></div></div>
+
+    <!-- Node 4: Paper Generation (pending) -->
+    <div class="node pending">
+      <div class="node-ring">
+        <span class="node-num">4</span>
+        <span class="node-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        </span>
+      </div>
+      <span class="node-label">Paper Generation</span>
+    </div>
+  </div>
+
+  <!-- Activity Card -->
+  <div class="activity-card">
+    <div class="circles-container">
+      <div class="exp-circle"></div>
+      <div class="exp-circle"></div>
+      <div class="exp-circle"></div>
+    </div>
+    <div class="activity-label">Current Activity</div>
+    <div class="activity-title">Running experiment: Contrastive pre-training baseline comparison</div>
+    <div class="wave-container">
+      <div class="wave-bar"></div>
+      <div class="wave-bar"></div>
+      <div class="wave-bar"></div>
+      <div class="wave-bar"></div>
+      <div class="wave-bar"></div>
+      <div class="wave-bar"></div>
+      <div class="wave-bar"></div>
+      <div class="wave-bar"></div>
+      <div class="wave-bar"></div>
+      <div class="wave-bar"></div>
+      <div class="wave-bar"></div>
+    </div>
+    <div class="activity-stats">
+      <span class="stat"><span class="dot green"></span>4 artifacts completed</span>
+      <span class="stat"><span class="dot blue"></span>2 in progress</span>
+      <span class="stat"><span class="dot purple"></span>$12.47 spent</span>
+    </div>
+  </div>
+
+  <!-- Milestone Feed -->
+  <div class="feed">
+    <div class="feed-title">Recent Milestones</div>
+    <div class="milestone">
+      <div class="milestone-icon active">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      </div>
+      <div class="milestone-text"><strong>Running experiment:</strong> contrastive pre-training baseline comparison</div>
+      <span class="milestone-time">now</span>
+    </div>
+    <div class="milestone">
+      <div class="milestone-icon arrow">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+      </div>
+      <div class="milestone-text"><strong>Starting experiment:</strong> cross-lingual transfer evaluation</div>
+      <span class="milestone-time">2m ago</span>
+    </div>
+    <div class="milestone">
+      <div class="milestone-icon check">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+      </div>
+      <div class="milestone-text"><strong>Dataset generated:</strong> multilingual-pairs-v2 (2,400 examples)</div>
+      <span class="milestone-time">8m ago</span>
+    </div>
+    <div class="milestone">
+      <div class="milestone-icon check">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+      </div>
+      <div class="milestone-text"><strong>Hypothesis refined</strong> to 8.4/10 confidence score</div>
+      <span class="milestone-time">14m ago</span>
+    </div>
+    <div class="milestone">
+      <div class="milestone-icon check">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+      </div>
+      <div class="milestone-text"><strong>Seed hypothesis accepted:</strong> self-supervised contrastive objective for phoneme-level alignment</div>
+      <span class="milestone-time">31m ago</span>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* ── Elapsed timer ── */
+(function(){
+  let h=2,m=34,s=17;
+  const el=document.getElementById('elapsed');
+  setInterval(()=>{
+    s++;if(s>=60){s=0;m++}if(m>=60){m=0;h++}
+    el.textContent=String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
+  },1000);
+})();
+
+/* ── Ambient particles ── */
+(function(){
+  const c=document.getElementById('particles');
+  const ctx=c.getContext('2d');
+  let w,h,particles=[];
+  const COUNT=50;
+
+  function resize(){w=c.width=window.innerWidth;h=c.height=window.innerHeight}
+  window.addEventListener('resize',resize);resize();
+
+  function Particle(){
+    this.x=Math.random()*w;
+    this.y=Math.random()*h;
+    this.vx=(Math.random()-.5)*.15;
+    this.vy=(Math.random()-.5)*.15;
+    this.r=Math.random()*1.5+.5;
+    this.alpha=Math.random()*.25+.03;
+    /* color: either blue-ish or purple-ish */
+    this.hue=Math.random()>.5?220:260;
+  }
+  for(let i=0;i<COUNT;i++) particles.push(new Particle());
+
+  function draw(){
+    ctx.clearRect(0,0,w,h);
+    for(const p of particles){
+      p.x+=p.vx;p.y+=p.vy;
+      if(p.x<0)p.x=w;if(p.x>w)p.x=0;
+      if(p.y<0)p.y=h;if(p.y>h)p.y=0;
+      ctx.beginPath();
+      ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+      ctx.fillStyle='hsla('+p.hue+',70%,65%,'+p.alpha+')';
+      ctx.fill();
+    }
+    /* faint connection lines between close particles */
+    for(let i=0;i<particles.length;i++){
+      for(let j=i+1;j<particles.length;j++){
+        const dx=particles[i].x-particles[j].x;
+        const dy=particles[i].y-particles[j].y;
+        const dist=Math.sqrt(dx*dx+dy*dy);
+        if(dist<120){
+          ctx.beginPath();
+          ctx.moveTo(particles[i].x,particles[i].y);
+          ctx.lineTo(particles[j].x,particles[j].y);
+          ctx.strokeStyle='rgba(59,130,246,'+(0.04*(1-dist/120))+')';
+          ctx.lineWidth=.5;
+          ctx.stroke();
+        }
+      }
+    }
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+</script>
+</body>
+</html>

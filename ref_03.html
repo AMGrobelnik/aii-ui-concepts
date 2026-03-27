@@ -1,0 +1,1397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Ring Gauges with Glow</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #07080d;
+    --surface: #0f1118;
+    --surface-raised: #151821;
+    --surface-hover: #1a1e2a;
+    --border: #1c2030;
+    --border-light: #252a3a;
+    --text: #e4e6ec;
+    --text-dim: #6b7085;
+    --text-muted: #3e4258;
+    --green: #34d399;
+    --green-dim: #1a6b4d;
+    --purple: #a78bfa;
+    --purple-dim: #5a3fb8;
+    --blue: #60a5fa;
+    --blue-dim: #2563a8;
+    --gray: #4b5068;
+    --gray-dim: #2a2e40;
+    --amber: #fbbf24;
+    --ring-size: 50;
+    --ring-stroke: 3;
+    --ring-stroke-selected: 4;
+    --glow-sm: 20px;
+    --glow-lg: 40px;
+    --transition-fast: 0.2s ease;
+    --transition-med: 0.35s ease;
+    --transition-slow: 0.6s ease;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ================================================================
+     TOP BAR
+     ================================================================ */
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+    height: 52px;
+    background: rgba(7, 8, 13, 0.85);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .topbar-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 700;
+    font-size: 14px;
+    letter-spacing: -0.3px;
+  }
+  .topbar-brand svg { width: 20px; height: 20px; flex-shrink: 0; }
+
+  .topbar-meta {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .topbar-meta span {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .topbar-pill {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 3px 10px;
+    font-weight: 500;
+    font-size: 12px;
+    color: var(--text);
+  }
+  .status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--blue);
+    animation: statusPulse 2s ease-in-out infinite;
+  }
+  @keyframes statusPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  /* ================================================================
+     RING GAUGE STRIP
+     ================================================================ */
+  .ring-strip {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 32px 24px 24px;
+    gap: 0;
+    position: relative;
+    user-select: none;
+  }
+
+  /* Connector line between gauges */
+  .ring-connector {
+    position: relative;
+    width: 72px;
+    height: 2px;
+    flex-shrink: 0;
+  }
+  .ring-connector::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 1px;
+  }
+  .ring-connector.green-purple::before {
+    background: linear-gradient(90deg, var(--green), var(--purple));
+  }
+  .ring-connector.purple-blue::before {
+    background: linear-gradient(90deg, var(--purple), var(--blue));
+  }
+  .ring-connector.blue-gray::before {
+    background: linear-gradient(90deg, var(--blue), var(--gray));
+    opacity: 0.4;
+  }
+
+  /* Ring gauge wrapper */
+  .ring-gauge {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    transition: transform var(--transition-fast);
+    z-index: 2;
+  }
+  .ring-gauge:hover { transform: scale(1.06); }
+  .ring-gauge:active { transform: scale(0.98); }
+
+  /* The ring SVG container */
+  .ring-wrap {
+    position: relative;
+    width: 50px;
+    height: 50px;
+  }
+
+  /* Glow halo behind ring */
+  .ring-glow {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    transition: box-shadow var(--transition-slow), width var(--transition-slow), height var(--transition-slow);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Glow pool on surface beneath */
+  .ring-pool {
+    position: absolute;
+    bottom: -8px;
+    left: 50%;
+    width: 70px;
+    height: 18px;
+    border-radius: 50%;
+    transform: translateX(-50%);
+    filter: blur(10px);
+    opacity: 0.5;
+    transition: opacity var(--transition-slow), width var(--transition-slow);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* State-specific glows */
+  .ring-gauge[data-stage="seed"] .ring-glow {
+    box-shadow: 0 0 var(--glow-sm) rgba(52, 211, 153, 0.4);
+  }
+  .ring-gauge[data-stage="seed"] .ring-pool {
+    background: rgba(52, 211, 153, 0.25);
+  }
+
+  .ring-gauge[data-stage="hypothesis"] .ring-glow {
+    box-shadow: 0 0 var(--glow-sm) rgba(167, 139, 250, 0.4);
+  }
+  .ring-gauge[data-stage="hypothesis"] .ring-pool {
+    background: rgba(167, 139, 250, 0.25);
+  }
+
+  .ring-gauge[data-stage="invention"] .ring-glow {
+    box-shadow: 0 0 var(--glow-sm) rgba(96, 165, 250, 0.5);
+    animation: inventionGlowPulse 2.5s ease-in-out infinite;
+  }
+  .ring-gauge[data-stage="invention"] .ring-pool {
+    background: rgba(96, 165, 250, 0.3);
+    animation: poolPulse 2.5s ease-in-out infinite;
+  }
+
+  .ring-gauge[data-stage="paper"] .ring-glow {
+    box-shadow: 0 0 6px rgba(75, 80, 104, 0.15);
+  }
+  .ring-gauge[data-stage="paper"] .ring-pool {
+    background: rgba(75, 80, 104, 0.08);
+    opacity: 0.25;
+  }
+
+  @keyframes inventionGlowPulse {
+    0%, 100% { box-shadow: 0 0 20px rgba(96, 165, 250, 0.45); }
+    50% { box-shadow: 0 0 40px rgba(96, 165, 250, 0.7); }
+  }
+  @keyframes poolPulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 0.7; }
+  }
+
+  /* Selected state: glow doubles */
+  .ring-gauge.selected[data-stage="seed"] .ring-glow {
+    box-shadow: 0 0 40px rgba(52, 211, 153, 0.6);
+  }
+  .ring-gauge.selected[data-stage="seed"] .ring-pool {
+    width: 90px;
+    opacity: 0.7;
+  }
+
+  .ring-gauge.selected[data-stage="hypothesis"] .ring-glow {
+    box-shadow: 0 0 40px rgba(167, 139, 250, 0.6);
+  }
+  .ring-gauge.selected[data-stage="hypothesis"] .ring-pool {
+    width: 90px;
+    opacity: 0.7;
+  }
+
+  .ring-gauge.selected[data-stage="invention"] .ring-glow {
+    animation: inventionGlowPulseSelected 2.5s ease-in-out infinite;
+  }
+  .ring-gauge.selected[data-stage="invention"] .ring-pool {
+    width: 90px;
+    animation: poolPulseSelected 2.5s ease-in-out infinite;
+  }
+  @keyframes inventionGlowPulseSelected {
+    0%, 100% { box-shadow: 0 0 40px rgba(96, 165, 250, 0.65); }
+    50% { box-shadow: 0 0 70px rgba(96, 165, 250, 0.9); }
+  }
+  @keyframes poolPulseSelected {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 0.9; }
+  }
+
+  .ring-gauge.selected[data-stage="paper"] .ring-glow {
+    box-shadow: 0 0 14px rgba(75, 80, 104, 0.25);
+  }
+
+  /* SVG ring */
+  .ring-svg {
+    width: 50px;
+    height: 50px;
+    transform: rotate(-90deg);
+    position: relative;
+    z-index: 2;
+  }
+  .ring-bg {
+    fill: none;
+    stroke: var(--border);
+    stroke-width: 3;
+  }
+  .ring-fg {
+    fill: none;
+    stroke-width: 3;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 1s cubic-bezier(0.4, 0, 0.2, 1),
+                stroke-width var(--transition-fast);
+  }
+  .ring-gauge.selected .ring-fg {
+    stroke-width: 4;
+  }
+  .ring-gauge.selected .ring-bg {
+    stroke-width: 4;
+  }
+
+  /* Dashed ring for 0% / waiting */
+  .ring-bg-dashed {
+    fill: none;
+    stroke: var(--gray);
+    stroke-width: 3;
+    stroke-dasharray: 4 6;
+    opacity: 0.4;
+  }
+  .ring-gauge.selected .ring-bg-dashed {
+    stroke-width: 4;
+  }
+
+  /* Center label inside ring */
+  .ring-center {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 3;
+    pointer-events: none;
+  }
+  .ring-center-text {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: -0.2px;
+  }
+  .ring-gauge[data-stage="seed"] .ring-center-text { color: var(--green); }
+  .ring-gauge[data-stage="hypothesis"] .ring-center-text { color: var(--purple); }
+  .ring-gauge[data-stage="invention"] .ring-center-text { color: var(--blue); }
+  .ring-gauge[data-stage="paper"] .ring-center-text { color: var(--gray); }
+
+  /* Stage label below ring */
+  .ring-label {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    transition: color var(--transition-fast);
+    white-space: nowrap;
+  }
+  .ring-gauge.selected .ring-label { color: var(--text); }
+
+  /* Animated endpoint dot for active ring */
+  .ring-endpoint {
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--blue);
+    box-shadow: 0 0 8px var(--blue);
+    z-index: 4;
+    transition: opacity var(--transition-fast);
+    animation: endpointPulse 1.5s ease-in-out infinite;
+  }
+  @keyframes endpointPulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.5); opacity: 0.7; }
+  }
+
+  /* ================================================================
+     CONTENT AREA
+     ================================================================ */
+  .content-area {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 8px 24px 80px;
+  }
+
+  /* Stage header */
+  .stage-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 20px;
+    opacity: 0;
+    transform: translateY(12px);
+    animation: fadeSlideIn 0.4s ease forwards;
+  }
+  @keyframes fadeSlideIn {
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .stage-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 18px;
+  }
+  .stage-icon.green { background: rgba(52, 211, 153, 0.12); }
+  .stage-icon.purple { background: rgba(167, 139, 250, 0.12); }
+  .stage-icon.blue { background: rgba(96, 165, 250, 0.12); }
+  .stage-icon.gray { background: rgba(75, 80, 104, 0.12); }
+
+  .stage-title {
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: -0.4px;
+    margin-bottom: 4px;
+  }
+  .stage-summary {
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.6;
+    max-width: 560px;
+  }
+
+  /* Status badges */
+  .stage-badges {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    opacity: 0;
+    animation: fadeSlideIn 0.4s ease 0.1s forwards;
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 500;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+  }
+  .badge-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+  }
+  .badge-dot.green { background: var(--green); }
+  .badge-dot.purple { background: var(--purple); }
+  .badge-dot.blue { background: var(--blue); }
+  .badge-dot.gray { background: var(--gray); }
+  .badge-dot.amber { background: var(--amber); }
+
+  /* Sub-stages */
+  .substages {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    opacity: 0;
+    animation: fadeSlideIn 0.4s ease 0.15s forwards;
+  }
+
+  .substage {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    transition: border-color var(--transition-fast),
+                background var(--transition-fast);
+  }
+  .substage:hover {
+    border-color: var(--border-light);
+    background: var(--surface-raised);
+  }
+  .substage.active {
+    border-color: var(--blue);
+    background: rgba(96, 165, 250, 0.04);
+  }
+  .substage.completed {
+    border-left: 2px solid var(--green);
+  }
+
+  .substage-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    cursor: pointer;
+    gap: 12px;
+  }
+
+  .substage-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .substage-status {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 10px;
+  }
+  .substage-status.done {
+    background: rgba(52, 211, 153, 0.15);
+    color: var(--green);
+  }
+  .substage-status.running {
+    background: rgba(96, 165, 250, 0.15);
+    color: var(--blue);
+    animation: statusPulse 2s ease-in-out infinite;
+  }
+  .substage-status.waiting {
+    background: var(--surface-raised);
+    color: var(--text-muted);
+  }
+
+  .substage-name {
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .substage-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+
+  .substage-time {
+    font-size: 11px;
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .substage-chevron {
+    width: 16px;
+    height: 16px;
+    color: var(--text-muted);
+    transition: transform var(--transition-fast), color var(--transition-fast);
+  }
+  .substage.expanded .substage-chevron {
+    transform: rotate(90deg);
+    color: var(--text-dim);
+  }
+
+  /* Expandable body */
+  .substage-body {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .substage.expanded .substage-body {
+    max-height: 600px;
+  }
+
+  .substage-content {
+    padding: 0 16px 14px 48px;
+    font-size: 12px;
+    color: var(--text-dim);
+    line-height: 1.65;
+  }
+  .substage-content p { margin-bottom: 8px; }
+  .substage-content p:last-child { margin-bottom: 0; }
+
+  .substage-detail-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+  }
+  .substage-detail-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    min-width: 80px;
+  }
+  .substage-detail-value {
+    font-size: 12px;
+    color: var(--text-dim);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Mini progress bar inside sub-stage */
+  .substage-progress {
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    margin-top: 8px;
+    overflow: hidden;
+  }
+  .substage-progress-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.6s ease;
+  }
+  .substage-progress-fill.green { background: var(--green); }
+  .substage-progress-fill.purple { background: var(--purple); }
+  .substage-progress-fill.blue { background: var(--blue); }
+
+  /* Log entries inside expanded sub-stage */
+  .substage-logs {
+    margin-top: 10px;
+    border-top: 1px solid var(--border);
+    padding-top: 10px;
+  }
+  .log-entry {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 3px 0;
+    font-size: 11px;
+    font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+  }
+  .log-time {
+    color: var(--text-muted);
+    flex-shrink: 0;
+    min-width: 52px;
+  }
+  .log-msg { color: var(--text-dim); }
+  .log-msg.success { color: var(--green); }
+  .log-msg.info { color: var(--blue); }
+  .log-msg.warn { color: var(--amber); }
+
+  /* ================================================================
+     NAVIGATION ARROWS
+     ================================================================ */
+  .nav-arrows {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    z-index: 50;
+  }
+
+  .nav-arrow {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--text-dim);
+    transition: background var(--transition-fast),
+                border-color var(--transition-fast),
+                color var(--transition-fast),
+                transform var(--transition-fast);
+  }
+  .nav-arrow:hover {
+    background: var(--surface-raised);
+    border-color: var(--border-light);
+    color: var(--text);
+  }
+  .nav-arrow:active { transform: scale(0.92); }
+  .nav-arrow.disabled {
+    opacity: 0.3;
+    pointer-events: none;
+  }
+  .nav-arrow svg { width: 18px; height: 18px; }
+
+  .nav-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-dim);
+    padding: 0 4px;
+    min-width: 80px;
+    text-align: center;
+  }
+
+  /* ================================================================
+     KEYBOARD HINT
+     ================================================================ */
+  .kbd-hint {
+    position: fixed;
+    bottom: 72px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--text-muted);
+    opacity: 0.6;
+    z-index: 50;
+  }
+  .kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-dim);
+    min-width: 22px;
+  }
+
+  /* ================================================================
+     SCROLLBAR
+     ================================================================ */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: var(--border-light); }
+
+  /* ================================================================
+     ANIMATIONS & TRANSITIONS
+     ================================================================ */
+  .content-transition-enter {
+    opacity: 0;
+    transform: translateX(24px);
+  }
+  .content-transition-enter-active {
+    opacity: 1;
+    transform: translateX(0);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+  }
+  .content-transition-exit {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  .content-transition-exit-active {
+    opacity: 0;
+    transform: translateX(-24px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+  }
+
+  /* Ensure smooth ring endpoint calc */
+  .ring-wrap { position: relative; }
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     TOP BAR
+     ============================================================ -->
+<div class="topbar">
+  <div class="topbar-brand">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+      <path d="M2 17l10 5 10-5"/>
+      <path d="M2 12l10 5 10-5"/>
+    </svg>
+    AI Inventor
+  </div>
+  <div class="topbar-meta">
+    <span><div class="status-dot"></div> Running</span>
+    <span class="topbar-pill">Run #42</span>
+    <span>Elapsed 14m 22s</span>
+  </div>
+</div>
+
+<!-- ============================================================
+     RING GAUGE STRIP
+     ============================================================ -->
+<div class="ring-strip" id="ringStrip">
+
+  <!-- Seed: 100% green -->
+  <div class="ring-gauge selected" data-stage="seed" data-index="0" onclick="selectStage(0)">
+    <div class="ring-wrap">
+      <div class="ring-glow"></div>
+      <div class="ring-pool"></div>
+      <svg class="ring-svg" viewBox="0 0 50 50">
+        <circle class="ring-bg" cx="25" cy="25" r="20"/>
+        <circle class="ring-fg" cx="25" cy="25" r="20"
+                stroke="var(--green)"
+                stroke-dasharray="125.66"
+                stroke-dashoffset="0"/>
+      </svg>
+      <div class="ring-center">
+        <span class="ring-center-text">&#10003;</span>
+      </div>
+    </div>
+    <span class="ring-label">Seed</span>
+  </div>
+
+  <div class="ring-connector green-purple"></div>
+
+  <!-- Hypothesis: 100% purple -->
+  <div class="ring-gauge" data-stage="hypothesis" data-index="1" onclick="selectStage(1)">
+    <div class="ring-wrap">
+      <div class="ring-glow"></div>
+      <div class="ring-pool"></div>
+      <svg class="ring-svg" viewBox="0 0 50 50">
+        <circle class="ring-bg" cx="25" cy="25" r="20"/>
+        <circle class="ring-fg" cx="25" cy="25" r="20"
+                stroke="var(--purple)"
+                stroke-dasharray="125.66"
+                stroke-dashoffset="0"/>
+      </svg>
+      <div class="ring-center">
+        <span class="ring-center-text">8.4</span>
+      </div>
+    </div>
+    <span class="ring-label">Hypothesis</span>
+  </div>
+
+  <div class="ring-connector purple-blue"></div>
+
+  <!-- Invention: 60% blue, animated endpoint -->
+  <div class="ring-gauge" data-stage="invention" data-index="2" onclick="selectStage(2)">
+    <div class="ring-wrap">
+      <div class="ring-glow"></div>
+      <div class="ring-pool"></div>
+      <svg class="ring-svg" viewBox="0 0 50 50">
+        <circle class="ring-bg" cx="25" cy="25" r="20"/>
+        <circle class="ring-fg" cx="25" cy="25" r="20"
+                stroke="var(--blue)"
+                stroke-dasharray="125.66"
+                stroke-dashoffset="50.26"/>
+      </svg>
+      <div class="ring-endpoint" id="inventionEndpoint"></div>
+      <div class="ring-center">
+        <span class="ring-center-text">3/5</span>
+      </div>
+    </div>
+    <span class="ring-label">Invention</span>
+  </div>
+
+  <div class="ring-connector blue-gray"></div>
+
+  <!-- Paper: 0% gray dashed -->
+  <div class="ring-gauge" data-stage="paper" data-index="3" onclick="selectStage(3)">
+    <div class="ring-wrap">
+      <div class="ring-glow"></div>
+      <div class="ring-pool"></div>
+      <svg class="ring-svg" viewBox="0 0 50 50">
+        <circle class="ring-bg-dashed" cx="25" cy="25" r="20"/>
+      </svg>
+      <div class="ring-center">
+        <span class="ring-center-text">&mdash;</span>
+      </div>
+    </div>
+    <span class="ring-label">Paper</span>
+  </div>
+
+</div>
+
+<!-- ============================================================
+     CONTENT AREA
+     ============================================================ -->
+<div class="content-area" id="contentArea">
+  <!-- Content injected by JS -->
+</div>
+
+<!-- ============================================================
+     NAVIGATION ARROWS
+     ============================================================ -->
+<div class="kbd-hint">
+  <span class="kbd">&larr;</span>
+  <span class="kbd">&rarr;</span>
+  navigate stages
+</div>
+
+<div class="nav-arrows">
+  <button class="nav-arrow disabled" id="navPrev" onclick="navigate(-1)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="15 18 9 12 15 6"/>
+    </svg>
+  </button>
+  <span class="nav-label" id="navLabel">Seed</span>
+  <button class="nav-arrow" id="navNext" onclick="navigate(1)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <polyline points="9 6 15 12 9 18"/>
+    </svg>
+  </button>
+</div>
+
+<!-- ============================================================
+     JAVASCRIPT
+     ============================================================ -->
+<script>
+(function() {
+  'use strict';
+
+  // ---- Stage Data ----
+  const STAGES = [
+    {
+      id: 'seed',
+      label: 'Seed',
+      icon: { emoji: '\u{1F331}', colorClass: 'green' },
+      title: 'Seed Hypotheses',
+      summary: 'Generated 12 seed hypotheses from the invention knowledge graph. ' +
+               'Cross-domain connections identified between materials science and ' +
+               'photonic crystal research. All seeds passed novelty pre-screening.',
+      badges: [
+        { label: '12 seeds', dotClass: 'green' },
+        { label: 'KG depth 4', dotClass: 'green' },
+        { label: 'Completed', dotClass: 'green' }
+      ],
+      substages: [
+        {
+          name: 'Build Knowledge Graph',
+          status: 'done',
+          time: '1m 48s',
+          details: [
+            { label: 'Nodes', value: '342' },
+            { label: 'Edges', value: '1,207' },
+            { label: 'Sources', value: '28 papers' }
+          ],
+          logs: [
+            { time: '00:00', msg: 'Parsing source papers...', type: '' },
+            { time: '00:32', msg: 'Entity extraction complete (342 nodes)', type: 'success' },
+            { time: '01:15', msg: 'Relation mining pass 1/2', type: 'info' },
+            { time: '01:48', msg: 'Knowledge graph finalized', type: 'success' }
+          ],
+          progress: { pct: 100, color: 'green' }
+        },
+        {
+          name: 'Generate Seed Hypotheses',
+          status: 'done',
+          time: '2m 06s',
+          details: [
+            { label: 'Generated', value: '24 candidates' },
+            { label: 'Filtered', value: '12 unique' },
+            { label: 'Model', value: 'claude-opus-4-0520' }
+          ],
+          logs: [
+            { time: '00:00', msg: 'Starting hypothesis generation (batch 1/3)', type: '' },
+            { time: '00:45', msg: 'Batch 1 complete: 8 candidates', type: 'info' },
+            { time: '01:20', msg: 'Batch 2 complete: 9 candidates', type: 'info' },
+            { time: '01:52', msg: 'Batch 3 complete: 7 candidates', type: 'info' },
+            { time: '02:06', msg: 'Dedup filter: 24 -> 12 unique', type: 'success' }
+          ],
+          progress: { pct: 100, color: 'green' }
+        },
+        {
+          name: 'Novelty Pre-screen',
+          status: 'done',
+          time: '0m 52s',
+          details: [
+            { label: 'Checked', value: '12 hypotheses' },
+            { label: 'Passed', value: '12 / 12' },
+            { label: 'Method', value: 'Semantic dedup' }
+          ],
+          logs: [
+            { time: '00:00', msg: 'Running novelty checks against corpus', type: '' },
+            { time: '00:38', msg: 'Similarity scores computed', type: 'info' },
+            { time: '00:52', msg: 'All 12 passed (max similarity 0.31)', type: 'success' }
+          ],
+          progress: { pct: 100, color: 'green' }
+        }
+      ]
+    },
+    {
+      id: 'hypothesis',
+      label: 'Hypothesis',
+      icon: { emoji: '\u{1F9EA}', colorClass: 'purple' },
+      title: 'Hypothesis Refinement',
+      summary: 'Refined top 4 hypotheses through 3 review loops. ' +
+               'Best hypothesis scored 8.4/10 on feasibility, novelty, and impact. ' +
+               'Mechanism grounded in published photonic bandgap theory.',
+      badges: [
+        { label: 'Score 8.4', dotClass: 'purple' },
+        { label: '3 loops', dotClass: 'purple' },
+        { label: 'Completed', dotClass: 'green' }
+      ],
+      substages: [
+        {
+          name: 'Initial Review & Scoring',
+          status: 'done',
+          time: '1m 15s',
+          details: [
+            { label: 'Reviewed', value: '12 hypotheses' },
+            { label: 'Top-k', value: '4 selected' },
+            { label: 'Avg score', value: '6.2 / 10' }
+          ],
+          logs: [
+            { time: '00:00', msg: 'Scoring 12 hypotheses on 5 criteria', type: '' },
+            { time: '00:48', msg: 'Ranking complete, selecting top 4', type: 'info' },
+            { time: '01:15', msg: 'Top hypothesis: "Photonic crystal thermal emitter"', type: 'success' }
+          ],
+          progress: { pct: 100, color: 'purple' }
+        },
+        {
+          name: 'Refinement Loop 1',
+          status: 'done',
+          time: '1m 42s',
+          details: [
+            { label: 'Feedback', value: '3 weakness flags' },
+            { label: 'Revised', value: '4 hypotheses' },
+            { label: 'Score gain', value: '+1.1 avg' }
+          ],
+          logs: [
+            { time: '00:00', msg: 'Generating critique for top 4', type: '' },
+            { time: '00:30', msg: 'Weakness: vague mechanism in H#2', type: 'warn' },
+            { time: '01:00', msg: 'Revision pass complete', type: 'info' },
+            { time: '01:42', msg: 'Re-scored: avg 7.3 (+1.1)', type: 'success' }
+          ],
+          progress: { pct: 100, color: 'purple' }
+        },
+        {
+          name: 'Refinement Loop 2',
+          status: 'done',
+          time: '1m 28s',
+          details: [
+            { label: 'Feedback', value: '2 weakness flags' },
+            { label: 'Revised', value: '4 hypotheses' },
+            { label: 'Score gain', value: '+0.6 avg' }
+          ],
+          logs: [
+            { time: '00:00', msg: 'Generating critique round 2', type: '' },
+            { time: '00:40', msg: 'All major weaknesses resolved', type: 'info' },
+            { time: '01:28', msg: 'Re-scored: avg 7.9 (+0.6)', type: 'success' }
+          ],
+          progress: { pct: 100, color: 'purple' }
+        },
+        {
+          name: 'Refinement Loop 3 (Final)',
+          status: 'done',
+          time: '1m 33s',
+          details: [
+            { label: 'Feedback', value: '0 weakness flags' },
+            { label: 'Best score', value: '8.4 / 10' },
+            { label: 'Runner-up', value: '8.1 / 10' }
+          ],
+          logs: [
+            { time: '00:00', msg: 'Final refinement pass', type: '' },
+            { time: '00:55', msg: 'No remaining weaknesses flagged', type: 'success' },
+            { time: '01:33', msg: 'Final winner: H#1 at 8.4/10', type: 'success' }
+          ],
+          progress: { pct: 100, color: 'purple' }
+        }
+      ]
+    },
+    {
+      id: 'invention',
+      label: 'Invention',
+      icon: { emoji: '\u{1F4A1}', colorClass: 'blue' },
+      title: 'Invention Loop',
+      summary: 'Developing the invention plan and generating paper sections. ' +
+               'Currently on iteration 3 of 5. Strategy generation and plan ' +
+               'writing complete; paper text generation in progress.',
+      badges: [
+        { label: 'Iter 3/5', dotClass: 'blue' },
+        { label: 'In progress', dotClass: 'blue' },
+        { label: 'ETA ~6m', dotClass: 'amber' }
+      ],
+      substages: [
+        {
+          name: 'Generate Strategy',
+          status: 'done',
+          time: '1m 12s',
+          details: [
+            { label: 'Strategies', value: '3 generated' },
+            { label: 'Selected', value: 'Gradient optimization' },
+            { label: 'Confidence', value: '0.87' }
+          ],
+          logs: [
+            { time: '00:00', msg: 'Generating invention strategies', type: '' },
+            { time: '00:42', msg: '3 strategies proposed', type: 'info' },
+            { time: '01:12', msg: 'Selected: gradient-based photonic optimization', type: 'success' }
+          ],
+          progress: { pct: 100, color: 'blue' }
+        },
+        {
+          name: 'Generate Plan',
+          status: 'done',
+          time: '2m 05s',
+          details: [
+            { label: 'Sections', value: '6 planned' },
+            { label: 'Figures', value: '4 planned' },
+            { label: 'Equations', value: '8 outlined' }
+          ],
+          logs: [
+            { time: '00:00', msg: 'Outlining paper structure', type: '' },
+            { time: '00:55', msg: 'Section plan drafted (6 sections)', type: 'info' },
+            { time: '01:30', msg: 'Figure descriptions complete', type: 'info' },
+            { time: '02:05', msg: 'Plan finalized and validated', type: 'success' }
+          ],
+          progress: { pct: 100, color: 'blue' }
+        },
+        {
+          name: 'Generate Paper Text',
+          status: 'running',
+          time: '3m 14s...',
+          details: [
+            { label: 'Written', value: '4 / 6 sections' },
+            { label: 'Words', value: '~3,200' },
+            { label: 'Citations', value: '18 placed' }
+          ],
+          logs: [
+            { time: '00:00', msg: 'Writing abstract and introduction', type: '' },
+            { time: '01:10', msg: 'Section 1-2 complete (1,400 words)', type: 'info' },
+            { time: '02:15', msg: 'Section 3-4 complete (1,800 words)', type: 'info' },
+            { time: '03:14', msg: 'Writing section 5: Results...', type: 'info' }
+          ],
+          progress: { pct: 67, color: 'blue' }
+        },
+        {
+          name: 'Review Paper',
+          status: 'waiting',
+          time: '\u2014',
+          details: [
+            { label: 'Status', value: 'Queued' }
+          ],
+          logs: [],
+          progress: { pct: 0, color: 'blue' }
+        },
+        {
+          name: 'Revise Paper',
+          status: 'waiting',
+          time: '\u2014',
+          details: [
+            { label: 'Status', value: 'Queued' }
+          ],
+          logs: [],
+          progress: { pct: 0, color: 'blue' }
+        }
+      ]
+    },
+    {
+      id: 'paper',
+      label: 'Paper',
+      icon: { emoji: '\u{1F4C4}', colorClass: 'gray' },
+      title: 'Paper Generation',
+      summary: 'Awaiting invention loop completion. Will generate final LaTeX paper, ' +
+               'artifact demos, visualizations, and the full repository package.',
+      badges: [
+        { label: 'Not started', dotClass: 'gray' },
+        { label: 'Waiting', dotClass: 'gray' }
+      ],
+      substages: [
+        {
+          name: 'Generate Artifact Demos',
+          status: 'waiting',
+          time: '\u2014',
+          details: [{ label: 'Status', value: 'Blocked on invention' }],
+          logs: [],
+          progress: { pct: 0, color: 'blue' }
+        },
+        {
+          name: 'Generate Visualizations',
+          status: 'waiting',
+          time: '\u2014',
+          details: [{ label: 'Status', value: 'Blocked on invention' }],
+          logs: [],
+          progress: { pct: 0, color: 'blue' }
+        },
+        {
+          name: 'Generate Full Paper (LaTeX)',
+          status: 'waiting',
+          time: '\u2014',
+          details: [{ label: 'Status', value: 'Blocked on invention' }],
+          logs: [],
+          progress: { pct: 0, color: 'blue' }
+        },
+        {
+          name: 'Build Repository',
+          status: 'waiting',
+          time: '\u2014',
+          details: [{ label: 'Status', value: 'Blocked on invention' }],
+          logs: [],
+          progress: { pct: 0, color: 'blue' }
+        }
+      ]
+    }
+  ];
+
+  // ---- State ----
+  let currentStage = 0;
+  let expandedSubstages = new Set();
+
+  // ---- DOM refs ----
+  const contentArea = document.getElementById('contentArea');
+  const navPrev = document.getElementById('navPrev');
+  const navNext = document.getElementById('navNext');
+  const navLabel = document.getElementById('navLabel');
+  const ringStrip = document.getElementById('ringStrip');
+  const inventionEndpoint = document.getElementById('inventionEndpoint');
+
+  // ---- Chevron SVG ----
+  const chevronSVG = '<svg class="substage-chevron" viewBox="0 0 24 24" ' +
+    'fill="none" stroke="currentColor" stroke-width="2" ' +
+    'stroke-linecap="round" stroke-linejoin="round">' +
+    '<polyline points="9 6 15 12 9 18"/></svg>';
+
+  // ---- Status icons ----
+  function statusIcon(status) {
+    if (status === 'done') return '<div class="substage-status done">\u2713</div>';
+    if (status === 'running') return '<div class="substage-status running">\u25B6</div>';
+    return '<div class="substage-status waiting">\u2022</div>';
+  }
+
+  // ---- Render content for a stage ----
+  function renderStageContent(stage) {
+    const s = STAGES[stage];
+    let html = '';
+
+    // Header
+    html += '<div class="stage-header">';
+    html += '  <div class="stage-icon ' + s.icon.colorClass + '">' + s.icon.emoji + '</div>';
+    html += '  <div>';
+    html += '    <div class="stage-title">' + s.title + '</div>';
+    html += '    <div class="stage-summary">' + s.summary + '</div>';
+    html += '  </div>';
+    html += '</div>';
+
+    // Badges
+    html += '<div class="stage-badges">';
+    s.badges.forEach(function(b) {
+      html += '<span class="badge">';
+      html += '<span class="badge-dot ' + b.dotClass + '"></span>';
+      html += b.label;
+      html += '</span>';
+    });
+    html += '</div>';
+
+    // Sub-stages
+    html += '<div class="substages">';
+    s.substages.forEach(function(sub, i) {
+      var key = stage + '-' + i;
+      var isExpanded = expandedSubstages.has(key);
+      var classes = 'substage';
+      if (isExpanded) classes += ' expanded';
+      if (sub.status === 'done') classes += ' completed';
+      if (sub.status === 'running') classes += ' active';
+
+      html += '<div class="' + classes + '" data-key="' + key + '">';
+
+      // Header
+      html += '<div class="substage-header" onclick="toggleSubstage(\'' + key + '\')">';
+      html += '  <div class="substage-left">';
+      html += '    ' + statusIcon(sub.status);
+      html += '    <span class="substage-name">' + sub.name + '</span>';
+      html += '  </div>';
+      html += '  <div class="substage-right">';
+      html += '    <span class="substage-time">' + sub.time + '</span>';
+      html += '    ' + chevronSVG;
+      html += '  </div>';
+      html += '</div>';
+
+      // Body
+      html += '<div class="substage-body">';
+      html += '  <div class="substage-content">';
+
+      // Detail rows
+      sub.details.forEach(function(d) {
+        html += '<div class="substage-detail-row">';
+        html += '  <span class="substage-detail-label">' + d.label + '</span>';
+        html += '  <span class="substage-detail-value">' + d.value + '</span>';
+        html += '</div>';
+      });
+
+      // Progress bar
+      if (sub.progress) {
+        html += '<div class="substage-progress">';
+        html += '  <div class="substage-progress-fill ' + sub.progress.color + '"';
+        html += '       style="width:' + sub.progress.pct + '%"></div>';
+        html += '</div>';
+      }
+
+      // Logs
+      if (sub.logs && sub.logs.length > 0) {
+        html += '<div class="substage-logs">';
+        sub.logs.forEach(function(log) {
+          html += '<div class="log-entry">';
+          html += '  <span class="log-time">' + log.time + '</span>';
+          html += '  <span class="log-msg' + (log.type ? ' ' + log.type : '') + '">';
+          html += log.msg;
+          html += '  </span>';
+          html += '</div>';
+        });
+        html += '</div>';
+      }
+
+      html += '  </div>';
+      html += '</div>';
+      html += '</div>';
+    });
+    html += '</div>';
+
+    return html;
+  }
+
+  // ---- Select a stage ----
+  window.selectStage = function(index) {
+    if (index < 0 || index >= STAGES.length) return;
+    if (index === currentStage) return;
+
+    var direction = index > currentStage ? 1 : -1;
+    currentStage = index;
+    expandedSubstages.clear();
+
+    // Update ring selections
+    var gauges = ringStrip.querySelectorAll('.ring-gauge');
+    gauges.forEach(function(g, i) {
+      g.classList.toggle('selected', i === index);
+    });
+
+    // Animate content transition
+    contentArea.style.transition = 'opacity 0.2s ease, transform 0.2s ease';
+    contentArea.style.opacity = '0';
+    contentArea.style.transform = 'translateX(' + (-direction * 24) + 'px)';
+
+    setTimeout(function() {
+      contentArea.innerHTML = renderStageContent(index);
+      contentArea.style.transform = 'translateX(' + (direction * 24) + 'px)';
+
+      requestAnimationFrame(function() {
+        contentArea.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+        contentArea.style.opacity = '1';
+        contentArea.style.transform = 'translateX(0)';
+      });
+    }, 200);
+
+    // Update nav
+    updateNav();
+  };
+
+  // ---- Toggle sub-stage ----
+  window.toggleSubstage = function(key) {
+    if (expandedSubstages.has(key)) {
+      expandedSubstages.delete(key);
+    } else {
+      expandedSubstages.add(key);
+    }
+
+    var el = document.querySelector('.substage[data-key="' + key + '"]');
+    if (el) {
+      el.classList.toggle('expanded', expandedSubstages.has(key));
+    }
+  };
+
+  // ---- Navigate ----
+  window.navigate = function(dir) {
+    var next = currentStage + dir;
+    if (next >= 0 && next < STAGES.length) {
+      selectStage(next);
+    }
+  };
+
+  // ---- Update nav buttons ----
+  function updateNav() {
+    navPrev.classList.toggle('disabled', currentStage === 0);
+    navNext.classList.toggle('disabled', currentStage === STAGES.length - 1);
+    navLabel.textContent = STAGES[currentStage].label;
+  }
+
+  // ---- Keyboard nav ----
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'ArrowLeft') { navigate(-1); e.preventDefault(); }
+    if (e.key === 'ArrowRight') { navigate(1); e.preventDefault(); }
+  });
+
+  // ---- Position the animated endpoint dot ----
+  function positionEndpointDot() {
+    if (!inventionEndpoint) return;
+
+    // 60% progress means 60% of the circle arc from the top
+    // Ring: center (25,25), radius 20, SVG is rotated -90deg
+    // 60% of 360 = 216 degrees from the -90deg start (top)
+    // Actual angle = -90 + 216 = 126 degrees
+    var progress = 0.60;
+    var angleDeg = -90 + (progress * 360);
+    var angleRad = angleDeg * Math.PI / 180;
+    var radius = 20;
+    var cx = 25;
+    var cy = 25;
+
+    // Point on the circle in SVG coords
+    var px = cx + radius * Math.cos(angleRad);
+    var py = cy + radius * Math.sin(angleRad);
+
+    // Convert from SVG viewBox (50x50) to element size (50px)
+    var scale = 50 / 50;
+    inventionEndpoint.style.left = (px * scale - 3) + 'px';
+    inventionEndpoint.style.top = (py * scale - 3) + 'px';
+  }
+
+  // ---- Init ----
+  contentArea.innerHTML = renderStageContent(0);
+  contentArea.style.opacity = '1';
+  updateNav();
+  positionEndpointDot();
+
+  // Re-position endpoint on resize
+  window.addEventListener('resize', positionEndpointDot);
+
+})();
+</script>
+
+</body>
+</html>

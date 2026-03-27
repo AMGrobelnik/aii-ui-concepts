@@ -1,0 +1,1513 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Pipeline Monitor</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg-root: #0b0e14;
+    --bg-left: #0f1219;
+    --bg-right: #111620;
+    --bg-card: rgba(255,255,255,0.03);
+    --bg-card-hover: rgba(255,255,255,0.06);
+    --bg-glass: rgba(255,255,255,0.04);
+    --border-subtle: rgba(255,255,255,0.06);
+    --border-glass: rgba(255,255,255,0.08);
+    --text-primary: #e2e8f0;
+    --text-secondary: #8b95a8;
+    --text-tertiary: #5a6478;
+    --accent-blue: #3b82f6;
+    --accent-blue-dim: rgba(59,130,246,0.15);
+    --accent-blue-glow: rgba(59,130,246,0.25);
+    --accent-green: #22c55e;
+    --accent-green-dim: rgba(34,197,94,0.15);
+    --accent-amber: #f59e0b;
+    --accent-amber-dim: rgba(245,158,11,0.15);
+    --accent-purple: #a855f7;
+    --accent-purple-dim: rgba(168,85,247,0.15);
+    --accent-red: #ef4444;
+    --accent-red-dim: rgba(239,68,68,0.12);
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+    --shadow-card: 0 2px 12px rgba(0,0,0,0.3);
+    --transition-fast: 150ms ease;
+    --transition-med: 250ms ease;
+  }
+
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg-root);
+    color: var(--text-primary);
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Top Bar ───────────────────────────────────── */
+  .topbar {
+    height: 52px;
+    background: linear-gradient(180deg, rgba(15,18,25,0.98) 0%, rgba(15,18,25,0.95) 100%);
+    border-bottom: 1px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    gap: 18px;
+    flex-shrink: 0;
+    backdrop-filter: blur(12px);
+    z-index: 100;
+  }
+  .topbar-brand {
+    display: flex; align-items: center; gap: 10px;
+    font-weight: 700; font-size: 14px; letter-spacing: -0.3px;
+    white-space: nowrap;
+  }
+  .topbar-brand svg { flex-shrink: 0; }
+  .topbar-sep {
+    width: 1px; height: 22px;
+    background: var(--border-subtle);
+  }
+  .topbar-run {
+    font-size: 13px; color: var(--text-secondary);
+    font-family: 'JetBrains Mono', monospace; font-weight: 400;
+    white-space: nowrap;
+  }
+  .topbar-stats {
+    margin-left: auto;
+    display: flex; align-items: center; gap: 20px;
+  }
+  .topbar-stat {
+    font-size: 12px; color: var(--text-secondary);
+    display: flex; align-items: center; gap: 6px;
+    white-space: nowrap;
+  }
+  .topbar-stat .val {
+    color: var(--text-primary); font-weight: 600; font-size: 13px;
+  }
+  .topbar-progress-wrap {
+    display: flex; align-items: center; gap: 10px;
+  }
+  .topbar-progress-bar {
+    width: 120px; height: 6px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 3px; overflow: hidden;
+  }
+  .topbar-progress-fill {
+    height: 100%; width: 65%;
+    background: linear-gradient(90deg, var(--accent-blue), #60a5fa);
+    border-radius: 3px;
+    transition: width 0.6s ease;
+  }
+  .topbar-progress-text {
+    font-size: 13px; font-weight: 700; color: var(--accent-blue);
+  }
+
+  /* ── Main Split ────────────────────────────────── */
+  .main-split {
+    flex: 1; display: flex; overflow: hidden;
+  }
+
+  /* ── Left Pane ─────────────────────────────────── */
+  .left-pane {
+    width: 35%; min-width: 340px; max-width: 460px;
+    background: var(--bg-left);
+    border-right: 1px solid var(--border-subtle);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .left-header {
+    padding: 14px 16px 10px;
+    font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.8px;
+    color: var(--text-tertiary);
+    border-bottom: 1px solid var(--border-subtle);
+    flex-shrink: 0;
+  }
+  .tree-scroll {
+    flex: 1; overflow-y: auto; padding: 6px 0;
+  }
+  .tree-scroll::-webkit-scrollbar { width: 4px; }
+  .tree-scroll::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.1); border-radius: 2px;
+  }
+
+  /* Tree nodes */
+  .tree-module {
+    user-select: none;
+  }
+  .tree-row {
+    display: flex; align-items: center;
+    padding: 3px 12px 3px 0;
+    cursor: pointer;
+    transition: background var(--transition-fast);
+    border-radius: 0;
+    position: relative;
+    min-height: 28px;
+  }
+  .tree-row:hover { background: rgba(255,255,255,0.03); }
+  .tree-row.active {
+    background: var(--accent-blue-dim);
+  }
+  .tree-row.active::before {
+    content: '';
+    position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+    background: var(--accent-blue);
+    border-radius: 0 2px 2px 0;
+  }
+
+  .tree-indent {
+    flex-shrink: 0;
+    display: inline-flex;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: var(--text-tertiary);
+    line-height: 1;
+    white-space: pre;
+    opacity: 0.4;
+  }
+
+  .tree-icon {
+    width: 18px; height: 18px;
+    flex-shrink: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    margin-right: 7px;
+    font-size: 9px;
+    border-radius: 50%;
+  }
+  .tree-icon.done {
+    color: var(--accent-green);
+  }
+  .tree-icon.done::after {
+    content: '';
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--accent-green);
+    box-shadow: 0 0 6px rgba(34,197,94,0.4);
+  }
+  .tree-icon.running {
+    color: var(--accent-blue);
+  }
+  .tree-icon.running::after {
+    content: '';
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--accent-blue);
+    box-shadow: 0 0 8px rgba(59,130,246,0.5);
+    animation: pulse-dot 1.8s ease-in-out infinite;
+  }
+  .tree-icon.pending {
+    color: var(--text-tertiary);
+  }
+  .tree-icon.pending::after {
+    content: '';
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    border: 1.5px solid var(--text-tertiary);
+    opacity: 0.5;
+  }
+
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.8); }
+  }
+
+  .tree-label {
+    flex: 1;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .tree-row.is-module > .tree-label { font-weight: 600; font-size: 13px; }
+  .tree-label .score {
+    color: var(--accent-amber);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; font-weight: 500;
+    margin-left: 5px;
+  }
+  .tree-label .artifact-count {
+    color: var(--accent-blue);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; font-weight: 500;
+    margin-left: 5px;
+  }
+
+  .tree-badge {
+    flex-shrink: 0;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 500;
+    margin-left: 8px;
+    padding: 1px 6px;
+    border-radius: 4px;
+  }
+  .tree-badge.done {
+    color: var(--accent-green); background: var(--accent-green-dim);
+  }
+  .tree-badge.running {
+    color: var(--accent-blue); background: var(--accent-blue-dim);
+  }
+  .tree-badge.pending {
+    color: var(--text-tertiary); opacity: 0.5;
+  }
+
+  .tree-time {
+    flex-shrink: 0;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-tertiary);
+    margin-left: 8px;
+  }
+
+  .tree-chevron {
+    flex-shrink: 0; width: 16px; height: 16px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--text-tertiary);
+    font-size: 10px;
+    transition: transform var(--transition-fast);
+    margin-left: 4px;
+  }
+  .tree-chevron.collapsed { transform: rotate(-90deg); }
+
+  .tree-children {
+    overflow: hidden;
+    transition: max-height 0.3s ease, opacity 0.2s ease;
+  }
+  .tree-children.collapsed {
+    max-height: 0 !important;
+    opacity: 0;
+  }
+
+  /* ── Right Pane ────────────────────────────────── */
+  .right-pane {
+    flex: 1;
+    background: var(--bg-right);
+    overflow-y: auto;
+    position: relative;
+  }
+  .right-pane::-webkit-scrollbar { width: 6px; }
+  .right-pane::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.08); border-radius: 3px;
+  }
+
+  .detail-view {
+    padding: 28px 32px 40px;
+    max-width: 800px;
+    animation: fadeSlideIn 0.3s ease;
+  }
+  @keyframes fadeSlideIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .detail-header {
+    margin-bottom: 22px;
+  }
+  .detail-breadcrumb {
+    font-size: 11px;
+    color: var(--text-tertiary);
+    margin-bottom: 8px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .detail-breadcrumb span { opacity: 0.5; }
+  .detail-title-row {
+    display: flex; align-items: center; gap: 12px;
+    flex-wrap: wrap;
+  }
+  .detail-title {
+    font-size: 22px; font-weight: 700; letter-spacing: -0.5px;
+  }
+  .detail-status-badge {
+    font-size: 11px; font-weight: 600;
+    padding: 3px 10px; border-radius: 20px;
+    display: inline-flex; align-items: center; gap: 5px;
+  }
+  .detail-status-badge.done {
+    background: var(--accent-green-dim); color: var(--accent-green);
+  }
+  .detail-status-badge.running {
+    background: var(--accent-blue-dim); color: var(--accent-blue);
+  }
+  .detail-status-badge .pulse {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: currentColor;
+    animation: pulse-dot 1.8s ease-in-out infinite;
+  }
+
+  .detail-stats-row {
+    display: flex; gap: 24px;
+    margin-top: 14px; padding: 14px 18px;
+    background: var(--bg-glass);
+    border: 1px solid var(--border-glass);
+    border-radius: var(--radius-md);
+    backdrop-filter: blur(8px);
+  }
+  .detail-stat {
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .detail-stat-label {
+    font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px;
+    color: var(--text-tertiary); font-weight: 600;
+  }
+  .detail-stat-value {
+    font-size: 16px; font-weight: 700;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .detail-stat-value.blue { color: var(--accent-blue); }
+  .detail-stat-value.green { color: var(--accent-green); }
+  .detail-stat-value.amber { color: var(--accent-amber); }
+
+  /* Cards for artifacts */
+  .artifact-grid {
+    display: flex; flex-direction: column; gap: 10px;
+    margin-top: 20px;
+  }
+  .artifact-card {
+    background: var(--bg-glass);
+    border: 1px solid var(--border-glass);
+    border-radius: var(--radius-md);
+    padding: 16px 18px;
+    backdrop-filter: blur(8px);
+    transition: background var(--transition-fast), border-color var(--transition-fast);
+    cursor: default;
+  }
+  .artifact-card:hover {
+    background: var(--bg-card-hover);
+    border-color: rgba(255,255,255,0.1);
+  }
+  .artifact-card-top {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 8px;
+  }
+  .artifact-type-badge {
+    font-size: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.5px;
+    padding: 2px 8px; border-radius: 4px;
+  }
+  .artifact-type-badge.experiment {
+    background: var(--accent-purple-dim); color: var(--accent-purple);
+  }
+  .artifact-type-badge.dataset {
+    background: var(--accent-amber-dim); color: var(--accent-amber);
+  }
+  .artifact-type-badge.proof {
+    background: var(--accent-green-dim); color: var(--accent-green);
+  }
+  .artifact-type-badge.benchmark {
+    background: var(--accent-blue-dim); color: var(--accent-blue);
+  }
+  .artifact-card-title {
+    font-size: 14px; font-weight: 600; flex: 1;
+  }
+  .artifact-card-status {
+    font-size: 11px; font-weight: 600;
+    display: flex; align-items: center; gap: 4px;
+    flex-shrink: 0;
+  }
+  .artifact-card-status.done { color: var(--accent-green); }
+  .artifact-card-status.running { color: var(--accent-blue); }
+  .artifact-card-status.pending { color: var(--text-tertiary); }
+
+  .artifact-card-body {
+    display: flex; align-items: center; gap: 16px;
+    font-size: 12px; color: var(--text-secondary);
+  }
+  .artifact-metric {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 500; font-size: 12px;
+  }
+  .artifact-metric.highlight { color: var(--accent-amber); }
+  .artifact-card-body .sep {
+    width: 3px; height: 3px; border-radius: 50%;
+    background: var(--text-tertiary); opacity: 0.4;
+    flex-shrink: 0;
+  }
+
+  .artifact-progress-bar {
+    margin-top: 10px; height: 3px; width: 100%;
+    background: rgba(255,255,255,0.06); border-radius: 2px;
+    overflow: hidden;
+  }
+  .artifact-progress-fill {
+    height: 100%; border-radius: 2px;
+    background: linear-gradient(90deg, var(--accent-blue), #60a5fa);
+    transition: width 0.5s ease;
+    animation: shimmer 2s ease-in-out infinite;
+  }
+  @keyframes shimmer {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }
+
+  /* Hypothesis detail */
+  .hypo-score-display {
+    display: flex; align-items: baseline; gap: 6px;
+    margin-top: 18px;
+  }
+  .hypo-score-big {
+    font-size: 48px; font-weight: 800;
+    font-family: 'JetBrains Mono', monospace;
+    background: linear-gradient(135deg, var(--accent-amber), #fbbf24);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+    line-height: 1;
+  }
+  .hypo-score-max {
+    font-size: 18px; color: var(--text-tertiary); font-weight: 500;
+  }
+  .hypo-abstract-block {
+    margin-top: 18px; padding: 16px 18px;
+    background: var(--bg-glass);
+    border: 1px solid var(--border-glass);
+    border-radius: var(--radius-md);
+    backdrop-filter: blur(8px);
+  }
+  .hypo-abstract-title {
+    font-size: 15px; font-weight: 700; margin-bottom: 10px;
+    color: var(--text-primary);
+  }
+  .hypo-abstract-text {
+    font-size: 13px; line-height: 1.65;
+    color: var(--text-secondary);
+  }
+  .hypo-review-summary {
+    margin-top: 16px;
+    display: flex; gap: 12px;
+  }
+  .hypo-review-card {
+    flex: 1; padding: 14px 16px;
+    background: var(--bg-glass);
+    border: 1px solid var(--border-glass);
+    border-radius: var(--radius-md);
+    text-align: center;
+  }
+  .hypo-review-card .num {
+    font-size: 24px; font-weight: 800;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .hypo-review-card .num.green { color: var(--accent-green); }
+  .hypo-review-card .num.amber { color: var(--accent-amber); }
+  .hypo-review-card .lbl {
+    font-size: 11px; color: var(--text-tertiary);
+    text-transform: uppercase; letter-spacing: 0.5px;
+    font-weight: 600; margin-top: 2px;
+  }
+  .hypo-pills {
+    display: flex; flex-wrap: wrap; gap: 6px; margin-top: 16px;
+  }
+  .hypo-pill {
+    font-size: 11px; font-weight: 500;
+    padding: 3px 10px; border-radius: 20px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+  }
+
+  .detail-footer {
+    margin-top: 28px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-subtle);
+    font-size: 12px; color: var(--text-tertiary);
+    display: flex; align-items: center; gap: 6px;
+  }
+  .detail-footer .arrow { opacity: 0.5; }
+
+  /* Module overview detail (for clicking a module header) */
+  .module-overview-steps {
+    display: flex; flex-direction: column; gap: 8px;
+    margin-top: 18px;
+  }
+  .module-step-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 16px;
+    background: var(--bg-glass);
+    border: 1px solid var(--border-glass);
+    border-radius: var(--radius-md);
+  }
+  .module-step-status {
+    width: 24px; height: 24px;
+    border-radius: 50%; display: flex;
+    align-items: center; justify-content: center;
+    font-size: 12px; flex-shrink: 0;
+  }
+  .module-step-status.done { background: var(--accent-green-dim); color: var(--accent-green); }
+  .module-step-status.running { background: var(--accent-blue-dim); color: var(--accent-blue); }
+  .module-step-status.pending { background: rgba(255,255,255,0.04); color: var(--text-tertiary); }
+  .module-step-name { font-size: 13px; font-weight: 500; flex: 1; }
+  .module-step-time {
+    font-size: 11px; font-family: 'JetBrains Mono', monospace;
+    color: var(--text-tertiary);
+  }
+</style>
+</head>
+<body>
+
+<!-- ── Top Bar ────────────────────────────────────── -->
+<div class="topbar">
+  <div class="topbar-brand">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+      <path d="M12 2L2 7l10 5 10-5-10-5z" fill="#3b82f6" opacity="0.8"/>
+      <path d="M2 17l10 5 10-5" stroke="#3b82f6" stroke-width="2" fill="none" opacity="0.5"/>
+      <path d="M2 12l10 5 10-5" stroke="#3b82f6" stroke-width="2" fill="none" opacity="0.7"/>
+    </svg>
+    AI Inventor
+  </div>
+  <div class="topbar-sep"></div>
+  <div class="topbar-run">run-2026-0326-neural-mesh</div>
+  <div class="topbar-stats">
+    <div class="topbar-stat">
+      <span>Runtime</span>
+      <span class="val" id="runtime-counter">01:02:14</span>
+    </div>
+    <div class="topbar-stat">
+      <span>Cost</span>
+      <span class="val">$18.72</span>
+    </div>
+    <div class="topbar-sep"></div>
+    <div class="topbar-progress-wrap">
+      <div class="topbar-progress-bar"><div class="topbar-progress-fill"></div></div>
+      <div class="topbar-progress-text">65%</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Main Split ─────────────────────────────────── -->
+<div class="main-split">
+
+  <!-- Left Pane -->
+  <div class="left-pane">
+    <div class="left-header">Pipeline Progress</div>
+    <div class="tree-scroll" id="tree-root"></div>
+  </div>
+
+  <!-- Right Pane -->
+  <div class="right-pane">
+    <div class="detail-view" id="detail-view"></div>
+  </div>
+
+</div>
+
+<script>
+// ── Data Model ───────────────────────────────────────────────────────
+const TREE_DATA = [
+  {
+    id: "seed",
+    label: "Seed Hypothesis",
+    status: "done",
+    time: "2m",
+    collapsible: true,
+    collapsed: false,
+    children: [
+      { id: "seed.mine",   label: "Mine Papers",   status: "done" },
+      { id: "seed.kg",     label: "Build KG",       status: "done" },
+      { id: "seed.gaps",   label: "Find Gaps",      status: "done" },
+      { id: "seed.select", label: "Select Seeds",   status: "done" }
+    ]
+  },
+  {
+    id: "hypo",
+    label: "Hypothesis Loop",
+    status: "done",
+    time: "18m",
+    collapsible: true,
+    collapsed: false,
+    children: [
+      { id: "hypo.1", label: "Iteration 1", status: "done", score: "6.2" },
+      { id: "hypo.2", label: "Iteration 2", status: "done", score: "7.8" },
+      { id: "hypo.3", label: "Iteration 3", status: "done", score: "8.4" }
+    ]
+  },
+  {
+    id: "inv",
+    label: "Invention Loop",
+    status: "running",
+    time: "42m",
+    collapsible: true,
+    collapsed: false,
+    children: [
+      {
+        id: "inv.1",
+        label: "Iteration 1",
+        status: "done",
+        collapsible: true,
+        collapsed: true,
+        children: [
+          { id: "inv.1.strat",     label: "Strategy",          status: "done" },
+          { id: "inv.1.plan",      label: "Plan",              status: "done" },
+          { id: "inv.1.artifacts", label: "Artifacts", artCount: "5/5", status: "done" },
+          { id: "inv.1.paper",     label: "Paper Draft",       status: "done" },
+          { id: "inv.1.review",    label: "Review",            status: "done", score: "6.8" },
+          { id: "inv.1.update",    label: "Update Hypo",       status: "done" }
+        ]
+      },
+      {
+        id: "inv.2",
+        label: "Iteration 2",
+        status: "running",
+        collapsible: true,
+        collapsed: false,
+        children: [
+          { id: "inv.2.strat",     label: "Strategy",          status: "done" },
+          { id: "inv.2.plan",      label: "Plan",              status: "done" },
+          { id: "inv.2.artifacts", label: "Artifacts", artCount: "3/5", status: "running" },
+          { id: "inv.2.paper",     label: "Paper Draft",       status: "pending" },
+          { id: "inv.2.review",    label: "Review",            status: "pending" },
+          { id: "inv.2.update",    label: "Update Hypo",       status: "pending" }
+        ]
+      },
+      {
+        id: "inv.3",
+        label: "Iteration 3",
+        status: "pending",
+        collapsible: true,
+        collapsed: true,
+        children: [
+          { id: "inv.3.strat",     label: "Strategy",    status: "pending" },
+          { id: "inv.3.plan",      label: "Plan",        status: "pending" },
+          { id: "inv.3.artifacts", label: "Artifacts",   status: "pending" },
+          { id: "inv.3.paper",     label: "Paper Draft", status: "pending" },
+          { id: "inv.3.review",    label: "Review",      status: "pending" },
+          { id: "inv.3.update",    label: "Update Hypo", status: "pending" }
+        ]
+      }
+    ]
+  },
+  {
+    id: "paper",
+    label: "Paper & Repository",
+    status: "pending",
+    collapsible: true,
+    collapsed: true,
+    children: [
+      { id: "paper.demos",  label: "Artifact Demos",  status: "pending" },
+      { id: "paper.viz",    label: "Visualizations",   status: "pending" },
+      { id: "paper.full",   label: "Full Paper",       status: "pending" },
+      { id: "paper.repo",   label: "Repository",       status: "pending" }
+    ]
+  }
+];
+
+// ── Detail Content Definitions ───────────────────────────────────────
+const DETAILS = {};
+
+DETAILS["inv.2.artifacts"] = () => `
+  <div class="detail-header">
+    <div class="detail-breadcrumb">
+      Invention Loop <span>&rsaquo;</span> Iteration 2 <span>&rsaquo;</span> Artifacts
+    </div>
+    <div class="detail-title-row">
+      <div class="detail-title">Generate Artifacts</div>
+      <div class="detail-status-badge running"><span class="pulse"></span> Running</div>
+    </div>
+  </div>
+  <div class="detail-stats-row">
+    <div class="detail-stat">
+      <div class="detail-stat-label">Progress</div>
+      <div class="detail-stat-value blue">3 / 5</div>
+    </div>
+    <div class="detail-stat">
+      <div class="detail-stat-label">Runtime</div>
+      <div class="detail-stat-value">12m 08s</div>
+    </div>
+    <div class="detail-stat">
+      <div class="detail-stat-label">Cost</div>
+      <div class="detail-stat-value amber">$5.41</div>
+    </div>
+    <div class="detail-stat">
+      <div class="detail-stat-label">Model</div>
+      <div class="detail-stat-value" style="font-size:13px">claude-opus-4-6</div>
+    </div>
+  </div>
+  <div class="artifact-grid">
+    ${artifactCard("Experiment", "Cross-Domain Transfer Ablation", "done",
+      "acc: 0.847", "3m 42s", "$1.12")}
+    ${artifactCard("Dataset", "Synthetic Mesh Topology Corpus", "done",
+      "2,400 examples", "4m 18s", "$1.56")}
+    ${artifactCard("Proof", "Convergence Bound Theorem 3.2", "done",
+      "verified", "2m 05s", "$0.89")}
+    ${artifactCard("Benchmark", "Latency vs. Throughput Scaling", "running",
+      "68% complete", "1m 58s", "$0.97", 68)}
+    ${artifactCard("Experiment", "Adversarial Robustness Evaluation", "pending",
+      "queued", "--", "--")}
+  </div>
+  <div class="detail-footer">
+    Part of Invention Loop Iteration 2 <span class="arrow">&rarr;</span> feeds into Paper Draft
+  </div>
+`;
+
+DETAILS["hypo.3"] = () => `
+  <div class="detail-header">
+    <div class="detail-breadcrumb">
+      Hypothesis Loop <span>&rsaquo;</span> Iteration 3
+    </div>
+    <div class="detail-title-row">
+      <div class="detail-title">Hypothesis &mdash; Iteration 3 (Final)</div>
+      <div class="detail-status-badge done">Complete</div>
+    </div>
+  </div>
+  <div class="hypo-score-display">
+    <span class="hypo-score-big">8.4</span>
+    <span class="hypo-score-max">/ 10</span>
+  </div>
+  <div class="hypo-abstract-block">
+    <div class="hypo-abstract-title">Neural Mesh Topologies for Cross-Domain Knowledge Transfer</div>
+    <div class="hypo-abstract-text">
+      We propose a novel architecture for cross-domain knowledge transfer using dynamically
+      constructed mesh topologies between heterogeneous neural modules. Unlike existing approaches
+      that rely on fixed adapter layers or linear projection heads, our method constructs a
+      sparse, task-conditioned connectivity graph at inference time, enabling selective knowledge
+      routing between domain-specialized sub-networks. We demonstrate that this approach yields
+      a 12.3% improvement on multi-domain benchmarks while reducing parameter count by 40%
+      compared to full fine-tuning baselines. The theoretical convergence bounds (Theorem 3.2)
+      guarantee stable training dynamics under mild assumptions on the spectral gap of the
+      mesh Laplacian.
+    </div>
+  </div>
+  <div class="hypo-review-summary">
+    <div class="hypo-review-card">
+      <div class="num green">0</div>
+      <div class="lbl">Major Issues</div>
+    </div>
+    <div class="hypo-review-card">
+      <div class="num amber">2</div>
+      <div class="lbl">Minor Issues</div>
+    </div>
+    <div class="hypo-review-card">
+      <div class="num" style="color:var(--text-primary)">3</div>
+      <div class="lbl">Iterations</div>
+    </div>
+    <div class="hypo-review-card">
+      <div class="num" style="color:var(--accent-blue)">+2.2</div>
+      <div class="lbl">Score Gain</div>
+    </div>
+  </div>
+  <div class="hypo-pills">
+    <span class="hypo-pill">mesh topology</span>
+    <span class="hypo-pill">cross-domain transfer</span>
+    <span class="hypo-pill">knowledge routing</span>
+    <span class="hypo-pill">spectral gap</span>
+    <span class="hypo-pill">sparse connectivity</span>
+    <span class="hypo-pill">convergence bounds</span>
+    <span class="hypo-pill">adapter-free</span>
+  </div>
+  <div class="detail-footer">
+    Hypothesis Loop (3 iterations) <span class="arrow">&rarr;</span> feeds into Invention Loop
+  </div>
+`;
+
+DETAILS["hypo.1"] = () => hypoIterDetail("1", "6.2", "Initial broad hypothesis exploring mesh connectivity patterns for neural module composition. Focused on establishing baseline transfer metrics across vision and language domains.", 2, 4, ["mesh networks", "transfer learning", "neural modules"]);
+DETAILS["hypo.2"] = () => hypoIterDetail("2", "7.8", "Refined hypothesis incorporating spectral analysis of mesh Laplacian to predict optimal connectivity patterns. Added theoretical grounding for convergence behavior and introduced sparsity constraints.", 1, 3, ["spectral analysis", "Laplacian", "sparsity", "convergence"]);
+
+DETAILS["seed"] = () => moduleOverview("Seed Hypothesis", "done", "2m", "$0.84", [
+  { name: "Mine Papers", status: "done", time: "0m 32s" },
+  { name: "Build KG", status: "done", time: "0m 41s" },
+  { name: "Find Gaps", status: "done", time: "0m 28s" },
+  { name: "Select Seeds", status: "done", time: "0m 19s" },
+]);
+DETAILS["seed.mine"] = () => stepDetail("Seed Hypothesis", "Mine Papers", "done", "Crawled and parsed 847 papers from arXiv, Semantic Scholar, and local corpus. Extracted abstracts, methods, and citation graphs.", "0m 32s", "$0.21", "847 papers processed");
+DETAILS["seed.kg"] = () => stepDetail("Seed Hypothesis", "Build KG", "done", "Constructed knowledge graph with 2,341 concept nodes and 5,672 relationship edges from mined paper corpus.", "0m 41s", "$0.28", "2,341 nodes");
+DETAILS["seed.gaps"] = () => stepDetail("Seed Hypothesis", "Find Gaps", "done", "Identified 18 underexplored research directions by analyzing structural holes and weak bridges in the knowledge graph.", "0m 28s", "$0.19", "18 gaps found");
+DETAILS["seed.select"] = () => stepDetail("Seed Hypothesis", "Select Seeds", "done", "Ranked gaps by novelty and feasibility. Selected top 3 seed hypotheses for the hypothesis refinement loop.", "0m 19s", "$0.16", "3 seeds selected");
+
+DETAILS["hypo"] = () => moduleOverview("Hypothesis Loop", "done", "18m", "$4.32", [
+  { name: "Iteration 1 (6.2)", status: "done", time: "5m 48s" },
+  { name: "Iteration 2 (7.8)", status: "done", time: "6m 12s" },
+  { name: "Iteration 3 (8.4)", status: "done", time: "6m 00s" },
+]);
+
+DETAILS["inv"] = () => moduleOverview("Invention Loop", "running", "42m", "$12.56", [
+  { name: "Iteration 1", status: "done", time: "18m 24s" },
+  { name: "Iteration 2", status: "running", time: "23m 36s" },
+  { name: "Iteration 3", status: "pending", time: "--" },
+]);
+DETAILS["inv.1"] = () => iterOverview("Invention Loop", "1", "done", "18m 24s", "$4.18", [
+  { name: "Strategy", status: "done", time: "2m 14s" },
+  { name: "Plan", status: "done", time: "3m 08s" },
+  { name: "Artifacts (5/5)", status: "done", time: "8m 42s" },
+  { name: "Paper Draft", status: "done", time: "2m 31s" },
+  { name: "Review (6.8)", status: "done", time: "1m 12s" },
+  { name: "Update Hypo", status: "done", time: "0m 37s" },
+]);
+DETAILS["inv.2"] = () => iterOverview("Invention Loop", "2", "running", "23m 36s", "$7.38", [
+  { name: "Strategy", status: "done", time: "2m 08s" },
+  { name: "Plan", status: "done", time: "2m 55s" },
+  { name: "Artifacts (3/5)", status: "running", time: "12m 08s" },
+  { name: "Paper Draft", status: "pending", time: "--" },
+  { name: "Review", status: "pending", time: "--" },
+  { name: "Update Hypo", status: "pending", time: "--" },
+]);
+DETAILS["inv.3"] = () => iterOverview("Invention Loop", "3", "pending", "--", "--", [
+  { name: "Strategy", status: "pending", time: "--" },
+  { name: "Plan", status: "pending", time: "--" },
+  { name: "Artifacts", status: "pending", time: "--" },
+  { name: "Paper Draft", status: "pending", time: "--" },
+  { name: "Review", status: "pending", time: "--" },
+  { name: "Update Hypo", status: "pending", time: "--" },
+]);
+
+// Sub-step details for invention loop iterations
+["inv.1.strat","inv.1.plan","inv.1.paper","inv.1.update",
+ "inv.2.strat","inv.2.plan","inv.2.paper","inv.2.review","inv.2.update",
+ "inv.3.strat","inv.3.plan","inv.3.paper","inv.3.review","inv.3.update"].forEach(id => {
+  const parts = id.split(".");
+  const iter = parts[1];
+  const stepMap = {
+    strat:  ["Strategy",    "Generated research strategy by analyzing hypothesis gaps and identifying the most promising experimental directions."],
+    plan:   ["Plan",        "Produced detailed execution plan with ordered artifact specifications, resource estimates, and dependency graph."],
+    paper:  ["Paper Draft", "Synthesized experimental results and theoretical analysis into a structured paper draft following target venue format."],
+    review: ["Review",      "Critical review of paper draft evaluating novelty, correctness, completeness, and presentation quality."],
+    update: ["Update Hypo", "Updated hypothesis based on review feedback, incorporating suggested improvements and addressing identified weaknesses."]
+  };
+  const step = stepMap[parts[2]];
+  if (!step) return;
+  const node = findNode(id);
+  const st = node ? node.status : "pending";
+  const timeStr = st === "done" ? (iter === "1" ? "2m 14s" : "2m 08s") : "--";
+  const costStr = st === "done" ? "$0.62" : "--";
+  DETAILS[id] = () => stepDetail("Invention Loop / Iteration " + iter, step[0], st, step[1], timeStr, costStr, "");
+});
+
+DETAILS["inv.1.artifacts"] = () => `
+  <div class="detail-header">
+    <div class="detail-breadcrumb">
+      Invention Loop <span>&rsaquo;</span> Iteration 1 <span>&rsaquo;</span> Artifacts
+    </div>
+    <div class="detail-title-row">
+      <div class="detail-title">Generate Artifacts</div>
+      <div class="detail-status-badge done">Complete</div>
+    </div>
+  </div>
+  <div class="detail-stats-row">
+    <div class="detail-stat">
+      <div class="detail-stat-label">Progress</div>
+      <div class="detail-stat-value green">5 / 5</div>
+    </div>
+    <div class="detail-stat">
+      <div class="detail-stat-label">Runtime</div>
+      <div class="detail-stat-value">8m 42s</div>
+    </div>
+    <div class="detail-stat">
+      <div class="detail-stat-label">Cost</div>
+      <div class="detail-stat-value amber">$2.18</div>
+    </div>
+  </div>
+  <div class="artifact-grid">
+    ${artifactCard("Experiment", "Baseline Transfer Evaluation", "done", "acc: 0.791", "2m 12s", "$0.48")}
+    ${artifactCard("Dataset", "Domain Pair Corpus v1", "done", "1,200 examples", "2m 34s", "$0.52")}
+    ${artifactCard("Proof", "Connectivity Lower Bound", "done", "verified", "1m 28s", "$0.41")}
+    ${artifactCard("Experiment", "Mesh Density Sweep", "done", "12 configs", "1m 38s", "$0.44")}
+    ${artifactCard("Benchmark", "Cross-Domain Accuracy Table", "done", "4 domains", "0m 50s", "$0.33")}
+  </div>
+  <div class="detail-footer">
+    Part of Invention Loop Iteration 1 <span class="arrow">&rarr;</span> feeds into Paper Draft
+  </div>
+`;
+
+DETAILS["inv.1.review"] = () => `
+  <div class="detail-header">
+    <div class="detail-breadcrumb">
+      Invention Loop <span>&rsaquo;</span> Iteration 1 <span>&rsaquo;</span> Review
+    </div>
+    <div class="detail-title-row">
+      <div class="detail-title">Paper Review</div>
+      <div class="detail-status-badge done">Complete</div>
+    </div>
+  </div>
+  <div class="hypo-score-display">
+    <span class="hypo-score-big">6.8</span>
+    <span class="hypo-score-max">/ 10</span>
+  </div>
+  <div class="hypo-review-summary" style="margin-top:18px">
+    <div class="hypo-review-card">
+      <div class="num amber">1</div>
+      <div class="lbl">Major Issues</div>
+    </div>
+    <div class="hypo-review-card">
+      <div class="num amber">4</div>
+      <div class="lbl">Minor Issues</div>
+    </div>
+    <div class="hypo-review-card">
+      <div class="num" style="color:var(--text-primary)">1m 12s</div>
+      <div class="lbl">Runtime</div>
+    </div>
+  </div>
+  <div class="hypo-abstract-block" style="margin-top:16px">
+    <div class="hypo-abstract-title">Review Summary</div>
+    <div class="hypo-abstract-text">
+      The initial draft establishes the mesh topology framework but lacks sufficient ablation
+      evidence for the sparsity claims. The convergence analysis needs tighter bounds. Minor
+      presentation issues in Section 4 figures. Baseline comparisons should include recent
+      adapter-based methods (LoRA, prefix tuning).
+    </div>
+  </div>
+  <div class="detail-footer">
+    Part of Invention Loop Iteration 1 <span class="arrow">&rarr;</span> feeds into Update Hypo
+  </div>
+`;
+
+DETAILS["inv.3.artifacts"] = () => stepDetail("Invention Loop / Iteration 3", "Artifacts", "pending", "Artifact generation has not started for this iteration.", "--", "--", "");
+
+DETAILS["paper"] = () => moduleOverview("Paper & Repository", "pending", "--", "--", [
+  { name: "Artifact Demos", status: "pending", time: "--" },
+  { name: "Visualizations", status: "pending", time: "--" },
+  { name: "Full Paper", status: "pending", time: "--" },
+  { name: "Repository", status: "pending", time: "--" },
+]);
+DETAILS["paper.demos"] = () => stepDetail("Paper & Repository", "Artifact Demos", "pending", "Interactive demonstrations of key artifacts will be generated for the paper repository.", "--", "--", "");
+DETAILS["paper.viz"] = () => stepDetail("Paper & Repository", "Visualizations", "pending", "Publication-quality figures and visualizations for the final paper.", "--", "--", "");
+DETAILS["paper.full"] = () => stepDetail("Paper & Repository", "Full Paper", "pending", "Complete camera-ready paper incorporating all iterations of feedback.", "--", "--", "");
+DETAILS["paper.repo"] = () => stepDetail("Paper & Repository", "Repository", "pending", "GitHub repository with reproducible code, data, and documentation.", "--", "--", "");
+
+// ── HTML Generators ──────────────────────────────────────────────────
+
+function artifactCard(type, title, status, metric, time, cost, progress) {
+  const typeLower = type.toLowerCase();
+  const statusIcon = status === "done" ? "&#10003;" : status === "running" ? "&#9654;" : "&#9675;";
+  const statusLabel = status === "done" ? "Complete" : status === "running" ? "Running" : "Queued";
+  let progressBar = "";
+  if (typeof progress === "number") {
+    progressBar = `<div class="artifact-progress-bar"><div class="artifact-progress-fill" style="width:${progress}%"></div></div>`;
+  }
+  return `
+    <div class="artifact-card">
+      <div class="artifact-card-top">
+        <span class="artifact-type-badge ${typeLower}">${type}</span>
+        <span class="artifact-card-title">${title}</span>
+        <span class="artifact-card-status ${status}">${statusIcon} ${statusLabel}</span>
+      </div>
+      <div class="artifact-card-body">
+        <span class="artifact-metric ${status === "done" ? "highlight" : ""}">${metric}</span>
+        <span class="sep"></span>
+        <span>${time}</span>
+        <span class="sep"></span>
+        <span>${cost}</span>
+      </div>
+      ${progressBar}
+    </div>`;
+}
+
+function hypoIterDetail(iter, score, abstract, major, minor, terms) {
+  return `
+    <div class="detail-header">
+      <div class="detail-breadcrumb">Hypothesis Loop <span>&rsaquo;</span> Iteration ${iter}</div>
+      <div class="detail-title-row">
+        <div class="detail-title">Hypothesis &mdash; Iteration ${iter}</div>
+        <div class="detail-status-badge done">Complete</div>
+      </div>
+    </div>
+    <div class="hypo-score-display">
+      <span class="hypo-score-big">${score}</span>
+      <span class="hypo-score-max">/ 10</span>
+    </div>
+    <div class="hypo-abstract-block">
+      <div class="hypo-abstract-title">Hypothesis Summary</div>
+      <div class="hypo-abstract-text">${abstract}</div>
+    </div>
+    <div class="hypo-review-summary">
+      <div class="hypo-review-card"><div class="num ${major === 0 ? 'green' : 'amber'}">${major}</div><div class="lbl">Major Issues</div></div>
+      <div class="hypo-review-card"><div class="num amber">${minor}</div><div class="lbl">Minor Issues</div></div>
+    </div>
+    <div class="hypo-pills">${terms.map(t => `<span class="hypo-pill">${t}</span>`).join("")}</div>
+    <div class="detail-footer">Hypothesis Loop <span class="arrow">&rarr;</span> feeds into Invention Loop</div>`;
+}
+
+function moduleOverview(name, status, time, cost, steps) {
+  const badgeClass = status === "done" ? "done" : status === "running" ? "running" : "pending";
+  const badgeText = status === "done" ? "Complete" : status === "running" ? "Running" : "Pending";
+  const badgeHtml = status === "running"
+    ? `<div class="detail-status-badge running"><span class="pulse"></span> ${badgeText}</div>`
+    : `<div class="detail-status-badge ${badgeClass}">${badgeText}</div>`;
+  return `
+    <div class="detail-header">
+      <div class="detail-title-row">
+        <div class="detail-title">${name}</div>
+        ${badgeHtml}
+      </div>
+    </div>
+    <div class="detail-stats-row">
+      <div class="detail-stat">
+        <div class="detail-stat-label">Steps</div>
+        <div class="detail-stat-value">${steps.length}</div>
+      </div>
+      <div class="detail-stat">
+        <div class="detail-stat-label">Runtime</div>
+        <div class="detail-stat-value">${time}</div>
+      </div>
+      <div class="detail-stat">
+        <div class="detail-stat-label">Cost</div>
+        <div class="detail-stat-value amber">${cost}</div>
+      </div>
+    </div>
+    <div class="module-overview-steps">
+      ${steps.map(s => `
+        <div class="module-step-row">
+          <div class="module-step-status ${s.status}">${s.status === "done" ? "&#10003;" : s.status === "running" ? "&#9654;" : "&#9675;"}</div>
+          <div class="module-step-name">${s.name}</div>
+          <div class="module-step-time">${s.time}</div>
+        </div>`).join("")}
+    </div>`;
+}
+
+function iterOverview(parent, iter, status, time, cost, steps) {
+  const badgeClass = status === "done" ? "done" : status === "running" ? "running" : "pending";
+  const badgeText = status === "done" ? "Complete" : status === "running" ? "Running" : "Pending";
+  const badgeHtml = status === "running"
+    ? `<div class="detail-status-badge running"><span class="pulse"></span> ${badgeText}</div>`
+    : `<div class="detail-status-badge ${badgeClass}">${badgeText}</div>`;
+  return `
+    <div class="detail-header">
+      <div class="detail-breadcrumb">${parent}</div>
+      <div class="detail-title-row">
+        <div class="detail-title">Iteration ${iter}</div>
+        ${badgeHtml}
+      </div>
+    </div>
+    <div class="detail-stats-row">
+      <div class="detail-stat">
+        <div class="detail-stat-label">Steps</div>
+        <div class="detail-stat-value">${steps.length}</div>
+      </div>
+      <div class="detail-stat">
+        <div class="detail-stat-label">Runtime</div>
+        <div class="detail-stat-value">${time}</div>
+      </div>
+      <div class="detail-stat">
+        <div class="detail-stat-label">Cost</div>
+        <div class="detail-stat-value amber">${cost}</div>
+      </div>
+    </div>
+    <div class="module-overview-steps">
+      ${steps.map(s => `
+        <div class="module-step-row">
+          <div class="module-step-status ${s.status}">${s.status === "done" ? "&#10003;" : s.status === "running" ? "&#9654;" : "&#9675;"}</div>
+          <div class="module-step-name">${s.name}</div>
+          <div class="module-step-time">${s.time}</div>
+        </div>`).join("")}
+    </div>`;
+}
+
+function stepDetail(parent, name, status, description, time, cost, metric) {
+  const badgeClass = status === "done" ? "done" : status === "running" ? "running" : "pending";
+  const badgeText = status === "done" ? "Complete" : status === "running" ? "Running" : "Pending";
+  const badgeHtml = status === "running"
+    ? `<div class="detail-status-badge running"><span class="pulse"></span> ${badgeText}</div>`
+    : `<div class="detail-status-badge ${badgeClass}">${badgeText}</div>`;
+  return `
+    <div class="detail-header">
+      <div class="detail-breadcrumb">${parent}</div>
+      <div class="detail-title-row">
+        <div class="detail-title">${name}</div>
+        ${badgeHtml}
+      </div>
+    </div>
+    <div class="detail-stats-row">
+      <div class="detail-stat">
+        <div class="detail-stat-label">Runtime</div>
+        <div class="detail-stat-value">${time}</div>
+      </div>
+      <div class="detail-stat">
+        <div class="detail-stat-label">Cost</div>
+        <div class="detail-stat-value amber">${cost}</div>
+      </div>
+      ${metric ? `<div class="detail-stat"><div class="detail-stat-label">Result</div><div class="detail-stat-value green">${metric}</div></div>` : ""}
+    </div>
+    <div class="hypo-abstract-block" style="margin-top:18px">
+      <div class="hypo-abstract-text">${description}</div>
+    </div>`;
+}
+
+// ── Utilities ────────────────────────────────────────────────────────
+
+function findNode(id, nodes) {
+  nodes = nodes || TREE_DATA;
+  for (const n of nodes) {
+    if (n.id === id) return n;
+    if (n.children) {
+      const found = findNode(id, n.children);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+// ── Tree Rendering ───────────────────────────────────────────────────
+
+let activeId = "inv.2.artifacts";
+
+function statusBadgeText(status, time) {
+  if (status === "done" && time) return time;
+  return "";
+}
+
+function renderTree() {
+  const root = document.getElementById("tree-root");
+  root.innerHTML = "";
+  TREE_DATA.forEach(module => {
+    root.appendChild(renderModule(module, 0, []));
+  });
+  highlightActive();
+}
+
+function renderModule(node, depth, prefixSegments) {
+  const container = document.createElement("div");
+  container.className = "tree-module";
+  container.dataset.id = node.id;
+
+  // Module/iteration header row
+  const row = document.createElement("div");
+  row.className = "tree-row" + (depth === 0 ? " is-module" : "");
+  row.dataset.id = node.id;
+
+  // Indent with tree lines
+  if (prefixSegments.length > 0) {
+    const indent = document.createElement("span");
+    indent.className = "tree-indent";
+    indent.textContent = prefixSegments.join("") + " ";
+    row.appendChild(indent);
+  } else {
+    const indent = document.createElement("span");
+    indent.className = "tree-indent";
+    indent.style.width = "12px";
+    row.appendChild(indent);
+  }
+
+  // Status dot
+  const icon = document.createElement("span");
+  icon.className = "tree-icon " + node.status;
+  row.appendChild(icon);
+
+  // Label
+  const label = document.createElement("span");
+  label.className = "tree-label";
+  let labelHtml = node.label;
+  if (node.score) labelHtml += ` <span class="score">(${node.score})</span>`;
+  if (node.artCount) labelHtml += ` <span class="artifact-count">(${node.artCount})</span>`;
+  label.innerHTML = labelHtml;
+  row.appendChild(label);
+
+  // Time badge for module-level
+  if (node.time && depth === 0) {
+    const time = document.createElement("span");
+    time.className = "tree-time";
+    time.textContent = node.time;
+    row.appendChild(time);
+  }
+
+  // Status badge
+  if (node.status === "running" && !node.children) {
+    const badge = document.createElement("span");
+    badge.className = "tree-badge running";
+    badge.innerHTML = "&#9654;";
+    row.appendChild(badge);
+  }
+
+  // Chevron for collapsible
+  if (node.collapsible && node.children && node.children.length > 0) {
+    const chevron = document.createElement("span");
+    chevron.className = "tree-chevron" + (node.collapsed ? " collapsed" : "");
+    chevron.innerHTML = "&#9662;";
+    row.appendChild(chevron);
+  }
+
+  row.addEventListener("click", (e) => {
+    // Toggle collapse if clicking chevron or if module header
+    if (node.collapsible && node.children) {
+      const chevron = row.querySelector(".tree-chevron");
+      if (chevron && (e.target === chevron || e.target.closest(".tree-chevron"))) {
+        node.collapsed = !node.collapsed;
+        renderTree();
+        showDetail(activeId);
+        return;
+      }
+      // For completed modules, clicking the row also toggles
+      if (node.status === "done" && depth === 0) {
+        node.collapsed = !node.collapsed;
+        renderTree();
+      }
+    }
+    // Always select and show detail
+    activeId = node.id;
+    highlightActive();
+    showDetail(node.id);
+  });
+
+  container.appendChild(row);
+
+  // Children
+  if (node.children && node.children.length > 0) {
+    const childWrap = document.createElement("div");
+    childWrap.className = "tree-children" + (node.collapsed ? " collapsed" : "");
+
+    // Measure for max-height
+    if (!node.collapsed) {
+      childWrap.style.maxHeight = (node.children.length * 200) + "px";
+    }
+
+    node.children.forEach((child, idx) => {
+      const isLast = idx === node.children.length - 1;
+      const connector = isLast ? " \u2514\u2500" : " \u251C\u2500";
+      const continuation = isLast ? "   " : " \u2502 ";
+
+      const newPrefix = [...prefixSegments, (depth === 0 && prefixSegments.length === 0) ? "  " : ""];
+
+      if (child.children && child.children.length > 0) {
+        // Nested item with children
+        const subContainer = renderModule(child, depth + 1,
+          [...(depth === 0 ? ["  "] : prefixSegments), connector.substring(0,1) === " " ? connector : connector]);
+
+        // Fix indent for this node
+        const subRow = subContainer.querySelector(".tree-row");
+        if (subRow) {
+          const indent = subRow.querySelector(".tree-indent");
+          if (indent) {
+            const basePrefix = depth === 0 ? "  " : prefixSegments.join("");
+            indent.textContent = basePrefix + connector + " ";
+          }
+          // Fix indent for children of this node
+          const subChildren = subContainer.querySelector(".tree-children");
+          if (subChildren) {
+            const grandRows = subChildren.querySelectorAll(":scope > .tree-module > .tree-row .tree-indent, :scope > .tree-module > .tree-children .tree-indent");
+            grandRows.forEach(gi => {
+              const baseP = depth === 0 ? "  " : prefixSegments.join("");
+              const cont = isLast ? "   " : " \u2502 ";
+              const currentText = gi.textContent;
+              // Extract the part after the base prefix
+              const afterBase = currentText.substring(basePrefix ? basePrefix.length : 0);
+              gi.textContent = baseP + cont + afterBase;
+            });
+          }
+        }
+        childWrap.appendChild(subContainer);
+      } else {
+        // Leaf node
+        const leafRow = document.createElement("div");
+        leafRow.className = "tree-row";
+        leafRow.dataset.id = child.id;
+
+        const indent = document.createElement("span");
+        indent.className = "tree-indent";
+        const basePrefix = depth === 0 ? "  " : prefixSegments.join("");
+        indent.textContent = basePrefix + connector + " ";
+        leafRow.appendChild(indent);
+
+        const ic = document.createElement("span");
+        ic.className = "tree-icon " + child.status;
+        leafRow.appendChild(ic);
+
+        const lbl = document.createElement("span");
+        lbl.className = "tree-label";
+        let lhtml = child.label;
+        if (child.score) lhtml += ` <span class="score">(${child.score})</span>`;
+        if (child.artCount) lhtml += ` <span class="artifact-count">(${child.artCount})</span>`;
+        lbl.innerHTML = lhtml;
+        leafRow.appendChild(lbl);
+
+        if (child.status === "running") {
+          const badge = document.createElement("span");
+          badge.className = "tree-badge running";
+          badge.innerHTML = "&#9654;";
+          leafRow.appendChild(badge);
+        }
+
+        leafRow.addEventListener("click", () => {
+          activeId = child.id;
+          highlightActive();
+          showDetail(child.id);
+        });
+
+        const leafWrap = document.createElement("div");
+        leafWrap.className = "tree-module";
+        leafWrap.dataset.id = child.id;
+        leafWrap.appendChild(leafRow);
+        childWrap.appendChild(leafWrap);
+      }
+    });
+
+    container.appendChild(childWrap);
+  }
+
+  return container;
+}
+
+function highlightActive() {
+  document.querySelectorAll(".tree-row").forEach(row => {
+    row.classList.toggle("active", row.dataset.id === activeId);
+  });
+}
+
+function showDetail(id) {
+  const view = document.getElementById("detail-view");
+  const generator = DETAILS[id];
+  if (generator) {
+    view.style.opacity = "0";
+    view.style.transform = "translateY(8px)";
+    setTimeout(() => {
+      view.innerHTML = generator();
+      view.style.transition = "opacity 0.25s ease, transform 0.25s ease";
+      view.style.opacity = "1";
+      view.style.transform = "translateY(0)";
+    }, 80);
+  } else {
+    // Fallback: generic detail
+    const node = findNode(id);
+    if (node) {
+      view.style.opacity = "0";
+      view.style.transform = "translateY(8px)";
+      setTimeout(() => {
+        const st = node.status === "done" ? "Complete" : node.status === "running" ? "Running" : "Pending";
+        view.innerHTML = `
+          <div class="detail-header">
+            <div class="detail-title-row">
+              <div class="detail-title">${node.label}</div>
+              <div class="detail-status-badge ${node.status}">${st}</div>
+            </div>
+          </div>
+          <div class="detail-stats-row">
+            <div class="detail-stat">
+              <div class="detail-stat-label">Status</div>
+              <div class="detail-stat-value">${st}</div>
+            </div>
+          </div>`;
+        view.style.transition = "opacity 0.25s ease, transform 0.25s ease";
+        view.style.opacity = "1";
+        view.style.transform = "translateY(0)";
+      }, 80);
+    }
+  }
+}
+
+// ── Runtime Counter ──────────────────────────────────────────────────
+let runtimeSeconds = 3734; // 01:02:14
+setInterval(() => {
+  runtimeSeconds++;
+  const h = Math.floor(runtimeSeconds / 3600);
+  const m = Math.floor((runtimeSeconds % 3600) / 60);
+  const s = runtimeSeconds % 60;
+  document.getElementById("runtime-counter").textContent =
+    String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
+}, 1000);
+
+// ── Build the improved tree with proper box-drawing characters ──────
+// This replaces the generic renderer with one that correctly draws the
+// full tree structure with Unicode box-drawing connectors.
+
+function buildTree() {
+  const root = document.getElementById("tree-root");
+  root.innerHTML = "";
+
+  TREE_DATA.forEach((mod, mi) => {
+    const modEl = buildNode(mod, "", true, mi === TREE_DATA.length - 1);
+    root.appendChild(modEl);
+  });
+
+  highlightActive();
+  showDetail(activeId);
+}
+
+function buildNode(node, inheritedPrefix, isTopLevel, isLast) {
+  const frag = document.createDocumentFragment();
+
+  // The row for this node
+  const row = document.createElement("div");
+  row.className = "tree-row" + (isTopLevel ? " is-module" : "");
+  row.dataset.id = node.id;
+
+  // Indent / connector
+  const indent = document.createElement("span");
+  indent.className = "tree-indent";
+  if (isTopLevel) {
+    indent.textContent = " ";
+  } else {
+    indent.textContent = inheritedPrefix + (isLast ? "\u2514\u2500 " : "\u251C\u2500 ");
+  }
+  row.appendChild(indent);
+
+  const icon = document.createElement("span");
+  icon.className = "tree-icon " + node.status;
+  row.appendChild(icon);
+
+  const label = document.createElement("span");
+  label.className = "tree-label";
+  let lh = node.label;
+  if (node.score) lh += ` <span class="score">(${node.score})</span>`;
+  if (node.artCount) lh += ` <span class="artifact-count">(${node.artCount})</span>`;
+  label.innerHTML = lh;
+  row.appendChild(label);
+
+  if (isTopLevel && node.time) {
+    const t = document.createElement("span");
+    t.className = "tree-time";
+    t.textContent = node.time;
+    row.appendChild(t);
+  }
+
+  if (node.status === "running" && (!node.children || node.children.length === 0)) {
+    const b = document.createElement("span");
+    b.className = "tree-badge running";
+    b.innerHTML = "&#9654;";
+    row.appendChild(b);
+  }
+
+  if (node.collapsible && node.children && node.children.length > 0) {
+    const ch = document.createElement("span");
+    ch.className = "tree-chevron" + (node.collapsed ? " collapsed" : "");
+    ch.innerHTML = "&#9662;";
+    ch.addEventListener("click", (e) => {
+      e.stopPropagation();
+      node.collapsed = !node.collapsed;
+      buildTree();
+    });
+    row.appendChild(ch);
+  }
+
+  row.addEventListener("click", (e) => {
+    if (e.target.closest(".tree-chevron")) return;
+    if (node.collapsible && node.children && node.status === "done" && isTopLevel) {
+      node.collapsed = !node.collapsed;
+      buildTree();
+    }
+    activeId = node.id;
+    highlightActive();
+    showDetail(node.id);
+  });
+
+  const wrapper = document.createElement("div");
+  wrapper.className = "tree-module";
+  wrapper.dataset.id = node.id;
+  wrapper.appendChild(row);
+
+  // Children
+  if (node.children && node.children.length > 0) {
+    const childContainer = document.createElement("div");
+    childContainer.className = "tree-children" + (node.collapsed ? " collapsed" : "");
+    if (!node.collapsed) {
+      childContainer.style.maxHeight = "2000px";
+    }
+
+    const childPrefix = isTopLevel
+      ? "  "
+      : inheritedPrefix + (isLast ? "   " : " \u2502 ");
+
+    node.children.forEach((child, ci) => {
+      const childIsLast = ci === node.children.length - 1;
+      const childEl = buildNode(child, childPrefix, false, childIsLast);
+      childContainer.appendChild(childEl);
+    });
+
+    wrapper.appendChild(childContainer);
+  }
+
+  return wrapper;
+}
+
+// ── Initialize ───────────────────────────────────────────────────────
+buildTree();
+</script>
+</body>
+</html>

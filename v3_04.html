@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor v3.04 — Vertical Glow Beam</title>
+<style>
+  *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+  :root{
+    --bg:#1a1d23;--surface:#22262e;--border:#2e3440;
+    --text:#e2e4e9;--muted:#8b919a;
+    --green:#22c55e;--purple:#a78bfa;--blue:#3b82f6;--orange:#f59e0b;
+  }
+  body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,-apple-system,sans-serif;height:100vh;overflow:hidden;display:flex}
+  ::selection{background:var(--purple);color:#fff}
+
+  /* ── Ring Sidebar ─────────────────────────────────────── */
+  .ring-sidebar{width:88px;min-width:88px;height:100vh;display:flex;flex-direction:column;align-items:center;padding:20px 0;border-right:1px solid var(--border);background:var(--surface);position:relative;z-index:10}
+  .ring-sidebar .logo{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--green),var(--blue));display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;margin-bottom:24px;box-shadow:0 0 20px rgba(34,197,94,.25)}
+  .ring-container{position:relative;width:64px;height:64px;margin:8px 0;cursor:pointer;flex-shrink:0}
+  .ring-container svg{position:absolute;top:0;left:0;width:64px;height:64px}
+  .ring-track{fill:none;stroke:var(--border);stroke-width:3}
+  .ring-progress{fill:none;stroke-width:3;stroke-linecap:round;transition:stroke-dashoffset .6s ease,stroke .3s}
+  .ring-label{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--muted);transition:color .3s}
+  .ring-container.active .ring-label{color:var(--text)}
+  .ring-container:hover .ring-label{color:var(--text)}
+  .ring-container.active::after{content:'';position:absolute;right:-14px;top:50%;transform:translateY(-50%);width:3px;height:20px;border-radius:2px;background:var(--green)}
+  .ring-spacer{flex:1}
+  .ring-sidebar .status{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-top:12px;writing-mode:vertical-rl;text-orientation:mixed}
+
+  /* ── Main Area ────────────────────────────────────────── */
+  .main{flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative}
+
+  /* ── Row 1: Module Nodes ──────────────────────────────── */
+  .row1{padding:20px 32px 16px;display:flex;align-items:center;gap:0;position:relative;z-index:5;min-height:76px}
+  .module-node{position:relative;display:flex;flex-direction:column;align-items:center;cursor:pointer;flex-shrink:0}
+  .module-circle{width:36px;height:36px;border-radius:50%;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;transition:all .3s ease;background:var(--surface);position:relative;z-index:2}
+  .module-node.active .module-circle{border-color:var(--node-color);box-shadow:0 0 12px color-mix(in srgb,var(--node-color) 40%,transparent),0 0 4px color-mix(in srgb,var(--node-color) 20%,transparent)}
+  .module-node:hover .module-circle{border-color:color-mix(in srgb,var(--node-color) 60%,var(--border))}
+  .module-name{font-size:9px;color:var(--muted);margin-top:5px;white-space:nowrap;transition:color .3s;max-width:72px;overflow:hidden;text-overflow:ellipsis;text-align:center}
+  .module-node.active .module-name{color:var(--text)}
+
+  /* Animated gradient connector between modules */
+  .module-connector{width:48px;height:2px;position:relative;flex-shrink:0;margin:0 2px;align-self:flex-start;margin-top:18px}
+  .module-connector .track{position:absolute;inset:0;background:var(--border);border-radius:1px}
+  .module-connector .fill{position:absolute;top:0;left:0;height:100%;border-radius:1px;background:linear-gradient(90deg,var(--from-color),var(--to-color));transition:width .4s ease}
+  .module-connector .particle-lane{position:absolute;inset:0;overflow:hidden;border-radius:1px}
+  .module-connector .particle{position:absolute;width:6px;height:2px;border-radius:1px;top:0;opacity:0}
+  .module-connector.passed .particle{animation:connectorParticle 2.5s linear infinite}
+  @keyframes connectorParticle{0%{left:-6px;opacity:0}10%{opacity:.8}90%{opacity:.8}100%{left:100%;opacity:0}}
+
+  /* ── Row 2: Sub-step Dots ─────────────────────────────── */
+  .row2{padding:0 32px 16px;display:flex;align-items:center;gap:10px;position:relative;z-index:5;min-height:32px}
+  .sub-dot{width:12px;height:12px;border-radius:50%;border:2px solid var(--border);background:var(--surface);cursor:pointer;transition:all .3s ease;position:relative;flex-shrink:0}
+  .sub-dot.completed{background:var(--sub-color);border-color:var(--sub-color);opacity:.7}
+  .sub-dot.active{border-color:var(--sub-color);box-shadow:0 0 8px color-mix(in srgb,var(--sub-color) 50%,transparent);transform:scale(1.2)}
+  .sub-dot:hover{border-color:var(--sub-color);transform:scale(1.15)}
+  .sub-dot-connector{width:16px;height:1px;background:var(--border);flex-shrink:0}
+
+  /* ── Vertical Glow Beam ───────────────────────────────── */
+  .beam-container{position:absolute;top:0;left:0;width:100%;height:120px;pointer-events:none;z-index:3;overflow:visible}
+  .beam-line{position:absolute;width:2px;transition:left .3s cubic-bezier(.4,0,.2,1),height .3s ease,opacity .3s;opacity:0}
+  .beam-line.visible{opacity:1}
+  .beam-line .beam-core{position:absolute;inset:0;width:2px;border-radius:1px}
+  .beam-line .beam-glow{position:absolute;top:0;bottom:0;left:-7px;width:16px;border-radius:8px;filter:blur(6px);opacity:.35}
+  .beam-line .beam-spark{position:absolute;width:2px;height:12px;border-radius:1px;left:0;top:0;opacity:0}
+  .beam-line.visible .beam-spark{animation:sparkTravel 1.8s ease-in-out infinite}
+  @keyframes sparkTravel{0%{top:0;opacity:0}15%{opacity:1}85%{opacity:1}100%{top:calc(100% - 12px);opacity:0}}
+
+  /* ── Content Area ─────────────────────────────────────── */
+  .content{flex:1;padding:0 32px 24px;overflow-y:auto;position:relative;z-index:4}
+  .content::-webkit-scrollbar{width:5px}
+  .content::-webkit-scrollbar-track{background:transparent}
+  .content::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+  .content-header{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+  .content-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700}
+  .content-title{font-size:18px;font-weight:600;letter-spacing:-.02em}
+  .content-subtitle{font-size:12px;color:var(--muted);margin-bottom:20px}
+  .content-body{display:grid;gap:14px}
+
+  /* Cards */
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;transition:border-color .3s,box-shadow .3s}
+  .card:hover{border-color:color-mix(in srgb,var(--card-accent,var(--green)) 30%,var(--border))}
+  .card-title{font-size:13px;font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:8px}
+  .card-title .dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+  .card-text{font-size:12px;color:var(--muted);line-height:1.6}
+  .card-meta{display:flex;gap:12px;margin-top:10px;font-size:10px;color:var(--muted)}
+  .card-meta span{display:flex;align-items:center;gap:4px}
+  .card-tag{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:500;background:color-mix(in srgb,var(--tag-color,var(--green)) 12%,transparent);color:var(--tag-color,var(--green));margin-right:6px}
+
+  /* Key-value pairs */
+  .kv-row{display:flex;gap:8px;font-size:12px;padding:4px 0}
+  .kv-key{color:var(--muted);min-width:100px;flex-shrink:0}
+  .kv-val{color:var(--text)}
+
+  /* Progress bar mini */
+  .mini-bar{height:3px;background:var(--border);border-radius:2px;margin-top:8px;overflow:hidden}
+  .mini-bar .fill{height:100%;border-radius:2px;transition:width .5s ease}
+
+  /* Status badges */
+  .badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:500}
+  .badge.done{background:rgba(34,197,94,.12);color:var(--green)}
+  .badge.running{background:rgba(59,130,246,.12);color:var(--blue)}
+  .badge.pending{background:rgba(139,145,154,.12);color:var(--muted)}
+
+  /* Two-column card layout for wider screens */
+  @media (min-width: 1200px) {
+    .content-body {
+      grid-template-columns: 1fr 1fr;
+    }
+    .content-body .card:first-child {
+      grid-column: 1 / -1;
+    }
+  }
+
+  /* Pulse animation for running status dots */
+  .sub-dot.active::before {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+    border: 1px solid var(--sub-color);
+    opacity: 0;
+    animation: dotPulse 2s ease-out infinite;
+  }
+  @keyframes dotPulse {
+    0% { transform: scale(0.8); opacity: 0.6; }
+    100% { transform: scale(1.6); opacity: 0; }
+  }
+
+  /* Hover tooltip for sub-dots */
+  .sub-dot::after {
+    content: attr(title);
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 4px 10px;
+    border-radius: 4px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    font-size: 10px;
+    color: var(--text);
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .2s;
+    z-index: 10;
+  }
+  .sub-dot:hover::after {
+    opacity: 1;
+  }
+
+  /* Active module node glow pulse */
+  .module-node.active .module-circle::before {
+    content: '';
+    position: absolute;
+    inset: -6px;
+    border-radius: 50%;
+    border: 1px solid var(--node-color);
+    opacity: 0;
+    animation: nodeGlow 3s ease-in-out infinite;
+  }
+  @keyframes nodeGlow {
+    0%, 100% { opacity: 0; transform: scale(0.9); }
+    50% { opacity: 0.4; transform: scale(1.1); }
+  }
+
+  /* Smooth content fade-in */
+  .content-body .card {
+    animation: cardFadeIn .4s ease-out both;
+  }
+  .content-body .card:nth-child(1) { animation-delay: 0s; }
+  .content-body .card:nth-child(2) { animation-delay: .06s; }
+  .content-body .card:nth-child(3) { animation-delay: .12s; }
+  .content-body .card:nth-child(4) { animation-delay: .18s; }
+  .content-body .card:nth-child(5) { animation-delay: .24s; }
+  .content-body .card:nth-child(6) { animation-delay: .30s; }
+  @keyframes cardFadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Beam secondary glow layer for depth */
+  .beam-line .beam-glow-outer {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -12px;
+    width: 26px;
+    border-radius: 13px;
+    filter: blur(12px);
+    opacity: 0.15;
+  }
+
+  /* Breadcrumb bar */
+  .breadcrumb {
+    padding: 10px 32px 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--muted);
+    position: relative;
+    z-index: 5;
+  }
+  .breadcrumb .sep {
+    opacity: 0.4;
+  }
+  .breadcrumb .crumb {
+    cursor: pointer;
+    transition: color .2s;
+  }
+  .breadcrumb .crumb:hover {
+    color: var(--text);
+  }
+  .breadcrumb .crumb.current {
+    color: var(--text);
+    font-weight: 500;
+  }
+
+  /* Stats footer inside content */
+  .content-stats {
+    display: flex;
+    gap: 24px;
+    padding: 16px 0;
+    margin-top: 16px;
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+  }
+  .stat-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .stat-value {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .stat-label {
+    color: var(--muted);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  /* Module status indicator in row1 */
+  .module-status-ring {
+    position: absolute;
+    bottom: -2px;
+    right: -2px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 2px solid var(--surface);
+    z-index: 3;
+  }
+  .module-status-ring.done { background: var(--green); }
+  .module-status-ring.running { background: var(--blue); animation: statusPulse 1.5s ease-in-out infinite; }
+  .module-status-ring.pending { background: var(--border); }
+  @keyframes statusPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  /* Keyboard hint */
+  .kb-hint{position:fixed;bottom:16px;right:20px;display:flex;gap:6px;align-items:center;z-index:20}
+  .kb-hint kbd{display:inline-flex;align-items:center;justify-content:center;min-width:22px;height:22px;padding:0 5px;border-radius:4px;background:var(--surface);border:1px solid var(--border);font-size:10px;font-family:inherit;color:var(--muted)}
+  .kb-hint span{font-size:10px;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<!-- Ring Sidebar -->
+<div class="ring-sidebar" id="ringSidebar"></div>
+
+<!-- Main Area -->
+<div class="main">
+  <!-- Beam Container (absolute positioned over row1+row2) -->
+  <div class="beam-container" id="beamContainer">
+    <div class="beam-line" id="beamLine">
+      <div class="beam-glow-outer"></div>
+      <div class="beam-glow"></div>
+      <div class="beam-core"></div>
+      <div class="beam-spark"></div>
+    </div>
+  </div>
+
+  <div class="row1" id="row1"></div>
+  <div class="row2" id="row2"></div>
+  <div class="breadcrumb" id="breadcrumb"></div>
+  <div class="content" id="content"></div>
+</div>
+
+<!-- Keyboard Hint -->
+<div class="kb-hint">
+  <kbd>&#8592;</kbd><kbd>&#8594;</kbd><span>module</span>
+  <kbd>&#8593;</kbd><kbd>&#8595;</kbd><span>step</span>
+</div>
+
+<script>
+// ── Pipeline Data ──────────────────────────────────────────────────
+const PIPELINE = [
+  {
+    id: 'seed', name: 'Seed Hypotheses', short: 'SEED', color: 'var(--green)', progress: 100,
+    steps: [
+      {
+        name: 'Knowledge Graph Extraction',
+        status: 'done',
+        content: {
+          title: 'Knowledge Graph Extraction',
+          subtitle: 'Extract entities and relations from source papers to build the invention knowledge graph.',
+          cards: [
+            { title: 'Entity Extraction', dot: 'var(--green)', text: 'Identified 847 unique entities across 12 source papers. Categories: methods (312), materials (198), properties (167), applications (170). Entity linking resolved 63 duplicate references.', tags: [{ label: 'NER', color: 'var(--green)' }, { label: 'complete', color: 'var(--green)' }], meta: ['847 entities', '12 papers', '23s'] },
+            { title: 'Relation Mining', dot: 'var(--green)', text: 'Extracted 1,204 typed relations using dependency parsing and LLM-based extraction. Relation types: enables (389), inhibits (124), requires (201), produces (178), enhances (312).', tags: [{ label: 'RE', color: 'var(--green)' }], meta: ['1,204 relations', '5 types'] },
+            { title: 'Graph Assembly', dot: 'var(--green)', text: 'Constructed knowledge graph with 847 nodes and 1,204 edges. Connected components: 3 major clusters, 7 minor. Graph density: 0.0034. Average node degree: 2.84.', tags: [{ label: 'graph', color: 'var(--blue)' }], meta: ['density 0.0034', 'avg degree 2.84'] },
+            { title: 'Embedding Generation', dot: 'var(--green)', text: 'Generated 128-dim TransE embeddings for all entities and relations. Training: 500 epochs, margin=1.0, lr=0.01. Final MRR on validation set: 0.68. Embeddings stored in FAISS index for fast retrieval.', tags: [{ label: 'TransE', color: 'var(--purple)' }, { label: 'FAISS', color: 'var(--blue)' }], meta: ['128-dim', 'MRR 0.68'] }
+          ]
+        }
+      },
+      {
+        name: 'Gap Analysis',
+        status: 'done',
+        content: {
+          title: 'Gap Analysis',
+          subtitle: 'Identify unexplored combinations and missing connections in the knowledge graph.',
+          cards: [
+            { title: 'Structural Holes', dot: 'var(--green)', text: 'Found 34 structural holes between major clusters suggesting unexplored research directions. Top opportunity: bridging photocatalytic materials with self-healing polymer networks.', tags: [{ label: 'gaps', color: 'var(--orange)' }], meta: ['34 holes', 'high-conf 12'] },
+            { title: 'Missing Link Prediction', dot: 'var(--green)', text: 'TransE embeddings predicted 156 likely-but-absent links. Filtered to 28 high-confidence candidates (score > 0.85). Cross-validated against held-out edges: MRR = 0.72.', tags: [{ label: 'TransE', color: 'var(--purple)' }], meta: ['28 candidates', 'MRR 0.72'] },
+            { title: 'Temporal Trend Analysis', dot: 'var(--green)', text: 'Analyzed publication year distribution of source papers to identify emerging vs. declining research fronts. 3 topics show exponential growth (2022-2025): self-supervised materials discovery, LLM-guided synthesis, and adaptive metamaterials.', tags: [{ label: 'trends', color: 'var(--green)' }], meta: ['3 emerging', '2022-2025'] }
+          ]
+        }
+      },
+      {
+        name: 'Hypothesis Generation',
+        status: 'done',
+        content: {
+          title: 'Hypothesis Generation',
+          subtitle: 'Generate initial hypotheses from knowledge graph gaps and predicted links.',
+          cards: [
+            { title: 'Combinatorial Expansion', dot: 'var(--green)', text: 'Generated 96 raw hypotheses by combining gap analysis results with domain heuristics. Each hypothesis pairs a structural hole with a predicted mechanism.', tags: [{ label: 'gen', color: 'var(--green)' }], meta: ['96 hypotheses', 'batch 1'] },
+            { title: 'Novelty Filter', dot: 'var(--green)', text: 'Semantic similarity check against 50K existing papers (Specter2 embeddings). Removed 31 hypotheses with cosine similarity > 0.82 to existing work. 65 novel hypotheses remain.', tags: [{ label: 'filter', color: 'var(--blue)' }], meta: ['65 remain', 'threshold 0.82'] },
+            { title: 'Feasibility Scoring', dot: 'var(--green)', text: 'LLM-based feasibility assessment on remaining hypotheses. Criteria: material availability, method compatibility, expected timeline. Mean score: 7.2/10.', tags: [{ label: 'scoring', color: 'var(--purple)' }], meta: ['mean 7.2/10', '18s/hypo'] },
+            { title: 'Diversity Sampling', dot: 'var(--green)', text: 'Applied DPP-based diversity sampling to ensure hypotheses cover distinct research directions. Final set spans 8 topical clusters with minimum pairwise cosine distance of 0.45.', tags: [{ label: 'DPP', color: 'var(--green)' }, { label: 'sampling', color: 'var(--blue)' }], meta: ['8 clusters', 'min dist 0.45'] }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    id: 'hypo', name: 'Hypothesis Loop', short: 'HYPO', color: 'var(--purple)', progress: 75,
+    steps: [
+      {
+        name: 'Refine Hypotheses',
+        status: 'done',
+        content: {
+          title: 'Refine Hypotheses',
+          subtitle: 'Iteratively refine hypothesis statements for clarity, specificity, and testability.',
+          cards: [
+            { title: 'Clarity Pass', dot: 'var(--purple)', text: 'Rewrote 65 hypotheses into structured format: IF [condition] THEN [prediction] BECAUSE [mechanism]. Average clarity score improved from 5.8 to 8.4 (LLM-judged).', tags: [{ label: 'rewrite', color: 'var(--purple)' }], meta: ['65 rewritten', 'clarity +2.6'] },
+            { title: 'Specificity Enhancement', dot: 'var(--purple)', text: 'Added quantitative predictions where possible. 41/65 hypotheses now include numerical targets (e.g., "increase efficiency by 15-25%"). Remaining 24 are qualitative but well-bounded.', tags: [{ label: 'quantify', color: 'var(--blue)' }], meta: ['41 quantified', '24 qualitative'] },
+            { title: 'Mechanism Grounding', dot: 'var(--purple)', text: 'Each hypothesis now includes explicit mechanistic justification traced back to knowledge graph paths. Average path length: 3.2 hops. 12 hypotheses required additional literature retrieval to complete grounding.', tags: [{ label: 'grounding', color: 'var(--purple)' }], meta: ['avg 3.2 hops', '12 augmented'] },
+            { title: 'Deduplication Pass', dot: 'var(--purple)', text: 'Pairwise semantic similarity check detected 4 near-duplicate hypothesis pairs (cosine > 0.90). Merged into stronger combined statements. Final count after deduplication: 61 unique hypotheses.', tags: [{ label: 'dedup', color: 'var(--orange)' }], meta: ['4 pairs merged', '61 remain'] }
+          ]
+        }
+      },
+      {
+        name: 'Review Hypotheses',
+        status: 'running',
+        content: {
+          title: 'Review Hypotheses',
+          subtitle: 'Multi-agent review evaluating novelty, feasibility, and potential impact of each hypothesis.',
+          cards: [
+            { title: 'Novelty Assessment', dot: 'var(--blue)', text: 'Three independent LLM reviewers scored novelty on 1-10 scale. Inter-rater agreement: Cohen kappa = 0.74. Mean novelty: 7.1. Distribution: 12 excellent (>8), 38 good (6-8), 15 marginal (<6).', tags: [{ label: 'novelty', color: 'var(--green)' }, { label: 'in-progress', color: 'var(--blue)' }], meta: ['kappa 0.74', 'mean 7.1'] },
+            { title: 'Feasibility Check', dot: 'var(--blue)', text: 'Evaluating material requirements, equipment needs, and estimated timelines. Currently processing batch 3/4. Early results: 82% rated feasible within 12-month horizon.', tags: [{ label: 'feasibility', color: 'var(--orange)' }], meta: ['batch 3/4', '82% feasible'] },
+            { title: 'Impact Projection', dot: 'var(--muted)', text: 'Pending completion of feasibility check. Will estimate citation potential, industry applicability, and alignment with current research trends.', tags: [{ label: 'pending', color: 'var(--muted)' }], meta: ['queued'] },
+            { title: 'Consensus Ranking', dot: 'var(--muted)', text: 'Will aggregate all review scores using weighted Borda count. Top 20 hypotheses advance to the invention loop. Ties broken by novelty score.', tags: [{ label: 'pending', color: 'var(--muted)' }], meta: ['top-20 advance'] },
+            { title: 'Reviewer Calibration', dot: 'var(--blue)', text: 'Running calibration suite to detect reviewer drift and bias. Each LLM reviewer is tested against 15 gold-standard hypotheses with known scores. Adjusting reviewer weights based on calibration error.', tags: [{ label: 'calibration', color: 'var(--blue)' }], meta: ['15 gold items', '3 reviewers'] },
+            { title: 'Conflict Resolution', dot: 'var(--muted)', text: 'Pending. Will flag hypotheses with high inter-reviewer disagreement (std > 2.0) for additional review pass. Expected: 8-12% of hypotheses require conflict resolution.', tags: [{ label: 'pending', color: 'var(--muted)' }], meta: ['threshold std>2.0'] }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    id: 'invent', name: 'Invention Loop', short: 'INV', color: 'var(--blue)', progress: 30,
+    steps: [
+      {
+        name: 'Generate Strategies',
+        status: 'done',
+        content: {
+          title: 'Generate Strategies',
+          subtitle: 'Create invention strategies that operationalize each hypothesis into concrete research approaches.',
+          cards: [
+            { title: 'Strategy Templates', dot: 'var(--blue)', text: 'Applied 6 invention strategy templates: analogical transfer, constraint relaxation, function composition, parameter optimization, material substitution, and process integration.', tags: [{ label: 'templates', color: 'var(--blue)' }], meta: ['6 templates', '20 hypotheses'] },
+            { title: 'Strategy Variants', dot: 'var(--blue)', text: 'Generated 3-5 strategy variants per hypothesis. Total: 78 strategies. Each strategy specifies: approach, key steps, expected challenges, and success metrics.', tags: [{ label: 'generation', color: 'var(--green)' }], meta: ['78 strategies', '~4/hypo'] },
+            { title: 'Cross-Pollination Analysis', dot: 'var(--blue)', text: 'Identified 14 strategy pairs with shared sub-components enabling cross-pollination. Merging complementary approaches reduced total unique strategies to 62 while preserving coverage.', tags: [{ label: 'merge', color: 'var(--purple)' }], meta: ['14 pairs', '62 final'] },
+            { title: 'Risk Assessment', dot: 'var(--blue)', text: 'Each strategy scored on 3 risk dimensions: technical (can it work?), resource (can we afford it?), novelty (is it publishable?). Risk matrix generated with 8 high-risk / 31 medium / 23 low-risk strategies.', tags: [{ label: 'risk', color: 'var(--orange)' }], meta: ['8 high', '31 med', '23 low'] }
+          ]
+        }
+      },
+      {
+        name: 'Generate Plan',
+        status: 'running',
+        content: {
+          title: 'Generate Experimental Plans',
+          subtitle: 'Convert strategies into detailed, executable experimental plans with resource estimates.',
+          cards: [
+            { title: 'Plan Structure', dot: 'var(--blue)', text: 'Each plan contains: objectives, methodology (5-8 steps), required materials and equipment, timeline, expected results, and contingency paths. Using structured Pydantic schema for validation.', tags: [{ label: 'schema', color: 'var(--blue)' }], meta: ['5-8 steps/plan'] },
+            { title: 'Resource Estimation', dot: 'var(--orange)', text: 'Estimating computational resources, API costs, and time requirements for each plan. Current batch: plans 12-20. Average estimated cost: $2.40/plan execution.', tags: [{ label: 'costing', color: 'var(--orange)' }], meta: ['$2.40 avg', 'batch 2/3'] },
+            { title: 'Dependency Graph', dot: 'var(--muted)', text: 'Building execution dependency graph across plans. Identifying shared resources and potential parallelism. Expected: 60% of plans can run concurrently.', tags: [{ label: 'pending', color: 'var(--muted)' }], meta: ['~60% parallel'] },
+            { title: 'Budget Allocation', dot: 'var(--orange)', text: 'Distributing $48 total budget across 20 plans based on expected impact and resource requirements. High-priority plans receive 2x allocation. Budget includes contingency reserve of 15%.', tags: [{ label: 'budget', color: 'var(--orange)' }, { label: 'in-progress', color: 'var(--blue)' }], meta: ['$48 total', '15% reserve'] },
+            { title: 'Validation Criteria', dot: 'var(--muted)', text: 'Defining success/failure criteria for each plan before execution. Includes minimum effect sizes, statistical significance thresholds (p < 0.05), and qualitative benchmarks for interpretability.', tags: [{ label: 'criteria', color: 'var(--blue)' }], meta: ['p<0.05', 'per-plan'] }
+          ]
+        }
+      },
+      {
+        name: 'Generate Paper Text',
+        status: 'pending',
+        content: {
+          title: 'Generate Paper Text',
+          subtitle: 'Draft paper sections: abstract, introduction, methods, results, and discussion.',
+          cards: [
+            { title: 'Section Planning', dot: 'var(--muted)', text: 'Will generate outlines for each section based on experimental plan and expected results. Uses citation-aware generation to properly reference source materials.', tags: [{ label: 'queued', color: 'var(--muted)' }], meta: ['5 sections'] },
+            { title: 'Draft Generation', dot: 'var(--muted)', text: 'Multi-pass generation: skeleton draft, detail expansion, coherence refinement. Each pass uses different temperature settings for optimal quality.', tags: [{ label: 'queued', color: 'var(--muted)' }], meta: ['3 passes'] },
+            { title: 'Citation Integration', dot: 'var(--muted)', text: 'Auto-linking claims to source papers from the knowledge graph. Each factual claim requires at least one supporting reference. Citation style: numbered brackets per venue requirements.', tags: [{ label: 'queued', color: 'var(--muted)' }], meta: ['auto-cite', 'numbered'] },
+            { title: 'Consistency Checker', dot: 'var(--muted)', text: 'Cross-section consistency verification: notation uniformity, terminology alignment, figure/table reference integrity, and claim-evidence traceability throughout the manuscript.', tags: [{ label: 'queued', color: 'var(--muted)' }], meta: ['4 checks'] }
+          ]
+        }
+      },
+      {
+        name: 'Review Paper',
+        status: 'pending',
+        content: {
+          title: 'Review Paper',
+          subtitle: 'Automated peer review checking technical correctness, clarity, and completeness.',
+          cards: [
+            { title: 'Technical Review', dot: 'var(--muted)', text: 'Will verify claims against experimental results, check statistical validity, and ensure methodology is reproducible. Uses specialized reviewer agent.', tags: [{ label: 'queued', color: 'var(--muted)' }], meta: ['3 reviewers'] },
+            { title: 'Revision Cycle', dot: 'var(--muted)', text: 'Iterative revision based on review feedback. Maximum 3 revision cycles. Convergence criterion: all reviewers score >= 7/10 on all dimensions.', tags: [{ label: 'queued', color: 'var(--muted)' }], meta: ['max 3 cycles'] },
+            { title: 'Clarity Analysis', dot: 'var(--muted)', text: 'Readability scoring using Flesch-Kincaid and domain-specific metrics. Target: graduate-level readability (FK grade 14-16) while maintaining technical precision. Flagging jargon overuse and passive voice.', tags: [{ label: 'queued', color: 'var(--muted)' }], meta: ['FK 14-16', 'auto-flag'] },
+            { title: 'Novelty Claim Audit', dot: 'var(--muted)', text: 'Cross-referencing each novelty claim against Semantic Scholar database. Ensuring no overclaiming of prior work. Generating novelty evidence table for the supplementary materials.', tags: [{ label: 'queued', color: 'var(--muted)' }], meta: ['S2 lookup', 'evidence table'] }
+          ]
+        }
+      }
+    ]
+  },
+  {
+    id: 'paper', name: 'Paper Repo', short: 'REPO', color: 'var(--orange)', progress: 0,
+    steps: [
+      {
+        name: 'Generate Artifacts',
+        status: 'pending',
+        content: {
+          title: 'Generate Artifacts',
+          subtitle: 'Create interactive demos and code artifacts that accompany the paper.',
+          cards: [
+            { title: 'Demo Generation', dot: 'var(--orange)', text: 'Will generate Python demos for each key result. Demos include: interactive parameter sweeps, visualization notebooks, and minimal reproduction scripts.', tags: [{ label: 'queued', color: 'var(--muted)' }], meta: ['~3 demos/paper'] },
+            { title: 'Code Packaging', dot: 'var(--muted)', text: 'Package code as installable Python library with pyproject.toml, type hints, and comprehensive docstrings. Includes CI configuration for automated testing.', tags: [{ label: 'queued', color: 'var(--muted)' }], meta: ['src layout'] },
+            { title: 'Test Suite Generation', dot: 'var(--muted)', text: 'Auto-generating pytest test suite from experimental plans and expected results. Coverage targets: 85% line coverage, 70% branch coverage. Includes property-based tests for numerical methods.', tags: [{ label: 'queued', color: 'var(--muted)' }], meta: ['85% cov', 'hypothesis'] },
+            { title: 'Reproducibility Manifest', dot: 'var(--muted)', text: 'Generating pinned dependency lockfile, random seed registry, and hardware/software environment snapshot. Enables bit-exact reproduction on compatible systems.', tags: [{ label: 'queued', color: 'var(--muted)' }], meta: ['lockfile', 'seeds'] }
+          ]
+        }
+      },
+      {
+        name: 'Generate Visualizations',
+        status: 'pending',
+        content: {
+          title: 'Generate Visualizations',
+          subtitle: 'Create publication-quality figures and interactive visualizations.',
+          cards: [
+            { title: 'Static Figures', dot: 'var(--muted)', text: 'Matplotlib/Seaborn figures matching journal style guidelines. Auto-generated from experimental data. Includes: performance plots, architecture diagrams, comparison tables.', tags: [{ label: 'queued', color: 'var(--muted)' }], meta: ['~5 figures'] },
+            { title: 'Interactive Viz', dot: 'var(--muted)', text: 'Plotly-based interactive visualizations for the web appendix. Allows readers to explore parameter spaces and drill into results.', tags: [{ label: 'queued', color: 'var(--muted)' }], meta: ['plotly'] },
+            { title: 'Figure Captioning', dot: 'var(--muted)', text: 'LLM-generated figure captions that describe key takeaways, statistical annotations, and data provenance. Each caption follows Nature-style guidelines: descriptive, self-contained, under 100 words.', tags: [{ label: 'queued', color: 'var(--muted)' }], meta: ['Nature style', '<100 words'] },
+            { title: 'Accessibility Pass', dot: 'var(--muted)', text: 'Ensuring all figures pass WCAG 2.1 AA contrast requirements. Adding alt-text descriptions, colorblind-safe palettes, and pattern-coded variants for key plots.', tags: [{ label: 'queued', color: 'var(--muted)' }], meta: ['WCAG AA', 'alt-text'] }
+          ]
+        }
+      },
+      {
+        name: 'Compile Full Paper',
+        status: 'pending',
+        content: {
+          title: 'Compile Full Paper',
+          subtitle: 'Assemble all components into the final paper repository with LaTeX source.',
+          cards: [
+            { title: 'LaTeX Assembly', dot: 'var(--muted)', text: 'Compile paper text, figures, tables, and references into LaTeX document. Apply target venue formatting (NeurIPS/ICML/AAAI style).', tags: [{ label: 'queued', color: 'var(--muted)' }], meta: ['multi-venue'] },
+            { title: 'Repository Structure', dot: 'var(--muted)', text: 'Final repo: paper/, code/, demos/, data/, configs/. Includes README with reproduction instructions, LICENSE, and CITATION.cff.', tags: [{ label: 'queued', color: 'var(--muted)' }], meta: ['5 dirs'] },
+            { title: 'Quality Gates', dot: 'var(--muted)', text: 'Final checks: LaTeX compilation, reference integrity, figure resolution, code linting, test coverage > 80%, demo execution. All gates must pass.', tags: [{ label: 'queued', color: 'var(--muted)' }], meta: ['6 gates'] },
+            { title: 'Supplementary Materials', dot: 'var(--muted)', text: 'Assembling supplementary PDF with extended proofs, additional experiments, hyperparameter sensitivity analysis, and full ablation study results. Target: 15-25 pages.', tags: [{ label: 'queued', color: 'var(--muted)' }], meta: ['15-25 pages'] },
+            { title: 'Release Packaging', dot: 'var(--muted)', text: 'Creating GitHub release with tagged version, built PDF, pip-installable wheel, Docker image for full reproduction, and Zenodo DOI reservation for archival citation.', tags: [{ label: 'queued', color: 'var(--muted)' }], meta: ['GitHub', 'Zenodo DOI'] }
+          ]
+        }
+      }
+    ]
+  }
+];
+
+// ── State ──────────────────────────────────────────────────────────
+let activeModule = 1;  // index into PIPELINE
+let activeStep = 1;    // index into current module's steps
+
+// ── Render Ring Sidebar ────────────────────────────────────────────
+function renderRings() {
+  const sb = document.getElementById('ringSidebar');
+  sb.innerHTML = '';
+
+  const logo = document.createElement('div');
+  logo.className = 'logo';
+  logo.textContent = 'AI';
+  sb.appendChild(logo);
+
+  PIPELINE.forEach((mod, i) => {
+    const el = document.createElement('div');
+    el.className = 'ring-container' + (i === activeModule ? ' active' : '');
+    const circumference = 2 * Math.PI * 27;
+    const offset = circumference - (mod.progress / 100) * circumference;
+    el.innerHTML = `
+      <svg viewBox="0 0 64 64">
+        <circle class="ring-track" cx="32" cy="32" r="27"/>
+        <circle class="ring-progress" cx="32" cy="32" r="27"
+          stroke="${mod.color.replace('var(--','').replace(')','') === 'green' ? '#22c55e' : mod.color.replace('var(--','').replace(')','') === 'purple' ? '#a78bfa' : mod.color.replace('var(--','').replace(')','') === 'blue' ? '#3b82f6' : '#f59e0b'}"
+          stroke-dasharray="${circumference}"
+          stroke-dashoffset="${offset}"
+          transform="rotate(-90 32 32)"/>
+      </svg>
+      <div class="ring-label">${mod.short}</div>
+    `;
+    el.addEventListener('click', () => { activeModule = i; activeStep = 0; render(); });
+    sb.appendChild(el);
+  });
+
+  const spacer = document.createElement('div');
+  spacer.className = 'ring-spacer';
+  sb.appendChild(spacer);
+
+  const status = document.createElement('div');
+  status.className = 'status';
+  status.textContent = 'pipeline active';
+  sb.appendChild(status);
+}
+
+// ── Render Row 1: Module Nodes ─────────────────────────────────────
+function renderRow1() {
+  const row = document.getElementById('row1');
+  row.innerHTML = '';
+
+  PIPELINE.forEach((mod, i) => {
+    if (i > 0) {
+      const conn = document.createElement('div');
+      conn.className = 'module-connector' + (PIPELINE[i - 1].progress === 100 ? ' passed' : '');
+      const prevColor = resolveColor(PIPELINE[i - 1].color);
+      const curColor = resolveColor(mod.color);
+      conn.style.setProperty('--from-color', prevColor);
+      conn.style.setProperty('--to-color', curColor);
+      conn.innerHTML = `
+        <div class="track"></div>
+        <div class="fill" style="width:${PIPELINE[i-1].progress === 100 ? '100' : '0'}%;background:linear-gradient(90deg,${prevColor},${curColor})"></div>
+        <div class="particle-lane">
+          <div class="particle" style="background:${prevColor};animation-delay:0s"></div>
+          <div class="particle" style="background:${curColor};animation-delay:1.2s"></div>
+        </div>
+      `;
+      row.appendChild(conn);
+    }
+
+    const node = document.createElement('div');
+    node.className = 'module-node' + (i === activeModule ? ' active' : '');
+    node.style.setProperty('--node-color', resolveColor(mod.color));
+    node.dataset.index = i;
+
+    const icon = mod.progress === 100 ? '\u2713' : (mod.progress > 0 ? '\u25B6' : (i + 1));
+    const statusClass = mod.progress === 100 ? 'done' : (mod.progress > 0 ? 'running' : 'pending');
+    node.innerHTML = `
+      <div class="module-circle">
+        ${icon}
+        <div class="module-status-ring ${statusClass}"></div>
+      </div>
+      <div class="module-name">${mod.name}</div>
+    `;
+    node.addEventListener('click', () => { activeModule = i; activeStep = 0; render(); });
+    row.appendChild(node);
+  });
+}
+
+// ── Render Row 2: Sub-step Dots ────────────────────────────────────
+function renderRow2() {
+  const row = document.getElementById('row2');
+  row.innerHTML = '';
+  const mod = PIPELINE[activeModule];
+  const color = resolveColor(mod.color);
+
+  mod.steps.forEach((step, i) => {
+    if (i > 0) {
+      const conn = document.createElement('div');
+      conn.className = 'sub-dot-connector';
+      row.appendChild(conn);
+    }
+
+    const dot = document.createElement('div');
+    dot.className = 'sub-dot';
+    dot.style.setProperty('--sub-color', color);
+    dot.dataset.index = i;
+    if (i === activeStep) dot.classList.add('active');
+    else if (step.status === 'done') dot.classList.add('completed');
+
+    dot.title = step.name;
+    dot.addEventListener('click', () => { activeStep = i; render(); });
+    row.appendChild(dot);
+  });
+}
+
+// ── Render Vertical Beam ───────────────────────────────────────────
+function renderBeam() {
+  const beam = document.getElementById('beamLine');
+  const container = document.getElementById('beamContainer');
+
+  // Find positions of active module circle and active sub-dot
+  const moduleNode = document.querySelector(`.module-node[data-index="${activeModule}"]`);
+  const subDot = document.querySelector(`.sub-dot[data-index="${activeStep}"]`);
+
+  if (!moduleNode || !subDot) {
+    beam.classList.remove('visible');
+    return;
+  }
+
+  const mainEl = document.querySelector('.main');
+  const mainRect = mainEl.getBoundingClientRect();
+
+  const moduleCircle = moduleNode.querySelector('.module-circle');
+  const mcRect = moduleCircle.getBoundingClientRect();
+  const sdRect = subDot.getBoundingClientRect();
+
+  // Calculate center X of module circle relative to main
+  const moduleCenterX = mcRect.left + mcRect.width / 2 - mainRect.left;
+  // For the beam, use the sub-dot's center X as the landing point
+  const subCenterX = sdRect.left + sdRect.width / 2 - mainRect.left;
+
+  // Beam starts at bottom of module circle, ends at top of sub-dot
+  const beamTop = mcRect.bottom - mainRect.top;
+  const beamBottom = sdRect.top - mainRect.top;
+  const beamHeight = Math.max(beamBottom - beamTop, 4);
+
+  // Use module circle X for the top, sub-dot X for the bottom
+  // For simplicity with a straight vertical beam, average the two or pick one
+  // We'll use a slight slant by positioning from module center
+  const beamX = moduleCenterX;
+
+  const color = resolveColor(PIPELINE[activeModule].color);
+
+  beam.style.left = beamX + 'px';
+  beam.style.top = beamTop + 'px';
+  beam.style.height = beamHeight + 'px';
+
+  beam.querySelector('.beam-core').style.background = color;
+  beam.querySelector('.beam-glow').style.background = color;
+  beam.querySelector('.beam-glow-outer').style.background = color;
+  beam.querySelector('.beam-spark').style.background = `linear-gradient(to bottom, transparent, ${color}, transparent)`;
+
+  // Size the container to cover both rows
+  container.style.height = (beamBottom + 20) + 'px';
+
+  beam.classList.add('visible');
+
+  // If sub-dot is not aligned with module, we draw a subtle angled beam
+  // by using a CSS transform
+  if (Math.abs(moduleCenterX - subCenterX) > 2) {
+    const dx = subCenterX - moduleCenterX;
+    const angle = Math.atan2(dx, beamHeight) * (180 / Math.PI);
+    const length = Math.sqrt(dx * dx + beamHeight * beamHeight);
+    beam.style.height = length + 'px';
+    beam.style.transformOrigin = 'top center';
+    beam.style.transform = `rotate(${angle}deg)`;
+  } else {
+    beam.style.transform = 'none';
+  }
+}
+
+// ── Render Content ─────────────────────────────────────────────────
+function renderContent() {
+  const el = document.getElementById('content');
+  const mod = PIPELINE[activeModule];
+  const step = mod.steps[activeStep];
+  const data = step.content;
+  const color = resolveColor(mod.color);
+
+  let html = `
+    <div class="content-header">
+      <div class="content-icon" style="background:color-mix(in srgb,${color} 15%,transparent);color:${color}">${activeStep + 1}</div>
+      <div class="content-title">${data.title}</div>
+      <div style="flex:1"></div>
+      <div class="badge ${step.status === 'done' ? 'done' : step.status === 'running' ? 'running' : 'pending'}">
+        ${step.status === 'done' ? '\u2713 Done' : step.status === 'running' ? '\u25CF Running' : '\u25CB Pending'}
+      </div>
+    </div>
+    <div class="content-subtitle">${data.subtitle}</div>
+    <div class="content-body">
+  `;
+
+  data.cards.forEach(card => {
+    const dotColor = card.dot || color;
+    html += `<div class="card" style="--card-accent:${dotColor}">`;
+    html += `<div class="card-title"><span class="dot" style="background:${dotColor}"></span>${card.title}</div>`;
+
+    if (card.tags) {
+      html += '<div style="margin-bottom:6px">';
+      card.tags.forEach(t => {
+        html += `<span class="card-tag" style="--tag-color:${t.color}">${t.label}</span>`;
+      });
+      html += '</div>';
+    }
+
+    html += `<div class="card-text">${card.text}</div>`;
+
+    if (card.meta) {
+      html += '<div class="card-meta">';
+      card.meta.forEach(m => { html += `<span>${m}</span>`; });
+      html += '</div>';
+    }
+
+    // Add a mini progress bar to "running" cards
+    if (step.status === 'running' && card.dot === 'var(--blue)') {
+      html += `<div class="mini-bar"><div class="fill" style="width:65%;background:${color}"></div></div>`;
+    }
+
+    html += '</div>';
+  });
+
+  html += '</div>';
+
+  // Stats footer
+  const stats = getStepStats(step);
+  html += `
+    <div class="content-stats">
+      <div class="stat-item">
+        <span class="stat-value">${stats.totalCards}</span>
+        <span class="stat-label">Components</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-value">${stats.doneCards}</span>
+        <span class="stat-label">Active</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-value">${stats.totalTags}</span>
+        <span class="stat-label">Tags</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-value">${mod.steps.indexOf(step) + 1}/${mod.steps.length}</span>
+        <span class="stat-label">Step</span>
+      </div>
+      <div class="stat-item">
+        <span class="stat-value">${mod.progress}%</span>
+        <span class="stat-label">Module</span>
+      </div>
+    </div>
+  `;
+
+  el.innerHTML = html;
+  el.scrollTop = 0;
+}
+
+// ── Resolve CSS variable color to actual hex ───────────────────────
+function resolveColor(varStr) {
+  const map = { 'var(--green)': '#22c55e', 'var(--purple)': '#a78bfa', 'var(--blue)': '#3b82f6', 'var(--orange)': '#f59e0b', 'var(--muted)': '#8b919a' };
+  return map[varStr] || varStr;
+}
+
+// ── Render Breadcrumb ──────────────────────────────────────────────
+function renderBreadcrumb() {
+  const el = document.getElementById('breadcrumb');
+  const mod = PIPELINE[activeModule];
+  const step = mod.steps[activeStep];
+  el.innerHTML = `
+    <span class="crumb" onclick="activeModule=0;activeStep=0;render();">Pipeline</span>
+    <span class="sep">/</span>
+    <span class="crumb" onclick="activeStep=0;render();">${mod.name}</span>
+    <span class="sep">/</span>
+    <span class="crumb current">${step.name}</span>
+  `;
+}
+
+// ── Compute Step Stats ─────────────────────────────────────────────
+function getStepStats(step) {
+  const totalCards = step.content.cards.length;
+  const doneCards = step.content.cards.filter(c =>
+    c.dot && (c.dot.includes('green') || c.dot.includes('purple') || c.dot.includes('blue'))
+    && !c.tags?.some(t => t.label === 'queued' || t.label === 'pending')
+  ).length;
+  const totalTags = step.content.cards.reduce((sum, c) => sum + (c.tags?.length || 0), 0);
+  const totalMeta = step.content.cards.reduce((sum, c) => sum + (c.meta?.length || 0), 0);
+  return { totalCards, doneCards, totalTags, totalMeta };
+}
+
+// ── Full Render ────────────────────────────────────────────────────
+function render() {
+  renderRings();
+  renderRow1();
+  renderRow2();
+  renderBreadcrumb();
+  renderContent();
+  // Beam needs layout to settle before calculating positions
+  requestAnimationFrame(() => { requestAnimationFrame(() => { renderBeam(); }); });
+}
+
+// ── Keyboard Navigation ────────────────────────────────────────────
+document.addEventListener('keydown', (e) => {
+  const mod = PIPELINE[activeModule];
+  let changed = false;
+
+  switch (e.key) {
+    case 'ArrowRight':
+      if (activeModule < PIPELINE.length - 1) { activeModule++; activeStep = 0; changed = true; }
+      break;
+    case 'ArrowLeft':
+      if (activeModule > 0) { activeModule--; activeStep = 0; changed = true; }
+      break;
+    case 'ArrowDown':
+      if (activeStep < mod.steps.length - 1) { activeStep++; changed = true; }
+      break;
+    case 'ArrowUp':
+      if (activeStep > 0) { activeStep--; changed = true; }
+      break;
+  }
+
+  if (changed) { e.preventDefault(); render(); }
+});
+
+// ── Window resize: reposition beam ─────────────────────────────────
+window.addEventListener('resize', () => { requestAnimationFrame(renderBeam); });
+
+// ── Init ───────────────────────────────────────────────────────────
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Arc + Dot Rows</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0a0a0f;
+    --bg-raised: #0f1019;
+    --text: #e4e4e7;
+    --text-dim: #71717a;
+    --text-muted: #52525b;
+    --accent: #3b82f6;
+    --accent-glow: rgba(59, 130, 246, 0.25);
+    --accent-dim: rgba(59, 130, 246, 0.10);
+    --success: #4ade80;
+    --success-dim: rgba(74, 222, 128, 0.12);
+    --running: #facc15;
+    --running-dim: rgba(250, 204, 21, 0.12);
+    --error: #f87171;
+    --pending: #27272a;
+    --pending-border: #3f3f46;
+    --border: rgba(255, 255, 255, 0.06);
+    --transition: 280ms cubic-bezier(0.4, 0, 0.2, 1);
+    --arc-radius: 200;
+  }
+
+  html, body {
+    height: 100%;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Top Zone: Arc + Dot Rows ─────────────────────── */
+  .nav-zone {
+    flex-shrink: 0;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding-top: 24px;
+    padding-bottom: 12px;
+    background: linear-gradient(180deg, #0c0e18 0%, var(--bg) 100%);
+    user-select: none;
+  }
+
+  .nav-zone::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--border) 20%, var(--border) 80%, transparent);
+  }
+
+  /* ── SVG Arc ─────────────────────────────────────── */
+  .arc-container { position: relative; width: 440px; height: 120px; margin-bottom: 6px; }
+  .arc-container svg { width: 100%; height: 100%; overflow: visible; }
+  .arc-track { fill: none; stroke: var(--pending); stroke-width: 6; stroke-linecap: round; }
+  .arc-fill {
+    fill: none; stroke: url(#arcGradient); stroke-width: 6; stroke-linecap: round;
+    transition: stroke-dashoffset 800ms cubic-bezier(0.4, 0, 0.2, 1);
+    filter: drop-shadow(0 0 6px var(--accent-glow));
+  }
+  .arc-pct { font-size: 28px; font-weight: 600; fill: var(--text); text-anchor: middle; dominant-baseline: auto; }
+  .arc-label { font-size: 11px; font-weight: 400; fill: var(--text-dim); text-anchor: middle; dominant-baseline: hanging; letter-spacing: 0.04em; }
+  .arc-tip { r: 5; fill: var(--accent); filter: drop-shadow(0 0 8px var(--accent)); transition: all var(--transition); }
+
+  /* ── Dot Rows Container ──────────────────────────── */
+  .dot-rows {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+  }
+
+  .dot-row {
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    height: 0; opacity: 0; overflow: hidden;
+    transition: height var(--transition), opacity var(--transition), transform var(--transition);
+    transform: translateY(-6px);
+  }
+  .dot-row.visible { height: 36px; opacity: 1; transform: translateY(0); }
+  .dot-row.row-modules { height: 36px; opacity: 1; transform: translateY(0); }
+
+  /* ── Diamond-in-Ring (Module Markers) ────────────── */
+  .module-marker { position: relative; width: 30px; height: 30px; cursor: pointer; outline: none; transition: transform var(--transition); }
+  .module-marker:hover, .module-marker:focus-visible { transform: scale(1.15); }
+  .module-marker svg { width: 100%; height: 100%; }
+  .marker-ring { fill: none; stroke: var(--pending-border); stroke-width: 2; transition: stroke var(--transition); }
+  .marker-diamond { fill: var(--pending); transition: fill var(--transition), filter var(--transition); }
+
+  .module-marker[data-status="done"] .marker-ring { stroke: var(--success); }
+  .module-marker[data-status="done"] .marker-diamond { fill: var(--success); }
+  .module-marker[data-status="running"] .marker-ring { stroke: var(--running); }
+  .module-marker[data-status="running"] .marker-diamond { fill: var(--running); filter: drop-shadow(0 0 6px var(--running-dim)); }
+  .module-marker[data-status="error"] .marker-ring { stroke: var(--error); }
+  .module-marker[data-status="error"] .marker-diamond { fill: var(--error); }
+  .module-marker.focused .marker-ring { stroke: var(--accent); stroke-width: 2.5; }
+  .module-marker.focused .marker-diamond { filter: drop-shadow(0 0 8px var(--accent-glow)); }
+  .marker-label {
+    position: absolute; bottom: -16px; left: 50%; transform: translateX(-50%);
+    font-size: 9px; font-weight: 500; letter-spacing: 0.06em; color: var(--text-muted);
+    white-space: nowrap; transition: color var(--transition); text-transform: uppercase;
+  }
+  .module-marker.focused .marker-label { color: var(--accent); }
+  .module-marker[data-status="done"] .marker-label { color: var(--success); }
+  .module-marker[data-status="running"] .marker-label { color: var(--running); }
+  .module-connector { width: 32px; height: 2px; background: var(--pending-border); border-radius: 1px; position: relative; transition: background var(--transition); }
+  .module-connector.done { background: var(--success); }
+
+  /* ── Sub-module & Detail Dots ────────────────────── */
+  .sub-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--pending); border: 1.5px solid var(--pending-border); cursor: pointer; outline: none; transition: all var(--transition); position: relative; }
+  .sub-dot:hover, .sub-dot:focus-visible { transform: scale(1.3); }
+  .sub-dot[data-status="done"] { background: var(--success); border-color: var(--success); }
+  .sub-dot[data-status="running"] { background: var(--running); border-color: var(--running); box-shadow: 0 0 8px var(--running-dim); animation: dotPulse 2s ease-in-out infinite; }
+  .sub-dot[data-status="error"] { background: var(--error); border-color: var(--error); }
+  .sub-dot.focused { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim), 0 0 10px var(--accent-glow); }
+  .detail-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--pending); border: 1px solid var(--pending-border); cursor: pointer; outline: none; transition: all var(--transition); }
+  .detail-dot:hover, .detail-dot:focus-visible { transform: scale(1.4); }
+  .detail-dot[data-status="done"] { background: var(--success); border-color: var(--success); }
+  .detail-dot[data-status="running"] { background: var(--running); border-color: var(--running); animation: dotPulse 2s ease-in-out infinite; }
+  .detail-dot.focused { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+  .dot-tip {
+    position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%) scale(0.9);
+    background: #18181b; color: var(--text); font-size: 11px; padding: 4px 10px; border-radius: 6px;
+    border: 1px solid var(--border); white-space: nowrap; pointer-events: none; opacity: 0;
+    transition: opacity 150ms ease, transform 150ms ease; z-index: 20;
+  }
+  .sub-dot:hover .dot-tip, .sub-dot.focused .dot-tip,
+  .detail-dot:hover .dot-tip, .detail-dot.focused .dot-tip { opacity: 1; transform: translateX(-50%) scale(1); }
+
+  .row-label { font-size: 9px; font-weight: 500; letter-spacing: 0.08em; color: var(--text-muted); text-transform: uppercase; margin-right: 12px; min-width: 56px; text-align: right; flex-shrink: 0; }
+
+  /* ── Content Zone ────────────────────────────────── */
+  .content-zone {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px 32px;
+    scrollbar-width: thin;
+    scrollbar-color: #27272a transparent;
+  }
+
+  .content-zone::-webkit-scrollbar { width: 6px; }
+  .content-zone::-webkit-scrollbar-track { background: transparent; }
+  .content-zone::-webkit-scrollbar-thumb { background: #27272a; border-radius: 3px; }
+  .content-card { background: var(--bg-raised); border: 1px solid var(--border); border-radius: 10px; padding: 20px 24px; margin-bottom: 14px; transition: border-color var(--transition), box-shadow var(--transition); animation: cardIn 350ms ease-out both; }
+  .content-card:hover { border-color: rgba(255, 255, 255, 0.10); }
+  .content-card.active-card { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent-dim), 0 4px 20px rgba(0, 0, 0, 0.3); }
+  .card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .card-status { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .card-status.done { background: var(--success); }
+  .card-status.running { background: var(--running); animation: dotPulse 2s ease-in-out infinite; }
+  .card-status.pending { background: var(--pending-border); }
+  .card-status.error { background: var(--error); }
+  .card-title { font-size: 14px; font-weight: 600; color: var(--text); }
+  .card-meta { font-size: 11px; color: var(--text-muted); margin-left: auto; font-variant-numeric: tabular-nums; }
+  .card-body { font-size: 12.5px; line-height: 1.65; color: var(--text-dim); }
+  .card-body p + p { margin-top: 8px; }
+  .card-tags { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+  .tag { font-size: 10px; padding: 2px 8px; border-radius: 4px; background: var(--accent-dim); color: var(--accent); letter-spacing: 0.03em; }
+  .tag.success { background: var(--success-dim); color: var(--success); }
+  .tag.warning { background: var(--running-dim); color: var(--running); }
+
+  /* ── Keyboard hint ───────────────────────────────── */
+  .kb-hint { position: fixed; bottom: 12px; right: 16px; font-size: 10px; color: var(--text-muted); display: flex; gap: 12px; z-index: 30; }
+  .kb-hint kbd { display: inline-block; padding: 1px 6px; background: #18181b; border: 1px solid #27272a; border-radius: 3px; font-family: inherit; font-size: 10px; color: var(--text-dim); margin: 0 2px; }
+
+  /* ── Animations ──────────────────────────────────── */
+  @keyframes dotPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.55; }
+  }
+
+  @keyframes cardIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes slideRow {
+    from { opacity: 0; transform: translateY(-8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── Navigation Zone ────────────────────────────── -->
+<div class="nav-zone" role="navigation" aria-label="Pipeline progress">
+
+  <!-- Arc -->
+  <div class="arc-container">
+    <svg viewBox="-230 -20 460 145" id="arcSvg">
+      <defs>
+        <linearGradient id="arcGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="#4ade80" />
+          <stop offset="50%" stop-color="#3b82f6" />
+          <stop offset="100%" stop-color="#818cf8" />
+        </linearGradient>
+      </defs>
+      <!-- Track (full half-circle) -->
+      <path class="arc-track" id="arcTrack" />
+      <!-- Filled portion -->
+      <path class="arc-fill" id="arcFill" />
+      <!-- Tip glow circle -->
+      <circle class="arc-tip" id="arcTip" cx="0" cy="0" />
+      <!-- Center text -->
+      <text class="arc-pct" x="0" y="95" id="arcPctText">65%</text>
+      <text class="arc-label" x="0" y="118" id="arcLabelText">pipeline progress</text>
+    </svg>
+  </div>
+
+  <!-- Dot Rows -->
+  <div class="dot-rows" id="dotRows">
+    <!-- Row 1: Modules (always visible) -->
+    <div class="dot-row row-modules visible" id="rowModules" role="listbox" aria-label="Pipeline modules"></div>
+    <!-- Row 2: Sub-modules (slides in on module select) -->
+    <div class="dot-row row-subs" id="rowSubs" role="listbox" aria-label="Sub-modules"></div>
+    <!-- Row 3: Details (slides in on sub-module select) -->
+    <div class="dot-row row-details" id="rowDetails" role="listbox" aria-label="Details"></div>
+  </div>
+</div>
+
+<!-- ── Content Zone ───────────────────────────────── -->
+<div class="content-zone" id="contentZone"></div>
+
+<!-- ── Keyboard Hint ──────────────────────────────── -->
+<div class="kb-hint">
+  <span><kbd>&uarr;</kbd><kbd>&darr;</kbd> rows</span>
+  <span><kbd>&larr;</kbd><kbd>&rarr;</kbd> items</span>
+  <span><kbd>Enter</kbd> expand</span>
+</div>
+
+<script>
+/* ================================================================
+   DATA MODEL
+   ================================================================ */
+const PIPELINE = {
+  progress: 0.65,
+  modules: [
+    {
+      id: 'seed',
+      label: 'Seed',
+      status: 'done',
+      subs: [
+        {
+          id: 'seed-kg', name: 'Knowledge Graph', status: 'done',
+          details: [
+            { id: 'kg-fetch', name: 'Fetch papers', status: 'done' },
+            { id: 'kg-embed', name: 'Embed nodes', status: 'done' },
+            { id: 'kg-cluster', name: 'Cluster topics', status: 'done' },
+          ],
+          content: {
+            title: 'Knowledge Graph Construction',
+            meta: '12.4s',
+            body: 'Parsed 847 papers from Semantic Scholar. Built a citation graph with 3,291 edges. Topic clustering identified 14 coherent research fronts across transformer architectures, optimization theory, and emergent capabilities.',
+            tags: [{ text: '847 papers', cls: 'success' }, { text: '14 clusters', cls: '' }]
+          }
+        },
+        {
+          id: 'seed-gen', name: 'Generate Seeds', status: 'done',
+          details: [
+            { id: 'gen-cross', name: 'Cross-pollinate', status: 'done' },
+            { id: 'gen-filter', name: 'Novelty filter', status: 'done' },
+          ],
+          content: {
+            title: 'Seed Hypothesis Generation',
+            meta: '8.1s',
+            body: 'Cross-pollinated 14 clusters to produce 42 seed hypotheses. Novelty filter retained 28 candidates with sufficient distance from existing work. Seeds span mechanistic interpretability, efficient fine-tuning, and reasoning scaffolds.',
+            tags: [{ text: '28 seeds', cls: 'success' }, { text: 'filtered 42 -> 28', cls: '' }]
+          }
+        },
+      ]
+    },
+    {
+      id: 'hypo',
+      label: 'Hypo',
+      status: 'running',
+      subs: [
+        {
+          id: 'hypo-expand', name: 'Expand', status: 'done',
+          details: [
+            { id: 'exp-lit', name: 'Literature scan', status: 'done' },
+            { id: 'exp-refine', name: 'Refine claims', status: 'done' },
+          ],
+          content: {
+            title: 'Hypothesis Expansion',
+            meta: '15.3s',
+            body: 'Expanded 28 seed hypotheses into structured research proposals. Each proposal includes a falsifiable claim, proposed methodology, and expected outcomes. Literature scan verified no direct overlap with published results.',
+            tags: [{ text: '28 proposals', cls: 'success' }]
+          }
+        },
+        {
+          id: 'hypo-review', name: 'Review', status: 'running',
+          details: [
+            { id: 'rev-feasibility', name: 'Feasibility check', status: 'done' },
+            { id: 'rev-novelty', name: 'Novelty scoring', status: 'running' },
+            { id: 'rev-rigor', name: 'Rigor audit', status: 'pending' },
+          ],
+          content: {
+            title: 'Hypothesis Review (In Progress)',
+            meta: 'running',
+            body: 'Multi-criteria review of each hypothesis. Feasibility check passed 22 of 28. Novelty scoring is evaluating semantic distance from the nearest published work using citation-aware embeddings. Rigor audit pending.',
+            tags: [{ text: '22/28 feasible', cls: 'success' }, { text: 'scoring...', cls: 'warning' }]
+          }
+        },
+        {
+          id: 'hypo-select', name: 'Select', status: 'pending',
+          details: [],
+          content: {
+            title: 'Hypothesis Selection',
+            meta: 'pending',
+            body: 'Will select top-k hypotheses using composite scoring across novelty, feasibility, and scientific rigor dimensions. Target: 5 hypotheses for the invention loop.',
+            tags: [{ text: 'pending', cls: '' }]
+          }
+        },
+      ]
+    },
+    {
+      id: 'invent',
+      label: 'Invent',
+      status: 'pending',
+      subs: [
+        {
+          id: 'inv-plan', name: 'Plan', status: 'pending', details: [],
+          content: { title: 'Invention Planning', meta: 'pending', body: 'Will generate detailed invention plans for each selected hypothesis, including experimental design and expected results.', tags: [] }
+        },
+        {
+          id: 'inv-draft', name: 'Draft', status: 'pending', details: [],
+          content: { title: 'Paper Drafting', meta: 'pending', body: 'Will draft technical paper sections for each invention plan.', tags: [] }
+        },
+        {
+          id: 'inv-review', name: 'Review', status: 'pending', details: [],
+          content: { title: 'Paper Review', meta: 'pending', body: 'Internal review loop for generated paper drafts.', tags: [] }
+        },
+      ]
+    },
+    {
+      id: 'publish',
+      label: 'Paper',
+      status: 'pending',
+      subs: [
+        {
+          id: 'pub-artifacts', name: 'Artifacts', status: 'pending', details: [],
+          content: { title: 'Artifact Generation', meta: 'pending', body: 'Will generate code demos and visualizations for the paper repository.', tags: [] }
+        },
+        {
+          id: 'pub-compile', name: 'Compile', status: 'pending', details: [],
+          content: { title: 'Paper Compilation', meta: 'pending', body: 'Will compile the final paper with all sections, figures, and references into a complete repository.', tags: [] }
+        },
+      ]
+    },
+  ]
+};
+
+/* ================================================================
+   ARC RENDERING
+   ================================================================ */
+const ARC_RADIUS = 200;
+const ARC_START = Math.PI;    // left end
+const ARC_END   = 0;          // right end (half-circle, open upward-bowl)
+
+function polarToCartesian(cx, cy, r, angle) {
+  return { x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) };
+}
+
+function describeArc(cx, cy, r, startAngle, endAngle) {
+  const start = polarToCartesian(cx, cy, r, startAngle);
+  const end   = polarToCartesian(cx, cy, r, endAngle);
+  const largeArc = Math.abs(endAngle - startAngle) > Math.PI ? 1 : 0;
+  return `M ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 1 ${end.x} ${end.y}`;
+}
+
+function renderArc(progress) {
+  const cx = 0, cy = 110;
+  const trackPath = describeArc(cx, cy, ARC_RADIUS, ARC_START, ARC_END);
+
+  const arcTrack = document.getElementById('arcTrack');
+  const arcFill  = document.getElementById('arcFill');
+  const arcTip   = document.getElementById('arcTip');
+  const arcPct   = document.getElementById('arcPctText');
+
+  arcTrack.setAttribute('d', trackPath);
+
+  // Compute total arc length for dash-offset animation
+  arcFill.setAttribute('d', trackPath);
+  const totalLen = arcFill.getTotalLength();
+  arcFill.style.strokeDasharray  = totalLen;
+  arcFill.style.strokeDashoffset = totalLen * (1 - progress);
+
+  // Position the tip at the progress point
+  const tipAngle = ARC_START + (ARC_END - ARC_START) * progress;
+  const tipPos = polarToCartesian(cx, cy, ARC_RADIUS, tipAngle);
+  arcTip.setAttribute('cx', tipPos.x);
+  arcTip.setAttribute('cy', tipPos.y);
+
+  arcPct.textContent = Math.round(progress * 100) + '%';
+}
+
+/* ================================================================
+   DOT ROW RENDERING
+   ================================================================ */
+const state = {
+  activeRow: 0,         // 0 = modules, 1 = subs, 2 = details
+  moduleIdx: 0,
+  subIdx: 0,
+  detailIdx: -1,
+};
+
+function getActiveSubs() {
+  const mod = PIPELINE.modules[state.moduleIdx];
+  return mod ? mod.subs : [];
+}
+
+function getActiveDetails() {
+  const subs = getActiveSubs();
+  const sub = subs[state.subIdx];
+  return sub ? sub.details : [];
+}
+
+/* ── Build Row 1: Modules ─────────────────────────── */
+function buildModuleRow() {
+  const row = document.getElementById('rowModules');
+  row.innerHTML = '';
+
+  PIPELINE.modules.forEach((mod, i) => {
+    // Connector before (except first)
+    if (i > 0) {
+      const conn = document.createElement('div');
+      conn.className = 'module-connector' + (PIPELINE.modules[i - 1].status === 'done' ? ' done' : '');
+      row.appendChild(conn);
+    }
+
+    const el = document.createElement('div');
+    el.className = 'module-marker' + (state.activeRow === 0 && state.moduleIdx === i ? ' focused' : '');
+    el.setAttribute('data-status', mod.status);
+    el.setAttribute('tabindex', '0');
+    el.setAttribute('role', 'option');
+    el.setAttribute('aria-label', mod.label);
+    el.innerHTML = `
+      <svg viewBox="0 0 30 30">
+        <circle class="marker-ring" cx="15" cy="15" r="13" />
+        <rect class="marker-diamond" x="10" y="10" width="10" height="10" rx="1.5"
+              transform="rotate(45 15 15)" />
+      </svg>
+      <span class="marker-label">${mod.label}</span>
+    `;
+    el.addEventListener('click', () => {
+      state.moduleIdx = i;
+      state.subIdx = 0;
+      state.detailIdx = -1;
+      state.activeRow = 0;
+      refresh();
+    });
+    row.appendChild(el);
+  });
+}
+
+/* ── Build Row 2: Sub-modules ─────────────────────── */
+function buildSubRow() {
+  const row = document.getElementById('rowSubs');
+  const subs = getActiveSubs();
+  row.innerHTML = '';
+
+  if (subs.length === 0) {
+    row.classList.remove('visible');
+    return;
+  }
+
+  const label = document.createElement('span');
+  label.className = 'row-label';
+  label.textContent = 'steps';
+  row.appendChild(label);
+
+  subs.forEach((sub, i) => {
+    const dot = document.createElement('div');
+    dot.className = 'sub-dot' + (state.activeRow >= 1 && state.subIdx === i ? ' focused' : '');
+    dot.setAttribute('data-status', sub.status);
+    dot.setAttribute('tabindex', '-1');
+    dot.setAttribute('role', 'option');
+    dot.innerHTML = `<span class="dot-tip">${sub.name}</span>`;
+    dot.addEventListener('click', () => {
+      state.subIdx = i;
+      state.detailIdx = -1;
+      state.activeRow = 1;
+      refresh();
+    });
+    row.appendChild(dot);
+  });
+
+  row.classList.add('visible');
+  row.style.animation = 'slideRow 250ms ease-out';
+}
+
+/* ── Build Row 3: Details ─────────────────────────── */
+function buildDetailRow() {
+  const row = document.getElementById('rowDetails');
+  const details = getActiveDetails();
+  row.innerHTML = '';
+
+  if (details.length === 0) {
+    row.classList.remove('visible');
+    return;
+  }
+
+  const label = document.createElement('span');
+  label.className = 'row-label';
+  label.textContent = 'detail';
+  row.appendChild(label);
+
+  details.forEach((d, i) => {
+    const dot = document.createElement('div');
+    dot.className = 'detail-dot' + (state.activeRow === 2 && state.detailIdx === i ? ' focused' : '');
+    dot.setAttribute('data-status', d.status);
+    dot.setAttribute('tabindex', '-1');
+    dot.setAttribute('role', 'option');
+    dot.innerHTML = `<span class="dot-tip">${d.name}</span>`;
+    dot.addEventListener('click', () => {
+      state.detailIdx = i;
+      state.activeRow = 2;
+      refresh();
+    });
+    row.appendChild(dot);
+  });
+
+  row.classList.add('visible');
+  row.style.animation = 'slideRow 250ms ease-out';
+}
+
+/* ================================================================
+   CONTENT RENDERING
+   ================================================================ */
+function renderContent() {
+  const zone = document.getElementById('contentZone');
+  zone.innerHTML = '';
+
+  const subs = getActiveSubs();
+  if (subs.length === 0) {
+    zone.innerHTML = `<div class="content-card"><div class="card-body" style="color:var(--text-muted)">No data for this module yet.</div></div>`;
+    return;
+  }
+
+  // Show content for each sub-module in the selected module
+  subs.forEach((sub, i) => {
+    const c = sub.content;
+    if (!c) return;
+
+    const isActive = (state.subIdx === i);
+    const card = document.createElement('div');
+    card.className = 'content-card' + (isActive ? ' active-card' : '');
+    card.style.animationDelay = (i * 50) + 'ms';
+
+    let tagsHtml = '';
+    if (c.tags && c.tags.length) {
+      tagsHtml = '<div class="card-tags">' +
+        c.tags.map(t => `<span class="tag ${t.cls}">${t.text}</span>`).join('') +
+        '</div>';
+    }
+
+    card.innerHTML = `
+      <div class="card-header">
+        <div class="card-status ${sub.status}"></div>
+        <div class="card-title">${c.title}</div>
+        <div class="card-meta">${c.meta}</div>
+      </div>
+      <div class="card-body">
+        <p>${c.body}</p>
+      </div>
+      ${tagsHtml}
+    `;
+
+    card.addEventListener('click', () => {
+      state.subIdx = i;
+      state.activeRow = 1;
+      refresh();
+    });
+
+    zone.appendChild(card);
+  });
+
+  // Scroll active card into view
+  requestAnimationFrame(() => {
+    const active = zone.querySelector('.active-card');
+    if (active) active.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  });
+}
+
+/* ================================================================
+   REFRESH (master re-render)
+   ================================================================ */
+function refresh() {
+  buildModuleRow();
+  buildSubRow();
+  buildDetailRow();
+  renderContent();
+}
+
+/* ================================================================
+   KEYBOARD NAVIGATION
+   ================================================================ */
+document.addEventListener('keydown', (e) => {
+  const key = e.key;
+  let handled = true;
+
+  switch (key) {
+    case 'ArrowUp':
+      if (state.activeRow > 0) {
+        state.activeRow--;
+        if (state.activeRow === 1) state.detailIdx = -1;
+        if (state.activeRow === 0) { state.subIdx = 0; state.detailIdx = -1; }
+      }
+      break;
+
+    case 'ArrowDown': {
+      const maxRow = getActiveDetails().length > 0 ? 2 : (getActiveSubs().length > 0 ? 1 : 0);
+      if (state.activeRow < maxRow) {
+        state.activeRow++;
+        if (state.activeRow === 2 && state.detailIdx < 0) state.detailIdx = 0;
+      }
+      break;
+    }
+
+    case 'ArrowLeft':
+      if (state.activeRow === 0) {
+        state.moduleIdx = Math.max(0, state.moduleIdx - 1);
+        state.subIdx = 0;
+        state.detailIdx = -1;
+      } else if (state.activeRow === 1) {
+        state.subIdx = Math.max(0, state.subIdx - 1);
+        state.detailIdx = -1;
+      } else if (state.activeRow === 2) {
+        state.detailIdx = Math.max(0, state.detailIdx - 1);
+      }
+      break;
+
+    case 'ArrowRight':
+      if (state.activeRow === 0) {
+        state.moduleIdx = Math.min(PIPELINE.modules.length - 1, state.moduleIdx + 1);
+        state.subIdx = 0;
+        state.detailIdx = -1;
+      } else if (state.activeRow === 1) {
+        const maxSub = getActiveSubs().length - 1;
+        state.subIdx = Math.min(maxSub, state.subIdx + 1);
+        state.detailIdx = -1;
+      } else if (state.activeRow === 2) {
+        const maxDet = getActiveDetails().length - 1;
+        state.detailIdx = Math.min(maxDet, state.detailIdx + 1);
+      }
+      break;
+
+    case 'Enter': {
+      // Drill deeper: module -> subs -> details
+      if (state.activeRow === 0 && getActiveSubs().length > 0) {
+        state.activeRow = 1;
+        state.subIdx = 0;
+      } else if (state.activeRow === 1 && getActiveDetails().length > 0) {
+        state.activeRow = 2;
+        state.detailIdx = 0;
+      }
+      break;
+    }
+
+    case 'Escape':
+    case 'Backspace':
+      if (state.activeRow > 0) {
+        state.activeRow--;
+        if (state.activeRow < 2) state.detailIdx = -1;
+      }
+      break;
+
+    default:
+      handled = false;
+  }
+
+  if (handled) {
+    e.preventDefault();
+    refresh();
+  }
+});
+
+/* ================================================================
+   INIT
+   ================================================================ */
+renderArc(PIPELINE.progress);
+refresh();
+
+/* Animate arc on load for a smooth entrance */
+(function animateArcEntrance() {
+  const fill = document.getElementById('arcFill');
+  const totalLen = fill.getTotalLength();
+  fill.style.transition = 'none';
+  fill.style.strokeDashoffset = totalLen;
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      fill.style.transition = 'stroke-dashoffset 1200ms cubic-bezier(0.4, 0, 0.2, 1)';
+      fill.style.strokeDashoffset = totalLen * (1 - PIPELINE.progress);
+    });
+  });
+})();
+</script>
+</body>
+</html>

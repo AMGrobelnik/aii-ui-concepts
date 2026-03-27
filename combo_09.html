@@ -1,0 +1,812 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Diamond-in-Ring Module Cards</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#0a0c14;--surface:#11131e;--border:#1e2236;
+    --text:#d4d8f0;--text-dim:#6b7094;--text-bright:#f0f2ff;
+    --accent-1:#6366f1;--accent-2:#22d3ee;--accent-3:#a78bfa;--accent-4:#f472b6;
+    --glow-1:rgba(99,102,241,.25);--glow-2:rgba(34,211,238,.25);
+    --glow-3:rgba(167,139,250,.25);--glow-4:rgba(244,114,182,.25);
+    --ring-track:rgba(255,255,255,.06);
+    --row-gap:18px;--card-w:158px;--card-h:62px;--ring-sz:32px;
+    --trans-slide:.38s cubic-bezier(.22,1,.36,1);
+    --trans-fade:.28s ease;
+  }
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:'Inter',system-ui,-apple-system,sans-serif}
+
+  /* ---------- layout ---------- */
+  #app{display:flex;flex-direction:column;height:100vh;overflow:hidden}
+  #nav-area{flex:0 0 auto;padding:28px 32px 0;display:flex;flex-direction:column;align-items:center;gap:var(--row-gap)}
+  #content-area{flex:1 1 auto;overflow-y:auto;padding:24px 40px 40px;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+
+  /* ---------- row containers ---------- */
+  .row{display:flex;align-items:center;justify-content:center;gap:14px;position:relative;min-height:0;overflow:hidden;transition:max-height var(--trans-slide),opacity var(--trans-fade),margin var(--trans-slide)}
+  .row.collapsed{max-height:0!important;opacity:0;margin:0!important;pointer-events:none}
+  #row-modules{max-height:80px}
+  #row-sub{max-height:50px}
+  #row-detail{max-height:50px}
+
+  /* ---------- connector lines between module cards ---------- */
+  #connectors{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none}
+  #connectors line{stroke:var(--border);stroke-width:1.2;stroke-dasharray:5 4}
+  @keyframes dashScroll{to{stroke-dashoffset:-18}}
+  #connectors line{animation:dashScroll 1.6s linear infinite}
+
+  /* ---------- module card ---------- */
+  .mod-card{
+    position:relative;width:var(--card-w);height:var(--card-h);
+    background:var(--surface);border:1px solid var(--border);border-radius:12px;
+    display:flex;align-items:center;gap:10px;padding:0 12px;
+    cursor:pointer;user-select:none;
+    transition:border-color .22s,box-shadow .22s,transform .18s;
+    z-index:2;
+  }
+  .mod-card::before{
+    content:'';position:absolute;inset:-6px;border-radius:18px;
+    opacity:0;transition:opacity .28s;pointer-events:none;z-index:-1;
+  }
+  .mod-card:hover{transform:translateY(-2px)}
+  .mod-card:hover::before{opacity:1}
+  .mod-card.selected{border-color:var(--accent);transform:translateY(-2px)}
+  .mod-card.selected::before{opacity:1}
+  .mod-card.focused{outline:2px solid var(--accent);outline-offset:2px}
+
+  /* per-card accent overrides */
+  .mod-card[data-idx="0"]{--accent:var(--accent-1);--glow:var(--glow-1)}
+  .mod-card[data-idx="1"]{--accent:var(--accent-2);--glow:var(--glow-2)}
+  .mod-card[data-idx="2"]{--accent:var(--accent-3);--glow:var(--glow-3)}
+  .mod-card[data-idx="3"]{--accent:var(--accent-4);--glow:var(--glow-4)}
+  .mod-card::before{background:var(--glow)}
+  .mod-card.selected{border-color:var(--accent)}
+
+  /* ring gauge */
+  .ring-wrap{width:var(--ring-sz);height:var(--ring-sz);flex-shrink:0;position:relative}
+  .ring-wrap svg{width:100%;height:100%}
+  .ring-track{fill:none;stroke:var(--ring-track);stroke-width:3}
+  .ring-fill{fill:none;stroke:var(--accent);stroke-width:3;stroke-linecap:round;transition:stroke-dashoffset .6s cubic-bezier(.4,0,.2,1)}
+
+  /* diamond inside ring */
+  .diamond{
+    position:absolute;top:50%;left:50%;width:8px;height:8px;
+    background:var(--accent);transform:translate(-50%,-50%) rotate(45deg);
+    border-radius:1.5px;box-shadow:0 0 6px var(--glow);
+    transition:transform .25s,box-shadow .25s;
+  }
+  .mod-card.selected .diamond{transform:translate(-50%,-50%) rotate(45deg) scale(1.25);box-shadow:0 0 12px var(--glow)}
+
+  /* card text */
+  .card-text{display:flex;flex-direction:column;gap:1px;overflow:hidden}
+  .card-label{font-size:11.5px;font-weight:600;color:var(--text-bright);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .card-metric{font-size:10px;color:var(--text-dim);font-variant-numeric:tabular-nums}
+
+  /* ---------- dot rows (sub-module / detail) ---------- */
+  .dot-row{display:flex;align-items:center;gap:10px;justify-content:center}
+  .dot-item{
+    display:flex;align-items:center;gap:6px;
+    padding:6px 14px;border-radius:20px;
+    background:var(--surface);border:1px solid var(--border);
+    cursor:pointer;user-select:none;
+    transition:border-color .2s,background .2s,transform .16s;
+    font-size:11px;color:var(--text);white-space:nowrap;
+  }
+  .dot-item .dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;transition:box-shadow .2s}
+  .dot-item:hover{border-color:var(--accent);transform:translateY(-1px)}
+  .dot-item.selected{border-color:var(--accent);background:rgba(255,255,255,.03)}
+  .dot-item.selected .dot{box-shadow:0 0 8px var(--glow)}
+  .dot-item.focused{outline:2px solid var(--accent);outline-offset:2px}
+
+  /* ---------- breadcrumb trail ---------- */
+  #breadcrumb{
+    font-size:10.5px;color:var(--text-dim);text-align:center;
+    min-height:16px;transition:opacity var(--trans-fade);
+  }
+  #breadcrumb span{cursor:pointer;transition:color .15s}
+  #breadcrumb span:hover{color:var(--text-bright)}
+  #breadcrumb .sep{margin:0 5px;opacity:.4}
+
+  /* ---------- content panel ---------- */
+  .content-block{
+    max-width:720px;margin:0 auto;
+    opacity:0;transform:translateY(10px);
+    animation:fadeUp .4s .08s forwards;
+  }
+  @keyframes fadeUp{to{opacity:1;transform:translateY(0)}}
+  .content-block h2{font-size:17px;font-weight:700;color:var(--text-bright);margin-bottom:8px}
+  .content-block h3{font-size:13.5px;font-weight:600;color:var(--accent);margin:14px 0 6px;text-transform:uppercase;letter-spacing:.5px}
+  .content-block p{font-size:13px;line-height:1.65;color:var(--text-dim);margin-bottom:10px}
+  .content-block ul{padding-left:18px;margin-bottom:10px}
+  .content-block li{font-size:12.5px;line-height:1.6;color:var(--text-dim);margin-bottom:4px}
+  .content-block code{font-size:11.5px;background:rgba(255,255,255,.05);padding:1px 5px;border-radius:4px;color:var(--accent-2)}
+  .stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}
+  .stat-cell{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;text-align:center}
+  .stat-cell .val{font-size:18px;font-weight:700;color:var(--text-bright)}
+  .stat-cell .lbl{font-size:10px;color:var(--text-dim);margin-top:2px}
+
+  /* ---------- key hints ---------- */
+  #key-hints{
+    position:fixed;bottom:12px;right:16px;
+    display:flex;gap:6px;align-items:center;
+    font-size:10px;color:var(--text-dim);opacity:.55;
+  }
+  .key{
+    display:inline-flex;align-items:center;justify-content:center;
+    min-width:20px;height:18px;padding:0 4px;
+    border:1px solid var(--border);border-radius:4px;
+    font-size:9px;color:var(--text-dim);background:var(--surface);
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- Navigation rows -->
+  <div id="nav-area">
+    <!-- Row 1: Module cards -->
+    <div class="row" id="row-modules" style="position:relative">
+      <svg id="connectors" xmlns="http://www.w3.org/2000/svg"></svg>
+      <!-- cards injected by JS -->
+    </div>
+
+    <!-- Row 2: Sub-module dots -->
+    <div class="row collapsed" id="row-sub">
+      <div class="dot-row" id="sub-dots"></div>
+    </div>
+
+    <!-- Row 3: Detail dots -->
+    <div class="row collapsed" id="row-detail">
+      <div class="dot-row" id="detail-dots"></div>
+    </div>
+
+    <div id="breadcrumb"></div>
+  </div>
+
+  <!-- Scrollable content -->
+  <div id="content-area">
+    <div class="content-block" id="content"></div>
+  </div>
+</div>
+
+<div id="key-hints">
+  <span class="key">&larr;</span><span class="key">&rarr;</span> navigate
+  <span style="margin-left:4px" class="key">&darr;</span> expand
+  <span style="margin-left:4px" class="key">&uarr;</span> collapse
+  <span style="margin-left:4px" class="key">Enter</span> select
+</div>
+
+<script>
+/* ================================================================
+   DATA
+   ================================================================ */
+const DATA = [
+  {
+    name: "Hypothesis",
+    metric: "87% pass",
+    pct: 87,
+    content: {
+      title: "Hypothesis Generation",
+      body: `<p>The hypothesis engine synthesizes research gaps from the knowledge graph and proposes
+      novel scientific hypotheses grounded in existing literature.</p>
+      <div class="stat-grid">
+        <div class="stat-cell"><div class="val">2,418</div><div class="lbl">KG Nodes</div></div>
+        <div class="stat-cell"><div class="val">87%</div><div class="lbl">Pass Rate</div></div>
+        <div class="stat-cell"><div class="val">3.2s</div><div class="lbl">Avg Latency</div></div>
+      </div>
+      <p>Each hypothesis is scored on novelty, feasibility, and grounding before entering
+      the review loop.</p>`
+    },
+    subs: [
+      {
+        name: "Seed Generation",
+        content: {
+          title: "Seed Generation",
+          body: `<h3>Process</h3>
+          <p>Seeds are extracted from the invention knowledge graph by traversing high-centrality
+          edges and identifying under-explored clusters.</p>
+          <ul><li>Traverses top-50 betweenness nodes</li>
+          <li>Clusters via spectral decomposition</li>
+          <li>Filters by recency and citation density</li></ul>`
+        },
+        details: [
+          { name: "KG Traversal", content: { title: "KG Traversal", body: "<p>Breadth-first traversal of the invention knowledge graph, weighting edges by inverse citation age. Identifies <code>gap nodes</code> where expected connections are absent.</p><p>Uses a custom betweenness-centrality variant that penalises well-trodden paths, surfacing under-explored regions of the graph.</p>" } },
+          { name: "Cluster Extract", content: { title: "Cluster Extraction", body: "<p>Spectral clustering on the Laplacian of the KG adjacency matrix. Eigenvalue gap heuristic selects <code>k</code> automatically.</p><p>Each cluster is summarised by its top-3 representative nodes and the dominant relationship type.</p>" } },
+          { name: "Recency Filter", content: { title: "Recency Filter", body: "<p>Applies exponential decay weighting based on publication date. Papers older than 5 years receive a 0.3x multiplier unless they are landmark works (citation count > 500).</p>" } }
+        ]
+      },
+      {
+        name: "Review Loop",
+        content: {
+          title: "Hypothesis Review Loop",
+          body: `<h3>Review Pipeline</h3>
+          <p>Each candidate hypothesis passes through a multi-stage review that checks
+          scientific rigour, novelty against existing work, and practical feasibility.</p>
+          <ul><li>Stage 1 &mdash; Novelty check against FAISS index</li>
+          <li>Stage 2 &mdash; Feasibility scoring via cost model</li>
+          <li>Stage 3 &mdash; LLM critique with structured rubric</li></ul>`
+        },
+        details: [
+          { name: "Novelty Check", content: { title: "Novelty Check", body: "<p>Embeds the hypothesis with <code>text-embedding-3-large</code> and queries a FAISS index of 1.2M paper abstracts. Hypotheses with cosine similarity > 0.92 to any existing abstract are flagged as potentially derivative.</p>" } },
+          { name: "Feasibility", content: { title: "Feasibility Scoring", body: "<p>Estimates compute cost, data requirements, and expected time-to-result using a regression model trained on 800 completed research projects.</p><p>Outputs a feasibility score from 0-100 and a breakdown by resource category.</p>" } },
+          { name: "LLM Critique", content: { title: "LLM Critique", body: "<p>Claude generates a structured critique using a 12-point rubric covering methodology, assumptions, potential confounds, and expected impact.</p><p>Critiques are parsed into <code>pass</code>, <code>revise</code>, or <code>reject</code> decisions.</p>" } }
+        ]
+      },
+      {
+        name: "Scoring",
+        content: {
+          title: "Hypothesis Scoring",
+          body: `<p>Composite scoring combines novelty, feasibility, and grounding metrics into a single
+          ranking score used to prioritise hypotheses for the invention loop.</p>
+          <div class="stat-grid">
+            <div class="stat-cell"><div class="val">0.72</div><div class="lbl">Avg Novelty</div></div>
+            <div class="stat-cell"><div class="val">0.81</div><div class="lbl">Avg Feasibility</div></div>
+            <div class="stat-cell"><div class="val">0.65</div><div class="lbl">Avg Grounding</div></div>
+          </div>`
+        },
+        details: [
+          { name: "Weights", content: { title: "Score Weights", body: "<p>Default weighting: novelty 0.4, feasibility 0.35, grounding 0.25. Weights are configurable in <code>pipeline.yaml</code> under the <code>scoring</code> section.</p>" } },
+          { name: "Calibration", content: { title: "Score Calibration", body: "<p>Scores are calibrated against a held-out set of 200 expert-rated hypotheses. Platt scaling ensures the composite score approximates the probability of expert approval.</p>" } }
+        ]
+      }
+    ]
+  },
+  {
+    name: "Invention",
+    metric: "12 active",
+    pct: 62,
+    content: {
+      title: "Invention Loop",
+      body: `<p>The invention loop iterates between plan generation, paper drafting, and review
+      until the output meets quality thresholds.</p>
+      <div class="stat-grid">
+        <div class="stat-cell"><div class="val">12</div><div class="lbl">Active Runs</div></div>
+        <div class="stat-cell"><div class="val">3.1</div><div class="lbl">Avg Iterations</div></div>
+        <div class="stat-cell"><div class="val">94%</div><div class="lbl">Convergence</div></div>
+      </div>
+      <p>Convergence is measured by the delta in review scores between consecutive iterations.</p>`
+    },
+    subs: [
+      {
+        name: "Plan Gen",
+        content: {
+          title: "Plan Generation",
+          body: `<h3>Strategy</h3>
+          <p>Generates a structured research plan from the approved hypothesis, including
+          methodology, expected results, and resource requirements.</p>
+          <ul><li>Methodology selection from template library</li>
+          <li>Resource estimation and scheduling</li>
+          <li>Risk identification and mitigation strategies</li></ul>`
+        },
+        details: [
+          { name: "Templates", content: { title: "Methodology Templates", body: "<p>Library of 45 methodology templates covering experimental, computational, and theoretical approaches. Templates are matched to hypothesis type using a classifier trained on 3,000 labelled examples.</p>" } },
+          { name: "Resources", content: { title: "Resource Estimation", body: "<p>Estimates GPU hours, dataset sizes, and human review time. Uses historical data from completed runs to improve accuracy over time.</p>" } }
+        ]
+      },
+      {
+        name: "Paper Draft",
+        content: {
+          title: "Paper Text Generation",
+          body: `<p>Generates full paper text section by section, maintaining consistency
+          with the research plan and citing relevant literature.</p>
+          <ul><li>Abstract and introduction from hypothesis + plan</li>
+          <li>Methods section from plan templates</li>
+          <li>Results with placeholder figures</li>
+          <li>Discussion and future work</li></ul>`
+        },
+        details: [
+          { name: "Sections", content: { title: "Section Generation", body: "<p>Each section is generated independently then stitched together with a consistency pass. Cross-references and citations are resolved in a final formatting step.</p>" } },
+          { name: "Citations", content: { title: "Citation Management", body: "<p>Citations are pulled from the KG and formatted in the target venue's style. Each citation is verified against the Semantic Scholar API to ensure correctness.</p>" } }
+        ]
+      },
+      {
+        name: "Review",
+        content: {
+          title: "Paper Review",
+          body: `<h3>Review Stages</h3>
+          <p>Automated review checks structural completeness, argument coherence,
+          and citation validity before human review.</p>
+          <div class="stat-grid">
+            <div class="stat-cell"><div class="val">96%</div><div class="lbl">Structure Pass</div></div>
+            <div class="stat-cell"><div class="val">89%</div><div class="lbl">Coherence</div></div>
+            <div class="stat-cell"><div class="val">91%</div><div class="lbl">Citation Valid</div></div>
+          </div>`
+        },
+        details: [
+          { name: "Structure", content: { title: "Structure Check", body: "<p>Validates that all required sections are present, word counts are within bounds, and figures/tables are referenced in the text.</p>" } },
+          { name: "Coherence", content: { title: "Coherence Analysis", body: "<p>Checks argument flow using discourse relation parsing. Identifies logical gaps and unsupported claims.</p>" } }
+        ]
+      }
+    ]
+  },
+  {
+    name: "Paper Repo",
+    metric: "4 built",
+    pct: 45,
+    content: {
+      title: "Paper Repository Generation",
+      body: `<p>Converts approved papers into complete, self-contained repositories with
+      reproducible code, visualisations, and documentation.</p>
+      <div class="stat-grid">
+        <div class="stat-cell"><div class="val">4</div><div class="lbl">Repos Built</div></div>
+        <div class="stat-cell"><div class="val">18</div><div class="lbl">Artifacts</div></div>
+        <div class="stat-cell"><div class="val">2.8m</div><div class="lbl">Avg Build Time</div></div>
+      </div>`
+    },
+    subs: [
+      {
+        name: "Artifact Demos",
+        content: {
+          title: "Artifact Demo Generation",
+          body: `<p>Generates interactive demos for each artifact described in the paper,
+          including Python scripts and Jupyter notebooks.</p>
+          <ul><li>Python demo scripts with CLI interfaces</li>
+          <li>Jupyter notebooks with inline visualisations</li>
+          <li>Automated testing of demo outputs</li></ul>`
+        },
+        details: [
+          { name: "Python Demos", content: { title: "Python Demo Scripts", body: "<p>Each demo is a standalone Python script with <code>argparse</code> CLI, type hints, and docstrings. Demos are tested in an isolated virtualenv to verify reproducibility.</p>" } },
+          { name: "Notebooks", content: { title: "Jupyter Notebooks", body: "<p>Generated notebooks include markdown narrative, code cells, and output cells with pre-computed results. Cell execution order is validated.</p>" } }
+        ]
+      },
+      {
+        name: "Visualisations",
+        content: {
+          title: "Visualisation Generation",
+          body: `<p>Creates publication-quality figures using matplotlib and plotly,
+          matched to the paper's style and colour scheme.</p>`
+        },
+        details: [
+          { name: "Static Figs", content: { title: "Static Figures", body: "<p>Matplotlib figures at 300 DPI with consistent styling. Font sizes, colours, and layout are controlled by a shared <code>style.mplstyle</code> file.</p>" } },
+          { name: "Interactive", content: { title: "Interactive Plots", body: "<p>Plotly figures embedded in HTML with hover tooltips and zoom. Exported as standalone HTML files for easy sharing.</p>" } }
+        ]
+      },
+      {
+        name: "Full Paper",
+        content: {
+          title: "Full Paper Assembly",
+          body: `<p>Assembles the final paper PDF from LaTeX sources, including all figures,
+          tables, and supplementary materials.</p>
+          <ul><li>LaTeX compilation with BibTeX</li>
+          <li>Figure placement optimisation</li>
+          <li>Supplementary appendix generation</li></ul>`
+        },
+        details: [
+          { name: "LaTeX Build", content: { title: "LaTeX Build", body: "<p>Two-pass LaTeX compilation resolves cross-references and bibliography. Build errors are caught and auto-fixed where possible.</p>" } },
+          { name: "Supplements", content: { title: "Supplementary Materials", body: "<p>Auto-generates appendices with extended results, ablation studies, and full hyperparameter tables extracted from the experiment configs.</p>" } }
+        ]
+      }
+    ]
+  },
+  {
+    name: "Telemetry",
+    metric: "1.2k evts",
+    pct: 78,
+    content: {
+      title: "Telemetry & Observability",
+      body: `<p>Real-time telemetry captures every pipeline event, enabling live monitoring
+      and post-hoc analysis of runs.</p>
+      <div class="stat-grid">
+        <div class="stat-cell"><div class="val">1,247</div><div class="lbl">Events Today</div></div>
+        <div class="stat-cell"><div class="val">4</div><div class="lbl">Active Sinks</div></div>
+        <div class="stat-cell"><div class="val">99.8%</div><div class="lbl">Delivery Rate</div></div>
+      </div>
+      <p>Events are routed to multiple sinks including console, SSE, and persistent storage.</p>`
+    },
+    subs: [
+      {
+        name: "Console Sink",
+        content: {
+          title: "Console Sink",
+          body: `<p>Formats telemetry events for human-readable terminal output with
+          colour coding and structured alignment.</p>
+          <ul><li>ANSI colour coding by event severity</li>
+          <li>Tabular alignment for key-value pairs</li>
+          <li>Configurable verbosity levels</li></ul>`
+        },
+        details: [
+          { name: "Formatting", content: { title: "Console Formatting", body: "<p>Uses <code>loguru</code>-style formatting with green timestamps, cyan function names, and level-based colours. Long values are truncated with ellipsis.</p>" } },
+          { name: "Filters", content: { title: "Event Filters", body: "<p>Configurable filters suppress noisy events like heartbeats and progress updates. Custom filter chains can be defined in <code>telemetry.yaml</code>.</p>" } }
+        ]
+      },
+      {
+        name: "SSE Sink",
+        content: {
+          title: "Server-Sent Events Sink",
+          body: `<p>Streams telemetry events to connected web clients via SSE,
+          enabling live dashboard updates without polling.</p>`
+        },
+        details: [
+          { name: "Connection", content: { title: "SSE Connection Management", body: "<p>Maintains persistent HTTP connections with automatic reconnection. Heartbeat events every 15 seconds keep connections alive through proxies.</p>" } },
+          { name: "Buffering", content: { title: "Event Buffering", body: "<p>Ring buffer of 500 events ensures late-connecting clients receive recent history. Buffer is partitioned by event type for selective replay.</p>" } }
+        ]
+      },
+      {
+        name: "Storage Sink",
+        content: {
+          title: "Persistent Storage Sink",
+          body: `<p>Writes all events to persistent storage for post-hoc analysis
+          and run comparison.</p>
+          <ul><li>JSON-lines format for easy processing</li>
+          <li>Automatic rotation at 100MB</li>
+          <li>Compression of rotated files</li></ul>`
+        },
+        details: [
+          { name: "JSON-L Writer", content: { title: "JSON-Lines Writer", body: "<p>Each event is serialised as a single JSON line with a monotonic sequence number. Writes are <code>fsync</code>'d to prevent data loss on crash.</p>" } },
+          { name: "Rotation", content: { title: "Log Rotation", body: "<p>Files rotate at 100MB with gzip compression of rotated files. Retention policy keeps 30 days of compressed logs.</p>" } }
+        ]
+      }
+    ]
+  }
+];
+
+/* ================================================================
+   STATE
+   ================================================================ */
+const state = {
+  modIdx: 0,       // selected module index (-1 = none)
+  subIdx: -1,      // selected sub-module index
+  detIdx: -1,      // selected detail index
+  focusRow: 0,     // 0=modules, 1=subs, 2=details
+  focusCol: 0,     // column within focused row
+};
+
+/* helpers */
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+
+/* ================================================================
+   RENDER — MODULE CARDS (ROW 1)
+   ================================================================ */
+function renderModuleCards() {
+  const row = $("#row-modules");
+  // keep SVG, remove old cards
+  row.querySelectorAll(".mod-card").forEach(c => c.remove());
+
+  DATA.forEach((mod, i) => {
+    const card = document.createElement("div");
+    card.className = "mod-card" + (i === state.modIdx ? " selected" : "");
+    card.dataset.idx = i;
+
+    const circumference = Math.PI * 2 * 12; // r=12
+    const offset = circumference * (1 - mod.pct / 100);
+
+    card.innerHTML = `
+      <div class="ring-wrap">
+        <svg viewBox="0 0 32 32">
+          <circle class="ring-track" cx="16" cy="16" r="12"/>
+          <circle class="ring-fill" cx="16" cy="16" r="12"
+            stroke-dasharray="${circumference}"
+            stroke-dashoffset="${offset}"
+            transform="rotate(-90 16 16)"/>
+        </svg>
+        <div class="diamond"></div>
+      </div>
+      <div class="card-text">
+        <div class="card-label">${mod.name}</div>
+        <div class="card-metric">${mod.metric}</div>
+      </div>
+    `;
+    card.addEventListener("click", () => selectModule(i));
+    row.appendChild(card);
+  });
+  drawConnectors();
+}
+
+/* ================================================================
+   RENDER — CONNECTOR LINES
+   ================================================================ */
+function drawConnectors() {
+  const svg = $("#connectors");
+  svg.innerHTML = "";
+  const cards = $$("#row-modules .mod-card");
+  if (cards.length < 2) return;
+
+  const rowRect = $("#row-modules").getBoundingClientRect();
+  svg.setAttribute("viewBox", `0 0 ${rowRect.width} ${rowRect.height}`);
+
+  for (let i = 0; i < cards.length - 1; i++) {
+    const a = cards[i].getBoundingClientRect();
+    const b = cards[i + 1].getBoundingClientRect();
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", a.right - rowRect.left);
+    line.setAttribute("y1", a.top + a.height / 2 - rowRect.top);
+    line.setAttribute("x2", b.left - rowRect.left);
+    line.setAttribute("y2", b.top + b.height / 2 - rowRect.top);
+    svg.appendChild(line);
+  }
+}
+
+/* ================================================================
+   RENDER — SUB-MODULE DOTS (ROW 2)
+   ================================================================ */
+function renderSubDots() {
+  const container = $("#sub-dots");
+  container.innerHTML = "";
+  const rowEl = $("#row-sub");
+
+  if (state.modIdx < 0) { rowEl.classList.add("collapsed"); return; }
+
+  const mod = DATA[state.modIdx];
+  const accent = getComputedStyle(document.documentElement)
+    .getPropertyValue(`--accent-${state.modIdx + 1}`).trim();
+
+  mod.subs.forEach((sub, i) => {
+    const el = document.createElement("div");
+    el.className = "dot-item" + (i === state.subIdx ? " selected" : "");
+    el.style.setProperty("--accent", accent);
+    el.style.setProperty("--glow", `${accent}40`);
+    el.innerHTML = `<span class="dot" style="background:${accent}"></span>${sub.name}`;
+    el.addEventListener("click", () => selectSub(i));
+    container.appendChild(el);
+  });
+
+  rowEl.classList.remove("collapsed");
+}
+
+/* ================================================================
+   RENDER — DETAIL DOTS (ROW 3)
+   ================================================================ */
+function renderDetailDots() {
+  const container = $("#detail-dots");
+  container.innerHTML = "";
+  const rowEl = $("#row-detail");
+
+  if (state.modIdx < 0 || state.subIdx < 0) { rowEl.classList.add("collapsed"); return; }
+
+  const sub = DATA[state.modIdx].subs[state.subIdx];
+  if (!sub.details || sub.details.length === 0) { rowEl.classList.add("collapsed"); return; }
+
+  const accent = getComputedStyle(document.documentElement)
+    .getPropertyValue(`--accent-${state.modIdx + 1}`).trim();
+
+  sub.details.forEach((det, i) => {
+    const el = document.createElement("div");
+    el.className = "dot-item" + (i === state.detIdx ? " selected" : "");
+    el.style.setProperty("--accent", accent);
+    el.style.setProperty("--glow", `${accent}40`);
+    el.innerHTML = `<span class="dot" style="background:${accent}"></span>${det.name}`;
+    el.addEventListener("click", () => selectDetail(i));
+    container.appendChild(el);
+  });
+
+  rowEl.classList.remove("collapsed");
+}
+
+/* ================================================================
+   RENDER — BREADCRUMB
+   ================================================================ */
+function renderBreadcrumb() {
+  const el = $("#breadcrumb");
+  const parts = [];
+  if (state.modIdx >= 0) {
+    parts.push(`<span data-action="mod">${DATA[state.modIdx].name}</span>`);
+  }
+  if (state.subIdx >= 0 && state.modIdx >= 0) {
+    parts.push(`<span data-action="sub">${DATA[state.modIdx].subs[state.subIdx].name}</span>`);
+  }
+  if (state.detIdx >= 0 && state.subIdx >= 0 && state.modIdx >= 0) {
+    const det = DATA[state.modIdx].subs[state.subIdx].details;
+    if (det && det[state.detIdx]) {
+      parts.push(`<span data-action="det">${det[state.detIdx].name}</span>`);
+    }
+  }
+  el.innerHTML = parts.join('<span class="sep">/</span>');
+
+  // breadcrumb click navigation
+  el.querySelectorAll("span[data-action]").forEach(sp => {
+    sp.addEventListener("click", () => {
+      const action = sp.dataset.action;
+      if (action === "mod") { state.subIdx = -1; state.detIdx = -1; state.focusRow = 0; }
+      else if (action === "sub") { state.detIdx = -1; state.focusRow = 1; }
+      renderAll();
+    });
+  });
+}
+
+/* ================================================================
+   RENDER — CONTENT
+   ================================================================ */
+function renderContent() {
+  const el = $("#content");
+  let data = null;
+  if (state.detIdx >= 0 && state.subIdx >= 0 && state.modIdx >= 0) {
+    const dets = DATA[state.modIdx].subs[state.subIdx].details;
+    if (dets && dets[state.detIdx]) data = dets[state.detIdx].content;
+  } else if (state.subIdx >= 0 && state.modIdx >= 0) {
+    data = DATA[state.modIdx].subs[state.subIdx].content;
+  } else if (state.modIdx >= 0) {
+    data = DATA[state.modIdx].content;
+  }
+
+  if (!data) { el.innerHTML = ""; return; }
+
+  // re-trigger animation
+  el.style.animation = "none";
+  void el.offsetHeight;
+  el.style.animation = "";
+
+  el.innerHTML = `<h2>${data.title}</h2>${data.body}`;
+}
+
+/* ================================================================
+   RENDER — FOCUS RINGS
+   ================================================================ */
+function renderFocus() {
+  $$(".mod-card").forEach(c => c.classList.remove("focused"));
+  $$(".dot-item").forEach(d => d.classList.remove("focused"));
+
+  if (state.focusRow === 0) {
+    const cards = $$("#row-modules .mod-card");
+    if (cards[state.focusCol]) cards[state.focusCol].classList.add("focused");
+  } else if (state.focusRow === 1) {
+    const dots = $$("#sub-dots .dot-item");
+    if (dots[state.focusCol]) dots[state.focusCol].classList.add("focused");
+  } else if (state.focusRow === 2) {
+    const dots = $$("#detail-dots .dot-item");
+    if (dots[state.focusCol]) dots[state.focusCol].classList.add("focused");
+  }
+}
+
+/* ================================================================
+   RENDER ALL
+   ================================================================ */
+function renderAll() {
+  renderModuleCards();
+  renderSubDots();
+  renderDetailDots();
+  renderBreadcrumb();
+  renderContent();
+  renderFocus();
+}
+
+/* ================================================================
+   SELECTION LOGIC
+   ================================================================ */
+function selectModule(i) {
+  if (state.modIdx === i) return; // already selected
+  state.modIdx = i;
+  state.subIdx = -1;
+  state.detIdx = -1;
+  state.focusRow = 0;
+  state.focusCol = i;
+  renderAll();
+}
+
+function selectSub(i) {
+  if (state.subIdx === i) return;
+  state.subIdx = i;
+  state.detIdx = -1;
+  state.focusRow = 1;
+  state.focusCol = i;
+  renderAll();
+}
+
+function selectDetail(i) {
+  if (state.detIdx === i) return;
+  state.detIdx = i;
+  state.focusRow = 2;
+  state.focusCol = i;
+  renderAll();
+}
+
+/* ================================================================
+   KEYBOARD NAVIGATION
+   ================================================================ */
+function getRowLength(row) {
+  if (row === 0) return DATA.length;
+  if (row === 1 && state.modIdx >= 0) return DATA[state.modIdx].subs.length;
+  if (row === 2 && state.modIdx >= 0 && state.subIdx >= 0) {
+    const dets = DATA[state.modIdx].subs[state.subIdx].details;
+    return dets ? dets.length : 0;
+  }
+  return 0;
+}
+
+function isRowVisible(row) {
+  if (row === 0) return true;
+  if (row === 1) return state.modIdx >= 0;
+  if (row === 2) return state.modIdx >= 0 && state.subIdx >= 0 &&
+    DATA[state.modIdx].subs[state.subIdx].details &&
+    DATA[state.modIdx].subs[state.subIdx].details.length > 0;
+  return false;
+}
+
+document.addEventListener("keydown", (e) => {
+  const key = e.key;
+  if (!["ArrowLeft","ArrowRight","ArrowUp","ArrowDown","Enter"," "].includes(key)) return;
+  e.preventDefault();
+
+  const len = getRowLength(state.focusRow);
+
+  switch (key) {
+    case "ArrowLeft":
+      state.focusCol = (state.focusCol - 1 + len) % len;
+      renderFocus();
+      break;
+
+    case "ArrowRight":
+      state.focusCol = (state.focusCol + 1) % len;
+      renderFocus();
+      break;
+
+    case "ArrowDown": {
+      // If at row 0, select the focused module and drop to row 1
+      if (state.focusRow === 0) {
+        state.modIdx = state.focusCol;
+        state.subIdx = -1;
+        state.detIdx = -1;
+        renderAll();
+        // now move focus to row 1 if visible
+        if (isRowVisible(1)) {
+          state.focusRow = 1;
+          state.focusCol = 0;
+          renderFocus();
+        }
+      }
+      // If at row 1, select the focused sub and drop to row 2
+      else if (state.focusRow === 1) {
+        state.subIdx = state.focusCol;
+        state.detIdx = -1;
+        renderAll();
+        if (isRowVisible(2)) {
+          state.focusRow = 2;
+          state.focusCol = 0;
+          renderFocus();
+        }
+      }
+      break;
+    }
+
+    case "ArrowUp": {
+      // Move focus up one row
+      if (state.focusRow === 2) {
+        state.detIdx = -1;
+        state.focusRow = 1;
+        state.focusCol = Math.min(state.focusCol, getRowLength(1) - 1);
+        renderAll();
+      } else if (state.focusRow === 1) {
+        state.subIdx = -1;
+        state.detIdx = -1;
+        state.focusRow = 0;
+        state.focusCol = state.modIdx >= 0 ? state.modIdx : 0;
+        renderAll();
+      }
+      break;
+    }
+
+    case "Enter":
+    case " ": {
+      // Activate the focused item
+      if (state.focusRow === 0) {
+        selectModule(state.focusCol);
+      } else if (state.focusRow === 1) {
+        selectSub(state.focusCol);
+      } else if (state.focusRow === 2) {
+        selectDetail(state.focusCol);
+      }
+      break;
+    }
+  }
+});
+
+/* ================================================================
+   RESIZE HANDLER
+   ================================================================ */
+let resizeTimer;
+window.addEventListener("resize", () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => drawConnectors(), 80);
+});
+
+/* ================================================================
+   INIT
+   ================================================================ */
+renderAll();
+// auto-select first module
+selectModule(0);
+</script>
+</body>
+</html>

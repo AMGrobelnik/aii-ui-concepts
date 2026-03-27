@@ -1,0 +1,1131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Pipeline Monitor</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0a0f;
+    --card: #0f1117;
+    --card-hover: #131620;
+    --border: #1e2130;
+    --border-light: #2a2e42;
+    --text: #e2e4eb;
+    --text-dim: #8b8fa3;
+    --text-muted: #555972;
+    --green: #34d399;
+    --green-dim: #065f46;
+    --blue: #60a5fa;
+    --blue-bright: #93c5fd;
+    --purple: #a78bfa;
+    --purple-dim: #4c1d95;
+    --orange: #fb923c;
+    --red: #f87171;
+    --glow-blue: rgba(96, 165, 250, 0.25);
+    --glow-green: rgba(52, 211, 153, 0.15);
+    --radius: 10px;
+    --transition: 300ms ease;
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ===== TOP BAR ===== */
+  .topbar {
+    position: fixed; top: 0; left: 0; right: 0;
+    height: 56px;
+    background: rgba(10, 10, 15, 0.92);
+    backdrop-filter: blur(16px);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center;
+    padding: 0 24px;
+    z-index: 100;
+  }
+
+  .topbar-left {
+    display: flex; align-items: center; gap: 14px;
+    min-width: 240px;
+  }
+
+  .brand {
+    font-size: 17px; font-weight: 700;
+    background: linear-gradient(135deg, var(--blue), var(--purple));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: -0.3px;
+  }
+
+  .run-name {
+    font-size: 12px; font-weight: 500;
+    color: var(--text-dim);
+    background: var(--card);
+    border: 1px solid var(--border);
+    padding: 3px 10px;
+    border-radius: 20px;
+    letter-spacing: 0.2px;
+  }
+
+  /* ===== PIPELINE STEPPER ===== */
+  .stepper-wrap {
+    flex: 1;
+    display: flex; justify-content: center; align-items: center;
+  }
+
+  .stepper {
+    display: flex; align-items: center; gap: 0;
+  }
+
+  .step {
+    display: flex; align-items: center; gap: 8px;
+    cursor: default;
+    position: relative;
+  }
+
+  .step-node {
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 600;
+    position: relative;
+    transition: var(--transition);
+    flex-shrink: 0;
+  }
+
+  .step-node.completed {
+    background: var(--green);
+    color: #022c22;
+    box-shadow: 0 0 12px var(--glow-green);
+  }
+
+  .step-node.active {
+    background: var(--blue);
+    color: #0c1e3a;
+    box-shadow: 0 0 20px var(--glow-blue);
+    animation: pulse-node 2s ease-in-out infinite;
+  }
+
+  .step-node.active::after {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+    border: 2px solid var(--blue);
+    animation: ring-expand 2s ease-in-out infinite;
+  }
+
+  .step-node.pending {
+    background: transparent;
+    border: 2px solid var(--text-muted);
+    color: var(--text-muted);
+  }
+
+  @keyframes pulse-node {
+    0%, 100% { box-shadow: 0 0 12px var(--glow-blue); }
+    50% { box-shadow: 0 0 24px var(--glow-blue), 0 0 40px rgba(96,165,250,0.1); }
+  }
+
+  @keyframes ring-expand {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(1.2); }
+  }
+
+  .step-label {
+    font-size: 12px; font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .step-label.completed { color: var(--green); }
+  .step-label.active { color: var(--blue-bright); }
+  .step-label.pending { color: var(--text-muted); }
+
+  .step-line {
+    width: 48px; height: 2px;
+    margin: 0 6px;
+    position: relative;
+    background: var(--border);
+    border-radius: 1px;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  .step-line .fill {
+    position: absolute; top: 0; left: 0;
+    height: 100%;
+    border-radius: 1px;
+    transition: width 0.6s ease;
+  }
+
+  .step-line .fill.done {
+    width: 100%;
+    background: linear-gradient(90deg, var(--green), var(--blue));
+  }
+
+  .step-line .fill.flowing {
+    width: 100%;
+    background: linear-gradient(90deg, var(--green), var(--blue));
+  }
+
+  .step-line .fill.flowing::after {
+    content: '';
+    position: absolute; top: -1px; left: 0;
+    width: 100%; height: 4px;
+    background: repeating-linear-gradient(
+      90deg,
+      transparent, transparent 6px,
+      rgba(255,255,255,0.5) 6px, rgba(255,255,255,0.5) 9px
+    );
+    animation: flow-dots 0.8s linear infinite;
+  }
+
+  @keyframes flow-dots {
+    0% { transform: translateX(-12px); }
+    100% { transform: translateX(0px); }
+  }
+
+  .step-line .fill.empty { width: 0; }
+
+  /* ===== TOP BAR RIGHT ===== */
+  .topbar-right {
+    display: flex; align-items: center; gap: 18px;
+    min-width: 240px;
+    justify-content: flex-end;
+  }
+
+  .stat {
+    display: flex; flex-direction: column; align-items: center;
+  }
+
+  .stat-value {
+    font-size: 14px; font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.3px;
+  }
+
+  .stat-label {
+    font-size: 9px; font-weight: 500;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+  }
+
+  .details-btn {
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    padding: 5px 14px;
+    border-radius: 6px;
+    font-size: 12px; font-weight: 500;
+    cursor: pointer;
+    transition: var(--transition);
+    font-family: inherit;
+  }
+
+  .details-btn:hover {
+    border-color: var(--border-light);
+    color: var(--text);
+    background: var(--card-hover);
+  }
+
+  .details-btn .arrow {
+    display: inline-block;
+    transition: transform var(--transition);
+    margin-left: 4px;
+  }
+
+  .details-btn.open .arrow { transform: rotate(90deg); }
+
+  /* ===== MAIN CONTENT ===== */
+  .main { padding: 72px 32px 32px; max-width: 1100px; margin: 0 auto; }
+
+  /* ===== COMPLETED SUMMARY STRIP ===== */
+  .completed-strip {
+    display: flex; gap: 14px;
+    margin-bottom: 24px;
+    overflow: hidden;
+    max-height: 80px;
+    transition: max-height 0.4s ease, opacity 0.3s ease, margin 0.3s ease;
+    opacity: 1;
+  }
+
+  .completed-strip.hidden {
+    max-height: 0;
+    opacity: 0;
+    margin-bottom: 0;
+  }
+
+  .summary-card {
+    flex: 1;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 18px;
+    display: flex; align-items: center; gap: 14px;
+    cursor: pointer;
+    transition: var(--transition);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .summary-card::before {
+    content: '';
+    position: absolute; left: 0; top: 0; bottom: 0;
+    width: 3px;
+  }
+
+  .summary-card.seed::before { background: var(--green); }
+  .summary-card.hypothesis::before { background: var(--purple); }
+
+  .summary-card:hover {
+    background: var(--card-hover);
+    border-color: var(--border-light);
+    transform: translateY(-1px);
+  }
+
+  .summary-icon {
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+
+  .summary-card.seed .summary-icon {
+    background: rgba(52, 211, 153, 0.1);
+    color: var(--green);
+  }
+
+  .summary-card.hypothesis .summary-icon {
+    background: rgba(167, 139, 250, 0.1);
+    color: var(--purple);
+  }
+
+  .summary-info h4 {
+    font-size: 13px; font-weight: 600;
+    margin-bottom: 2px;
+  }
+
+  .summary-info p {
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+
+  .summary-expand-indicator {
+    margin-left: auto;
+    font-size: 10px;
+    color: var(--text-muted);
+    transition: var(--transition);
+    flex-shrink: 0;
+  }
+
+  .summary-card:hover .summary-expand-indicator { color: var(--text-dim); }
+
+  /* ===== EXPANDED MODULE ===== */
+  .expanded-module {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.4s ease, margin 0.3s ease;
+    margin-bottom: 0;
+  }
+
+  .expanded-module.open {
+    max-height: 300px;
+    margin-bottom: 18px;
+  }
+
+  .expanded-inner {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px 22px;
+  }
+
+  .expanded-inner h5 {
+    font-size: 12px; font-weight: 600;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    margin-bottom: 14px;
+  }
+
+  /* ===== HORIZONTAL SUB-STEP FLOW ===== */
+  .substep-flow {
+    display: flex; align-items: center; gap: 0;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .substep-card {
+    width: 148px; min-width: 148px;
+    padding: 12px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: var(--transition);
+    position: relative;
+  }
+
+  .substep-card.completed-sub {
+    background: rgba(52, 211, 153, 0.04);
+    border: 1px solid rgba(52, 211, 153, 0.2);
+  }
+
+  .substep-card.completed-sub:hover {
+    background: rgba(52, 211, 153, 0.08);
+    transform: translateY(-2px);
+  }
+
+  .substep-card.active-sub {
+    background: rgba(96, 165, 250, 0.06);
+    border: 1px solid rgba(96, 165, 250, 0.35);
+    box-shadow: 0 0 20px rgba(96, 165, 250, 0.08);
+    animation: glow-card 2.5s ease-in-out infinite;
+  }
+
+  @keyframes glow-card {
+    0%, 100% { box-shadow: 0 0 14px rgba(96, 165, 250, 0.06); }
+    50% { box-shadow: 0 0 24px rgba(96, 165, 250, 0.12); }
+  }
+
+  .substep-card.active-sub:hover { transform: translateY(-2px); }
+
+  .substep-card.pending-sub {
+    background: transparent;
+    border: 1px dashed var(--border);
+    opacity: 0.6;
+  }
+
+  .substep-card.pending-sub:hover {
+    opacity: 0.8;
+    transform: translateY(-1px);
+  }
+
+  .substep-status {
+    font-size: 11px; font-weight: 600;
+    margin-bottom: 6px;
+    display: flex; align-items: center; gap: 5px;
+  }
+
+  .substep-card.completed-sub .substep-status { color: var(--green); }
+  .substep-card.active-sub .substep-status { color: var(--blue-bright); }
+  .substep-card.pending-sub .substep-status { color: var(--text-muted); }
+
+  .substep-name {
+    font-size: 13px; font-weight: 600;
+    margin-bottom: 4px;
+  }
+
+  .substep-detail {
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.4;
+  }
+
+  .substep-card.active-sub .substep-detail { color: var(--blue); }
+
+  .substep-arrow {
+    display: flex; align-items: center;
+    padding: 0 4px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+
+  .substep-arrow svg { width: 18px; height: 18px; }
+
+  .substep-arrow.done svg { color: var(--green); opacity: 0.5; }
+  .substep-arrow.flowing-arrow svg {
+    color: var(--blue);
+    animation: arrow-pulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes arrow-pulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 1; }
+  }
+
+  /* ===== ACTIVE MODULE HEADER ===== */
+  .active-module {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 22px 26px;
+    margin-bottom: 20px;
+  }
+
+  .module-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 18px;
+  }
+
+  .module-title {
+    font-size: 18px; font-weight: 700;
+    display: flex; align-items: center; gap: 10px;
+  }
+
+  .module-title .iter-badge {
+    font-size: 12px; font-weight: 500;
+    color: var(--blue);
+    background: rgba(96, 165, 250, 0.1);
+    padding: 3px 10px;
+    border-radius: 20px;
+  }
+
+  .module-progress-wrap {
+    display: flex; align-items: center; gap: 12px;
+  }
+
+  .module-progress-bar {
+    width: 140px; height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .module-progress-bar .bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--blue), var(--purple));
+    border-radius: 2px;
+    transition: width 0.6s ease;
+  }
+
+  .module-progress-pct {
+    font-size: 13px; font-weight: 600;
+    color: var(--blue);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ===== ACTIVE SUB-STEP DETAIL PANEL ===== */
+  .detail-panel {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 22px 26px;
+    margin-bottom: 20px;
+    transition: var(--transition);
+  }
+
+  .detail-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 16px;
+  }
+
+  .detail-title {
+    font-size: 15px; font-weight: 600;
+    display: flex; align-items: center; gap: 8px;
+  }
+
+  .detail-title .count-badge {
+    font-size: 12px; font-weight: 500;
+    color: var(--text-dim);
+    background: var(--border);
+    padding: 2px 10px;
+    border-radius: 12px;
+  }
+
+  .detail-progress {
+    width: 100%; height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    margin-bottom: 18px;
+    overflow: hidden;
+  }
+
+  .detail-progress .bar {
+    height: 100%;
+    background: linear-gradient(90deg, var(--green), var(--blue));
+    border-radius: 2px;
+    transition: width 0.5s ease;
+  }
+
+  .artifact-list { display: flex; flex-direction: column; gap: 8px; }
+
+  .artifact-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    transition: var(--transition);
+  }
+
+  .artifact-row:hover { background: rgba(255,255,255,0.02); }
+
+  .artifact-icon {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px;
+    flex-shrink: 0;
+  }
+
+  .artifact-row.done .artifact-icon {
+    background: rgba(52, 211, 153, 0.15);
+    color: var(--green);
+  }
+
+  .artifact-row.running .artifact-icon {
+    background: rgba(96, 165, 250, 0.15);
+    color: var(--blue);
+    animation: pulse-node 2s ease-in-out infinite;
+  }
+
+  .artifact-row.waiting .artifact-icon {
+    background: var(--border);
+    color: var(--text-muted);
+  }
+
+  .artifact-name {
+    font-size: 13px; font-weight: 500;
+    flex: 1;
+  }
+
+  .artifact-row.done .artifact-name { color: var(--text); }
+  .artifact-row.running .artifact-name { color: var(--blue-bright); }
+  .artifact-row.waiting .artifact-name { color: var(--text-muted); }
+
+  .artifact-result {
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .artifact-row.done .artifact-result { color: var(--green); }
+  .artifact-row.running .artifact-result { color: var(--blue); }
+  .artifact-row.waiting .artifact-result { color: var(--text-muted); }
+
+  .artifact-metric {
+    font-size: 11px;
+    color: var(--text-dim);
+    background: rgba(52, 211, 153, 0.08);
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 500;
+  }
+
+  /* ===== PENDING MODULE ===== */
+  .pending-module {
+    background: var(--card);
+    border: 1px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 18px 24px;
+    opacity: 0.5;
+    display: flex; align-items: center; gap: 14px;
+    transition: var(--transition);
+  }
+
+  .pending-module:hover { opacity: 0.65; }
+
+  .pending-icon {
+    width: 36px; height: 36px;
+    border-radius: 10px;
+    background: var(--border);
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-muted);
+    font-size: 16px;
+    flex-shrink: 0;
+  }
+
+  .pending-info h4 {
+    font-size: 14px; font-weight: 600;
+    color: var(--text-dim);
+    margin-bottom: 2px;
+  }
+
+  .pending-info p {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  /* ===== COMPLETED DETAIL (for sub-step click) ===== */
+  .substep-detail-panel {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.35s ease, margin 0.3s ease, padding 0.3s ease;
+    background: rgba(15, 17, 23, 0.6);
+    border-radius: 8px;
+    margin-top: 0;
+  }
+
+  .substep-detail-panel.open {
+    max-height: 120px;
+    margin-top: 12px;
+    padding: 14px 18px;
+    border: 1px solid var(--border);
+  }
+
+  .substep-detail-panel p {
+    font-size: 12px;
+    color: var(--text-dim);
+    line-height: 1.6;
+  }
+
+  .substep-detail-panel .label {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+  }
+
+  /* ===== SCROLL ===== */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--border-light); }
+</style>
+</head>
+<body>
+
+<!-- ===== TOP BAR ===== -->
+<div class="topbar">
+  <div class="topbar-left">
+    <span class="brand">AI Inventor</span>
+    <span class="run-name">ssl-low-resource-v3</span>
+  </div>
+
+  <div class="stepper-wrap">
+    <div class="stepper">
+      <!-- Step 1: Seed -->
+      <div class="step">
+        <div class="step-node completed">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        </div>
+        <span class="step-label completed">Seed</span>
+      </div>
+      <div class="step-line"><div class="fill done"></div></div>
+
+      <!-- Step 2: Hypothesis -->
+      <div class="step">
+        <div class="step-node completed">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        </div>
+        <span class="step-label completed">Hypothesis</span>
+      </div>
+      <div class="step-line"><div class="fill flowing"></div></div>
+
+      <!-- Step 3: Invention -->
+      <div class="step">
+        <div class="step-node active">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="9 3 15 3 21 9 21 15 15 21 9 21 3 15 3 9"/></svg>
+        </div>
+        <span class="step-label active">Invention</span>
+      </div>
+      <div class="step-line"><div class="fill empty"></div></div>
+
+      <!-- Step 4: Paper -->
+      <div class="step">
+        <div class="step-node pending">4</div>
+        <span class="step-label pending">Paper</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="topbar-right">
+    <div class="stat">
+      <span class="stat-value" id="elapsed">02:34:17</span>
+      <span class="stat-label">Elapsed</span>
+    </div>
+    <div class="stat">
+      <span class="stat-value" style="color: var(--green)">$12.47</span>
+      <span class="stat-label">Cost</span>
+    </div>
+    <button class="details-btn" id="detailsBtn" onclick="toggleDetails()">
+      Details <span class="arrow">&#9654;</span>
+    </button>
+  </div>
+</div>
+
+<!-- ===== MAIN CONTENT ===== -->
+<div class="main">
+
+  <!-- Completed Summary Strip -->
+  <div class="completed-strip" id="completedStrip">
+    <div class="summary-card seed" onclick="toggleExpanded('seed')">
+      <div class="summary-icon">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      </div>
+      <div class="summary-info">
+        <h4>Seed</h4>
+        <p>847 papers &rarr; 12 research gaps found</p>
+      </div>
+      <span class="summary-expand-indicator">&#9660;</span>
+    </div>
+
+    <div class="summary-card hypothesis" onclick="toggleExpanded('hypothesis')">
+      <div class="summary-icon">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+      </div>
+      <div class="summary-info">
+        <h4>Hypothesis</h4>
+        <p>Refined over 3 iterations &rarr; 8.4/10 confidence</p>
+      </div>
+      <span class="summary-expand-indicator">&#9660;</span>
+    </div>
+  </div>
+
+  <!-- Expanded: Seed sub-steps -->
+  <div class="expanded-module" id="expanded-seed">
+    <div class="expanded-inner">
+      <h5>Seed &mdash; Sub-steps</h5>
+      <div class="substep-flow" id="seed-substeps">
+        <div class="substep-card completed-sub" onclick="showSubDetail('seed', 0)">
+          <div class="substep-status"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg> Done</div>
+          <div class="substep-name">Literature Scan</div>
+          <div class="substep-detail">847 papers indexed</div>
+        </div>
+        <div class="substep-arrow done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></div>
+        <div class="substep-card completed-sub" onclick="showSubDetail('seed', 1)">
+          <div class="substep-status"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg> Done</div>
+          <div class="substep-name">Gap Analysis</div>
+          <div class="substep-detail">12 research gaps</div>
+        </div>
+        <div class="substep-arrow done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></div>
+        <div class="substep-card completed-sub" onclick="showSubDetail('seed', 2)">
+          <div class="substep-status"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg> Done</div>
+          <div class="substep-name">Initial Hypo</div>
+          <div class="substep-detail">5 candidates seeded</div>
+        </div>
+      </div>
+      <div class="substep-detail-panel" id="seed-subdetail">
+        <div class="label">Summary</div>
+        <p id="seed-subdetail-text"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Expanded: Hypothesis sub-steps -->
+  <div class="expanded-module" id="expanded-hypothesis">
+    <div class="expanded-inner">
+      <h5>Hypothesis Loop &mdash; Sub-steps</h5>
+      <div class="substep-flow" id="hypo-substeps">
+        <div class="substep-card completed-sub" onclick="showSubDetail('hypothesis', 0)">
+          <div class="substep-status"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg> Done</div>
+          <div class="substep-name">Generate</div>
+          <div class="substep-detail">8 variants created</div>
+        </div>
+        <div class="substep-arrow done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></div>
+        <div class="substep-card completed-sub" onclick="showSubDetail('hypothesis', 1)">
+          <div class="substep-status"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg> Done</div>
+          <div class="substep-name">Review</div>
+          <div class="substep-detail">3 iterations done</div>
+        </div>
+        <div class="substep-arrow done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></div>
+        <div class="substep-card completed-sub" onclick="showSubDetail('hypothesis', 2)">
+          <div class="substep-status"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg> Done</div>
+          <div class="substep-name">Select Best</div>
+          <div class="substep-detail">8.4/10 confidence</div>
+        </div>
+      </div>
+      <div class="substep-detail-panel" id="hypothesis-subdetail">
+        <div class="label">Summary</div>
+        <p id="hypothesis-subdetail-text"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Active Module: Invention Loop -->
+  <div class="active-module">
+    <div class="module-header">
+      <div class="module-title">
+        Invention Loop
+        <span class="iter-badge">Iteration 2 of 3</span>
+      </div>
+      <div class="module-progress-wrap">
+        <div class="module-progress-bar"><div class="bar" style="width: 58%"></div></div>
+        <span class="module-progress-pct">58%</span>
+      </div>
+    </div>
+
+    <!-- Sub-step Flow -->
+    <div class="substep-flow" id="invention-substeps">
+      <!-- 1. Strategy - completed -->
+      <div class="substep-card completed-sub" data-idx="0" onclick="selectInventionSub(0)">
+        <div class="substep-status"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg> Done</div>
+        <div class="substep-name">Strategy</div>
+        <div class="substep-detail">3 strategies generated</div>
+      </div>
+      <div class="substep-arrow done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></div>
+
+      <!-- 2. Plan - completed -->
+      <div class="substep-card completed-sub" data-idx="1" onclick="selectInventionSub(1)">
+        <div class="substep-status"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg> Done</div>
+        <div class="substep-name">Plan</div>
+        <div class="substep-detail">5 artifacts planned</div>
+      </div>
+      <div class="substep-arrow done"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></div>
+
+      <!-- 3. Artifacts - active -->
+      <div class="substep-card active-sub" data-idx="2" onclick="selectInventionSub(2)">
+        <div class="substep-status">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="5"/></svg>
+          3/5
+        </div>
+        <div class="substep-name">Artifacts</div>
+        <div class="substep-detail">Running ablation study...</div>
+      </div>
+      <div class="substep-arrow flowing-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></div>
+
+      <!-- 4. Paper Draft - pending -->
+      <div class="substep-card pending-sub" data-idx="3" onclick="selectInventionSub(3)">
+        <div class="substep-status">&#9675;</div>
+        <div class="substep-name">Paper Draft</div>
+        <div class="substep-detail">Waiting</div>
+      </div>
+      <div class="substep-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></div>
+
+      <!-- 5. Review - pending -->
+      <div class="substep-card pending-sub" data-idx="4" onclick="selectInventionSub(4)">
+        <div class="substep-status">&#9675;</div>
+        <div class="substep-name">Review</div>
+        <div class="substep-detail">Waiting</div>
+      </div>
+      <div class="substep-arrow"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></div>
+
+      <!-- 6. Update Hypo - pending -->
+      <div class="substep-card pending-sub" data-idx="5" onclick="selectInventionSub(5)">
+        <div class="substep-status">&#9675;</div>
+        <div class="substep-name">Update Hypo</div>
+        <div class="substep-detail">Waiting</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Active Sub-step Detail Panel -->
+  <div class="detail-panel" id="detailPanel">
+    <div id="detailContent">
+      <!-- Default: Artifacts detail -->
+    </div>
+  </div>
+
+  <!-- Pending Module -->
+  <div class="pending-module">
+    <div class="pending-icon">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+    </div>
+    <div class="pending-info">
+      <h4>Paper &amp; Repository</h4>
+      <p>Waiting for Invention Loop to complete</p>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ===== DATA =====
+  const inventionSubDetails = [
+    {
+      title: 'Strategy Generation',
+      content: `<div class="label">Output</div>
+        <p>Generated 3 research strategies: (1) Contrastive pre-training with language-agnostic
+        representations, (2) Cross-lingual transfer via shared subword embeddings,
+        (3) Multi-task learning with auxiliary language identification.
+        Selected strategy #1 as primary approach based on novelty and feasibility scores.</p>`
+    },
+    {
+      title: 'Plan',
+      content: `<div class="label">Output</div>
+        <p>Planned 5 artifacts to validate the hypothesis: Contrastive Baseline experiment,
+        Multilingual Dataset construction, Convergence Proof in Lean 4, Ablation Study
+        across model sizes, and Cross-lingual Evaluation benchmark.
+        Estimated total compute: 14 GPU-hours on A100.</p>`
+    },
+    {
+      title: 'Generating Artifacts',
+      badge: '3 of 5 complete',
+      isArtifacts: true
+    },
+    {
+      title: 'Paper Draft',
+      content: `<div class="label">Status</div>
+        <p>Pending &mdash; will synthesize artifact results into a structured paper draft with
+        introduction, methodology, experimental results, and analysis sections.</p>`
+    },
+    {
+      title: 'Review',
+      content: `<div class="label">Status</div>
+        <p>Pending &mdash; automated reviewer will score the draft on novelty, correctness,
+        clarity, and significance. Feedback will be used for revision.</p>`
+    },
+    {
+      title: 'Update Hypothesis',
+      content: `<div class="label">Status</div>
+        <p>Pending &mdash; will refine the hypothesis based on experimental results and
+        reviewer feedback, updating confidence scores for the next iteration.</p>`
+    }
+  ];
+
+  const seedSubDetails = [
+    'Scanned 847 papers from arXiv, ACL Anthology, and Semantic Scholar. Extracted key claims, methods, and reported limitations using structured LLM parsing.',
+    'Identified 12 research gaps by clustering unaddressed limitations and cross-referencing with recent survey papers. Top gaps: low-resource SSL, cross-lingual transfer efficiency, and tokenizer-free architectures.',
+    'Seeded 5 initial hypothesis candidates from the top-scoring research gaps. Each candidate includes a problem statement, proposed mechanism, and testability criteria.'
+  ];
+
+  const hypoSubDetails = [
+    'Generated 8 hypothesis variants by combining different mechanisms (contrastive, generative, hybrid) with different application scopes (monolingual, cross-lingual, multi-task).',
+    'Iterated 3 review cycles. Each cycle: LLM-based critique for novelty, feasibility, and impact, then refinement based on feedback. Confidence improved from 6.1 to 8.4 across iterations.',
+    'Selected best hypothesis: "Contrastive pre-training with language-agnostic token representations improves low-resource NLP by 15-20% over standard multilingual baselines." Confidence: 8.4/10.'
+  ];
+
+  const artifactsData = [
+    { name: 'Contrastive Baseline', status: 'done', result: 'acc: 0.847', metric: '+17.5%' },
+    { name: 'Multilingual Dataset', status: 'done', result: '2,400 examples', metric: null },
+    { name: 'Convergence Proof', status: 'done', result: 'verified (Lean 4)', metric: null },
+    { name: 'Ablation Study', status: 'running', result: 'running... 1m 20s', metric: null },
+    { name: 'Cross-lingual Eval', status: 'waiting', result: 'pending', metric: null }
+  ];
+
+  // ===== ELAPSED TIMER =====
+  let baseSeconds = 2 * 3600 + 34 * 60 + 17;
+  const elapsedEl = document.getElementById('elapsed');
+
+  function updateElapsed() {
+    baseSeconds++;
+    const h = String(Math.floor(baseSeconds / 3600)).padStart(2, '0');
+    const m = String(Math.floor((baseSeconds % 3600) / 60)).padStart(2, '0');
+    const s = String(baseSeconds % 60).padStart(2, '0');
+    elapsedEl.textContent = `${h}:${m}:${s}`;
+  }
+  setInterval(updateElapsed, 1000);
+
+  // ===== DETAILS TOGGLE =====
+  let detailsOpen = true;
+
+  function toggleDetails() {
+    detailsOpen = !detailsOpen;
+    const btn = document.getElementById('detailsBtn');
+    const strip = document.getElementById('completedStrip');
+    btn.classList.toggle('open', detailsOpen);
+    strip.classList.toggle('hidden', !detailsOpen);
+  }
+
+  // ===== EXPANDED MODULE TOGGLE =====
+  const expandedState = { seed: false, hypothesis: false };
+
+  function toggleExpanded(which) {
+    expandedState[which] = !expandedState[which];
+    const el = document.getElementById(`expanded-${which}`);
+    el.classList.toggle('open', expandedState[which]);
+
+    // Close the sub-detail when collapsing
+    if (!expandedState[which]) {
+      const panel = document.getElementById(`${which}-subdetail`);
+      panel.classList.remove('open');
+    }
+  }
+
+  // ===== COMPLETED MODULE SUB-DETAIL =====
+  function showSubDetail(module, idx) {
+    const panel = document.getElementById(`${module}-subdetail`);
+    const textEl = document.getElementById(`${module}-subdetail-text`);
+    const details = module === 'seed' ? seedSubDetails : hypoSubDetails;
+
+    if (panel.classList.contains('open') && textEl.dataset.idx === String(idx)) {
+      panel.classList.remove('open');
+      return;
+    }
+
+    textEl.textContent = details[idx];
+    textEl.dataset.idx = String(idx);
+    panel.classList.add('open');
+  }
+
+  // ===== INVENTION SUB-STEP SELECTION =====
+  let selectedInvSub = 2; // default: artifacts
+
+  function selectInventionSub(idx) {
+    selectedInvSub = idx;
+    renderDetailPanel(idx);
+
+    // Update visual selection on cards
+    const cards = document.querySelectorAll('#invention-substeps .substep-card');
+    cards.forEach((c, i) => {
+      c.style.outline = i === idx ? '2px solid rgba(96, 165, 250, 0.4)' : 'none';
+      c.style.outlineOffset = i === idx ? '2px' : '0';
+    });
+  }
+
+  function renderDetailPanel(idx) {
+    const data = inventionSubDetails[idx];
+    const panel = document.getElementById('detailContent');
+
+    if (data.isArtifacts) {
+      panel.innerHTML = renderArtifactsDetail();
+    } else {
+      panel.innerHTML = `
+        <div class="detail-header">
+          <div class="detail-title">${data.title}</div>
+        </div>
+        ${data.content}
+      `;
+    }
+  }
+
+  function renderArtifactsDetail() {
+    const doneCount = artifactsData.filter(a => a.status === 'done').length;
+    const total = artifactsData.length;
+    const pct = (doneCount / total) * 100;
+
+    let rows = artifactsData.map(a => {
+      const iconMap = {
+        done: `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>`,
+        running: `<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="5"/></svg>`,
+        waiting: `<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>`
+      };
+
+      const metricHtml = a.metric ? `<span class="artifact-metric">${a.metric}</span>` : '';
+
+      return `
+        <div class="artifact-row ${a.status}">
+          <div class="artifact-icon">${iconMap[a.status]}</div>
+          <span class="artifact-name">${a.name}</span>
+          <span class="artifact-result">${a.result}</span>
+          ${metricHtml}
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <div class="detail-header">
+        <div class="detail-title">
+          Generating Artifacts
+          <span class="count-badge">${doneCount} of ${total} complete</span>
+        </div>
+      </div>
+      <div class="detail-progress"><div class="bar" style="width: ${pct}%"></div></div>
+      <div class="artifact-list">${rows}</div>
+    `;
+  }
+
+  // ===== RUNNING ARTIFACT TIMER =====
+  let runningSeconds = 80; // 1m 20s
+
+  function tickRunningArtifact() {
+    runningSeconds++;
+    const m = Math.floor(runningSeconds / 60);
+    const s = String(runningSeconds % 60).padStart(2, '0');
+    artifactsData[3].result = `running... ${m}m ${s}s`;
+
+    // Only re-render if artifacts panel is active
+    if (selectedInvSub === 2) {
+      renderDetailPanel(2);
+    }
+
+    // Also update the substep card text
+    const activeCard = document.querySelector('#invention-substeps .active-sub .substep-detail');
+    if (activeCard) {
+      activeCard.textContent = `Running ablation study...`;
+    }
+  }
+  setInterval(tickRunningArtifact, 1000);
+
+  // ===== INIT =====
+  renderDetailPanel(2);
+  selectInventionSub(2);
+</script>
+</body>
+</html>

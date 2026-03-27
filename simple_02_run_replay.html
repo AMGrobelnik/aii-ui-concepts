@@ -1,0 +1,1687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Run Replay</title>
+<style>
+  /* ── Reset & Base ─────────────────────────────────────────── */
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg:        #0a0a0f;
+    --bg-card:   rgba(255,255,255,0.04);
+    --border:    rgba(255,255,255,0.08);
+    --blue:      #3b82f6;
+    --purple:    #8b5cf6;
+    --cyan:      #22d3ee;
+    --green:     #34d399;
+    --amber:     #fbbf24;
+    --text:      #e2e8f0;
+    --text-dim:  #94a3b8;
+    --text-mute: #64748b;
+    --glow-blue:   0 0 30px rgba(59,130,246,0.3);
+    --glow-purple: 0 0 30px rgba(139,92,246,0.3);
+    --glass-bg:  rgba(15,15,25,0.65);
+    --glass-border: rgba(255,255,255,0.1);
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+    line-height: 1.6;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Dot-Grid Background ──────────────────────────────────── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: radial-gradient(rgba(255,255,255,0.03) 1px, transparent 1px);
+    background-size: 32px 32px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── Particle Canvas ──────────────────────────────────────── */
+  #particles {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  /* ── Timeline Spine ───────────────────────────────────────── */
+  .timeline-spine {
+    position: fixed;
+    left: 80px;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    z-index: 2;
+    pointer-events: none;
+  }
+
+  .timeline-spine::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg,
+      transparent 0%,
+      rgba(59,130,246,0.15) 10%,
+      rgba(139,92,246,0.15) 50%,
+      rgba(34,211,153,0.15) 90%,
+      transparent 100%
+    );
+    border-radius: 2px;
+  }
+
+  .timeline-progress {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 0%;
+    background: linear-gradient(180deg,
+      var(--blue) 0%,
+      var(--purple) 40%,
+      var(--cyan) 70%,
+      var(--green) 100%
+    );
+    border-radius: 2px;
+    transition: height 0.05s linear;
+    box-shadow: 0 0 12px rgba(59,130,246,0.5), 0 0 24px rgba(139,92,246,0.3);
+  }
+
+  .timeline-dot {
+    position: absolute;
+    left: -8px;
+    width: 19px;
+    height: 19px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    background: var(--bg);
+    transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+    z-index: 3;
+  }
+
+  .timeline-dot.active {
+    border-color: var(--blue);
+    background: var(--blue);
+    box-shadow: 0 0 16px rgba(59,130,246,0.6), 0 0 40px rgba(59,130,246,0.2);
+    transform: scale(1.3);
+  }
+
+  .timeline-dot.completed {
+    border-color: var(--green);
+    background: var(--green);
+    box-shadow: 0 0 12px rgba(34,211,153,0.4);
+  }
+
+  .timeline-dot[data-stage="1"] { top: 14%; }
+  .timeline-dot[data-stage="2"] { top: 36%; }
+  .timeline-dot[data-stage="3"] { top: 58%; }
+  .timeline-dot[data-stage="4"] { top: 80%; }
+
+  .timeline-label {
+    position: absolute;
+    left: 28px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-mute);
+    white-space: nowrap;
+    transition: color 0.4s;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .timeline-dot.active .timeline-label,
+  .timeline-dot.completed .timeline-label {
+    opacity: 1;
+    color: var(--text-dim);
+  }
+
+  /* ── Hero Section ─────────────────────────────────────────── */
+  .hero {
+    position: relative;
+    z-index: 1;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 60px 40px;
+  }
+
+  .hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 16px;
+    border-radius: 100px;
+    background: rgba(59,130,246,0.1);
+    border: 1px solid rgba(59,130,246,0.2);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--blue);
+    margin-bottom: 32px;
+    letter-spacing: 0.03em;
+  }
+
+  .hero-badge .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: pulse-dot 2s ease infinite;
+  }
+
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(34,211,153,0.4); }
+    50% { opacity: 0.7; box-shadow: 0 0 0 6px rgba(34,211,153,0); }
+  }
+
+  .hero h1 {
+    font-size: clamp(36px, 5vw, 64px);
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+    max-width: 800px;
+    background: linear-gradient(135deg, #fff 0%, var(--text) 50%, var(--blue) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 20px;
+  }
+
+  .hero .subtitle {
+    font-size: 18px;
+    color: var(--text-dim);
+    max-width: 540px;
+    margin-bottom: 40px;
+    line-height: 1.7;
+  }
+
+  .hero-meta {
+    display: flex;
+    gap: 32px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .hero-meta-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .hero-meta-item .value {
+    font-size: 24px;
+    font-weight: 700;
+    color: #fff;
+  }
+
+  .hero-meta-item .label {
+    font-size: 12px;
+    color: var(--text-mute);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .scroll-hint {
+    position: absolute;
+    bottom: 40px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    animation: float 3s ease infinite;
+  }
+
+  .scroll-hint span {
+    font-size: 12px;
+    color: var(--text-mute);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  .scroll-arrow {
+    width: 20px;
+    height: 20px;
+    border-right: 2px solid var(--text-mute);
+    border-bottom: 2px solid var(--text-mute);
+    transform: rotate(45deg);
+    opacity: 0.5;
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(10px); }
+  }
+
+  /* ── Stage Sections ───────────────────────────────────────── */
+  .stage {
+    position: relative;
+    z-index: 1;
+    min-height: 100vh;
+    padding: 120px 40px 120px 160px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  .stage-header {
+    margin-bottom: 48px;
+  }
+
+  .stage-number {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    opacity: 0;
+    transform: translateY(20px);
+    transition: all 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .stage.visible .stage-number { opacity: 1; transform: translateY(0); }
+
+  .stage-number.blue   { color: var(--blue); }
+  .stage-number.purple { color: var(--purple); }
+  .stage-number.cyan   { color: var(--cyan); }
+  .stage-number.green  { color: var(--green); }
+
+  .stage-title {
+    font-size: clamp(28px, 3.5vw, 48px);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+    color: #fff;
+    opacity: 0;
+    transform: translateY(30px);
+    transition: all 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.1s;
+  }
+
+  .stage.visible .stage-title { opacity: 1; transform: translateY(0); }
+
+  .stage-desc {
+    font-size: 16px;
+    color: var(--text-dim);
+    max-width: 560px;
+    margin-top: 16px;
+    opacity: 0;
+    transform: translateY(20px);
+    transition: all 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.2s;
+  }
+
+  .stage.visible .stage-desc { opacity: 1; transform: translateY(0); }
+
+  /* ── Glass Card ───────────────────────────────────────────── */
+  .glass {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    padding: 28px;
+    transition: all 0.4s ease;
+  }
+
+  .glass:hover {
+    border-color: rgba(255,255,255,0.15);
+    background: rgba(15,15,25,0.75);
+  }
+
+  /* ── Reveal Animation ─────────────────────────────────────── */
+  .reveal {
+    opacity: 0;
+    transform: translateY(40px);
+    transition: all 0.9s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .reveal.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .reveal[data-delay="1"] { transition-delay: 0.15s; }
+  .reveal[data-delay="2"] { transition-delay: 0.3s; }
+  .reveal[data-delay="3"] { transition-delay: 0.45s; }
+  .reveal[data-delay="4"] { transition-delay: 0.6s; }
+  .reveal[data-delay="5"] { transition-delay: 0.75s; }
+
+  /* ── Stage 1: Knowledge Graph ─────────────────────────────── */
+  .kg-container {
+    position: relative;
+    width: 100%;
+    max-width: 900px;
+    height: 480px;
+    border-radius: 20px;
+    overflow: hidden;
+    background: rgba(5,5,15,0.6);
+    border: 1px solid var(--border);
+  }
+
+  .kg-canvas {
+    width: 100%;
+    height: 100%;
+  }
+
+  .kg-badge {
+    position: absolute;
+    bottom: 20px;
+    right: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border-radius: 10px;
+    background: rgba(59,130,246,0.1);
+    border: 1px solid rgba(59,130,246,0.2);
+    font-size: 13px;
+    color: var(--blue);
+    font-weight: 500;
+  }
+
+  .kg-badge .pulse {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--blue);
+    animation: pulse-dot 1.5s ease infinite;
+  }
+
+  /* ── Stage 2: Hypothesis Cards ────────────────────────────── */
+  .hypo-track {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    max-width: 1000px;
+  }
+
+  .hypo-card {
+    flex: 1;
+    min-width: 260px;
+    max-width: 320px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .hypo-card .iter-badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 6px;
+    margin-bottom: 14px;
+  }
+
+  .hypo-card.draft .iter-badge {
+    background: rgba(251,191,36,0.1);
+    color: var(--amber);
+    border: 1px solid rgba(251,191,36,0.2);
+  }
+
+  .hypo-card.refining .iter-badge {
+    background: rgba(139,92,246,0.1);
+    color: var(--purple);
+    border: 1px solid rgba(139,92,246,0.2);
+  }
+
+  .hypo-card.final .iter-badge {
+    background: rgba(34,211,153,0.1);
+    color: var(--green);
+    border: 1px solid rgba(34,211,153,0.2);
+  }
+
+  .hypo-card h3 {
+    font-size: 15px;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 10px;
+    line-height: 1.4;
+  }
+
+  .hypo-card p {
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.6;
+  }
+
+  .hypo-card.draft {
+    opacity: 0.55;
+    border-style: dashed;
+  }
+
+  .hypo-card.refining {
+    opacity: 0.75;
+  }
+
+  .hypo-card.final {
+    border-color: rgba(34,211,153,0.2);
+    box-shadow: 0 0 40px rgba(34,211,153,0.08);
+  }
+
+  .hypo-final {
+    max-width: 700px;
+    margin-top: 32px;
+    border-color: rgba(34,211,153,0.15);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .hypo-final::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(34,211,153,0.03), transparent 60%);
+    pointer-events: none;
+  }
+
+  .hypo-final h3 {
+    font-size: 20px;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 12px;
+    line-height: 1.35;
+  }
+
+  .hypo-final .abstract {
+    font-size: 14px;
+    color: var(--text-dim);
+    line-height: 1.7;
+    margin-bottom: 16px;
+    font-style: italic;
+  }
+
+  .confidence-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    border-radius: 8px;
+    background: rgba(34,211,153,0.1);
+    border: 1px solid rgba(34,211,153,0.2);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--green);
+  }
+
+  .confidence-bar {
+    width: 60px;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(34,211,153,0.15);
+    overflow: hidden;
+  }
+
+  .confidence-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: var(--green);
+    width: 0%;
+    transition: width 1.5s cubic-bezier(0.16, 1, 0.3, 1) 0.5s;
+  }
+
+  .stage.visible .confidence-bar-fill {
+    width: 87%;
+  }
+
+  /* ── Stage 3: Invention Gallery ───────────────────────────── */
+  .invention-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+    max-width: 1000px;
+  }
+
+  .artifact-card {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .artifact-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    border-radius: 16px 16px 0 0;
+  }
+
+  .artifact-card.experiment::before { background: linear-gradient(90deg, var(--blue), var(--cyan)); }
+  .artifact-card.dataset::before    { background: linear-gradient(90deg, var(--purple), var(--blue)); }
+  .artifact-card.proof::before      { background: linear-gradient(90deg, var(--amber), var(--green)); }
+  .artifact-card.eval::before       { background: linear-gradient(90deg, var(--green), var(--cyan)); }
+
+  .artifact-type {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+
+  .artifact-card.experiment .artifact-type { color: var(--cyan); }
+  .artifact-card.dataset .artifact-type    { color: var(--purple); }
+  .artifact-card.proof .artifact-type      { color: var(--amber); }
+  .artifact-card.eval .artifact-type       { color: var(--green); }
+
+  .artifact-card h4 {
+    font-size: 15px;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 12px;
+    line-height: 1.4;
+  }
+
+  /* Mini data table */
+  .mini-table {
+    width: 100%;
+    font-size: 12px;
+    border-collapse: collapse;
+  }
+
+  .mini-table th {
+    text-align: left;
+    color: var(--text-mute);
+    font-weight: 500;
+    padding: 4px 8px 4px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .mini-table td {
+    padding: 6px 8px 6px 0;
+    color: var(--text-dim);
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Mini bar chart */
+  .mini-chart {
+    display: flex;
+    align-items: flex-end;
+    gap: 6px;
+    height: 60px;
+    margin-top: 8px;
+  }
+
+  .chart-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    height: 100%;
+    justify-content: flex-end;
+  }
+
+  .chart-bar {
+    width: 100%;
+    border-radius: 4px 4px 0 0;
+    transition: height 1.2s cubic-bezier(0.16, 1, 0.3, 1);
+    height: 0;
+  }
+
+  .stage.visible .chart-bar { /* heights set inline */ }
+
+  .chart-label {
+    font-size: 10px;
+    color: var(--text-mute);
+    text-align: center;
+  }
+
+  /* Code snippet */
+  .code-snippet {
+    background: rgba(0,0,0,0.4);
+    border-radius: 8px;
+    padding: 12px 14px;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text-dim);
+    overflow-x: auto;
+    border: 1px solid rgba(255,255,255,0.04);
+  }
+
+  .code-snippet .kw  { color: var(--purple); }
+  .code-snippet .fn  { color: var(--blue); }
+  .code-snippet .str { color: var(--green); }
+  .code-snippet .cm  { color: var(--text-mute); font-style: italic; }
+  .code-snippet .num { color: var(--amber); }
+
+  /* Spiral rings */
+  .iteration-rings {
+    display: flex;
+    gap: 16px;
+    margin-top: 32px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .ring {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 700;
+    color: #fff;
+    position: relative;
+    transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+    transform: scale(0);
+  }
+
+  .stage.visible .ring { transform: scale(1); }
+  .ring:nth-child(1) { transition-delay: 0.3s; }
+  .ring:nth-child(2) { transition-delay: 0.5s; }
+  .ring:nth-child(3) { transition-delay: 0.7s; }
+
+  .ring::before {
+    content: '';
+    position: absolute;
+    inset: -3px;
+    border-radius: 50%;
+    border: 2px solid transparent;
+    animation: ring-spin 6s linear infinite;
+  }
+
+  .ring:nth-child(1) { background: rgba(59,130,246,0.15); }
+  .ring:nth-child(1)::before { border-top-color: var(--blue); border-right-color: var(--blue); }
+  .ring:nth-child(2) { background: rgba(139,92,246,0.15); width: 80px; height: 80px; font-size: 14px; }
+  .ring:nth-child(2)::before { border-top-color: var(--purple); border-right-color: var(--purple); border-bottom-color: var(--purple); }
+  .ring:nth-child(3) { background: rgba(34,211,153,0.15); width: 96px; height: 96px; font-size: 15px; box-shadow: 0 0 30px rgba(34,211,153,0.15); }
+  .ring:nth-child(3)::before { border-color: var(--green); }
+
+  @keyframes ring-spin { to { transform: rotate(360deg); } }
+
+  .ring-label {
+    font-size: 12px;
+    color: var(--text-mute);
+    margin-left: 8px;
+  }
+
+  /* ── Stage 4: Paper & Repo ────────────────────────────────── */
+  .paper-preview {
+    max-width: 700px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .paper-preview::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(59,130,246,0.03), transparent 50%);
+    pointer-events: none;
+  }
+
+  .paper-header {
+    text-align: center;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 20px;
+  }
+
+  .paper-header h3 {
+    font-size: 18px;
+    font-weight: 700;
+    color: #fff;
+    line-height: 1.4;
+    margin-bottom: 8px;
+  }
+
+  .paper-authors {
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+
+  .paper-figure {
+    width: 100%;
+    height: 160px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, rgba(59,130,246,0.08), rgba(139,92,246,0.08));
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 16px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .paper-figure-label {
+    font-size: 12px;
+    color: var(--text-mute);
+    font-weight: 500;
+  }
+
+  .paper-figure canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  .paper-stats {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+
+  .paper-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .paper-stat .val {
+    font-size: 18px;
+    font-weight: 700;
+    color: #fff;
+  }
+
+  .paper-stat .lbl {
+    font-size: 11px;
+    color: var(--text-mute);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .repo-card {
+    max-width: 480px;
+    margin-top: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .repo-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .repo-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.06);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .repo-icon svg { width: 20px; height: 20px; fill: var(--text-dim); }
+
+  .repo-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--blue);
+  }
+
+  .repo-desc {
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.6;
+  }
+
+  .repo-stats {
+    display: flex;
+    gap: 20px;
+  }
+
+  .repo-stat {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+
+  .repo-stat svg { width: 14px; height: 14px; fill: var(--text-mute); }
+
+  .repo-lang {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+
+  .repo-lang .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--amber);
+  }
+
+  /* Buttons */
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 28px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, var(--blue), var(--purple));
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-decoration: none;
+    margin-top: 20px;
+  }
+
+  .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 30px rgba(59,130,246,0.3);
+  }
+
+  .btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 22px;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-decoration: none;
+    margin-top: 12px;
+  }
+
+  .btn-secondary:hover {
+    background: rgba(255,255,255,0.08);
+    border-color: rgba(255,255,255,0.15);
+  }
+
+  /* ── End Section ──────────────────────────────────────────── */
+  .end-section {
+    position: relative;
+    z-index: 1;
+    min-height: 60vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 80px 40px;
+  }
+
+  .end-section h2 {
+    font-size: clamp(28px, 4vw, 48px);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: #fff;
+    margin-bottom: 12px;
+  }
+
+  .end-section p {
+    font-size: 16px;
+    color: var(--text-dim);
+    max-width: 480px;
+    margin-bottom: 32px;
+  }
+
+  .end-duration {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 24px;
+    border-radius: 12px;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    font-size: 14px;
+    color: var(--text-dim);
+  }
+
+  .end-duration strong {
+    color: #fff;
+    font-weight: 600;
+  }
+
+  /* ── Responsive ───────────────────────────────────────────── */
+  @media (max-width: 768px) {
+    .timeline-spine { display: none; }
+    .stage { padding: 80px 24px; }
+    .hypo-track { flex-direction: column; }
+    .hypo-card { max-width: 100%; }
+    .invention-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Particle canvas -->
+<canvas id="particles"></canvas>
+
+<!-- Timeline spine -->
+<div class="timeline-spine">
+  <div class="timeline-progress" id="timelineProgress"></div>
+  <div class="timeline-dot" data-stage="1">
+    <span class="timeline-label">Seed</span>
+  </div>
+  <div class="timeline-dot" data-stage="2">
+    <span class="timeline-label">Hypotheses</span>
+  </div>
+  <div class="timeline-dot" data-stage="3">
+    <span class="timeline-label">Invention</span>
+  </div>
+  <div class="timeline-dot" data-stage="4">
+    <span class="timeline-label">Paper</span>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- HERO                                                       -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<section class="hero">
+  <div class="hero-badge">
+    <span class="dot"></span>
+    Run completed
+  </div>
+
+  <h1>Self-Supervised Learning for Low-Resource Language Understanding</h1>
+
+  <p class="subtitle">
+    A fully autonomous research pipeline discovered, refined, and published this invention in 4 stages.
+  </p>
+
+  <div class="hero-meta">
+    <div class="hero-meta-item">
+      <span class="value">4</span>
+      <span class="label">Stages</span>
+    </div>
+    <div class="hero-meta-item">
+      <span class="value">6</span>
+      <span class="label">Iterations</span>
+    </div>
+    <div class="hero-meta-item">
+      <span class="value">4</span>
+      <span class="label">Artifacts</span>
+    </div>
+    <div class="hero-meta-item">
+      <span class="value">47m</span>
+      <span class="label">Duration</span>
+    </div>
+  </div>
+
+  <div class="scroll-hint">
+    <span>Scroll to explore</span>
+    <div class="scroll-arrow"></div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- STAGE 1 — SEED HYPOTHESIS                                  -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<section class="stage" id="stage1" data-stage="1">
+  <div class="stage-header">
+    <div class="stage-number blue">Stage 01 &mdash; Seed Hypothesis</div>
+    <h2 class="stage-title">Mining the knowledge graph<br>for research gaps</h2>
+    <p class="stage-desc">
+      The system analyzed 12,400 papers across NLP, multilingual learning, and self-supervised methods to identify underexplored intersections in the research landscape.
+    </p>
+  </div>
+
+  <div class="reveal">
+    <div class="kg-container">
+      <canvas class="kg-canvas" id="kgCanvas"></canvas>
+      <div class="kg-badge">
+        <span class="pulse"></span>
+        3 research gaps identified
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- STAGE 2 — HYPOTHESIS REFINEMENT                            -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<section class="stage" id="stage2" data-stage="2">
+  <div class="stage-header">
+    <div class="stage-number purple">Stage 02 &mdash; Hypothesis Refinement</div>
+    <h2 class="stage-title">Three iterations of<br>critique and refinement</h2>
+    <p class="stage-desc">
+      Each hypothesis was generated, reviewed against novelty and feasibility criteria, and iteratively improved until convergence.
+    </p>
+  </div>
+
+  <div class="hypo-track">
+    <div class="glass hypo-card draft reveal" data-delay="1">
+      <span class="iter-badge">Iteration 1 &mdash; Draft</span>
+      <h3>Code-switching augmentation for cross-lingual NLU</h3>
+      <p>Initial exploration of synthetic code-switching as a data augmentation strategy for multilingual models. Scope too broad, lacks quantitative targets.</p>
+    </div>
+    <div class="glass hypo-card refining reveal" data-delay="2">
+      <span class="iter-badge">Iteration 2 &mdash; Refining</span>
+      <h3>Contrastive pre-training with synthetic code-switching for zero-shot transfer</h3>
+      <p>Narrowed to contrastive objectives. Reviewer flagged need for specific language targets and expected improvement ranges.</p>
+    </div>
+    <div class="glass hypo-card final reveal" data-delay="3">
+      <span class="iter-badge">Iteration 3 &mdash; Final</span>
+      <h3>Cross-lingual contrastive pre-training with synthetic code-switching</h3>
+      <p>Precise claim: 15&ndash;23% improvement on zero-shot transfer for low-resource languages. Testable, novel, feasible.</p>
+    </div>
+  </div>
+
+  <div class="glass hypo-final reveal" data-delay="4">
+    <h3>Cross-lingual contrastive pre-training with synthetic code-switching improves zero-shot transfer by 15&ndash;23% on low-resource languages</h3>
+    <p class="abstract">
+      We propose a contrastive pre-training framework that leverages synthetic code-switching to create cross-lingual alignment signals. By training on artificially code-switched parallel corpora with an InfoNCE objective, our method achieves 15&ndash;23% relative improvement on zero-shot cross-lingual transfer benchmarks for Yoruba, Swahili, and Quechua.
+    </p>
+    <div class="confidence-badge">
+      <span>Confidence: 87%</span>
+      <div class="confidence-bar">
+        <div class="confidence-bar-fill"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- STAGE 3 — INVENTION LOOP                                   -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<section class="stage" id="stage3" data-stage="3">
+  <div class="stage-header">
+    <div class="stage-number cyan">Stage 03 &mdash; Invention Loop</div>
+    <h2 class="stage-title">Strategies, artifacts,<br>and paper drafts</h2>
+    <p class="stage-desc">
+      Three iterations of the invention loop produced experiments, datasets, evaluations, and progressively stronger paper drafts reviewed by an AI critic.
+    </p>
+  </div>
+
+  <div class="invention-grid">
+    <!-- Experiment 1 -->
+    <div class="glass artifact-card experiment reveal" data-delay="1">
+      <div class="artifact-type">Experiment</div>
+      <h4>Contrastive Pre-training Ablation</h4>
+      <table class="mini-table">
+        <thead><tr><th>Config</th><th>XNLI</th><th>XQuAD</th></tr></thead>
+        <tbody>
+          <tr><td>Baseline (mBERT)</td><td>65.4</td><td>59.2</td></tr>
+          <tr><td>+ Code-switch</td><td>74.1</td><td>68.7</td></tr>
+          <tr><td style="color:var(--green)">+ Contrastive</td><td style="color:var(--green)">79.8</td><td style="color:var(--green)">73.1</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Experiment 2 -->
+    <div class="glass artifact-card experiment reveal" data-delay="2">
+      <div class="artifact-type">Experiment</div>
+      <h4>Language-Pair Transfer Analysis</h4>
+      <div class="mini-chart" id="langChart">
+        <div class="chart-col">
+          <div class="chart-bar" data-h="72" style="background: linear-gradient(to top, var(--blue), var(--cyan));"></div>
+          <span class="chart-label">yo</span>
+        </div>
+        <div class="chart-col">
+          <div class="chart-bar" data-h="85" style="background: linear-gradient(to top, var(--blue), var(--cyan));"></div>
+          <span class="chart-label">sw</span>
+        </div>
+        <div class="chart-col">
+          <div class="chart-bar" data-h="64" style="background: linear-gradient(to top, var(--blue), var(--cyan));"></div>
+          <span class="chart-label">qu</span>
+        </div>
+        <div class="chart-col">
+          <div class="chart-bar" data-h="91" style="background: linear-gradient(to top, var(--blue), var(--cyan));"></div>
+          <span class="chart-label">hi</span>
+        </div>
+        <div class="chart-col">
+          <div class="chart-bar" data-h="78" style="background: linear-gradient(to top, var(--blue), var(--cyan));"></div>
+          <span class="chart-label">ar</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Dataset -->
+    <div class="glass artifact-card dataset reveal" data-delay="3">
+      <div class="artifact-type">Dataset</div>
+      <h4>Synthetic Code-Switched Corpus</h4>
+      <table class="mini-table">
+        <thead><tr><th>Split</th><th>Pairs</th><th>Langs</th></tr></thead>
+        <tbody>
+          <tr><td>Train</td><td>2.4M</td><td>12</td></tr>
+          <tr><td>Valid</td><td>48K</td><td>12</td></tr>
+          <tr><td>Test</td><td>24K</td><td>12</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Evaluation -->
+    <div class="glass artifact-card eval reveal" data-delay="4">
+      <div class="artifact-type">Evaluation</div>
+      <h4>Zero-Shot Transfer Benchmark</h4>
+      <div class="mini-chart" id="evalChart">
+        <div class="chart-col">
+          <div class="chart-bar" data-h="54" style="background: rgba(148,163,184,0.4);"></div>
+          <div class="chart-bar" data-h="75" style="background: linear-gradient(to top, var(--green), var(--cyan)); margin-top: -54%;"></div>
+          <span class="chart-label">XNLI</span>
+        </div>
+        <div class="chart-col">
+          <div class="chart-bar" data-h="48" style="background: rgba(148,163,184,0.4);"></div>
+          <div class="chart-bar" data-h="68" style="background: linear-gradient(to top, var(--green), var(--cyan)); margin-top: -48%;"></div>
+          <span class="chart-label">XQuAD</span>
+        </div>
+        <div class="chart-col">
+          <div class="chart-bar" data-h="42" style="background: rgba(148,163,184,0.4);"></div>
+          <div class="chart-bar" data-h="62" style="background: linear-gradient(to top, var(--green), var(--cyan)); margin-top: -42%;"></div>
+          <span class="chart-label">PAWS-X</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Iteration rings -->
+  <div class="iteration-rings reveal" data-delay="5">
+    <div class="ring">i=1</div>
+    <div class="ring">i=2</div>
+    <div class="ring">i=3</div>
+    <span class="ring-label">Each iteration expanded scope and strengthened results</span>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- STAGE 4 — PAPER & REPOSITORY                               -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<section class="stage" id="stage4" data-stage="4">
+  <div class="stage-header">
+    <div class="stage-number green">Stage 04 &mdash; Paper & Repository</div>
+    <h2 class="stage-title">Published paper<br>and open-source code</h2>
+    <p class="stage-desc">
+      The final paper was compiled with LaTeX, figures were auto-generated, and the full reproduction repository was deployed to GitHub.
+    </p>
+  </div>
+
+  <div class="glass paper-preview reveal" data-delay="1">
+    <div class="paper-header">
+      <h3>Cross-Lingual Contrastive Pre-Training with Synthetic Code-Switching Improves Zero-Shot Transfer by 15&ndash;23% on Low-Resource Languages</h3>
+      <p class="paper-authors">AI Inventor System &middot; Autonomous Research Pipeline</p>
+    </div>
+
+    <div class="paper-figure">
+      <canvas id="paperFigCanvas"></canvas>
+      <span class="paper-figure-label" style="position:relative;z-index:1;">Figure 1 &mdash; Cross-lingual transfer accuracy by language family</span>
+    </div>
+
+    <div class="paper-figure" style="height:120px;">
+      <canvas id="paperFig2Canvas"></canvas>
+      <span class="paper-figure-label" style="position:relative;z-index:1;">Figure 2 &mdash; Contrastive loss convergence across training epochs</span>
+    </div>
+
+    <div class="paper-stats" style="margin-top: 16px;">
+      <div class="paper-stat">
+        <span class="val">12</span>
+        <span class="lbl">Pages</span>
+      </div>
+      <div class="paper-stat">
+        <span class="val">5</span>
+        <span class="lbl">Figures</span>
+      </div>
+      <div class="paper-stat">
+        <span class="val">8</span>
+        <span class="lbl">Tables</span>
+      </div>
+      <div class="paper-stat">
+        <span class="val">47</span>
+        <span class="lbl">References</span>
+      </div>
+    </div>
+
+    <a href="#" class="btn-primary">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      View Full Paper
+    </a>
+  </div>
+
+  <div class="glass repo-card reveal" data-delay="2">
+    <div class="repo-header">
+      <div class="repo-icon">
+        <svg viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      </div>
+      <span class="repo-name">ai-inventor/ssl-low-resource</span>
+    </div>
+    <p class="repo-desc">
+      Cross-lingual contrastive pre-training with synthetic code-switching for zero-shot transfer to low-resource languages. Full reproduction code, datasets, and trained models.
+    </p>
+    <div class="repo-stats">
+      <div class="repo-stat">
+        <svg viewBox="0 0 16 16"><path d="M8 .25a.75.75 0 01.673.418l1.882 3.815 4.21.612a.75.75 0 01.416 1.279l-3.046 2.97.719 4.192a.75.75 0 01-1.088.791L8 12.347l-3.766 1.98a.75.75 0 01-1.088-.79l.72-4.194L.818 6.374a.75.75 0 01.416-1.28l4.21-.611L7.327.668A.75.75 0 018 .25z"/></svg>
+        <span>234</span>
+      </div>
+      <div class="repo-stat">
+        <svg viewBox="0 0 16 16"><path d="M5 3.25a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm0 2.122a2.25 2.25 0 10-1.5 0v.878A2.25 2.25 0 005.75 8.5h1.5v2.128a2.251 2.251 0 101.5 0V8.5h1.5a2.25 2.25 0 002.25-2.25v-.878a2.25 2.25 0 10-1.5 0v.878a.75.75 0 01-.75.75h-4.5A.75.75 0 015 6.25v-.878zm3.75 7.378a.75.75 0 11-1.5 0 .75.75 0 011.5 0zm3-8.75a.75.75 0 100-1.5.75.75 0 000 1.5z"/></svg>
+        <span>58</span>
+      </div>
+      <div class="repo-lang">
+        <span class="dot"></span>
+        Python
+      </div>
+    </div>
+    <a href="#" class="btn-secondary">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+      Open Repository
+    </a>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- END                                                        -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<section class="end-section">
+  <div class="reveal">
+    <h2>Run Complete</h2>
+    <p>From research gap to published paper and code repository, fully autonomous.</p>
+    <div class="end-duration">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-mute)" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      Total duration: <strong>47 minutes</strong>
+    </div>
+  </div>
+</section>
+
+<div style="height: 120px;"></div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- SCRIPTS                                                    -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+<script>
+(function() {
+  'use strict';
+
+  /* ── Particle System ──────────────────────────────────────── */
+  const pCanvas = document.getElementById('particles');
+  const pCtx = pCanvas.getContext('2d');
+  let particles = [];
+  const PARTICLE_COUNT = 60;
+
+  function resizeParticles() {
+    pCanvas.width = window.innerWidth;
+    pCanvas.height = window.innerHeight;
+  }
+
+  function initParticles() {
+    resizeParticles();
+    particles = [];
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+      particles.push({
+        x: Math.random() * pCanvas.width,
+        y: Math.random() * pCanvas.height,
+        r: Math.random() * 1.5 + 0.5,
+        dx: (Math.random() - 0.5) * 0.3,
+        dy: (Math.random() - 0.5) * 0.3,
+        o: Math.random() * 0.15 + 0.03,
+      });
+    }
+  }
+
+  function drawParticles() {
+    pCtx.clearRect(0, 0, pCanvas.width, pCanvas.height);
+    for (const p of particles) {
+      p.x += p.dx;
+      p.y += p.dy;
+      if (p.x < 0) p.x = pCanvas.width;
+      if (p.x > pCanvas.width) p.x = 0;
+      if (p.y < 0) p.y = pCanvas.height;
+      if (p.y > pCanvas.height) p.y = 0;
+      pCtx.beginPath();
+      pCtx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      pCtx.fillStyle = `rgba(139,92,246,${p.o})`;
+      pCtx.fill();
+    }
+    requestAnimationFrame(drawParticles);
+  }
+
+  window.addEventListener('resize', resizeParticles);
+  initParticles();
+  drawParticles();
+
+  /* ── Knowledge Graph Visualization ────────────────────────── */
+  const kgCanvas = document.getElementById('kgCanvas');
+  const kgCtx = kgCanvas.getContext('2d');
+
+  const KG_NODES = [
+    { label: 'NLP',                 x: 0.50, y: 0.28, r: 28, color: '#3b82f6', group: 'core' },
+    { label: 'Transformers',        x: 0.35, y: 0.18, r: 22, color: '#3b82f6', group: 'core' },
+    { label: 'Self-Supervised',     x: 0.68, y: 0.20, r: 24, color: '#8b5cf6', group: 'core' },
+    { label: 'Few-shot Learning',   x: 0.22, y: 0.38, r: 20, color: '#8b5cf6', group: 'core' },
+    { label: 'Multilingual',        x: 0.72, y: 0.42, r: 22, color: '#22d3ee', group: 'core' },
+    { label: 'Contrastive\nLearning', x: 0.55, y: 0.52, r: 20, color: '#22d3ee', group: 'core' },
+    { label: 'Code-Switching',      x: 0.38, y: 0.62, r: 18, color: '#34d399', group: 'gap' },
+    { label: 'Low-Resource\nLanguages', x: 0.65, y: 0.68, r: 22, color: '#34d399', group: 'gap' },
+    { label: 'Zero-Shot\nTransfer', x: 0.48, y: 0.78, r: 20, color: '#34d399', group: 'gap' },
+    { label: 'Pre-training',        x: 0.18, y: 0.55, r: 16, color: '#3b82f6', group: 'secondary' },
+    { label: 'Data\nAugmentation',  x: 0.82, y: 0.58, r: 16, color: '#8b5cf6', group: 'secondary' },
+    { label: 'BERT',                x: 0.15, y: 0.25, r: 14, color: '#64748b', group: 'secondary' },
+    { label: 'XLM-R',              x: 0.85, y: 0.30, r: 14, color: '#64748b', group: 'secondary' },
+    { label: 'Parallel\nCorpora',  x: 0.80, y: 0.78, r: 14, color: '#64748b', group: 'secondary' },
+  ];
+
+  const KG_EDGES = [
+    [0, 1], [0, 2], [0, 3], [0, 4], [0, 5],
+    [1, 11], [2, 12], [2, 5], [3, 9],
+    [4, 7], [4, 12], [4, 13],
+    [5, 6], [5, 7], [5, 10],
+    [6, 7], [6, 8], [7, 8], [7, 13],
+    [9, 2], [10, 6],
+  ];
+
+  const GAP_EDGES = [[5, 6], [5, 7], [6, 7], [6, 8], [7, 8]];
+
+  let kgAnimT = 0;
+  let kgVisible = false;
+
+  function resizeKG() {
+    const rect = kgCanvas.parentElement.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    kgCanvas.width = rect.width * dpr;
+    kgCanvas.height = rect.height * dpr;
+    kgCanvas.style.width = rect.width + 'px';
+    kgCanvas.style.height = rect.height + 'px';
+    kgCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  function drawKG(t) {
+    const w = kgCanvas.width / (window.devicePixelRatio || 1);
+    const h = kgCanvas.height / (window.devicePixelRatio || 1);
+    kgCtx.clearRect(0, 0, w, h);
+
+    if (!kgVisible) return;
+
+    const fadeIn = Math.min(kgAnimT / 60, 1);
+
+    // Edges
+    for (let i = 0; i < KG_EDGES.length; i++) {
+      const [a, b] = KG_EDGES[i];
+      const na = KG_NODES[a];
+      const nb = KG_NODES[b];
+      const isGap = GAP_EDGES.some(g => (g[0] === a && g[1] === b) || (g[0] === b && g[1] === a));
+
+      kgCtx.beginPath();
+      kgCtx.moveTo(na.x * w, na.y * h);
+      kgCtx.lineTo(nb.x * w, nb.y * h);
+
+      if (isGap) {
+        const glow = 0.3 + Math.sin(t * 0.03 + i) * 0.15;
+        kgCtx.strokeStyle = `rgba(34,211,153,${glow * fadeIn})`;
+        kgCtx.lineWidth = 2.5;
+        kgCtx.shadowColor = 'rgba(34,211,153,0.4)';
+        kgCtx.shadowBlur = 12;
+      } else {
+        kgCtx.strokeStyle = `rgba(255,255,255,${0.06 * fadeIn})`;
+        kgCtx.lineWidth = 1;
+        kgCtx.shadowBlur = 0;
+      }
+      kgCtx.stroke();
+      kgCtx.shadowBlur = 0;
+    }
+
+    // Nodes
+    for (let i = 0; i < KG_NODES.length; i++) {
+      const n = KG_NODES[i];
+      const nx = n.x * w;
+      const ny = n.y * h;
+      const isGap = n.group === 'gap';
+      const nodeDelay = Math.min(Math.max((kgAnimT - i * 3) / 20, 0), 1);
+
+      if (nodeDelay === 0) continue;
+
+      // Glow for gap nodes
+      if (isGap) {
+        const pulse = 0.4 + Math.sin(t * 0.04 + i * 1.5) * 0.2;
+        const grad = kgCtx.createRadialGradient(nx, ny, 0, nx, ny, n.r * 2.5);
+        grad.addColorStop(0, `rgba(34,211,153,${pulse * 0.2 * nodeDelay})`);
+        grad.addColorStop(1, 'rgba(34,211,153,0)');
+        kgCtx.beginPath();
+        kgCtx.arc(nx, ny, n.r * 2.5, 0, Math.PI * 2);
+        kgCtx.fillStyle = grad;
+        kgCtx.fill();
+      }
+
+      // Node circle
+      kgCtx.beginPath();
+      kgCtx.arc(nx, ny, n.r * nodeDelay, 0, Math.PI * 2);
+      const alpha = (n.group === 'secondary' ? 0.08 : 0.12) * nodeDelay;
+      kgCtx.fillStyle = n.color.replace(')', `,${alpha})`).replace('rgb', 'rgba');
+      kgCtx.fill();
+      kgCtx.strokeStyle = n.color.replace(')', `,${0.4 * nodeDelay})`).replace('rgb', 'rgba');
+      kgCtx.lineWidth = 1.5;
+      kgCtx.stroke();
+
+      // Label
+      kgCtx.fillStyle = `rgba(255,255,255,${(n.group === 'secondary' ? 0.4 : 0.8) * nodeDelay})`;
+      kgCtx.font = `${n.group === 'secondary' ? 10 : 11}px -apple-system, BlinkMacSystemFont, sans-serif`;
+      kgCtx.textAlign = 'center';
+      kgCtx.textBaseline = 'middle';
+      const lines = n.label.split('\n');
+      const lineH = 13;
+      const startY = ny - ((lines.length - 1) * lineH) / 2;
+      lines.forEach((line, li) => {
+        kgCtx.fillText(line, nx, startY + li * lineH);
+      });
+    }
+
+    kgAnimT++;
+  }
+
+  /* ── Paper Figure Canvases ────────────────────────────────── */
+  function drawPaperFig1() {
+    const c = document.getElementById('paperFigCanvas');
+    if (!c) return;
+    const ctx = c.getContext('2d');
+    const rect = c.parentElement.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    c.width = rect.width * dpr;
+    c.height = rect.height * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const w = rect.width, h = rect.height;
+
+    // grouped bar chart mockup
+    const groups = ['Niger-Congo', 'Austronesian', 'Quechuan', 'Indo-Aryan', 'Semitic'];
+    const baseline = [52, 48, 39, 71, 65];
+    const ours =     [72, 67, 58, 83, 79];
+
+    const pad = 60;
+    const gw = (w - pad * 2) / groups.length;
+    const bw = gw * 0.28;
+    const maxVal = 100;
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+    ctx.lineWidth = 1;
+    for (let v = 0; v <= 100; v += 25) {
+      const yy = pad + (1 - v / maxVal) * (h - pad * 2);
+      ctx.beginPath();
+      ctx.moveTo(pad, yy);
+      ctx.lineTo(w - pad, yy);
+      ctx.stroke();
+
+      ctx.fillStyle = 'rgba(255,255,255,0.2)';
+      ctx.font = '9px -apple-system, sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText(v, pad - 6, yy + 3);
+    }
+
+    groups.forEach((g, i) => {
+      const cx = pad + gw * i + gw / 2;
+      const bH = baseline[i] / maxVal * (h - pad * 2);
+      const oH = ours[i] / maxVal * (h - pad * 2);
+
+      // Baseline bar
+      ctx.fillStyle = 'rgba(148,163,184,0.25)';
+      ctx.beginPath();
+      ctx.roundRect(cx - bw - 2, h - pad - bH, bw, bH, [3, 3, 0, 0]);
+      ctx.fill();
+
+      // Ours bar
+      const grad = ctx.createLinearGradient(0, h - pad - oH, 0, h - pad);
+      grad.addColorStop(0, 'rgba(59,130,246,0.7)');
+      grad.addColorStop(1, 'rgba(139,92,246,0.7)');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.roundRect(cx + 2, h - pad - oH, bw, oH, [3, 3, 0, 0]);
+      ctx.fill();
+
+      // Label
+      ctx.fillStyle = 'rgba(255,255,255,0.35)';
+      ctx.font = '9px -apple-system, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(g, cx, h - pad + 14);
+    });
+  }
+
+  function drawPaperFig2() {
+    const c = document.getElementById('paperFig2Canvas');
+    if (!c) return;
+    const ctx = c.getContext('2d');
+    const rect = c.parentElement.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    c.width = rect.width * dpr;
+    c.height = rect.height * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const w = rect.width, h = rect.height;
+    const pad = 40;
+
+    // convergence curve
+    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+    ctx.lineWidth = 1;
+    for (let v = 0; v <= 4; v++) {
+      const yy = pad + (v / 4) * (h - pad * 2);
+      ctx.beginPath();
+      ctx.moveTo(pad, yy);
+      ctx.lineTo(w - pad, yy);
+      ctx.stroke();
+    }
+
+    function curve(points, color) {
+      ctx.beginPath();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      points.forEach((p, i) => {
+        const x = pad + (i / (points.length - 1)) * (w - pad * 2);
+        const y = pad + (1 - p) * (h - pad * 2);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+    }
+
+    // Baseline
+    curve([0.15, 0.32, 0.45, 0.52, 0.56, 0.58, 0.59, 0.595, 0.598, 0.60], 'rgba(148,163,184,0.4)');
+    // Ours
+    curve([0.12, 0.38, 0.55, 0.65, 0.72, 0.76, 0.785, 0.80, 0.81, 0.815], 'rgba(59,130,246,0.8)');
+  }
+
+  /* ── Scroll-triggered chart bars ──────────────────────────── */
+  function animateChartBars() {
+    document.querySelectorAll('.stage.visible .chart-bar[data-h]').forEach(bar => {
+      bar.style.height = bar.dataset.h + '%';
+    });
+  }
+
+  /* ── IntersectionObserver for Stages & Reveals ────────────── */
+  const stageObs = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        e.target.classList.add('visible');
+        if (e.target.id === 'stage1') {
+          kgVisible = true;
+          kgAnimT = 0;
+        }
+        animateChartBars();
+      }
+    });
+  }, { threshold: 0.2 });
+
+  const revealObs = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        e.target.classList.add('visible');
+        animateChartBars();
+      }
+    });
+  }, { threshold: 0.15 });
+
+  document.querySelectorAll('.stage').forEach(s => stageObs.observe(s));
+  document.querySelectorAll('.reveal').forEach(r => revealObs.observe(r));
+
+  /* ── Timeline Progress ────────────────────────────────────── */
+  const progressBar = document.getElementById('timelineProgress');
+  const timelineDots = document.querySelectorAll('.timeline-dot');
+
+  function updateTimeline() {
+    const scrollH = document.documentElement.scrollHeight - window.innerHeight;
+    const scrollY = window.scrollY;
+    const pct = Math.min(scrollY / scrollH * 100, 100);
+    progressBar.style.height = pct + '%';
+
+    const stages = document.querySelectorAll('.stage');
+    let activeIdx = -1;
+
+    stages.forEach((s, i) => {
+      const rect = s.getBoundingClientRect();
+      const center = rect.top + rect.height / 2;
+      if (center < window.innerHeight * 0.7) activeIdx = i;
+    });
+
+    timelineDots.forEach((dot, i) => {
+      dot.classList.remove('active', 'completed');
+      if (i < activeIdx) dot.classList.add('completed');
+      else if (i === activeIdx) dot.classList.add('active');
+    });
+  }
+
+  window.addEventListener('scroll', updateTimeline, { passive: true });
+  updateTimeline();
+
+  /* ── KG + Paper figure resize/draw loop ───────────────────── */
+  let animFrame = 0;
+
+  function resizeAll() {
+    resizeKG();
+    drawPaperFig1();
+    drawPaperFig2();
+  }
+
+  function loop() {
+    drawKG(animFrame);
+    animFrame++;
+    requestAnimationFrame(loop);
+  }
+
+  window.addEventListener('resize', resizeAll);
+
+  // Initial setup after layout settles
+  requestAnimationFrame(() => {
+    resizeAll();
+    loop();
+  });
+})();
+</script>
+
+</body>
+</html>

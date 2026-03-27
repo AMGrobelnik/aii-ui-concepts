@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0e0e12;
+    color: #c8c8d0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Progress Bar ── */
+  .bar-container {
+    position: relative;
+    width: 80vw;
+    max-width: 1200px;
+    margin: 20px auto 0;
+    display: flex;
+    gap: 2px;
+    height: 40px;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .segment {
+    position: relative;
+    height: 100%;
+    cursor: pointer;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: filter 0.2s;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .segment:hover { filter: brightness(1.15); }
+
+  .segment:first-child { border-radius: 8px 0 0 8px; }
+  .segment:last-child  { border-radius: 0 8px 8px 0; }
+
+  /* Segment backgrounds — base layer (unfilled) */
+  .segment--seed      { flex: 1;   background: linear-gradient(180deg, #1a3a24 0%, #122a18 100%); }
+  .segment--hypo      { flex: 2;   background: linear-gradient(180deg, #2a1a3a 0%, #1e1228 100%); }
+  .segment--invention { flex: 3;   background: linear-gradient(180deg, #141a2e 0%, #0e1220 100%); }
+  .segment--paper     { flex: 1.8; background: linear-gradient(180deg, #1a1a1e 0%, #131316 100%); }
+
+  /* Fill overlay */
+  .segment-fill {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    pointer-events: none;
+  }
+
+  .segment--seed .segment-fill {
+    width: 100%;
+    background: linear-gradient(180deg, #34d06a 0%, #22914a 100%);
+  }
+
+  .segment--hypo .segment-fill {
+    width: 100%;
+    background: linear-gradient(180deg, #a855f4 0%, #7c3aed 100%);
+  }
+
+  .segment--invention .segment-fill {
+    width: 60%;
+    background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
+  }
+
+  .segment--paper .segment-fill {
+    width: 0%;
+  }
+
+  /* Animated stripe at the fill edge for active segment */
+  .segment--invention .segment-fill::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: -20px;
+    width: 40px;
+    height: 100%;
+    background: repeating-linear-gradient(
+      -45deg,
+      transparent,
+      transparent 4px,
+      rgba(255,255,255,0.12) 4px,
+      rgba(255,255,255,0.12) 8px
+    );
+    animation: stripe-scroll 0.8s linear infinite;
+  }
+
+  @keyframes stripe-scroll {
+    0%   { transform: translateX(-16px); }
+    100% { transform: translateX(0px); }
+  }
+
+  /* Segment label */
+  .segment-label {
+    position: relative;
+    z-index: 2;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    color: rgba(255,255,255,0.9);
+    text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+  }
+
+  .segment--paper .segment-label { color: rgba(255,255,255,0.35); }
+
+  /* Selected segment glow */
+  .segment.selected::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 8%;
+    width: 84%;
+    height: 3px;
+    border-radius: 3px 3px 0 0;
+    z-index: 3;
+  }
+
+  .segment--seed.selected::after      { background: #34d06a; box-shadow: 0 0 12px #34d06a88; }
+  .segment--hypo.selected::after      { background: #a855f4; box-shadow: 0 0 12px #a855f488; }
+  .segment--invention.selected::after { background: #3b82f6; box-shadow: 0 0 12px #3b82f688; }
+  .segment--paper.selected::after     { background: #555;    box-shadow: 0 0 12px #55555588; }
+
+  /* ── Content Area ── */
+  .content-area {
+    max-width: 700px;
+    margin: 48px auto 0;
+    padding: 0 24px 80px;
+  }
+
+  .content-panel {
+    display: none;
+    animation: fadeIn 0.25s ease;
+  }
+
+  .content-panel.active { display: block; }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .panel-title {
+    font-size: 24px;
+    font-weight: 700;
+    color: #efefef;
+    margin-bottom: 4px;
+  }
+
+  .panel-subtitle {
+    font-size: 16px;
+    color: #888;
+    margin-bottom: 24px;
+  }
+
+  .panel-summary {
+    font-size: 14px;
+    line-height: 1.65;
+    color: #999;
+    margin-bottom: 32px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid #1e1e26;
+  }
+
+  /* Sub-stage rows */
+  .stage-list { list-style: none; }
+
+  .stage-row {
+    padding: 10px 12px;
+    border-radius: 6px;
+    font-size: 14px;
+    line-height: 1.5;
+    color: #aaa;
+    transition: background 0.15s;
+    cursor: default;
+  }
+
+  .stage-row:hover { background: #16161e; }
+
+  .stage-row.expandable { cursor: pointer; }
+
+  .stage-row .icon {
+    display: inline-block;
+    width: 20px;
+    text-align: center;
+    margin-right: 6px;
+  }
+
+  .stage-row .icon--done  { color: #34d06a; }
+  .stage-row .icon--run   { color: #3b82f6; }
+  .stage-row .icon--pend  { color: #444; }
+
+  .stage-row.current {
+    color: #efefef;
+    font-weight: 600;
+  }
+
+  .stage-row .detail {
+    color: #666;
+    font-weight: 400;
+    margin-left: 4px;
+  }
+
+  .stage-row.current .detail { color: #888; }
+
+  /* Expandable content */
+  .expand-content {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.35s ease, opacity 0.25s ease;
+    opacity: 0;
+  }
+
+  .expand-content.open {
+    opacity: 1;
+  }
+
+  .expand-inner {
+    padding: 12px 12px 16px 38px;
+    font-size: 13px;
+    line-height: 1.65;
+    color: #777;
+  }
+
+  .expand-inner p { margin-bottom: 8px; }
+  .expand-inner p:last-child { margin-bottom: 0; }
+
+  .expand-inner .artifact-item {
+    padding: 4px 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .artifact-item .art-icon { font-size: 12px; }
+  .artifact-item .art-icon--done { color: #34d06a; }
+  .artifact-item .art-icon--run  { color: #3b82f6; }
+  .artifact-item .art-icon--pend { color: #444; }
+
+  /* Iteration rows for hypo panel */
+  .iter-row {
+    padding: 10px 12px;
+    border-radius: 6px;
+    font-size: 14px;
+    line-height: 1.5;
+    color: #aaa;
+    transition: background 0.15s;
+    cursor: pointer;
+  }
+
+  .iter-row:hover { background: #16161e; }
+
+  .iter-score {
+    display: inline-block;
+    min-width: 48px;
+    font-weight: 600;
+    margin-right: 8px;
+  }
+
+  .iter-score--low  { color: #ef4444; }
+  .iter-score--mid  { color: #eab308; }
+  .iter-score--high { color: #34d06a; }
+
+  .iter-detail { color: #666; margin-left: 4px; }
+
+  /* Footer stats */
+  .footer-stats {
+    margin-top: 36px;
+    padding-top: 20px;
+    border-top: 1px solid #1e1e26;
+    font-size: 14px;
+    color: #555;
+    letter-spacing: 0.3px;
+  }
+
+  /* Seed panel specifics */
+  .seed-topics {
+    list-style: none;
+    margin-top: 8px;
+  }
+
+  .seed-topics li {
+    padding: 6px 12px;
+    font-size: 14px;
+    color: #888;
+    border-radius: 4px;
+  }
+
+  .seed-topics li::before {
+    content: '';
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #34d06a;
+    margin-right: 10px;
+    vertical-align: middle;
+  }
+
+  /* Paper panel */
+  .paper-pending-list {
+    list-style: none;
+    margin-top: 4px;
+  }
+
+  .paper-pending-list li {
+    padding: 8px 12px;
+    font-size: 14px;
+    color: #555;
+  }
+
+  .paper-pending-list li .icon { color: #333; }
+</style>
+</head>
+<body>
+
+<!-- ════ Segmented Progress Bar ════ -->
+<div class="bar-container" id="barContainer">
+  <div class="segment segment--seed" data-panel="seed">
+    <div class="segment-fill"></div>
+    <span class="segment-label">Seed</span>
+  </div>
+  <div class="segment segment--hypo" data-panel="hypo">
+    <div class="segment-fill"></div>
+    <span class="segment-label">Hypothesis</span>
+  </div>
+  <div class="segment segment--invention selected" data-panel="invention">
+    <div class="segment-fill"></div>
+    <span class="segment-label">Invention</span>
+  </div>
+  <div class="segment segment--paper" data-panel="paper">
+    <div class="segment-fill"></div>
+    <span class="segment-label">Paper</span>
+  </div>
+</div>
+
+<!-- ════ Content Panels ════ -->
+<div class="content-area">
+
+  <!-- ── Seed Panel ── -->
+  <div class="content-panel" id="panel-seed">
+    <div class="panel-title">Seed</div>
+    <div class="panel-subtitle">Complete — Knowledge Graph Built</div>
+    <div class="panel-summary">
+      Extracted 14 seed papers from the research domain. Built invention knowledge graph
+      with 83 concept nodes and 127 relation edges spanning cross-lingual NLP, contrastive
+      learning, and code-switching augmentation.
+    </div>
+    <ul class="seed-topics">
+      <li>Cross-lingual transfer learning (6 papers)</li>
+      <li>Contrastive pre-training objectives (4 papers)</li>
+      <li>Synthetic code-switching augmentation (3 papers)</li>
+      <li>Low-resource language adaptation (1 paper)</li>
+    </ul>
+    <div class="footer-stats">8m &bull; $2.14</div>
+  </div>
+
+  <!-- ── Hypothesis Panel ── -->
+  <div class="content-panel" id="panel-hypo">
+    <div class="panel-title">Hypothesis Loop</div>
+    <div class="panel-subtitle">Complete — 3 Iterations</div>
+    <div class="panel-summary">
+      Refined hypothesis from 6.2 to 8.4/10. Final: "Cross-lingual Contrastive
+      Pre-training with Synthetic Code-Switching for Low-Resource Transfer."
+    </div>
+
+    <div class="iter-row" data-expand="hypo-iter1">
+      <span class="iter-score iter-score--low">6.2/10</span>
+      Iter 1 — Initial<span class="iter-detail">3 major issues</span>
+    </div>
+    <div class="expand-content" id="hypo-iter1">
+      <div class="expand-inner">
+        <p><strong style="color:#bbb">Issues identified:</strong></p>
+        <p>1. Scope too broad — covers both high- and low-resource settings without clear focus.</p>
+        <p>2. No mechanism specified for contrastive pair construction across languages.</p>
+        <p>3. Evaluation plan missing controlled comparison against translate-train baseline.</p>
+      </div>
+    </div>
+
+    <div class="iter-row" data-expand="hypo-iter2">
+      <span class="iter-score iter-score--mid">7.8/10</span>
+      Iter 2 — Improved<span class="iter-detail">1 major issue</span>
+    </div>
+    <div class="expand-content" id="hypo-iter2">
+      <div class="expand-inner">
+        <p><strong style="color:#bbb">Improvements:</strong> Narrowed to low-resource. Added synthetic
+        code-switching as pair construction mechanism.</p>
+        <p><strong style="color:#bbb">Remaining:</strong> Ablation plan does not isolate the contribution
+        of code-switching from the contrastive objective itself.</p>
+      </div>
+    </div>
+
+    <div class="iter-row" data-expand="hypo-iter3">
+      <span class="iter-score iter-score--high">8.4/10</span>
+      Iter 3 — Final<span class="iter-detail">0 major issues</span>
+    </div>
+    <div class="expand-content" id="hypo-iter3">
+      <div class="expand-inner">
+        <p><strong style="color:#bbb">Title:</strong> Cross-lingual Contrastive Pre-training with
+        Synthetic Code-Switching for Low-Resource Transfer</p>
+        <p><strong style="color:#bbb">Abstract:</strong> We propose augmenting multilingual
+        pre-training with a contrastive objective over synthetically code-switched sentence pairs.
+        By generating code-switched variants through token-level lexicon substitution and
+        phrase-level alignment swaps, we create hard positive pairs that force the encoder to
+        learn language-invariant representations. Experiments on 8 low-resource languages show
+        +3.2 F1 over XLM-R and +1.8 F1 over translate-train on NER and sentiment tasks.</p>
+        <p><strong style="color:#bbb">Review:</strong> Well-scoped hypothesis with clear mechanism,
+        measurable claims, and controlled evaluation design. Ready for invention.</p>
+      </div>
+    </div>
+
+    <div class="footer-stats">18m &bull; $4.83</div>
+  </div>
+
+  <!-- ── Invention Panel ── -->
+  <div class="content-panel active" id="panel-invention">
+    <div class="panel-title">Invention Loop</div>
+    <div class="panel-subtitle">Iteration 2 of 3 — Generating Artifacts</div>
+    <div class="panel-summary">
+      3 of 5 research artifacts complete. Baseline experiment achieved 0.847 accuracy.
+      Running ablation study.
+    </div>
+
+    <ul class="stage-list">
+      <li class="stage-row">
+        <span class="icon icon--done">&#10003;</span>Strategy<span class="detail"> — Contrastive + ablation</span>
+      </li>
+      <li class="stage-row">
+        <span class="icon icon--done">&#10003;</span>Plan<span class="detail"> — 5 artifacts planned</span>
+      </li>
+      <li class="stage-row current expandable" data-expand="inv-artifacts">
+        <span class="icon icon--run">&#9654;</span>Artifacts<span class="detail"> — 3/5, ablation running</span>
+      </li>
+      <div class="expand-content" id="inv-artifacts">
+        <div class="expand-inner">
+          <div class="artifact-item">
+            <span class="art-icon art-icon--done">&#10003;</span>
+            <span>Baseline XLM-R fine-tune on 8 languages — 0.847 acc</span>
+          </div>
+          <div class="artifact-item">
+            <span class="art-icon art-icon--done">&#10003;</span>
+            <span>Code-switching augmentation pipeline — 12k pairs generated</span>
+          </div>
+          <div class="artifact-item">
+            <span class="art-icon art-icon--done">&#10003;</span>
+            <span>Contrastive pre-training run — converged at epoch 4</span>
+          </div>
+          <div class="artifact-item">
+            <span class="art-icon art-icon--run">&#9654;</span>
+            <span style="color:#aaa">Ablation: contrastive-only vs code-switch-only — running</span>
+          </div>
+          <div class="artifact-item">
+            <span class="art-icon art-icon--pend">&#9675;</span>
+            <span>Per-language breakdown analysis</span>
+          </div>
+        </div>
+      </div>
+      <li class="stage-row">
+        <span class="icon icon--pend">&#9675;</span>Paper Draft
+      </li>
+      <li class="stage-row">
+        <span class="icon icon--pend">&#9675;</span>Review
+      </li>
+      <li class="stage-row">
+        <span class="icon icon--pend">&#9675;</span>Update Hypo
+      </li>
+    </ul>
+
+    <div class="footer-stats">42m &bull; $12.47</div>
+  </div>
+
+  <!-- ── Paper Panel ── -->
+  <div class="content-panel" id="panel-paper">
+    <div class="panel-title">Paper</div>
+    <div class="panel-subtitle">Pending — Waiting for Invention Loop</div>
+    <div class="panel-summary">
+      Paper generation will begin after the invention loop completes. This stage compiles
+      all artifacts, figures, and text into a publishable research paper with repository.
+    </div>
+    <ul class="paper-pending-list">
+      <li><span class="icon icon--pend">&#9675;</span> Generate artifact demos</li>
+      <li><span class="icon icon--pend">&#9675;</span> Generate visualizations</li>
+      <li><span class="icon icon--pend">&#9675;</span> Compile full paper (LaTeX)</li>
+      <li><span class="icon icon--pend">&#9675;</span> Build paper repository</li>
+    </ul>
+    <div class="footer-stats">-- &bull; --</div>
+  </div>
+
+</div>
+
+<script>
+(function() {
+  const segments = document.querySelectorAll('.segment');
+  const panels   = document.querySelectorAll('.content-panel');
+
+  // ── Segment click: switch active panel ──
+  segments.forEach(seg => {
+    seg.addEventListener('click', () => {
+      const target = seg.dataset.panel;
+
+      // Close all expanded rows when switching panels
+      document.querySelectorAll('.expand-content.open').forEach(ec => {
+        ec.style.maxHeight = '0';
+        ec.classList.remove('open');
+      });
+
+      // Update selected segment
+      segments.forEach(s => s.classList.remove('selected'));
+      seg.classList.add('selected');
+
+      // Switch panel
+      panels.forEach(p => p.classList.remove('active'));
+      const panel = document.getElementById('panel-' + target);
+      if (panel) {
+        // Force re-trigger fade animation
+        panel.style.animation = 'none';
+        panel.offsetHeight; // reflow
+        panel.style.animation = '';
+        panel.classList.add('active');
+      }
+    });
+  });
+
+  // ── Expandable rows ──
+  document.querySelectorAll('[data-expand]').forEach(trigger => {
+    trigger.addEventListener('click', () => {
+      const targetId = trigger.dataset.expand;
+      const content  = document.getElementById(targetId);
+      if (!content) return;
+
+      if (content.classList.contains('open')) {
+        content.style.maxHeight = '0';
+        content.classList.remove('open');
+      } else {
+        // Close siblings in the same panel
+        const panel = trigger.closest('.content-panel');
+        if (panel) {
+          panel.querySelectorAll('.expand-content.open').forEach(ec => {
+            ec.style.maxHeight = '0';
+            ec.classList.remove('open');
+          });
+        }
+        content.classList.add('open');
+        content.style.maxHeight = content.scrollHeight + 'px';
+      }
+    });
+  });
+})();
+</script>
+</body>
+</html>

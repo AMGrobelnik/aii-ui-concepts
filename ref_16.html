@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Simple View</title>
+<style>
+  /* ── Reset & base ────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #0b0e17;
+    --surface:   #131829;
+    --border:    #1e2540;
+    --text:      #c8cee0;
+    --text-dim:  #5a6280;
+    --green:     #34d399;
+    --purple:    #a78bfa;
+    --blue:      #60a5fa;
+    --gray:      #4b5563;
+    --gray-dim:  #2a2f3d;
+
+    /* node sizes */
+    --node-normal:   60px;
+    --node-selected: 72px;
+    --node-shrunk:   50px;
+
+    /* transition */
+    --t: .35s cubic-bezier(.4,0,.2,1);
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── Top strip ───────────────────────────────────────── */
+  .top-strip {
+    position: relative;
+    width: 100%;
+    padding: 36px 60px 48px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background: linear-gradient(180deg, rgba(19,24,41,.95) 0%, var(--bg) 100%);
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  /* connecting lines drawn on a canvas behind nodes */
+  .connector-canvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .nodes-row {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 80px;
+  }
+
+  /* ── Single node wrapper ─────────────────────────────── */
+  .node-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+    transition: transform var(--t);
+  }
+
+  .node-wrapper:hover { transform: translateY(-2px); }
+
+  /* ── Circle (outer ring + glow) ──────────────────────── */
+  .node-circle {
+    position: relative;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition:
+      width var(--t),
+      height var(--t),
+      box-shadow var(--t),
+      border-color var(--t);
+    border: 2px solid transparent;
+  }
+
+  /* size states */
+  .node-circle.sz-normal  { width: var(--node-normal);   height: var(--node-normal);   }
+  .node-circle.sz-selected{ width: var(--node-selected);  height: var(--node-selected);  }
+  .node-circle.sz-shrunk  { width: var(--node-shrunk);    height: var(--node-shrunk);    }
+
+  /* color themes */
+  .node-circle[data-color="green"] {
+    border-color: var(--green);
+    background: radial-gradient(circle, rgba(52,211,153,.12) 0%, transparent 70%);
+    box-shadow: 0 0 18px rgba(52,211,153,.30), inset 0 0 12px rgba(52,211,153,.08);
+  }
+  .node-circle[data-color="green"].sz-selected {
+    box-shadow: 0 0 30px rgba(52,211,153,.50), inset 0 0 18px rgba(52,211,153,.14);
+  }
+
+  .node-circle[data-color="purple"] {
+    border-color: var(--purple);
+    background: radial-gradient(circle, rgba(167,139,250,.12) 0%, transparent 70%);
+    box-shadow: 0 0 18px rgba(167,139,250,.30), inset 0 0 12px rgba(167,139,250,.08);
+  }
+  .node-circle[data-color="purple"].sz-selected {
+    box-shadow: 0 0 30px rgba(167,139,250,.50), inset 0 0 18px rgba(167,139,250,.14);
+  }
+
+  .node-circle[data-color="blue"] {
+    border-color: var(--blue);
+    background: radial-gradient(circle, rgba(96,165,250,.12) 0%, transparent 70%);
+    box-shadow: 0 0 18px rgba(96,165,250,.30), inset 0 0 12px rgba(96,165,250,.08);
+  }
+  .node-circle[data-color="blue"].sz-selected {
+    box-shadow: 0 0 30px rgba(96,165,250,.50), inset 0 0 18px rgba(96,165,250,.14);
+  }
+
+  .node-circle[data-color="gray"] {
+    border-color: var(--gray);
+    background: radial-gradient(circle, rgba(75,85,99,.08) 0%, transparent 70%);
+    box-shadow: 0 0 8px rgba(75,85,99,.15), inset 0 0 6px rgba(75,85,99,.05);
+  }
+  .node-circle[data-color="gray"].sz-selected {
+    box-shadow: 0 0 16px rgba(75,85,99,.30), inset 0 0 10px rgba(75,85,99,.10);
+  }
+
+  /* ── Pulsing animation for active node ───────────────── */
+  @keyframes pulse-ring {
+    0%, 100% { box-shadow: 0 0 18px rgba(96,165,250,.30), inset 0 0 12px rgba(96,165,250,.08); }
+    50%      { box-shadow: 0 0 28px rgba(96,165,250,.55), inset 0 0 18px rgba(96,165,250,.18); }
+  }
+  .node-circle.pulsing {
+    animation: pulse-ring 2.2s ease-in-out infinite;
+  }
+  .node-circle.pulsing.sz-selected {
+    animation: pulse-ring-selected 2.2s ease-in-out infinite;
+  }
+  @keyframes pulse-ring-selected {
+    0%, 100% { box-shadow: 0 0 30px rgba(96,165,250,.50), inset 0 0 18px rgba(96,165,250,.14); }
+    50%      { box-shadow: 0 0 42px rgba(96,165,250,.70), inset 0 0 26px rgba(96,165,250,.22); }
+  }
+
+  /* ── Inner dot grid ──────────────────────────────────── */
+  .dot-grid {
+    display: grid;
+    gap: 3px;
+    transition: gap var(--t);
+  }
+  .sz-selected .dot-grid { gap: 4px; }
+
+  .dot-grid .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    transition: background var(--t), box-shadow var(--t), width var(--t), height var(--t);
+  }
+  .sz-selected .dot-grid .dot {
+    width: 7px; height: 7px;
+  }
+
+  /* dot states */
+  .dot.filled-green  { background: var(--green);  box-shadow: 0 0 4px rgba(52,211,153,.5);  }
+  .dot.filled-purple { background: var(--purple); box-shadow: 0 0 4px rgba(167,139,250,.5); }
+  .dot.filled-blue   { background: var(--blue);   box-shadow: 0 0 4px rgba(96,165,250,.5);  }
+  .dot.hollow {
+    background: transparent;
+    border: 1px solid var(--gray);
+    box-shadow: none;
+  }
+
+  /* active dot pulse */
+  @keyframes dot-pulse {
+    0%, 100% { background: rgba(96,165,250,.4); box-shadow: 0 0 3px rgba(96,165,250,.3); }
+    50%      { background: rgba(96,165,250,.9); box-shadow: 0 0 8px rgba(96,165,250,.8); }
+  }
+  .dot.active-pulse {
+    animation: dot-pulse 1.6s ease-in-out infinite;
+    border: none;
+  }
+
+  /* ── Module labels ───────────────────────────────────── */
+  .node-label {
+    margin-top: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    transition: color var(--t), font-size var(--t);
+    white-space: nowrap;
+  }
+  .node-wrapper.selected .node-label {
+    color: var(--text);
+    font-size: 12px;
+  }
+
+  /* ── Progress fraction below label ───────────────────── */
+  .node-fraction {
+    margin-top: 3px;
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-dim);
+    opacity: .7;
+    transition: opacity var(--t);
+  }
+  .node-wrapper.selected .node-fraction { opacity: 1; }
+
+  /* ── Content area ────────────────────────────────────── */
+  .content-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    padding: 0 40px 24px;
+  }
+
+  .content-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 0 14px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .content-title {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: -.01em;
+  }
+
+  .arrow-nav {
+    display: flex;
+    gap: 8px;
+  }
+
+  .arrow-btn {
+    width: 34px; height: 34px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background .2s, border-color .2s;
+  }
+  .arrow-btn:hover {
+    background: rgba(255,255,255,.06);
+    border-color: rgba(255,255,255,.12);
+  }
+  .arrow-btn:disabled {
+    opacity: .3;
+    cursor: default;
+    pointer-events: none;
+  }
+
+  /* ── Step cards ──────────────────────────────────────── */
+  .steps-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding: 18px 0 10px;
+  }
+  .steps-scroll::-webkit-scrollbar { width: 5px; }
+  .steps-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+  .step-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .step-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 14px 18px;
+    border-radius: 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    transition: border-color .2s, background .2s;
+  }
+  .step-card:hover {
+    border-color: rgba(255,255,255,.1);
+    background: rgba(19,24,41,.7);
+  }
+
+  .step-indicator {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .step-indicator.done    { background: var(--green); box-shadow: 0 0 6px rgba(52,211,153,.4); }
+  .step-indicator.running { background: var(--blue);  box-shadow: 0 0 6px rgba(96,165,250,.5); animation: dot-pulse 1.6s ease-in-out infinite; }
+  .step-indicator.pending { background: transparent; border: 1.5px solid var(--gray); }
+
+  .step-info { flex: 1; min-width: 0; }
+
+  .step-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .step-desc {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .step-time {
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-dim);
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ── Status badge in content header ──────────────────── */
+  .status-badge {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    padding: 3px 10px;
+    border-radius: 999px;
+    margin-left: 12px;
+  }
+  .status-badge.complete {
+    background: rgba(52,211,153,.12);
+    color: var(--green);
+    border: 1px solid rgba(52,211,153,.25);
+  }
+  .status-badge.active {
+    background: rgba(96,165,250,.12);
+    color: var(--blue);
+    border: 1px solid rgba(96,165,250,.25);
+  }
+  .status-badge.waiting {
+    background: rgba(75,85,99,.12);
+    color: var(--gray);
+    border: 1px solid rgba(75,85,99,.25);
+  }
+
+  /* ── Responsive ──────────────────────────────────────── */
+  @media (max-width: 700px) {
+    .nodes-row { gap: 40px; }
+    .content-area { padding: 0 16px 16px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════════════
+     TOP STRIP — nodes + connectors
+     ════════════════════════════════════════════════════════ -->
+<div class="top-strip">
+  <canvas class="connector-canvas" id="connectorCanvas"></canvas>
+
+  <div class="nodes-row" id="nodesRow">
+
+    <!-- ── Seed ────────────────────────────────────────── -->
+    <div class="node-wrapper" data-idx="0">
+      <div class="node-circle sz-shrunk" data-color="green" id="node0">
+        <div class="dot-grid" style="grid-template-columns: repeat(2, 1fr);">
+          <span class="dot filled-green"></span>
+          <span class="dot filled-green"></span>
+          <span class="dot filled-green"></span>
+          <span class="dot filled-green"></span>
+        </div>
+      </div>
+      <span class="node-label">Seed</span>
+      <span class="node-fraction">4 / 4</span>
+    </div>
+
+    <!-- ── Hypothesis ──────────────────────────────────── -->
+    <div class="node-wrapper" data-idx="1">
+      <div class="node-circle sz-shrunk" data-color="purple" id="node1">
+        <div class="dot-grid" style="grid-template-columns: repeat(2, 1fr);">
+          <span class="dot filled-purple"></span>
+          <span class="dot filled-purple"></span>
+          <span class="dot filled-purple"></span>
+          <span class="dot filled-purple"></span>
+          <span class="dot filled-purple"></span>
+          <span class="dot filled-purple"></span>
+        </div>
+      </div>
+      <span class="node-label">Hypothesis</span>
+      <span class="node-fraction">6 / 6</span>
+    </div>
+
+    <!-- ── Invention ───────────────────────────────────── -->
+    <div class="node-wrapper selected" data-idx="2">
+      <div class="node-circle sz-selected pulsing" data-color="blue" id="node2">
+        <div class="dot-grid" style="grid-template-columns: repeat(4, 1fr);">
+          <span class="dot filled-blue"></span>
+          <span class="dot filled-blue"></span>
+          <span class="dot filled-blue"></span>
+          <span class="dot filled-blue"></span>
+          <span class="dot filled-blue"></span>
+          <span class="dot filled-blue"></span>
+          <span class="dot filled-blue"></span>
+          <span class="dot filled-blue"></span>
+          <span class="dot active-pulse"></span>
+          <span class="dot hollow"></span>
+          <span class="dot hollow"></span>
+          <span class="dot hollow"></span>
+        </div>
+      </div>
+      <span class="node-label">Invention</span>
+      <span class="node-fraction">8 / 12</span>
+    </div>
+
+    <!-- ── Paper ───────────────────────────────────────── -->
+    <div class="node-wrapper" data-idx="3">
+      <div class="node-circle sz-shrunk" data-color="gray" id="node3">
+        <div class="dot-grid" style="grid-template-columns: repeat(3, 1fr);">
+          <span class="dot hollow"></span>
+          <span class="dot hollow"></span>
+          <span class="dot hollow"></span>
+          <span class="dot hollow"></span>
+          <span class="dot hollow"></span>
+        </div>
+      </div>
+      <span class="node-label">Paper</span>
+      <span class="node-fraction">0 / 5</span>
+    </div>
+
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════
+     CONTENT AREA
+     ════════════════════════════════════════════════════════ -->
+<div class="content-area">
+  <div class="content-header">
+    <div style="display:flex;align-items:center;">
+      <span class="content-title" id="contentTitle">Invention Loop</span>
+      <span class="status-badge active" id="statusBadge">Running</span>
+    </div>
+    <div class="arrow-nav">
+      <button class="arrow-btn" id="btnPrev" title="Previous module">&#8592;</button>
+      <button class="arrow-btn" id="btnNext" title="Next module">&#8594;</button>
+    </div>
+  </div>
+
+  <div class="steps-scroll">
+    <div class="step-list" id="stepList">
+      <!-- populated by JS -->
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════
+     DATA + LOGIC
+     ════════════════════════════════════════════════════════ -->
+<script>
+(function () {
+  "use strict";
+
+  /* ── Module data ─────────────────────────────────────── */
+  const MODULES = [
+    {
+      name: "Seed",
+      color: "green",
+      badgeClass: "complete",
+      badgeText: "Complete",
+      steps: [
+        { name: "Load Knowledge Graph",      desc: "Parse domain papers & extract entities",  status: "done", time: "12s" },
+        { name: "Extract Seed Concepts",      desc: "Identify core research themes",           status: "done", time: "8s"  },
+        { name: "Build Concept Embeddings",   desc: "Generate vector representations",         status: "done", time: "23s" },
+        { name: "Cluster & Rank Seeds",       desc: "Group related concepts by similarity",    status: "done", time: "5s"  },
+      ]
+    },
+    {
+      name: "Hypothesis",
+      color: "purple",
+      badgeClass: "complete",
+      badgeText: "Complete",
+      steps: [
+        { name: "Generate Candidate Hypotheses", desc: "LLM produces diverse research questions",        status: "done", time: "34s" },
+        { name: "Cross-Reference Literature",    desc: "Verify novelty against existing work",            status: "done", time: "41s" },
+        { name: "Score Feasibility",             desc: "Rate each hypothesis on practical viability",     status: "done", time: "18s" },
+        { name: "Review Hypothesis Quality",     desc: "Structured rubric evaluation per hypothesis",     status: "done", time: "26s" },
+        { name: "Deduplicate & Merge",           desc: "Collapse overlapping hypotheses into canonical set", status: "done", time: "7s"  },
+        { name: "Select Top Hypotheses",         desc: "Pick highest-scoring candidates for invention",   status: "done", time: "3s"  },
+      ]
+    },
+    {
+      name: "Invention Loop",
+      color: "blue",
+      badgeClass: "active",
+      badgeText: "Running",
+      steps: [
+        { name: "Initialize Iteration Context",    desc: "Load hypothesis context & prior attempts",        status: "done",    time: "2s"   },
+        { name: "Generate Strategy",               desc: "Propose technical approach for the hypothesis",   status: "done",    time: "28s"  },
+        { name: "Generate Detailed Plan",           desc: "Decompose strategy into implementation steps",   status: "done",    time: "45s"  },
+        { name: "Validate Plan Consistency",        desc: "Check plan aligns with hypothesis constraints",  status: "done",    time: "11s"  },
+        { name: "Generate Paper Text (Draft 1)",    desc: "Write methods & results sections",               status: "done",    time: "1m 22s" },
+        { name: "Generate Paper Text (Draft 2)",    desc: "Refine exposition, add related work",            status: "done",    time: "1m 05s" },
+        { name: "Review Paper Quality",             desc: "LLM-as-judge scoring pass",                     status: "done",    time: "38s"  },
+        { name: "Generate Figures & Diagrams",      desc: "Create supporting visual assets",                status: "done",    time: "52s"  },
+        { name: "Generate Experimental Artifacts",  desc: "Produce demo notebooks & code",                  status: "running", time: "1m 14s" },
+        { name: "Run Artifact Validation",          desc: "Execute generated code, check outputs",          status: "pending", time: "--"   },
+        { name: "Compile Invention Summary",        desc: "Aggregate results into a coherent package",      status: "pending", time: "--"   },
+        { name: "Decide: Iterate or Finalize",      desc: "Loop back if quality threshold unmet",           status: "pending", time: "--"   },
+      ]
+    },
+    {
+      name: "Paper Repo",
+      color: "gray",
+      badgeClass: "waiting",
+      badgeText: "Waiting",
+      steps: [
+        { name: "Generate Full Paper LaTeX",    desc: "Compile all sections into LaTeX source",       status: "pending", time: "--" },
+        { name: "Generate Visualizations",      desc: "High-fidelity charts & plots for paper",       status: "pending", time: "--" },
+        { name: "Generate Artifact Demos",      desc: "Interactive demos for supplementary materials", status: "pending", time: "--" },
+        { name: "Build Repository Structure",   desc: "Organize code, data, & paper into repo",       status: "pending", time: "--" },
+        { name: "Final Validation & Package",   desc: "Run checks, generate README, zip output",      status: "pending", time: "--" },
+      ]
+    }
+  ];
+
+  /* ── State ───────────────────────────────────────────── */
+  let selectedIdx = 2; // Invention is selected by default
+
+  /* ── DOM refs ────────────────────────────────────────── */
+  const nodesRow      = document.getElementById("nodesRow");
+  const wrappers      = Array.from(nodesRow.querySelectorAll(".node-wrapper"));
+  const circles       = Array.from(nodesRow.querySelectorAll(".node-circle"));
+  const canvas        = document.getElementById("connectorCanvas");
+  const ctx           = canvas.getContext("2d");
+  const contentTitle  = document.getElementById("contentTitle");
+  const statusBadge   = document.getElementById("statusBadge");
+  const stepList      = document.getElementById("stepList");
+  const btnPrev       = document.getElementById("btnPrev");
+  const btnNext       = document.getElementById("btnNext");
+
+  /* ── Connector drawing ───────────────────────────────── */
+  function drawConnectors() {
+    const strip = canvas.parentElement;
+    canvas.width  = strip.offsetWidth;
+    canvas.height = strip.offsetHeight;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const centers = circles.map(c => {
+      const r = c.getBoundingClientRect();
+      const sr = strip.getBoundingClientRect();
+      return { x: r.left + r.width / 2 - sr.left, y: r.top + r.height / 2 - sr.top };
+    });
+
+    for (let i = 0; i < centers.length - 1; i++) {
+      const a = centers[i];
+      const b = centers[i + 1];
+
+      /* gradient between the two node colors */
+      const colA = MODULES[i].color;
+      const colB = MODULES[i + 1].color;
+      const colorMap = {
+        green:  "rgba(52,211,153,0.35)",
+        purple: "rgba(167,139,250,0.35)",
+        blue:   "rgba(96,165,250,0.35)",
+        gray:   "rgba(75,85,99,0.20)",
+      };
+
+      const grad = ctx.createLinearGradient(a.x, a.y, b.x, b.y);
+      grad.addColorStop(0, colorMap[colA]);
+      grad.addColorStop(1, colorMap[colB]);
+
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.strokeStyle = grad;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+  }
+
+  /* ── Render node sizes ───────────────────────────────── */
+  function applyNodeSizes() {
+    circles.forEach((c, i) => {
+      c.classList.remove("sz-normal", "sz-selected", "sz-shrunk");
+      if (i === selectedIdx) {
+        c.classList.add("sz-selected");
+      } else {
+        c.classList.add("sz-shrunk");
+      }
+    });
+
+    wrappers.forEach((w, i) => {
+      w.classList.toggle("selected", i === selectedIdx);
+    });
+
+    /* redraw connectors after transition */
+    requestAnimationFrame(() => setTimeout(drawConnectors, 360));
+    drawConnectors();
+  }
+
+  /* ── Render content panel ────────────────────────────── */
+  function renderContent() {
+    const mod = MODULES[selectedIdx];
+
+    contentTitle.textContent = mod.name === "Paper Repo" ? "Paper Repository" : mod.name === "Invention Loop" ? "Invention Loop" : mod.name;
+
+    statusBadge.className = "status-badge " + mod.badgeClass;
+    statusBadge.textContent = mod.badgeText;
+
+    stepList.innerHTML = "";
+
+    mod.steps.forEach((s, i) => {
+      const card = document.createElement("div");
+      card.className = "step-card";
+      card.style.animationDelay = (i * 40) + "ms";
+
+      card.innerHTML = `
+        <span class="step-indicator ${s.status === 'done' ? 'done' : s.status === 'running' ? 'running' : 'pending'}"></span>
+        <span class="step-info">
+          <span class="step-name">${s.name}</span>
+          <span class="step-desc">${s.desc}</span>
+        </span>
+        <span class="step-time">${s.time}</span>
+      `;
+
+      stepList.appendChild(card);
+    });
+
+    /* arrow states */
+    btnPrev.disabled = selectedIdx === 0;
+    btnNext.disabled = selectedIdx === MODULES.length - 1;
+  }
+
+  /* ── Selection ───────────────────────────────────────── */
+  function selectModule(idx) {
+    if (idx < 0 || idx >= MODULES.length) return;
+    selectedIdx = idx;
+    applyNodeSizes();
+    renderContent();
+  }
+
+  /* click on nodes */
+  wrappers.forEach((w, i) => {
+    w.addEventListener("click", () => selectModule(i));
+  });
+
+  /* arrow buttons */
+  btnPrev.addEventListener("click", () => selectModule(selectedIdx - 1));
+  btnNext.addEventListener("click", () => selectModule(selectedIdx + 1));
+
+  /* keyboard arrows */
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowLeft")  selectModule(selectedIdx - 1);
+    if (e.key === "ArrowRight") selectModule(selectedIdx + 1);
+  });
+
+  /* ── Resize handling ─────────────────────────────────── */
+  let resizeRaf;
+  window.addEventListener("resize", () => {
+    cancelAnimationFrame(resizeRaf);
+    resizeRaf = requestAnimationFrame(drawConnectors);
+  });
+
+  /* ── Initial render ──────────────────────────────────── */
+  applyNodeSizes();
+  renderContent();
+  requestAnimationFrame(drawConnectors);
+
+})();
+</script>
+
+</body>
+</html>

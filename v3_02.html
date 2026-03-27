@@ -1,0 +1,1106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Glass Cards v3.02</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #1a1d23;
+    --surface: #22262e;
+    --border: #2e3440;
+    --text: #e2e4e9;
+    --muted: #8b919a;
+    --green: #22c55e;
+    --purple: #a78bfa;
+    --blue: #3b82f6;
+    --orange: #f59e0b;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Left Sidebar ── */
+  .sidebar {
+    width: 160px;
+    min-width: 160px;
+    height: 100vh;
+    background: #1e2128;
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 12px 20px;
+    gap: 20px;
+    z-index: 10;
+  }
+
+  /* Ring */
+  .ring-wrap {
+    position: relative;
+    width: 110px;
+    height: 110px;
+  }
+  .ring-wrap svg { width: 110px; height: 110px; }
+  .ring-bg {
+    fill: none;
+    stroke: var(--border);
+    stroke-width: 7;
+  }
+  .ring-fill {
+    fill: none;
+    stroke-width: 7;
+    stroke-linecap: round;
+    stroke: url(#ringGrad);
+    filter: url(#ringGlow);
+    transition: stroke-dasharray 0.6s ease, stroke-dashoffset 0.6s ease;
+  }
+  .ring-segment {
+    fill: none;
+    stroke-width: 7;
+    stroke-linecap: round;
+    opacity: 0;
+    transition: opacity 0.4s ease, stroke-dasharray 0.4s ease, stroke-dashoffset 0.4s ease;
+  }
+  .ring-segment.visible { opacity: 0.35; }
+  .ring-endpoint {
+    fill: var(--blue);
+    filter: url(#ringGlow);
+    transition: cx 0.6s ease, cy 0.6s ease;
+  }
+  .ring-center {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+  }
+  .ring-pct { font-size: 22px; font-weight: 700; color: #fff; }
+  .ring-label { font-size: 9px; color: var(--muted); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.6px; }
+
+  /* Legend */
+  .legend { width: 100%; display: flex; flex-direction: column; gap: 4px; }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 8px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 0.2s ease;
+    font-size: 11.5px;
+    user-select: none;
+  }
+  .legend-item:hover { background: rgba(255,255,255,0.04); }
+  .legend-item.selected { background: rgba(255,255,255,0.07); }
+  .legend-icon {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .legend-name { flex: 1; color: var(--muted); font-weight: 500; transition: color 0.2s; }
+  .legend-item.selected .legend-name { color: var(--text); }
+  .legend-stat { color: #555d68; font-size: 10px; font-weight: 400; }
+
+  /* Sidebar footer */
+  .sidebar-footer {
+    margin-top: auto;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+  .sidebar-footer-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+  }
+  .sidebar-footer-row .label { color: var(--muted); }
+  .sidebar-footer-row .value { color: var(--text); font-weight: 500; }
+
+  /* ── Main Area ── */
+  .main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── Row Container ── */
+  .rows-area {
+    padding: 20px 28px 0;
+    flex-shrink: 0;
+  }
+
+  /* ── Row 1 — Glass Cards ── */
+  .row1 {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    padding-bottom: 6px;
+    position: relative;
+  }
+
+  .glass-card-wrap {
+    position: relative;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  /* Glow halo behind card */
+  .glass-halo {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 140px;
+    height: 65px;
+    border-radius: 18px;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .glass-card-wrap.active .glass-halo { opacity: 0.25; }
+  .glass-card-wrap.selected .glass-halo { opacity: 0.4; }
+
+  @keyframes haloPulse {
+    0%, 100% { opacity: 0.25; transform: translate(-50%, -50%) scale(1); }
+    50% { opacity: 0.4; transform: translate(-50%, -50%) scale(1.05); }
+  }
+  .glass-card-wrap.active .glass-halo {
+    animation: haloPulse 2.5s ease-in-out infinite;
+  }
+  .glass-card-wrap.selected .glass-halo {
+    animation: none;
+    opacity: 0.5;
+  }
+
+  /* Glass card */
+  .glass-card {
+    position: relative;
+    z-index: 1;
+    width: 130px;
+    height: 55px;
+    background: rgba(34, 38, 46, 0.65);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 10px;
+    padding: 8px 10px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    transition: transform 0.25s ease, border-color 0.25s ease, background 0.25s ease;
+    overflow: hidden;
+  }
+  .glass-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 8px;
+    right: 8px;
+    height: 2px;
+    border-radius: 0 0 2px 2px;
+    transition: box-shadow 0.3s ease, background 0.3s ease;
+  }
+
+  .glass-card-wrap:hover .glass-card {
+    background: rgba(34, 38, 46, 0.85);
+    border-color: rgba(255,255,255,0.1);
+  }
+  .glass-card-wrap.selected .glass-card {
+    transform: scale(1.03);
+    border-color: rgba(255,255,255,0.15);
+    background: rgba(34, 38, 46, 0.9);
+  }
+
+  .glass-card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .glass-card-name {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--muted);
+    transition: color 0.2s;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 85px;
+  }
+  .glass-card-wrap.selected .glass-card-name { color: var(--text); }
+
+  .glass-card-icon {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    flex-shrink: 0;
+  }
+  .glass-card-icon.done { background: rgba(34, 197, 94, 0.15); color: var(--green); }
+  .glass-card-icon.active { background: rgba(59, 130, 246, 0.15); color: var(--blue); }
+  .glass-card-icon.pending { background: rgba(139, 145, 154, 0.1); color: #555d68; }
+
+  @keyframes spinnerRotate {
+    to { transform: rotate(360deg); }
+  }
+  .glass-card-icon.active::after {
+    content: '';
+    width: 10px;
+    height: 10px;
+    border: 1.5px solid transparent;
+    border-top-color: var(--blue);
+    border-radius: 50%;
+    animation: spinnerRotate 1s linear infinite;
+  }
+
+  .glass-card-metric {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1;
+    letter-spacing: -0.3px;
+  }
+
+  /* Gradient connector lines between cards */
+  .card-connector {
+    position: relative;
+    width: 36px;
+    height: 2px;
+    flex-shrink: 0;
+    align-self: center;
+    overflow: visible;
+  }
+  .card-connector-line {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    border-radius: 1px;
+    opacity: 0.4;
+  }
+  .card-connector-line.bg {
+    background: var(--border);
+    opacity: 0.6;
+  }
+
+  /* Animated flowing dot on connector */
+  .connector-dot {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    opacity: 0;
+  }
+  .card-connector.flow .connector-dot {
+    opacity: 0.8;
+    animation: flowDot 1.8s ease-in-out infinite;
+  }
+  @keyframes flowDot {
+    0% { left: -2px; opacity: 0; }
+    15% { opacity: 0.9; }
+    85% { opacity: 0.9; }
+    100% { left: calc(100% - 2px); opacity: 0; }
+  }
+
+  /* ── Row 2 — Sub-step Dots ── */
+  .row2-area {
+    margin-top: 18px;
+    display: flex;
+    align-items: flex-start;
+    gap: 0;
+    min-height: 38px;
+    transition: opacity 0.2s ease;
+  }
+  .row2-area.entering { opacity: 0; }
+
+  .sub-dot-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .sub-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    transition: transform 0.2s ease, box-shadow 0.3s ease;
+    position: relative;
+  }
+  .sub-dot.done { opacity: 0.9; }
+  .sub-dot.active {
+    box-shadow: 0 0 8px 2px var(--glow-color, rgba(59,130,246,0.4));
+    animation: dotGlow 2s ease-in-out infinite;
+  }
+  @keyframes dotGlow {
+    0%, 100% { box-shadow: 0 0 6px 1px var(--glow-color); }
+    50% { box-shadow: 0 0 12px 4px var(--glow-color); }
+  }
+  .sub-dot.pending { opacity: 0.3; }
+  .sub-dot-wrap:hover .sub-dot { transform: scale(1.2); }
+  .sub-dot-wrap.sel .sub-dot { transform: scale(1.25); }
+
+  .sub-dot-label {
+    font-size: 9px;
+    color: var(--muted);
+    white-space: nowrap;
+    transition: color 0.2s;
+  }
+  .sub-dot-wrap.sel .sub-dot-label { color: var(--text); font-weight: 500; }
+
+  .sub-connector {
+    width: 20px;
+    height: 2px;
+    background: var(--border);
+    align-self: center;
+    margin-top: 5px;
+    flex-shrink: 0;
+    border-radius: 1px;
+  }
+
+  /* ── Content Area ── */
+  .content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 28px 24px;
+  }
+  .content::-webkit-scrollbar { width: 5px; }
+  .content::-webkit-scrollbar-track { background: transparent; }
+  .content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .content-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: -0.3px;
+  }
+  .content-subtitle {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+  .content-summary {
+    font-size: 13px;
+    color: #a0a5ae;
+    margin-top: 10px;
+    line-height: 1.55;
+    max-width: 680px;
+  }
+
+  /* Expandable detail cards */
+  .card-list { margin-top: 16px; display: flex; flex-direction: column; gap: 6px; }
+  .detail-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    transition: border-color 0.2s;
+  }
+  .detail-card:hover { border-color: #3a3f4a; }
+  .detail-card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .detail-card-icon {
+    width: 20px;
+    height: 20px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    flex-shrink: 0;
+  }
+  .detail-card-icon.done { background: rgba(34,197,94,0.12); color: var(--green); }
+  .detail-card-icon.running { background: rgba(59,130,246,0.12); color: var(--blue); }
+  .detail-card-icon.pending-icon { background: rgba(139,145,154,0.08); color: #555d68; }
+
+  .detail-card-title { flex: 1; font-size: 13px; font-weight: 500; color: var(--text); }
+  .detail-card-meta {
+    display: flex;
+    gap: 12px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .detail-card-meta span { white-space: nowrap; }
+  .detail-card-chevron {
+    font-size: 11px;
+    color: #555d68;
+    transition: transform 0.25s ease;
+  }
+  .detail-card.open .detail-card-chevron { transform: rotate(90deg); }
+
+  .detail-card-body {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+  }
+  .detail-card.open .detail-card-body { max-height: 200px; }
+  .detail-card-body-text {
+    padding: 0 14px 12px 44px;
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--muted);
+  }
+
+  /* ── Footer ── */
+  .footer {
+    height: 36px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 24px;
+    gap: 24px;
+    font-size: 11px;
+    color: var(--muted);
+    flex-shrink: 0;
+    background: #1e2128;
+  }
+  .footer b { color: var(--text); font-weight: 500; margin-right: 4px; }
+  .footer .hint {
+    margin-left: auto;
+    color: #555d68;
+    font-size: 10px;
+  }
+  .footer .hint kbd {
+    display: inline-block;
+    padding: 1px 5px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    font-size: 10px;
+    font-family: inherit;
+    color: var(--muted);
+    margin: 0 1px;
+    background: var(--surface);
+  }
+</style>
+</head>
+<body>
+
+<!-- ── Sidebar ── -->
+<div class="sidebar">
+  <!-- Ring -->
+  <div class="ring-wrap">
+    <svg viewBox="0 0 110 110">
+      <defs>
+        <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="var(--green)" />
+          <stop offset="50%" stop-color="var(--purple)" />
+          <stop offset="100%" stop-color="var(--blue)" />
+        </linearGradient>
+        <filter id="ringGlow">
+          <feGaussianBlur stdDeviation="2.5" result="g" />
+          <feMerge><feMergeNode in="g" /><feMergeNode in="SourceGraphic" /></feMerge>
+        </filter>
+      </defs>
+      <circle class="ring-bg" cx="55" cy="55" r="46" />
+      <circle class="ring-segment" id="ringSegment" cx="55" cy="55" r="46"
+              stroke-dasharray="0 289.03" stroke-dashoffset="0"
+              transform="rotate(-90 55 55)" />
+      <circle class="ring-fill" id="ringFill" cx="55" cy="55" r="46"
+              stroke-dasharray="289.03" stroke-dashoffset="289.03"
+              transform="rotate(-90 55 55)" />
+      <circle class="ring-endpoint" id="ringEndpoint" cx="55" cy="9" r="3.5" />
+    </svg>
+    <div class="ring-center">
+      <div class="ring-pct" id="ringPct">0%</div>
+      <div class="ring-label">Progress</div>
+    </div>
+  </div>
+
+  <!-- Legend -->
+  <div class="legend" id="legend"></div>
+
+  <!-- Sidebar footer stats -->
+  <div class="sidebar-footer">
+    <div class="sidebar-footer-row">
+      <span class="label">Elapsed</span>
+      <span class="value">38m 12s</span>
+    </div>
+    <div class="sidebar-footer-row">
+      <span class="label">Cost</span>
+      <span class="value">$5.41</span>
+    </div>
+    <div class="sidebar-footer-row">
+      <span class="label">Tokens</span>
+      <span class="value">1.54M</span>
+    </div>
+  </div>
+</div>
+
+<!-- ── Main ── -->
+<div class="main">
+  <div class="rows-area">
+    <div class="row1" id="row1"></div>
+    <div class="row2-area" id="row2"></div>
+  </div>
+  <div class="content" id="contentArea">
+    <div id="contentInner"></div>
+  </div>
+  <div class="footer">
+    <span><b>Elapsed</b> 38m 12s</span>
+    <span><b>Cost</b> $5.41</span>
+    <span><b>Tokens</b> 1.2M in / 340K out</span>
+    <span class="hint"><kbd>&larr;</kbd><kbd>&rarr;</kbd><kbd>&uarr;</kbd><kbd>&darr;</kbd> navigate</span>
+  </div>
+</div>
+
+<script>
+// =============================================
+// Data Model
+// =============================================
+const COLORS = {
+  seed: '#22c55e',
+  hypo: '#a78bfa',
+  invention: '#3b82f6',
+  paper: '#f59e0b',
+};
+
+const MODULES = [
+  {
+    id: 'seed', name: 'Seed', color: COLORS.seed, status: 'done',
+    metric: '\u2713', legendStat: '\u2713 4/4',
+    subs: [
+      { id: 'mine', name: 'Mine', status: 'done' },
+      { id: 'kg', name: 'KG', status: 'done' },
+      { id: 'gaps', name: 'Gaps', status: 'done' },
+      { id: 'seeds', name: 'Seeds', status: 'done' },
+    ],
+  },
+  {
+    id: 'hypo', name: 'Hypothesis', color: COLORS.hypo, status: 'done',
+    metric: '8.4', legendStat: '\u2713 6/6',
+    subs: [
+      { id: 'gen1', name: 'Gen 1', status: 'done' },
+      { id: 'rev1', name: 'Rev 1', status: 'done' },
+      { id: 'gen2', name: 'Gen 2', status: 'done' },
+      { id: 'rev2', name: 'Rev 2', status: 'done' },
+      { id: 'gen3', name: 'Gen 3', status: 'done' },
+      { id: 'rev3', name: 'Rev 3', status: 'done' },
+    ],
+  },
+  {
+    id: 'invention', name: 'Invention', color: COLORS.invention, status: 'active',
+    metric: '3/5', legendStat: '\u25b6 3/6',
+    subs: [
+      { id: 'strategy', name: 'Strategy', status: 'done' },
+      { id: 'plan', name: 'Plan', status: 'done' },
+      { id: 'artifacts', name: 'Artifacts', status: 'active' },
+      { id: 'paper_draft', name: 'Paper Draft', status: 'pending' },
+      { id: 'review', name: 'Review', status: 'pending' },
+      { id: 'update', name: 'Update', status: 'pending' },
+    ],
+  },
+  {
+    id: 'paper', name: 'Paper', color: COLORS.paper, status: 'pending',
+    metric: '\u25cb', legendStat: '\u25cb 0/5',
+    subs: [
+      { id: 'compile', name: 'Compile', status: 'pending' },
+      { id: 'demos', name: 'Demos', status: 'pending' },
+      { id: 'viz', name: 'Viz', status: 'pending' },
+      { id: 'full_paper', name: 'Full Paper', status: 'pending' },
+      { id: 'repo', name: 'Repo', status: 'pending' },
+    ],
+  },
+];
+
+const CONTENT = {
+  mine: {
+    title: 'Mine Papers',
+    subtitle: 'Seed Phase',
+    summary: 'Collected 2,847 papers from Semantic Scholar across 4 research domains. Filtered to 312 high-relevance candidates based on citation velocity and recency.',
+    cards: [
+      { title: 'Query Expansion', status: 'done', meta: ['312 papers', '2m 08s', '$0.42'], detail: 'Expanded initial 8 seed queries to 34 using LLM-generated synonyms and related terms. Semantic Scholar API returned 2,847 results across domains.' },
+      { title: 'Relevance Filter', status: 'done', meta: ['89% precision', '1m 44s', '$0.38'], detail: 'Two-pass filtering: citation velocity threshold (>5/yr) then LLM relevance scoring. 312 papers retained.' },
+    ]
+  },
+  kg: {
+    title: 'Build Knowledge Graph',
+    subtitle: 'Seed Phase',
+    summary: 'Extracted 1,204 entities and 3,891 relationships from filtered papers. Graph density: 0.026.',
+    cards: [
+      { title: 'Entity Extraction', status: 'done', meta: ['1,204 entities', '3m 12s', '$0.87'], detail: 'Named entity recognition on abstracts and conclusions. Methods, datasets, metrics, and findings extracted.' },
+      { title: 'Relation Linking', status: 'done', meta: ['3,891 edges', '2m 50s', '$0.71'], detail: 'Co-occurrence and LLM-based relation classification. Typed edges: uses, improves, contradicts, extends.' },
+    ]
+  },
+  gaps: {
+    title: 'Identify Gaps',
+    subtitle: 'Seed Phase',
+    summary: 'Found 18 research gaps using structural hole analysis on the knowledge graph. Top gap: cross-lingual contrastive learning lacks code-switching augmentation.',
+    cards: [
+      { title: 'Structural Holes', status: 'done', meta: ['18 gaps', '1m 55s', '$0.52'], detail: 'Burt structural hole analysis on KG. Identified weakly-connected subgraph pairs where bridging research is missing.' },
+      { title: 'Gap Scoring', status: 'done', meta: ['ranked', '1m 20s', '$0.34'], detail: 'Scored gaps by novelty potential, feasibility, and expected impact. Top 5 gaps forwarded to seed generation.' },
+    ]
+  },
+  seeds: {
+    title: 'Generate Seeds',
+    subtitle: 'Seed Phase',
+    summary: 'Generated 6 seed hypotheses from top research gaps. Each seed includes a core claim, required evidence, and falsification criteria.',
+    cards: [
+      { title: 'Seed Generation', status: 'done', meta: ['6 seeds', '2m 30s', '$0.68'], detail: 'LLM-generated seed hypotheses from top 5 gaps. Each seed structured with claim, evidence requirements, and falsification criteria.' },
+      { title: 'Dedup & Merge', status: 'done', meta: ['6 unique', '0m 45s', '$0.18'], detail: 'Semantic similarity check across seeds. No duplicates found. All 6 seeds passed novelty threshold.' },
+    ]
+  },
+  gen1: {
+    title: 'Generate Hypotheses (Round 1)',
+    subtitle: 'Hypothesis Loop, Iteration 1',
+    summary: 'Expanded 6 seeds into 12 detailed hypotheses with experimental designs. Average confidence: 6.2/10.',
+    cards: [
+      { title: 'Hypothesis Expansion', status: 'done', meta: ['12 hypotheses', '4m 10s', '$1.12'], detail: 'Each seed expanded into 2 hypothesis variants with different experimental approaches and expected outcomes.' },
+    ]
+  },
+  rev1: {
+    title: 'Review Hypotheses (Round 1)',
+    subtitle: 'Hypothesis Loop, Iteration 1',
+    summary: 'Reviewed 12 hypotheses. 4 rejected (unfalsifiable or redundant), 8 advanced. Mean score: 6.8/10.',
+    cards: [
+      { title: 'LLM Review', status: 'done', meta: ['8 advanced', '3m 22s', '$0.94'], detail: 'Multi-criteria review: novelty, feasibility, falsifiability, impact. 4 hypotheses rejected for lacking clear falsification criteria.' },
+    ]
+  },
+  gen2: {
+    title: 'Generate Hypotheses (Round 2)',
+    subtitle: 'Hypothesis Loop, Iteration 2',
+    summary: 'Refined 8 hypotheses incorporating review feedback. Added experimental controls and baseline comparisons.',
+    cards: [
+      { title: 'Refinement', status: 'done', meta: ['8 hypotheses', '3m 45s', '$1.02'], detail: 'Addressed reviewer feedback: added control experiments, clarified metrics, specified baselines for comparison.' },
+    ]
+  },
+  rev2: {
+    title: 'Review Hypotheses (Round 2)',
+    subtitle: 'Hypothesis Loop, Iteration 2',
+    summary: 'Second review pass. 3 more rejected. 5 hypotheses remain, mean score: 7.9/10.',
+    cards: [
+      { title: 'LLM Review', status: 'done', meta: ['5 advanced', '2m 58s', '$0.81'], detail: 'Stricter review criteria. 3 hypotheses dropped for insufficient novelty over existing work. Remaining 5 show strong differentiation.' },
+    ]
+  },
+  gen3: {
+    title: 'Generate Hypotheses (Round 3)',
+    subtitle: 'Hypothesis Loop, Iteration 3',
+    summary: 'Final refinement of top 5 hypotheses. Selected best candidate: contrastive alignment with code-switching augmentation. Score: 8.4/10.',
+    cards: [
+      { title: 'Final Polish', status: 'done', meta: ['5 finalized', '3m 15s', '$0.88'], detail: 'Polished experimental designs, added ablation study plans, specified evaluation datasets and metrics.' },
+    ]
+  },
+  rev3: {
+    title: 'Review Hypotheses (Round 3)',
+    subtitle: 'Hypothesis Loop, Iteration 3',
+    summary: 'Final review complete. Top hypothesis selected with 8.4/10 score. Ready for invention loop.',
+    cards: [
+      { title: 'Final Selection', status: 'done', meta: ['1 selected', '2m 10s', '$0.56'], detail: 'Contrastive alignment with code-switching augmentation selected as primary hypothesis. Backup: multilingual bridging via shared subword spaces.' },
+    ]
+  },
+  strategy: {
+    title: 'Generate Strategy',
+    subtitle: 'Invention Loop, Iteration 2',
+    summary: 'Contrastive alignment with code-switching augmentation. Added ablation experiments to address reviewer feedback.',
+    cards: [
+      { title: 'Strategy Definition', status: 'done', meta: ['finalized', '3m 08s', '$0.84'], detail: 'Core approach: contrastive learning on code-switched parallel sentences. Augmentation creates synthetic bilingual examples by mixing tokens from aligned pairs.' },
+      { title: 'Ablation Plan', status: 'done', meta: ['4 conditions', '1m 45s', '$0.46'], detail: 'Four ablation conditions: no augmentation, random mixing, syntax-aware mixing, full code-switching. Each evaluated on 3 language pairs.' },
+    ]
+  },
+  plan: {
+    title: 'Generate Plan',
+    subtitle: 'Invention Loop, Iteration 2',
+    summary: 'Detailed research plan with 5 artifacts, estimated 15min runtime, $5.80 budget.',
+    cards: [
+      { title: 'Artifact Schedule', status: 'done', meta: ['5 artifacts', '2m 20s', '$0.62'], detail: 'Ordered: baseline, multilingual pairs, convergence proof, ablation study, cross-lingual evaluation. Dependencies mapped.' },
+      { title: 'Resource Estimation', status: 'done', meta: ['$5.80 budget', '0m 55s', '$0.24'], detail: 'Token budget allocated per artifact. Total estimated: 1.8M input tokens, 520K output tokens across all artifacts.' },
+    ]
+  },
+  artifacts: {
+    title: 'Generate Artifacts',
+    subtitle: 'Invention Loop, Iteration 2',
+    summary: '3 of 5 research artifacts complete. Baseline shows 17.5% accuracy improvement. Ablation study running.',
+    cards: [
+      { title: 'Contrastive Baseline', status: 'done', meta: ['acc: 0.847 (+17.5%)', '4m 32s', '$2.14'], detail: 'Trained contrastive model on EN-DE parallel corpus. 17.5% accuracy improvement over mBERT baseline on cross-lingual transfer benchmark. Learning rate: 2e-5, batch size: 64.' },
+      { title: 'Multilingual Pairs', status: 'done', meta: ['2,400 examples', '3m 15s', '$1.02'], detail: 'Generated 2,400 code-switched examples across EN-DE, EN-FR, EN-ZH pairs. Syntax-aware mixing preserves grammaticality in 94% of cases.' },
+      { title: 'Convergence Proof', status: 'done', meta: ['verified (Lean 4)', '2m 41s', '$0.89'], detail: 'Formal proof that contrastive loss with code-switching augmentation converges under mild assumptions. Verified in Lean 4 proof assistant.' },
+      { title: 'Ablation Study', status: 'running', meta: ['running...', '1m 20s', '$1.36'], detail: 'Currently evaluating syntax-aware mixing condition on EN-FR pair. 2 of 12 conditions complete.' },
+      { title: 'Cross-lingual Eval', status: 'pending', meta: ['pending', '--', '--'], detail: 'Will evaluate final model on XNLI, XQuAD, and MLQA benchmarks across 8 languages.' },
+    ]
+  },
+  paper_draft: {
+    title: 'Paper Draft',
+    subtitle: 'Invention Loop, Iteration 2',
+    summary: 'Awaiting artifact completion before drafting paper sections.',
+    cards: [
+      { title: 'Draft Generation', status: 'pending', meta: ['pending', '--', '--'], detail: 'Will generate Introduction, Methods, Results, and Discussion sections based on completed artifacts.' },
+    ]
+  },
+  review: {
+    title: 'Review Paper',
+    subtitle: 'Invention Loop, Iteration 2',
+    summary: 'Pending paper draft completion.',
+    cards: [
+      { title: 'Self-Review', status: 'pending', meta: ['pending', '--', '--'], detail: 'LLM-based review simulating 3 reviewer perspectives: methodology, novelty, and presentation quality.' },
+    ]
+  },
+  update: {
+    title: 'Update Paper',
+    subtitle: 'Invention Loop, Iteration 2',
+    summary: 'Pending review completion.',
+    cards: [
+      { title: 'Revision', status: 'pending', meta: ['pending', '--', '--'], detail: 'Address reviewer feedback and update paper sections. May trigger additional artifact generation if needed.' },
+    ]
+  },
+  compile: {
+    title: 'Compile Paper',
+    subtitle: 'Paper Generation',
+    summary: 'Pending invention loop completion.',
+    cards: [
+      { title: 'LaTeX Compilation', status: 'pending', meta: ['pending', '--', '--'], detail: 'Compile all sections into final LaTeX document with proper formatting, citations, and cross-references.' },
+    ]
+  },
+  demos: {
+    title: 'Generate Demos',
+    subtitle: 'Paper Generation',
+    summary: 'Pending.',
+    cards: [
+      { title: 'Interactive Demos', status: 'pending', meta: ['pending', '--', '--'], detail: 'Generate Python demo scripts for key results. Interactive visualization of contrastive learning dynamics.' },
+    ]
+  },
+  viz: {
+    title: 'Generate Visualizations',
+    subtitle: 'Paper Generation',
+    summary: 'Pending.',
+    cards: [
+      { title: 'Figures', status: 'pending', meta: ['pending', '--', '--'], detail: 'Generate publication-quality figures: training curves, ablation heatmap, cross-lingual transfer matrix, t-SNE embedding plot.' },
+    ]
+  },
+  full_paper: {
+    title: 'Full Paper Assembly',
+    subtitle: 'Paper Generation',
+    summary: 'Pending.',
+    cards: [
+      { title: 'Assembly', status: 'pending', meta: ['pending', '--', '--'], detail: 'Combine text, figures, tables, and appendices into final camera-ready PDF.' },
+    ]
+  },
+  repo: {
+    title: 'Generate Repository',
+    subtitle: 'Paper Generation',
+    summary: 'Pending.',
+    cards: [
+      { title: 'Code Repository', status: 'pending', meta: ['pending', '--', '--'], detail: 'Package all code, data scripts, and configs into a reproducible GitHub repository with README and CI.' },
+    ]
+  },
+};
+
+// =============================================
+// State
+// =============================================
+let selMod = 2;   // Invention (active module)
+let selSub = 2;   // Artifacts (active sub)
+
+// =============================================
+// Ring
+// =============================================
+const CIRC = 2 * Math.PI * 46; // ~289.03
+const TOTAL_STEPS = MODULES.reduce((s, m) => s + m.subs.length, 0);
+
+function getProgress() {
+  let done = 0;
+  MODULES.forEach(m => m.subs.forEach(s => { if (s.status === 'done') done++; }));
+  return done / TOTAL_STEPS;
+}
+
+function updateRing() {
+  const pct = getProgress();
+  const offset = CIRC * (1 - pct);
+  document.getElementById('ringFill').setAttribute('stroke-dashoffset', offset);
+  document.getElementById('ringPct').textContent = Math.round(pct * 100) + '%';
+
+  // Endpoint dot
+  const angle = -Math.PI / 2 + 2 * Math.PI * pct;
+  const ex = 55 + 46 * Math.cos(angle);
+  const ey = 55 + 46 * Math.sin(angle);
+  const ep = document.getElementById('ringEndpoint');
+  ep.setAttribute('cx', ex);
+  ep.setAttribute('cy', ey);
+
+  updateRingSegment();
+}
+
+function updateRingSegment() {
+  const seg = document.getElementById('ringSegment');
+  let before = 0;
+  for (let i = 0; i < selMod; i++) before += MODULES[i].subs.length;
+  const modSteps = MODULES[selMod].subs.length;
+  const startFrac = before / TOTAL_STEPS;
+  const lenFrac = modSteps / TOTAL_STEPS;
+
+  const dashLen = CIRC * lenFrac;
+  const gapLen = CIRC - dashLen;
+  const dashOffset = -CIRC * startFrac;
+
+  seg.setAttribute('stroke', MODULES[selMod].color);
+  seg.setAttribute('stroke-dasharray', `${dashLen} ${gapLen}`);
+  seg.setAttribute('stroke-dashoffset', dashOffset);
+  seg.classList.add('visible');
+}
+
+// =============================================
+// Legend
+// =============================================
+function renderLegend() {
+  const el = document.getElementById('legend');
+  el.innerHTML = MODULES.map((m, i) => `
+    <div class="legend-item ${i === selMod ? 'selected' : ''}" data-mod="${i}">
+      <div class="legend-icon" style="background:${m.color}"></div>
+      <span class="legend-name">${m.name}</span>
+      <span class="legend-stat">${m.legendStat}</span>
+    </div>
+  `).join('');
+  el.querySelectorAll('.legend-item').forEach(item => {
+    item.addEventListener('click', () => selectModule(+item.dataset.mod));
+  });
+}
+
+// =============================================
+// Row 1 — Glass Cards
+// =============================================
+function renderRow1() {
+  const el = document.getElementById('row1');
+  let html = '';
+
+  MODULES.forEach((m, i) => {
+    // Connector between cards
+    if (i > 0) {
+      const prevDone = MODULES[i - 1].status === 'done';
+      const curStarted = m.status !== 'pending';
+      const flowClass = prevDone && curStarted ? 'flow' : '';
+      html += `
+        <div class="card-connector ${flowClass}">
+          <div class="card-connector-line bg"></div>
+          <div class="card-connector-line" style="background:linear-gradient(90deg,${MODULES[i-1].color},${m.color});opacity:${prevDone && curStarted ? 0.5 : 0.15}"></div>
+          <div class="connector-dot" style="background:${m.color};box-shadow:0 0 6px ${m.color}"></div>
+        </div>
+      `;
+    }
+
+    // Status classes
+    const statusCls = m.status === 'done' ? 'done' : (m.status === 'active' ? 'active' : '');
+    const selCls = i === selMod ? 'selected' : '';
+    const activeCls = m.status === 'active' ? 'active' : '';
+
+    // Icon
+    let iconHtml = '';
+    if (m.status === 'done') {
+      iconHtml = `<div class="glass-card-icon done">\u2713</div>`;
+    } else if (m.status === 'active') {
+      iconHtml = `<div class="glass-card-icon active"></div>`;
+    } else {
+      iconHtml = `<div class="glass-card-icon pending">\u25cb</div>`;
+    }
+
+    html += `
+      <div class="glass-card-wrap ${selCls} ${activeCls}" data-mod="${i}">
+        <div class="glass-halo" style="background:radial-gradient(ellipse,${m.color}44 0%,transparent 70%)"></div>
+        <div class="glass-card" style="--card-color:${m.color}">
+          <div style="position:absolute;top:0;left:8px;right:8px;height:2px;border-radius:0 0 2px 2px;background:${m.color};opacity:${m.status === 'pending' ? 0.2 : 0.8}"></div>
+          <div class="glass-card-top">
+            <span class="glass-card-name">${m.name}</span>
+            ${iconHtml}
+          </div>
+          <div class="glass-card-metric" style="color:${m.status === 'pending' ? '#555d68' : m.color}">${m.metric}</div>
+        </div>
+      </div>
+    `;
+  });
+
+  el.innerHTML = html;
+
+  // Click handlers
+  el.querySelectorAll('.glass-card-wrap').forEach(wrap => {
+    wrap.addEventListener('click', () => selectModule(+wrap.dataset.mod));
+  });
+}
+
+// =============================================
+// Row 2 — Sub-step Dots
+// =============================================
+function renderRow2(animate) {
+  const el = document.getElementById('row2');
+  const mod = MODULES[selMod];
+
+  if (animate) {
+    el.classList.add('entering');
+    setTimeout(() => {
+      buildRow2(el, mod);
+      el.classList.remove('entering');
+    }, 150);
+  } else {
+    buildRow2(el, mod);
+  }
+}
+
+function buildRow2(el, mod) {
+  let html = '';
+  mod.subs.forEach((s, i) => {
+    if (i > 0) {
+      html += `<div class="sub-connector" style="background:${s.status !== 'pending' || mod.subs[i-1].status !== 'pending' ? mod.color + '33' : 'var(--border)'}"></div>`;
+    }
+    const stCls = s.status === 'done' ? 'done' : (s.status === 'active' ? 'active' : 'pending');
+    const selCls = i === selSub ? 'sel' : '';
+    const bgOpacity = s.status === 'done' ? 0.9 : (s.status === 'active' ? 1 : 0.2);
+    const glowColor = mod.color + '66';
+
+    html += `
+      <div class="sub-dot-wrap ${selCls}" data-sub="${i}">
+        <div class="sub-dot ${stCls}" style="background:${mod.color};opacity:${bgOpacity};--glow-color:${glowColor}"></div>
+        <span class="sub-dot-label">${s.name}</span>
+      </div>
+    `;
+  });
+  el.innerHTML = html;
+
+  el.querySelectorAll('.sub-dot-wrap').forEach(w => {
+    w.addEventListener('click', () => selectSub(+w.dataset.sub));
+  });
+}
+
+// =============================================
+// Content
+// =============================================
+function renderContent() {
+  const mod = MODULES[selMod];
+  const sub = mod.subs[selSub];
+  const data = CONTENT[sub.id];
+
+  if (!data) {
+    document.getElementById('contentInner').innerHTML = `
+      <div class="content-title">${sub.name}</div>
+      <div class="content-summary" style="margin-top:12px">No data available.</div>
+    `;
+    return;
+  }
+
+  let html = `
+    <div class="content-title">${data.title}</div>
+    <div class="content-subtitle">${data.subtitle}</div>
+    <div class="content-summary">${data.summary}</div>
+    <div class="card-list">
+  `;
+
+  data.cards.forEach((c, i) => {
+    const iconCls = c.status === 'done' ? 'done' : (c.status === 'running' ? 'running' : 'pending-icon');
+    const iconChar = c.status === 'done' ? '\u2713' : (c.status === 'running' ? '\u25b6' : '\u25cb');
+    html += `
+      <div class="detail-card" data-card="${i}">
+        <div class="detail-card-header">
+          <div class="detail-card-icon ${iconCls}">${iconChar}</div>
+          <span class="detail-card-title">${c.title}</span>
+          <div class="detail-card-meta">
+            ${c.meta.map(m => `<span>${m}</span>`).join('')}
+          </div>
+          <span class="detail-card-chevron">\u25b8</span>
+        </div>
+        <div class="detail-card-body">
+          <div class="detail-card-body-text">${c.detail}</div>
+        </div>
+      </div>
+    `;
+  });
+
+  html += '</div>';
+  document.getElementById('contentInner').innerHTML = html;
+
+  // Expand/collapse
+  document.querySelectorAll('.detail-card').forEach(card => {
+    card.querySelector('.detail-card-header').addEventListener('click', () => {
+      card.classList.toggle('open');
+    });
+  });
+}
+
+// =============================================
+// Selection Logic
+// =============================================
+function selectModule(idx) {
+  selMod = Math.max(0, Math.min(MODULES.length - 1, idx));
+  const mod = MODULES[selMod];
+  const activeIdx = mod.subs.findIndex(s => s.status === 'active');
+  selSub = activeIdx >= 0 ? activeIdx : 0;
+
+  renderLegend();
+  renderRow1();
+  renderRow2(true);
+  renderContent();
+  updateRing();
+}
+
+function selectSub(idx) {
+  const mod = MODULES[selMod];
+  selSub = Math.max(0, Math.min(mod.subs.length - 1, idx));
+
+  renderRow2(false);
+  renderContent();
+}
+
+// =============================================
+// Keyboard Navigation
+// =============================================
+document.addEventListener('keydown', (e) => {
+  switch (e.key) {
+    case 'ArrowLeft':
+      e.preventDefault();
+      selectSub(selSub - 1);
+      break;
+    case 'ArrowRight':
+      e.preventDefault();
+      selectSub(selSub + 1);
+      break;
+    case 'ArrowUp':
+      e.preventDefault();
+      selectModule(selMod - 1);
+      break;
+    case 'ArrowDown':
+      e.preventDefault();
+      selectModule(selMod + 1);
+      break;
+  }
+});
+
+// =============================================
+// Init
+// =============================================
+function init() {
+  renderLegend();
+  renderRow1();
+  renderRow2(false);
+  renderContent();
+  updateRing();
+}
+
+init();
+</script>
+</body>
+</html>

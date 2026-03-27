@@ -1,0 +1,1242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Sparkline Tree</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ── Reset & Tokens ───────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg-deep:#0e1015; --bg-surface:#14171e; --bg-card:#1a1d26;
+  --bg-card-alt:#1e2230; --bg-hover:#242838; --bg-elevated:#282d3a;
+  --border:#262a38; --border-dim:#1d2030; --border-lite:#333850; --border-focus:#3d4460;
+  --text-100:#e4e6ee; --text-200:#aeb2c4; --text-300:#777c94; --text-400:#4e5268; --text-500:#383c50;
+  --green:#34d399; --green-dim:rgba(52,211,153,0.12); --green-glow:rgba(52,211,153,0.30);
+  --blue:#5b8af5; --blue-dim:rgba(91,138,245,0.10); --blue-glow:rgba(91,138,245,0.28);
+  --amber:#fbbf24; --amber-dim:rgba(251,191,36,0.10); --amber-glow:rgba(251,191,36,0.22);
+  --red:#f87171; --red-dim:rgba(248,113,113,0.10);
+  --purple:#a78bfa; --purple-dim:rgba(167,139,250,0.10);
+  --cyan:#22d3ee; --cyan-dim:rgba(34,211,238,0.10);
+  --sidebar-w:280px; --topbar-h:48px; --radius:6px; --radius-lg:10px; --transition:160ms ease;
+}
+html { font-size: 13px; }
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  background: var(--bg-deep); color: var(--text-200);
+  line-height: 1.5; overflow: hidden; height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Shell ── */
+.shell { display: flex; height: 100vh; }
+.sidebar { width: var(--sidebar-w); min-width: var(--sidebar-w); background: var(--bg-surface); border-right: 1px solid var(--border-dim); display: flex; flex-direction: column; z-index: 20; overflow: hidden; }
+.main-area { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; }
+
+/* ── Topbar ── */
+.topbar { height: var(--topbar-h); min-height: var(--topbar-h); background: var(--bg-surface); border-bottom: 1px solid var(--border-dim); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; z-index: 15; }
+.topbar-left { display: flex; align-items: center; gap: 12px; }
+.brand { font-weight: 700; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-300); }
+.brand-accent { color: var(--blue); }
+.topbar-sep { width: 1px; height: 18px; background: var(--border); }
+.topbar-title { font-size: 12px; font-weight: 500; color: var(--text-200); letter-spacing: 0.02em; }
+.topbar-right { display: flex; align-items: center; gap: 10px; }
+.topbar-badge { display: flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 20px; font-size: 10.5px; font-weight: 600; letter-spacing: 0.03em; }
+.badge-running { background: var(--blue-dim); color: var(--blue); border: 1px solid rgba(91,138,245,0.2); }
+.badge-running .pulse-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--blue); animation: pulseDot 1.8s ease-in-out infinite; }
+@keyframes pulseDot { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:0.4; transform:scale(0.7); } }
+.topbar-elapsed { font-size: 11px; font-weight: 500; color: var(--text-300); font-variant-numeric: tabular-nums; }
+
+/* ── Sidebar Inner ── */
+.sidebar-header { padding: 16px 16px 12px; border-bottom: 1px solid var(--border-dim); }
+.sidebar-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-400); margin-bottom: 8px; }
+.run-info { font-size: 11.5px; font-weight: 500; color: var(--text-200); }
+.run-meta { font-size: 10px; color: var(--text-400); margin-top: 2px; }
+.sidebar-nav { flex: 1; overflow-y: auto; padding: 8px 0; }
+.sidebar-nav::-webkit-scrollbar { width: 4px; }
+.sidebar-nav::-webkit-scrollbar-track { background: transparent; }
+.sidebar-nav::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+/* ── Tree Nodes ── */
+.tree-group { margin-bottom: 2px; }
+.tree-node { display: flex; align-items: center; gap: 8px; padding: 6px 12px 6px 0; cursor: pointer; transition: background var(--transition); position: relative; min-height: 40px; }
+.tree-node:hover { background: var(--bg-hover); }
+.tree-node.active { background: var(--bg-card-alt); }
+.tree-indent { display: flex; align-items: stretch; align-self: stretch; flex-shrink: 0; }
+.tree-indent-unit { width: 20px; position: relative; flex-shrink: 0; }
+.tree-indent-unit::before { content: ''; position: absolute; left: 50%; top: 0; bottom: 0; width: 1px; background: var(--border-dim); }
+.tree-indent-unit.last::before { bottom: 50%; }
+.tree-indent-unit.last::after { content: ''; position: absolute; left: 50%; top: 50%; width: 8px; height: 1px; background: var(--border-dim); }
+.tree-icon { width: 18px; height: 18px; border-radius: 4px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 9px; font-weight: 700; position: relative; }
+.tree-icon.completed { background: var(--green-dim); color: var(--green); border: 1px solid rgba(52,211,153,0.2); }
+.tree-icon.running { background: var(--blue-dim); color: var(--blue); border: 1px solid rgba(91,138,245,0.25); animation: iconPulse 2.4s ease-in-out infinite; }
+@keyframes iconPulse { 0%,100% { box-shadow:0 0 0 0 var(--blue-glow); } 50% { box-shadow:0 0 6px 2px var(--blue-glow); } }
+.tree-icon.pending { background: var(--bg-card); color: var(--text-500); border: 1px solid var(--border); }
+.tree-icon.error { background: var(--red-dim); color: var(--red); border: 1px solid rgba(248,113,113,0.2); }
+.tree-content { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.tree-label { font-size: 11.5px; font-weight: 500; color: var(--text-200); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tree-node.pending .tree-label { color: var(--text-400); }
+.tree-node.active .tree-label { color: var(--text-100); }
+.tree-sublabel { font-size: 9.5px; color: var(--text-400); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ── Sparkline ── */
+.sparkline-wrap { width: 40px; height: 12px; flex-shrink: 0; position: relative; border-radius: 2px; overflow: hidden; }
+.sparkline-wrap canvas { width: 40px; height: 12px; display: block; }
+
+/* ── Content Area ── */
+.content-area { flex: 1; overflow-y: auto; padding: 24px; position: relative; }
+.content-area::-webkit-scrollbar { width: 5px; }
+.content-area::-webkit-scrollbar-track { background: transparent; }
+.content-area::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+#treeCanvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+
+/* ── Detail Panel ── */
+.detail-panel { position: relative; z-index: 2; max-width: 720px; margin: 0 auto; }
+.detail-header { margin-bottom: 24px; }
+.detail-breadcrumb { display: flex; align-items: center; gap: 6px; font-size: 10.5px; color: var(--text-400); margin-bottom: 10px; }
+.detail-breadcrumb span { cursor: pointer; }
+.detail-breadcrumb span:hover { color: var(--text-300); }
+.detail-breadcrumb .bc-sep { color: var(--text-500); font-size: 9px; }
+.detail-title { font-size: 20px; font-weight: 600; color: var(--text-100); margin-bottom: 4px; }
+.detail-subtitle { font-size: 12px; color: var(--text-300); }
+
+/* ── Activity Card ── */
+.activity-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 16px; margin-bottom: 20px; }
+.activity-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.activity-card-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-300); }
+.activity-card-value { font-size: 11px; font-weight: 500; color: var(--text-400); font-variant-numeric: tabular-nums; }
+#activityChart { width: 100%; height: 80px; display: block; border-radius: var(--radius); }
+
+/* ── Stats Grid ── */
+.stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
+.stat-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; }
+.stat-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-400); margin-bottom: 6px; }
+.stat-value { font-size: 18px; font-weight: 600; color: var(--text-100); font-variant-numeric: tabular-nums; }
+.stat-sub { font-size: 10px; color: var(--text-400); margin-top: 2px; }
+
+/* ── Log Feed ── */
+.log-section { margin-bottom: 20px; }
+.log-section-header { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-300); margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border-dim); }
+.log-entry { display: flex; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border-dim); font-size: 11.5px; animation: logFadeIn 0.3s ease-out; }
+@keyframes logFadeIn { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:translateY(0); } }
+.log-time { font-size: 10px; color: var(--text-500); font-variant-numeric: tabular-nums; flex-shrink: 0; width: 56px; padding-top: 1px; }
+.log-indicator { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; margin-top: 5px; }
+.log-indicator.info { background: var(--blue); }
+.log-indicator.success { background: var(--green); }
+.log-indicator.warn { background: var(--amber); }
+.log-indicator.error { background: var(--red); }
+.log-indicator.neutral { background: var(--text-400); }
+.log-msg { flex: 1; color: var(--text-200); line-height: 1.4; }
+.log-msg .highlight { color: var(--blue); font-weight: 500; }
+.log-msg .dim { color: var(--text-400); }
+
+/* ── Sub-Module Cards ── */
+.submod-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 20px; }
+.submod-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; cursor: pointer; transition: all var(--transition); }
+.submod-card:hover { border-color: var(--border-lite); background: var(--bg-card-alt); }
+.submod-card-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.submod-card-name { font-size: 11.5px; font-weight: 500; color: var(--text-200); }
+.submod-card-status { font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 6px; border-radius: 3px; }
+.submod-card-status.completed { background: var(--green-dim); color: var(--green); }
+.submod-card-status.running { background: var(--blue-dim); color: var(--blue); }
+.submod-card-status.pending { background: var(--bg-elevated); color: var(--text-400); }
+.submod-card-sparkline { width: 100%; height: 20px; display: block; border-radius: 3px; }
+
+/* ── Progress Bar ── */
+.sidebar-footer { padding: 12px 16px; border-top: 1px solid var(--border-dim); background: var(--bg-surface); }
+.progress-label { display: flex; justify-content: space-between; font-size: 10px; font-weight: 600; color: var(--text-300); margin-bottom: 6px; }
+.progress-track { height: 3px; background: var(--bg-card); border-radius: 2px; overflow: hidden; }
+.progress-fill { height: 100%; border-radius: 2px; background: linear-gradient(90deg, var(--green), var(--blue)); transition: width 1s ease-out; position: relative; }
+.progress-fill::after { content: ''; position: absolute; right: 0; top: -1px; bottom: -1px; width: 12px; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3)); animation: shimmer 2s ease-in-out infinite; }
+@keyframes shimmer { 0%,100% { opacity:0; } 50% { opacity:1; } }
+
+/* ── Particle Layer & Ambient ── */
+#particleLayer { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 50; }
+.ambient-glow { position: fixed; pointer-events: none; z-index: 0; }
+.ambient-glow-1 { width: 600px; height: 600px; top: -200px; left: -200px; background: radial-gradient(circle, rgba(91,138,245,0.04) 0%, transparent 70%); }
+.ambient-glow-2 { width: 500px; height: 500px; bottom: -150px; right: -150px; background: radial-gradient(circle, rgba(52,211,153,0.03) 0%, transparent 70%); }
+
+/* ── Tooltip ── */
+#tooltip { position: fixed; z-index: 200; pointer-events: none; background: var(--bg-elevated); border: 1px solid var(--border-lite); border-radius: var(--radius); padding: 8px 12px; font-size: 11px; color: var(--text-200); opacity: 0; transition: opacity 0.15s ease; max-width: 200px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+#tooltip.visible { opacity: 1; }
+#tooltip .tt-title { font-weight: 600; color: var(--text-100); margin-bottom: 2px; }
+#tooltip .tt-line { font-size: 10px; color: var(--text-300); }
+</style>
+</head>
+<body>
+
+<div class="ambient-glow ambient-glow-1"></div>
+<div class="ambient-glow ambient-glow-2"></div>
+
+<div class="shell">
+  <!-- ── Sidebar ── -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-label">Pipeline Run</div>
+      <div class="run-info">Hypothesis Batch #47</div>
+      <div class="run-meta">Started 12m 34s ago</div>
+    </div>
+    <nav class="sidebar-nav" id="treeNav"></nav>
+    <div class="sidebar-footer">
+      <div class="progress-label">
+        <span>Overall Progress</span>
+        <span id="progressPct">0%</span>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── Main ── -->
+  <div class="main-area">
+    <header class="topbar">
+      <div class="topbar-left">
+        <span class="brand"><span class="brand-accent">AI</span> Inventor</span>
+        <div class="topbar-sep"></div>
+        <span class="topbar-title" id="topTitle">Pipeline Overview</span>
+      </div>
+      <div class="topbar-right">
+        <div class="topbar-badge badge-running">
+          <div class="pulse-dot"></div>
+          Running
+        </div>
+        <div class="topbar-elapsed" id="elapsed">00:12:34</div>
+      </div>
+    </header>
+
+    <div class="content-area" id="contentArea">
+      <canvas id="treeCanvas"></canvas>
+      <div class="detail-panel" id="detailPanel"></div>
+    </div>
+  </div>
+</div>
+
+<canvas id="particleLayer"></canvas>
+<div id="tooltip"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// DATA MODEL
+// ═══════════════════════════════════════════════════════════════
+
+const PIPELINE = [
+  {
+    id: 'seed',
+    label: 'Seed Hypotheses',
+    status: 'completed',
+    duration: '1m 42s',
+    tokens: 48200,
+    children: [
+      { id: 'seed_kg', label: 'Build Knowledge Graph', status: 'completed', duration: '0m 38s', tokens: 12400 },
+      { id: 'seed_gen', label: 'Generate Candidates', status: 'completed', duration: '0m 52s', tokens: 28600 },
+      { id: 'seed_dedup', label: 'Deduplicate & Filter', status: 'completed', duration: '0m 12s', tokens: 7200 },
+    ]
+  },
+  {
+    id: 'hypo',
+    label: 'Hypothesis Loop',
+    status: 'completed',
+    duration: '4m 18s',
+    tokens: 186400,
+    children: [
+      { id: 'hypo_expand', label: 'Expand Hypotheses', status: 'completed', duration: '1m 04s', tokens: 42000 },
+      { id: 'hypo_review', label: 'Review & Critique', status: 'completed', duration: '1m 56s', tokens: 78200 },
+      { id: 'hypo_refine', label: 'Refine Hypotheses', status: 'completed', duration: '0m 48s', tokens: 38600 },
+      { id: 'hypo_select', label: 'Select Top-K', status: 'completed', duration: '0m 30s', tokens: 27600 },
+    ]
+  },
+  {
+    id: 'invent',
+    label: 'Invention Loop',
+    status: 'running',
+    duration: '5m 12s',
+    tokens: 224800,
+    children: [
+      { id: 'inv_strat', label: 'Generate Strategy', status: 'completed', duration: '1m 22s', tokens: 52000 },
+      { id: 'inv_plan', label: 'Generate Plan', status: 'completed', duration: '1m 48s', tokens: 68400 },
+      { id: 'inv_draft', label: 'Draft Paper Text', status: 'running', duration: '2m 02s', tokens: 104400 },
+      { id: 'inv_review', label: 'Review Paper', status: 'pending', duration: '--', tokens: 0 },
+    ]
+  },
+  {
+    id: 'paper',
+    label: 'Paper Generation',
+    status: 'pending',
+    duration: '--',
+    tokens: 0,
+    children: [
+      { id: 'paper_artifacts', label: 'Generate Artifacts', status: 'pending', duration: '--', tokens: 0 },
+      { id: 'paper_viz', label: 'Generate Visualizations', status: 'pending', duration: '--', tokens: 0 },
+      { id: 'paper_compile', label: 'Compile Full Paper', status: 'pending', duration: '--', tokens: 0 },
+      { id: 'paper_export', label: 'Export Repository', status: 'pending', duration: '--', tokens: 0 },
+    ]
+  }
+];
+
+// ═══════════════════════════════════════════════════════════════
+// SPARKLINE DATA GENERATOR
+// ═══════════════════════════════════════════════════════════════
+
+function generateSparkData(status, points) {
+  const n = points || 20;
+  const data = [];
+
+  if (status === 'pending') {
+    for (let i = 0; i < n; i++) data.push(0);
+    return data;
+  }
+
+  if (status === 'completed') {
+    // Generate a completed activity pattern: ramp up, plateau, ramp down
+    for (let i = 0; i < n; i++) {
+      const t = i / (n - 1);
+      const base = Math.sin(t * Math.PI) * 0.7;
+      const noise = (Math.random() - 0.5) * 0.3;
+      data.push(Math.max(0.05, Math.min(1, base + noise)));
+    }
+    return data;
+  }
+
+  if (status === 'running') {
+    // Partial data: only first ~60% filled, rest will animate
+    const filled = Math.floor(n * 0.6);
+    for (let i = 0; i < filled; i++) {
+      const t = i / (n - 1);
+      const base = 0.3 + Math.sin(t * Math.PI * 1.5) * 0.4;
+      const noise = (Math.random() - 0.5) * 0.25;
+      data.push(Math.max(0.1, Math.min(1, base + noise)));
+    }
+    return data;
+  }
+
+  return data;
+}
+
+// Attach sparkline data to all nodes
+function initSparkData() {
+  PIPELINE.forEach(group => {
+    group.sparkData = generateSparkData(group.status, 24);
+    group.children.forEach(child => {
+      child.sparkData = generateSparkData(child.status, 20);
+    });
+  });
+}
+initSparkData();
+
+// ═══════════════════════════════════════════════════════════════
+// SPARKLINE RENDERER
+// ═══════════════════════════════════════════════════════════════
+
+function statusColor(status) {
+  switch (status) {
+    case 'completed': return { line: '#34d399', fill: 'rgba(52,211,153,0.15)', glow: 'rgba(52,211,153,0.4)' };
+    case 'running':   return { line: '#5b8af5', fill: 'rgba(91,138,245,0.15)', glow: 'rgba(91,138,245,0.5)' };
+    case 'pending':   return { line: '#4e5268', fill: 'rgba(78,82,104,0.08)', glow: 'rgba(78,82,104,0.2)' };
+    case 'error':     return { line: '#f87171', fill: 'rgba(248,113,113,0.15)', glow: 'rgba(248,113,113,0.4)' };
+    default:          return { line: '#4e5268', fill: 'rgba(78,82,104,0.08)', glow: 'rgba(78,82,104,0.2)' };
+  }
+}
+
+function drawSparkline(canvas, data, status, time) {
+  if (!canvas) return;
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth;
+  const h = canvas.clientHeight;
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  const colors = statusColor(status);
+  const n = data.length;
+  if (n < 2) return;
+
+  const padY = 1.5;
+  const usableH = h - padY * 2;
+
+  // For pending: draw flat dashed line
+  if (status === 'pending') {
+    ctx.beginPath();
+    ctx.setLineDash([2, 3]);
+    ctx.strokeStyle = colors.line;
+    ctx.lineWidth = 0.8;
+    ctx.moveTo(0, h / 2);
+    ctx.lineTo(w, h / 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    return;
+  }
+
+  // For running: animate the drawing progress
+  let drawCount = n;
+  if (status === 'running') {
+    const cycle = (time % 4000) / 4000;
+    const extra = Math.floor(cycle * 8);
+    drawCount = Math.min(n, data.length + extra);
+
+    // Add new points dynamically
+    while (data.length < drawCount) {
+      const lastVal = data[data.length - 1] || 0.5;
+      const newVal = Math.max(0.1, Math.min(1, lastVal + (Math.random() - 0.5) * 0.3));
+      data.push(newVal);
+    }
+    drawCount = data.length;
+  }
+
+  // Build path points
+  const points = [];
+  const stepX = w / (Math.max(drawCount, 2) - 1);
+  for (let i = 0; i < drawCount; i++) {
+    const x = i * stepX;
+    const y = padY + (1 - data[i]) * usableH;
+    points.push({ x, y });
+  }
+
+  // Draw filled area
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, h);
+  for (const p of points) ctx.lineTo(p.x, p.y);
+  ctx.lineTo(points[points.length - 1].x, h);
+  ctx.closePath();
+  ctx.fillStyle = colors.fill;
+  ctx.fill();
+
+  // Draw line
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, points[0].y);
+  for (let i = 1; i < points.length; i++) {
+    const prev = points[i - 1];
+    const curr = points[i];
+    const cpx = (prev.x + curr.x) / 2;
+    ctx.quadraticCurveTo(prev.x + (cpx - prev.x) * 0.5, prev.y, cpx, (prev.y + curr.y) / 2);
+    ctx.quadraticCurveTo(curr.x - (curr.x - cpx) * 0.5, curr.y, curr.x, curr.y);
+  }
+  ctx.strokeStyle = colors.line;
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+
+  // Running: glow dot at the end
+  if (status === 'running' && points.length > 0) {
+    const last = points[points.length - 1];
+    const pulse = 0.5 + Math.sin(time * 0.005) * 0.5;
+
+    ctx.beginPath();
+    ctx.arc(last.x, last.y, 2.5 + pulse, 0, Math.PI * 2);
+    ctx.fillStyle = colors.glow;
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(last.x, last.y, 1.5, 0, Math.PI * 2);
+    ctx.fillStyle = colors.line;
+    ctx.fill();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TREE NAVIGATION BUILDER
+// ═══════════════════════════════════════════════════════════════
+
+const treeNav = document.getElementById('treeNav');
+const sparklineCanvases = [];
+let activeNodeId = 'inv_draft'; // Currently selected
+
+function buildTree() {
+  treeNav.innerHTML = '';
+  sparklineCanvases.length = 0;
+
+  PIPELINE.forEach((group, gi) => {
+    const groupDiv = document.createElement('div');
+    groupDiv.className = 'tree-group';
+
+    // Parent node
+    const parentNode = createTreeNode(group, 0, gi, true);
+    groupDiv.appendChild(parentNode);
+
+    // Children
+    group.children.forEach((child, ci) => {
+      const isLast = ci === group.children.length - 1;
+      const childNode = createTreeNode(child, 1, ci, false, isLast);
+      groupDiv.appendChild(childNode);
+    });
+
+    treeNav.appendChild(groupDiv);
+  });
+}
+
+function createTreeNode(item, depth, index, isParent, isLast) {
+  const div = document.createElement('div');
+  div.className = `tree-node ${item.status}${item.id === activeNodeId ? ' active' : ''}`;
+  div.dataset.id = item.id;
+
+  // Indent
+  if (depth > 0) {
+    const indent = document.createElement('div');
+    indent.className = 'tree-indent';
+    const unit = document.createElement('div');
+    unit.className = `tree-indent-unit${isLast ? ' last' : ''}`;
+    indent.appendChild(unit);
+    div.appendChild(indent);
+  }
+
+  // Icon
+  const icon = document.createElement('div');
+  icon.className = `tree-icon ${item.status}`;
+  if (item.status === 'completed') {
+    icon.innerHTML = '<svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  } else if (item.status === 'running') {
+    icon.innerHTML = '<svg width="10" height="10" viewBox="0 0 10 10" fill="none"><circle cx="5" cy="5" r="2.5" stroke="currentColor" stroke-width="1.2" stroke-dasharray="3 2"><animateTransform attributeName="transform" type="rotate" from="0 5 5" to="360 5 5" dur="1.5s" repeatCount="indefinite"/></circle></svg>';
+  } else if (item.status === 'pending') {
+    icon.innerHTML = '<svg width="10" height="10" viewBox="0 0 10 10" fill="none"><circle cx="5" cy="5" r="2" stroke="currentColor" stroke-width="1" stroke-dasharray="1.5 2"/></svg>';
+  }
+  div.appendChild(icon);
+
+  // Content
+  const content = document.createElement('div');
+  content.className = 'tree-content';
+
+  const label = document.createElement('div');
+  label.className = 'tree-label';
+  label.textContent = item.label;
+  content.appendChild(label);
+
+  if (isParent && item.status !== 'pending') {
+    const sub = document.createElement('div');
+    sub.className = 'tree-sublabel';
+    sub.textContent = item.duration !== '--' ? item.duration : '';
+    content.appendChild(sub);
+  }
+
+  div.appendChild(content);
+
+  // Sparkline
+  const sparkWrap = document.createElement('div');
+  sparkWrap.className = 'sparkline-wrap';
+  const sparkCanvas = document.createElement('canvas');
+  sparkCanvas.width = 80;
+  sparkCanvas.height = 24;
+  sparkWrap.appendChild(sparkCanvas);
+  div.appendChild(sparkWrap);
+
+  sparklineCanvases.push({ canvas: sparkCanvas, data: item.sparkData, status: item.status, id: item.id });
+
+  // Click handler
+  div.addEventListener('click', () => selectNode(item.id));
+
+  // Tooltip on hover
+  div.addEventListener('mouseenter', (e) => showTooltip(e, item));
+  div.addEventListener('mouseleave', hideTooltip);
+
+  return div;
+}
+
+function selectNode(id) {
+  activeNodeId = id;
+  document.querySelectorAll('.tree-node').forEach(n => {
+    n.classList.toggle('active', n.dataset.id === id);
+  });
+  renderDetail(id);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TOOLTIP
+// ═══════════════════════════════════════════════════════════════
+
+const tooltip = document.getElementById('tooltip');
+
+function showTooltip(e, item) {
+  const rect = e.currentTarget.getBoundingClientRect();
+  tooltip.innerHTML = `
+    <div class="tt-title">${item.label}</div>
+    <div class="tt-line">Status: ${item.status}</div>
+    ${item.duration !== '--' ? `<div class="tt-line">Duration: ${item.duration}</div>` : ''}
+    ${item.tokens ? `<div class="tt-line">Tokens: ${item.tokens.toLocaleString()}</div>` : ''}
+  `;
+  tooltip.style.left = (rect.right + 12) + 'px';
+  tooltip.style.top = (rect.top + rect.height / 2 - 30) + 'px';
+  tooltip.classList.add('visible');
+}
+
+function hideTooltip() {
+  tooltip.classList.remove('visible');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DETAIL PANEL RENDERER
+// ═══════════════════════════════════════════════════════════════
+
+const detailPanel = document.getElementById('detailPanel');
+let detailSparkCanvases = [];
+
+function findItem(id) {
+  for (const g of PIPELINE) {
+    if (g.id === id) return { item: g, parent: null };
+    for (const c of g.children) {
+      if (c.id === id) return { item: c, parent: g };
+    }
+  }
+  return null;
+}
+
+function renderDetail(id) {
+  detailSparkCanvases = [];
+  const found = findItem(id);
+  if (!found) return;
+
+  const { item, parent } = found;
+  const isParent = parent === null;
+
+  // Breadcrumb
+  let breadcrumb = '<span>Pipeline</span>';
+  if (parent) {
+    breadcrumb += `<span class="bc-sep">/</span><span onclick="selectNode('${parent.id}')">${parent.label}</span>`;
+  }
+  breadcrumb += `<span class="bc-sep">/</span><span>${item.label}</span>`;
+
+  // Stats
+  const totalTokens = isParent
+    ? item.children.reduce((s, c) => s + c.tokens, 0)
+    : item.tokens;
+  const completedCount = isParent
+    ? item.children.filter(c => c.status === 'completed').length
+    : (item.status === 'completed' ? 1 : 0);
+  const totalCount = isParent ? item.children.length : 1;
+
+  // Logs
+  const logs = generateLogs(item);
+
+  let html = `
+    <div class="detail-header">
+      <div class="detail-breadcrumb">${breadcrumb}</div>
+      <div class="detail-title">${item.label}</div>
+      <div class="detail-subtitle">Status: ${item.status} | Duration: ${item.duration}</div>
+    </div>
+
+    <div class="activity-card">
+      <div class="activity-card-header">
+        <span class="activity-card-title">Activity Over Time</span>
+        <span class="activity-card-value">${totalTokens.toLocaleString()} tokens</span>
+      </div>
+      <canvas id="activityChart"></canvas>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">Tokens Used</div>
+        <div class="stat-value">${(totalTokens / 1000).toFixed(1)}k</div>
+        <div class="stat-sub">input + output</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Duration</div>
+        <div class="stat-value">${item.duration}</div>
+        <div class="stat-sub">${item.status === 'running' ? 'still running' : item.status}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Sub-modules</div>
+        <div class="stat-value">${completedCount}/${totalCount}</div>
+        <div class="stat-sub">completed</div>
+      </div>
+    </div>
+  `;
+
+  // Sub-module cards if parent
+  if (isParent && item.children.length > 0) {
+    html += '<div class="submod-grid">';
+    item.children.forEach(child => {
+      html += `
+        <div class="submod-card" onclick="selectNode('${child.id}')">
+          <div class="submod-card-top">
+            <span class="submod-card-name">${child.label}</span>
+            <span class="submod-card-status ${child.status}">${child.status}</span>
+          </div>
+          <canvas class="submod-card-sparkline" data-child-id="${child.id}"></canvas>
+        </div>
+      `;
+    });
+    html += '</div>';
+  }
+
+  // Log feed
+  html += `
+    <div class="log-section">
+      <div class="log-section-header">Recent Activity</div>
+      ${logs.map(l => `
+        <div class="log-entry">
+          <span class="log-time">${l.time}</span>
+          <span class="log-indicator ${l.type}"></span>
+          <span class="log-msg">${l.msg}</span>
+        </div>
+      `).join('')}
+    </div>
+  `;
+
+  detailPanel.innerHTML = html;
+
+  // Set up the activity chart canvas
+  const actChart = document.getElementById('activityChart');
+  if (actChart) {
+    const actData = generateSparkData(item.status, 60);
+    detailSparkCanvases.push({ canvas: actChart, data: actData, status: item.status, isLarge: true });
+  }
+
+  // Set up submod card sparklines
+  document.querySelectorAll('.submod-card-sparkline').forEach(canvas => {
+    const childId = canvas.dataset.childId;
+    const child = item.children.find(c => c.id === childId);
+    if (child) {
+      const childData = generateSparkData(child.status, 30);
+      detailSparkCanvases.push({ canvas, data: childData, status: child.status, isLarge: false });
+    }
+  });
+}
+
+function generateLogs(item) {
+  const entries = [];
+  const base = ['08:22:', '08:23:', '08:24:', '08:25:', '08:26:', '08:27:'];
+
+  if (item.status === 'completed') {
+    entries.push({ time: base[0] + '14', type: 'info', msg: `Initialized <span class="highlight">${item.label}</span>` });
+    entries.push({ time: base[1] + '02', type: 'info', msg: `Loading context from upstream modules <span class="dim">(${(item.tokens * 0.3).toFixed(0)} tokens)</span>` });
+    entries.push({ time: base[2] + '18', type: 'info', msg: 'Agent processing started' });
+    entries.push({ time: base[3] + '44', type: 'success', msg: `Generation complete <span class="dim">(${item.tokens.toLocaleString()} tokens total)</span>` });
+    entries.push({ time: base[4] + '01', type: 'success', msg: `Module <span class="highlight">${item.label}</span> finished successfully` });
+  } else if (item.status === 'running') {
+    entries.push({ time: base[0] + '14', type: 'info', msg: `Initialized <span class="highlight">${item.label}</span>` });
+    entries.push({ time: base[1] + '02', type: 'info', msg: 'Loading upstream context and building prompt' });
+    entries.push({ time: base[2] + '18', type: 'info', msg: `Agent call in progress <span class="dim">(${item.tokens.toLocaleString()} tokens so far)</span>` });
+    entries.push({ time: base[3] + '44', type: 'warn', msg: 'Token usage approaching budget threshold' });
+  } else {
+    entries.push({ time: '--:--:--', type: 'neutral', msg: `Waiting for upstream dependencies` });
+  }
+
+  return entries;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// TREE-PATH CANVAS (connections + particles)
+// ═══════════════════════════════════════════════════════════════
+
+const treeCanvas = document.getElementById('treeCanvas');
+const treeCtx = treeCanvas.getContext('2d');
+
+function resizeTreeCanvas() {
+  const area = document.getElementById('contentArea');
+  const dpr = window.devicePixelRatio || 1;
+  treeCanvas.width = area.clientWidth * dpr;
+  treeCanvas.height = area.clientHeight * dpr;
+  treeCanvas.style.width = area.clientWidth + 'px';
+  treeCanvas.style.height = area.clientHeight + 'px';
+  treeCtx.scale(dpr, dpr);
+}
+
+// Tree path nodes for the main canvas visualization
+const treePathNodes = [];
+const treePathParticles = [];
+
+function buildTreePaths() {
+  treePathNodes.length = 0;
+  treePathParticles.length = 0;
+
+  const area = document.getElementById('contentArea');
+  const aw = area.clientWidth;
+  const ah = area.clientHeight;
+  const cx = aw / 2;
+  const cy = ah / 2;
+
+  // Central hub
+  treePathNodes.push({
+    x: cx, y: cy - 60,
+    radius: 28,
+    label: 'Pipeline',
+    status: 'running',
+    id: '__root'
+  });
+
+  // Position groups around the center
+  const groupPositions = [
+    { x: cx - 220, y: cy - 180 },
+    { x: cx + 220, y: cy - 180 },
+    { x: cx - 220, y: cy + 120 },
+    { x: cx + 220, y: cy + 120 },
+  ];
+
+  PIPELINE.forEach((group, i) => {
+    const pos = groupPositions[i];
+    treePathNodes.push({
+      x: pos.x, y: pos.y,
+      radius: 22,
+      label: group.label,
+      status: group.status,
+      id: group.id,
+      parentIdx: 0
+    });
+
+    const parentIdx = treePathNodes.length - 1;
+
+    // Children spread around the group
+    const childCount = group.children.length;
+    const spread = 50;
+    const startAngle = i < 2 ? -Math.PI * 0.3 : Math.PI * 0.3;
+    const arcSpan = Math.PI * 0.6;
+
+    group.children.forEach((child, ci) => {
+      const angle = startAngle + (ci / Math.max(1, childCount - 1)) * arcSpan;
+      const dist = 70 + ci * 12;
+      const offsetX = (i % 2 === 0 ? -1 : 1) * 30;
+      const offsetY = i < 2 ? -1 : 1;
+
+      treePathNodes.push({
+        x: pos.x + Math.cos(angle) * dist + offsetX,
+        y: pos.y + Math.sin(angle) * dist * offsetY,
+        radius: 14,
+        label: child.label,
+        status: child.status,
+        id: child.id,
+        parentIdx
+      });
+    });
+  });
+
+  // Create particles along paths
+  for (let i = 1; i < treePathNodes.length; i++) {
+    const node = treePathNodes[i];
+    if (node.parentIdx !== undefined) {
+      const parent = treePathNodes[node.parentIdx];
+      if (node.status === 'completed' || node.status === 'running') {
+        for (let p = 0; p < 3; p++) {
+          treePathParticles.push({
+            fromIdx: node.parentIdx,
+            toIdx: i,
+            progress: Math.random(),
+            speed: 0.003 + Math.random() * 0.004,
+            status: node.status,
+            size: 1.5 + Math.random() * 1.5
+          });
+        }
+      }
+    }
+  }
+}
+
+function drawTreePaths(time) {
+  const area = document.getElementById('contentArea');
+  const w = area.clientWidth;
+  const h = area.clientHeight;
+  treeCtx.clearRect(0, 0, w, h);
+
+  // Draw connections
+  for (let i = 1; i < treePathNodes.length; i++) {
+    const node = treePathNodes[i];
+    if (node.parentIdx === undefined) continue;
+    const parent = treePathNodes[node.parentIdx];
+    const colors = statusColor(node.status);
+
+    treeCtx.beginPath();
+    treeCtx.moveTo(parent.x, parent.y);
+
+    // Curved connection
+    const mx = (parent.x + node.x) / 2;
+    const my = (parent.y + node.y) / 2;
+    const ctrl1x = parent.x + (mx - parent.x) * 0.8;
+    const ctrl1y = parent.y;
+    const ctrl2x = node.x - (node.x - mx) * 0.8;
+    const ctrl2y = node.y;
+    treeCtx.bezierCurveTo(ctrl1x, ctrl1y, ctrl2x, ctrl2y, node.x, node.y);
+
+    treeCtx.strokeStyle = node.status === 'pending'
+      ? 'rgba(78,82,104,0.15)'
+      : colors.fill.replace(/[\d.]+\)$/, '0.35)');
+    treeCtx.lineWidth = node.status === 'pending' ? 0.8 : 1.2;
+    if (node.status === 'pending') {
+      treeCtx.setLineDash([3, 5]);
+    }
+    treeCtx.stroke();
+    treeCtx.setLineDash([]);
+  }
+
+  // Draw particles
+  treePathParticles.forEach(p => {
+    p.progress += p.speed;
+    if (p.progress > 1) p.progress -= 1;
+
+    const from = treePathNodes[p.fromIdx];
+    const to = treePathNodes[p.toIdx];
+
+    const t = p.progress;
+    const mx = (from.x + to.x) / 2;
+    const ctrl1x = from.x + (mx - from.x) * 0.8;
+    const ctrl1y = from.y;
+    const ctrl2x = to.x - (to.x - mx) * 0.8;
+    const ctrl2y = to.y;
+
+    // Cubic bezier position
+    const tt = 1 - t;
+    const px = tt*tt*tt*from.x + 3*tt*tt*t*ctrl1x + 3*tt*t*t*ctrl2x + t*t*t*to.x;
+    const py = tt*tt*tt*from.y + 3*tt*tt*t*ctrl1y + 3*tt*t*t*ctrl2y + t*t*t*to.y;
+
+    const colors = statusColor(p.status);
+    const alpha = 0.4 + Math.sin(time * 0.003 + p.progress * 10) * 0.3;
+
+    treeCtx.beginPath();
+    treeCtx.arc(px, py, p.size, 0, Math.PI * 2);
+    treeCtx.fillStyle = colors.line.replace(')', `,${alpha})`).replace('rgb', 'rgba');
+    treeCtx.fill();
+
+    // Glow
+    treeCtx.beginPath();
+    treeCtx.arc(px, py, p.size * 3, 0, Math.PI * 2);
+    treeCtx.fillStyle = colors.glow.replace(/[\d.]+\)$/, `${alpha * 0.3})`);
+    treeCtx.fill();
+  });
+
+  // Draw nodes
+  treePathNodes.forEach((node, idx) => {
+    const colors = statusColor(node.status);
+    const isHovered = hoveredCanvasNode === idx;
+    const isRoot = idx === 0;
+    const r = node.radius + (isHovered ? 3 : 0);
+
+    // Glow for active/running
+    if (node.status === 'running') {
+      const glowPulse = 0.3 + Math.sin(time * 0.003) * 0.15;
+      treeCtx.beginPath();
+      treeCtx.arc(node.x, node.y, r + 8, 0, Math.PI * 2);
+      treeCtx.fillStyle = colors.glow.replace(/[\d.]+\)$/, `${glowPulse})`);
+      treeCtx.fill();
+    }
+
+    // Node circle
+    treeCtx.beginPath();
+    treeCtx.arc(node.x, node.y, r, 0, Math.PI * 2);
+    treeCtx.fillStyle = isRoot ? 'rgba(30,34,48,0.9)' : 'rgba(26,29,38,0.85)';
+    treeCtx.fill();
+    treeCtx.strokeStyle = node.status === 'pending'
+      ? 'rgba(78,82,104,0.3)'
+      : colors.line.replace(')', ',0.5)').replace('rgb', 'rgba');
+    treeCtx.lineWidth = isHovered ? 2 : 1.2;
+    treeCtx.stroke();
+
+    // Status indicator inside
+    if (node.status === 'completed') {
+      treeCtx.beginPath();
+      const cx = node.x, cy = node.y;
+      const s = r * 0.35;
+      treeCtx.moveTo(cx - s, cy);
+      treeCtx.lineTo(cx - s * 0.2, cy + s * 0.7);
+      treeCtx.lineTo(cx + s, cy - s * 0.5);
+      treeCtx.strokeStyle = colors.line;
+      treeCtx.lineWidth = 1.5;
+      treeCtx.lineCap = 'round';
+      treeCtx.lineJoin = 'round';
+      treeCtx.stroke();
+    } else if (node.status === 'running') {
+      const angle = (time * 0.003) % (Math.PI * 2);
+      treeCtx.beginPath();
+      treeCtx.arc(node.x, node.y, r * 0.4, angle, angle + Math.PI * 1.4);
+      treeCtx.strokeStyle = colors.line;
+      treeCtx.lineWidth = 1.5;
+      treeCtx.lineCap = 'round';
+      treeCtx.stroke();
+    } else if (node.status === 'pending') {
+      treeCtx.beginPath();
+      treeCtx.arc(node.x, node.y, r * 0.25, 0, Math.PI * 2);
+      treeCtx.strokeStyle = colors.line;
+      treeCtx.lineWidth = 1;
+      treeCtx.setLineDash([2, 2]);
+      treeCtx.stroke();
+      treeCtx.setLineDash([]);
+    }
+
+    // Label (only for group-level nodes and root)
+    if (isRoot || node.radius >= 22) {
+      treeCtx.font = `${isRoot ? 500 : 400} ${isRoot ? 10 : 9}px Inter, sans-serif`;
+      treeCtx.fillStyle = node.status === 'pending' ? 'rgba(78,82,104,0.6)' : 'rgba(228,230,238,0.7)';
+      treeCtx.textAlign = 'center';
+      treeCtx.textBaseline = 'top';
+      treeCtx.fillText(node.label, node.x, node.y + r + 6);
+    }
+  });
+}
+
+// Canvas hover detection
+let hoveredCanvasNode = -1;
+
+function handleCanvasHover(e) {
+  const area = document.getElementById('contentArea');
+  const rect = area.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  let found = -1;
+
+  for (let i = 0; i < treePathNodes.length; i++) {
+    const node = treePathNodes[i];
+    const dx = mx - node.x;
+    const dy = my - node.y;
+    if (dx * dx + dy * dy < (node.radius + 5) * (node.radius + 5)) {
+      found = i;
+      break;
+    }
+  }
+
+  hoveredCanvasNode = found;
+  document.getElementById('contentArea').style.cursor = found >= 0 ? 'pointer' : 'default';
+
+  if (found >= 0) {
+    const node = treePathNodes[found];
+    const item = findItem(node.id);
+    if (item && node.id !== '__root') {
+      tooltip.innerHTML = `
+        <div class="tt-title">${item.item.label}</div>
+        <div class="tt-line">Status: ${item.item.status}</div>
+        ${item.item.duration !== '--' ? `<div class="tt-line">Duration: ${item.item.duration}</div>` : ''}
+      `;
+      tooltip.style.left = (e.clientX + 14) + 'px';
+      tooltip.style.top = (e.clientY - 10) + 'px';
+      tooltip.classList.add('visible');
+    }
+  } else {
+    tooltip.classList.remove('visible');
+  }
+}
+
+function handleCanvasClick(e) {
+  if (hoveredCanvasNode >= 0) {
+    const node = treePathNodes[hoveredCanvasNode];
+    if (node.id !== '__root') {
+      selectNode(node.id);
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FLOATING PARTICLE LAYER
+// ═══════════════════════════════════════════════════════════════
+
+const particleCanvas = document.getElementById('particleLayer');
+const particleCtx = particleCanvas.getContext('2d');
+const floatingParticles = [];
+
+function resizeParticleLayer() {
+  const dpr = window.devicePixelRatio || 1;
+  particleCanvas.width = window.innerWidth * dpr;
+  particleCanvas.height = window.innerHeight * dpr;
+  particleCanvas.style.width = window.innerWidth + 'px';
+  particleCanvas.style.height = window.innerHeight + 'px';
+  particleCtx.scale(dpr, dpr);
+}
+
+function initFloatingParticles() {
+  floatingParticles.length = 0;
+  for (let i = 0; i < 35; i++) {
+    floatingParticles.push({
+      x: Math.random() * window.innerWidth,
+      y: Math.random() * window.innerHeight,
+      vx: (Math.random() - 0.5) * 0.15,
+      vy: (Math.random() - 0.5) * 0.12,
+      size: 0.8 + Math.random() * 1.2,
+      alpha: 0.05 + Math.random() * 0.1,
+      phase: Math.random() * Math.PI * 2
+    });
+  }
+}
+
+function drawFloatingParticles(time) {
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  particleCtx.clearRect(0, 0, w, h);
+
+  floatingParticles.forEach(p => {
+    p.x += p.vx + Math.sin(time * 0.0003 + p.phase) * 0.05;
+    p.y += p.vy + Math.cos(time * 0.0004 + p.phase) * 0.04;
+
+    if (p.x < -10) p.x = w + 10;
+    if (p.x > w + 10) p.x = -10;
+    if (p.y < -10) p.y = h + 10;
+    if (p.y > h + 10) p.y = -10;
+
+    const pulse = p.alpha + Math.sin(time * 0.002 + p.phase) * 0.03;
+    particleCtx.beginPath();
+    particleCtx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    particleCtx.fillStyle = `rgba(91,138,245,${pulse})`;
+    particleCtx.fill();
+  });
+
+  // Connect nearby particles with faint lines
+  for (let i = 0; i < floatingParticles.length; i++) {
+    for (let j = i + 1; j < floatingParticles.length; j++) {
+      const a = floatingParticles[i];
+      const b = floatingParticles[j];
+      const dx = a.x - b.x;
+      const dy = a.y - b.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 120) {
+        const alpha = (1 - dist / 120) * 0.04;
+        particleCtx.beginPath();
+        particleCtx.moveTo(a.x, a.y);
+        particleCtx.lineTo(b.x, b.y);
+        particleCtx.strokeStyle = `rgba(91,138,245,${alpha})`;
+        particleCtx.lineWidth = 0.5;
+        particleCtx.stroke();
+      }
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ELAPSED TIMER
+// ═══════════════════════════════════════════════════════════════
+
+let startTime = Date.now() - 754000; // 12:34 offset
+const elapsedEl = document.getElementById('elapsed');
+
+function updateElapsed() {
+  const diff = Date.now() - startTime;
+  const s = Math.floor(diff / 1000) % 60;
+  const m = Math.floor(diff / 60000) % 60;
+  const h = Math.floor(diff / 3600000);
+  elapsedEl.textContent =
+    String(h).padStart(2, '0') + ':' +
+    String(m).padStart(2, '0') + ':' +
+    String(s).padStart(2, '0');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PROGRESS TRACKER
+// ═══════════════════════════════════════════════════════════════
+
+function updateProgress() {
+  let total = 0;
+  let done = 0;
+  PIPELINE.forEach(g => {
+    g.children.forEach(c => {
+      total++;
+      if (c.status === 'completed') done++;
+      else if (c.status === 'running') done += 0.5;
+    });
+  });
+  const pct = Math.round((done / total) * 100);
+  document.getElementById('progressPct').textContent = pct + '%';
+  document.getElementById('progressFill').style.width = pct + '%';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// SIMULATION: periodically advance running states
+// ═══════════════════════════════════════════════════════════════
+
+let simTimer = 0;
+const SIM_INTERVAL = 12000; // 12 seconds per tick
+
+function simulateProgress() {
+  // Find current running child
+  for (const group of PIPELINE) {
+    for (let i = 0; i < group.children.length; i++) {
+      const child = group.children[i];
+      if (child.status === 'running') {
+        // Complete it
+        child.status = 'completed';
+        child.duration = randomDuration();
+        child.tokens = 20000 + Math.floor(Math.random() * 80000);
+        child.sparkData = generateSparkData('completed', 20);
+
+        // Start the next one
+        if (i + 1 < group.children.length) {
+          group.children[i + 1].status = 'running';
+          group.children[i + 1].sparkData = generateSparkData('running', 20);
+        } else {
+          // Group done, start next group
+          group.status = 'completed';
+          group.sparkData = generateSparkData('completed', 24);
+          const gi = PIPELINE.indexOf(group);
+          if (gi + 1 < PIPELINE.length) {
+            PIPELINE[gi + 1].status = 'running';
+            PIPELINE[gi + 1].sparkData = generateSparkData('running', 24);
+            PIPELINE[gi + 1].children[0].status = 'running';
+            PIPELINE[gi + 1].children[0].sparkData = generateSparkData('running', 20);
+          }
+        }
+
+        // Rebuild UI
+        buildTree();
+        buildTreePaths();
+        updateProgress();
+        renderDetail(activeNodeId);
+        return;
+      }
+    }
+  }
+}
+
+function randomDuration() {
+  const m = Math.floor(Math.random() * 3);
+  const s = Math.floor(Math.random() * 60);
+  return `${m}m ${String(s).padStart(2, '0')}s`;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MAIN ANIMATION LOOP
+// ═══════════════════════════════════════════════════════════════
+
+let lastSimTick = 0;
+
+function animate(time) {
+  requestAnimationFrame(animate);
+
+  // Update sidebar sparklines
+  sparklineCanvases.forEach(s => {
+    drawSparkline(s.canvas, s.data, s.status, time);
+  });
+
+  // Update detail sparklines
+  detailSparkCanvases.forEach(s => {
+    drawSparkline(s.canvas, s.data, s.status, time);
+  });
+
+  // Tree paths + particles
+  drawTreePaths(time);
+
+  // Floating particles
+  drawFloatingParticles(time);
+
+  // Elapsed
+  updateElapsed();
+
+  // Simulation tick
+  if (time - lastSimTick > SIM_INTERVAL) {
+    lastSimTick = time;
+    if (time > 3000) { // skip first 3s
+      simulateProgress();
+    }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════
+
+function init() {
+  resizeTreeCanvas();
+  resizeParticleLayer();
+  initFloatingParticles();
+  buildTree();
+  buildTreePaths();
+  updateProgress();
+  renderDetail(activeNodeId);
+
+  const contentArea = document.getElementById('contentArea');
+  contentArea.addEventListener('mousemove', handleCanvasHover);
+  contentArea.addEventListener('click', handleCanvasClick);
+
+  window.addEventListener('resize', () => {
+    resizeTreeCanvas();
+    resizeParticleLayer();
+    buildTreePaths();
+  });
+
+  requestAnimationFrame(animate);
+}
+
+init();
+</script>
+</body>
+</html>

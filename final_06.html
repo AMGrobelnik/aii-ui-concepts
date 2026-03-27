@@ -1,0 +1,1163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor -- Ring Gauges</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0c12;
+    --surface: #11131b;
+    --surface-raised: #171a25;
+    --surface-hover: #1c2030;
+    --border: #1e2235;
+    --border-light: #282d42;
+    --text: #e2e5ee;
+    --text-dim: #6e7590;
+    --text-muted: #454b64;
+    --green: #34d399;
+    --green-dim: rgba(52,211,153,0.12);
+    --purple: #a78bfa;
+    --purple-dim: rgba(167,139,250,0.12);
+    --blue: #60a5fa;
+    --blue-dim: rgba(96,165,250,0.12);
+    --amber: #fbbf24;
+    --amber-dim: rgba(251,191,36,0.12);
+    --red: #ef4444;
+    --gray-ring: #2a2e40;
+    --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  html, body {
+    height: 100%; background: var(--bg); color: var(--text);
+    font-family: 'Inter', system-ui, sans-serif; font-size: 14px;
+    line-height: 1.5; overflow: hidden;
+  }
+  body { display: flex; flex-direction: column; }
+
+  /* ================================================================
+     SVG FILTER DEFINITIONS (injected in body, hidden)
+     ================================================================ */
+
+  /* ================================================================
+     TOP STRIP -- RING GAUGES
+     ================================================================ */
+  .ring-strip {
+    position: relative; z-index: 50;
+    height: 104px; min-height: 104px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    gap: 0; padding: 0 48px;
+    user-select: none;
+  }
+
+  .ring-node {
+    display: flex; flex-direction: column; align-items: center;
+    position: relative; z-index: 2; cursor: pointer;
+    padding: 0 28px;
+    transition: transform 180ms var(--ease);
+  }
+  .ring-node:hover { transform: scale(1.06); }
+
+  .ring-svg-wrap {
+    position: relative; width: 56px; height: 56px;
+  }
+
+  .ring-label {
+    margin-top: 6px; font-size: 11px; font-weight: 500;
+    color: var(--text-dim); white-space: nowrap;
+    transition: color 250ms var(--ease);
+  }
+  .ring-node.selected .ring-label { font-weight: 600; }
+
+  /* Connecting lines between rings */
+  .ring-connector {
+    flex: 1; max-width: 100px; height: 2px;
+    position: relative; margin-bottom: 18px;
+  }
+  .ring-connector-line {
+    position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: var(--border); border-radius: 1px;
+  }
+  .ring-connector-fill {
+    position: absolute; top: 0; left: 0; height: 2px;
+    border-radius: 1px; transition: width 600ms var(--ease);
+  }
+  .ring-connector.done .ring-connector-fill { width: 100%; }
+  .ring-connector.partial .ring-connector-fill { width: 50%; }
+  .ring-connector.none .ring-connector-fill { width: 0; }
+
+  /* ================================================================
+     CONTENT AREA
+     ================================================================ */
+  .content-area {
+    flex: 1; overflow-y: auto; padding: 28px 48px 20px;
+    scroll-behavior: smooth;
+  }
+  .content-area::-webkit-scrollbar { width: 6px; }
+  .content-area::-webkit-scrollbar-track { background: transparent; }
+  .content-area::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .module-view { display: none; animation: fadeSlide 350ms var(--ease); }
+  .module-view.visible { display: block; }
+
+  @keyframes fadeSlide {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .module-header {
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 24px;
+  }
+  .module-title {
+    font-size: 20px; font-weight: 700; letter-spacing: -0.3px;
+  }
+  .module-badge {
+    font-size: 11px; font-weight: 600; padding: 3px 12px;
+    border-radius: 10px; letter-spacing: 0.3px;
+  }
+  .module-badge.completed { background: var(--green-dim); color: var(--green); }
+  .module-badge.running   { background: var(--blue-dim);  color: var(--blue); }
+  .module-badge.pending   { background: rgba(100,110,140,0.12); color: var(--text-muted); }
+
+  /* ── Seed Hypothesis ───────────────────────────────── */
+  .seed-flow {
+    display: flex; align-items: center; gap: 0;
+    flex-wrap: wrap; padding: 8px 0;
+  }
+  .seed-card {
+    background: var(--surface-raised); border-radius: 12px;
+    padding: 18px 22px; display: flex; align-items: center; gap: 14px;
+    border: 1px solid var(--border); min-width: 190px;
+    transition: border-color 200ms, background 200ms;
+  }
+  .seed-card:hover { border-color: var(--border-light); background: var(--surface-hover); }
+  .seed-icon {
+    width: 40px; height: 40px; border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; flex-shrink: 0;
+  }
+  .seed-icon.mine   { background: #1a2535; }
+  .seed-icon.kg     { background: #1a1e40; }
+  .seed-icon.gap    { background: #2a1a20; }
+  .seed-icon.select { background: #1a2a1a; }
+  .seed-info .label { font-size: 12px; color: var(--text-dim); }
+  .seed-info .value { font-size: 17px; font-weight: 700; margin-top: 2px; }
+  .seed-arrow { font-size: 18px; color: var(--text-muted); padding: 0 14px; flex-shrink: 0; }
+
+  /* ── Hypothesis Loop ───────────────────────────────── */
+  .hypo-iterations { display: flex; flex-direction: column; gap: 14px; }
+
+  .hypo-iter { display: flex; align-items: stretch; gap: 0; }
+  .hypo-iter-label {
+    writing-mode: vertical-lr; text-orientation: mixed;
+    transform: rotate(180deg);
+    font-size: 11px; font-weight: 600; color: var(--text-muted);
+    padding: 8px 6px; display: flex; align-items: center;
+    letter-spacing: 1px; text-transform: uppercase;
+  }
+  .hypo-pair { display: flex; align-items: center; gap: 0; flex: 1; }
+
+  .hypo-card {
+    background: var(--surface-raised); border-radius: 10px;
+    padding: 16px 20px; flex: 1;
+    border: 1px solid var(--border); cursor: pointer;
+    transition: all 250ms var(--ease); position: relative;
+    border-left: 3px solid var(--purple);
+  }
+  .hypo-card:hover { border-color: var(--purple); background: var(--surface-hover); }
+  .hypo-card .card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .hypo-card .card-title { font-weight: 600; font-size: 13px; }
+  .hypo-card .card-status { font-size: 11px; padding: 2px 8px; border-radius: 8px; }
+  .hypo-card .card-status.done { background: var(--green-dim); color: var(--green); }
+  .hypo-card .card-meta { font-size: 12px; color: var(--text-dim); display: flex; gap: 14px; }
+  .hypo-arrow { font-size: 18px; color: var(--text-muted); padding: 0 12px; flex-shrink: 0; align-self: center; }
+
+  .score-bar-wrap { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .score-bar-bg { height: 6px; border-radius: 3px; background: var(--border); flex: 1; overflow: hidden; }
+  .score-bar-fill { height: 100%; border-radius: 3px; background: var(--purple); transition: width 600ms var(--ease); }
+  .score-val { font-size: 13px; font-weight: 600; color: var(--purple); min-width: 28px; }
+
+  .hypo-inter-arrow {
+    text-align: center; color: var(--text-muted); font-size: 12px;
+    padding: 4px 0 4px 30px; display: flex; align-items: center; gap: 6px;
+  }
+
+  /* Expand panels */
+  .expand-panel {
+    max-height: 0; overflow: hidden;
+    transition: max-height 350ms var(--ease), padding 350ms var(--ease), opacity 300ms var(--ease);
+    opacity: 0; background: rgba(14,16,22,0.8);
+    border-radius: 0 0 10px 10px; margin-top: -2px;
+    border: 1px solid var(--border); border-top: none;
+  }
+  .expand-panel.open { max-height: 500px; opacity: 1; padding: 16px 20px; }
+  .ep-status-bar {
+    display: flex; gap: 16px; padding: 8px 14px;
+    background: rgba(255,255,255,0.03); border-radius: 8px;
+    margin-bottom: 10px; font-size: 13px; color: var(--text-dim);
+  }
+  .ep-status-bar span { color: var(--text); font-weight: 500; }
+  .ep-detail { font-size: 13px; color: var(--text-dim); line-height: 1.6; }
+  .collapse-btn {
+    display: inline-flex; align-items: center; gap: 4px;
+    margin-top: 10px; font-size: 11px; color: var(--text-muted);
+    cursor: pointer; background: none; border: none;
+    padding: 4px 10px; border-radius: 4px;
+    transition: all 200ms var(--ease);
+  }
+  .collapse-btn:hover { color: var(--text); background: rgba(255,255,255,0.05); }
+
+  /* ── Invention Loop ────────────────────────────────── */
+  .iter-tabs {
+    display: flex; gap: 4px; margin-bottom: 20px;
+    background: var(--surface); border-radius: 8px; padding: 4px;
+    width: fit-content;
+  }
+  .iter-tab {
+    padding: 8px 20px; border-radius: 6px; cursor: pointer;
+    font-size: 13px; font-weight: 500; color: var(--text-dim);
+    transition: all 200ms var(--ease); border: none; background: none;
+  }
+  .iter-tab:hover { color: var(--text); background: var(--surface-raised); }
+  .iter-tab.active { background: var(--blue); color: #fff; font-weight: 600; }
+
+  .substep-flow {
+    display: flex; align-items: flex-start; gap: 0;
+    padding: 10px 0; overflow-x: auto;
+  }
+  .substep-card {
+    background: var(--surface-raised); border-radius: 10px;
+    padding: 16px 18px; min-width: 145px; max-width: 175px;
+    border: 1px solid var(--border); cursor: pointer;
+    transition: all 250ms var(--ease); position: relative;
+    border-left: 3px solid var(--border);
+  }
+  .substep-card.completed { border-left-color: var(--green); }
+  .substep-card.running   { border-left-color: var(--blue); min-width: 190px; max-width: 210px; box-shadow: 0 0 24px rgba(96,165,250,0.06); }
+  .substep-card.pending   { opacity: 0.45; }
+  .substep-card:hover     { background: var(--surface-hover); opacity: 1; }
+  .ss-icon  { font-size: 16px; margin-bottom: 8px; }
+  .ss-name  { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
+  .ss-meta  { font-size: 11px; color: var(--text-dim); }
+  .ss-progress { margin-top: 8px; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+  .ss-progress .bar { height: 100%; border-radius: 2px; transition: width 600ms var(--ease); }
+  .substep-card.completed .ss-progress .bar { width: 100%; background: var(--green); }
+  .substep-card.running   .ss-progress .bar { background: var(--blue); }
+  .substep-arrow { font-size: 16px; color: var(--text-muted); padding: 30px 8px 0; flex-shrink: 0; }
+
+  /* Artifact rows */
+  .artifact-section { margin-top: 20px; }
+  .artifact-section-title {
+    font-size: 12px; font-weight: 600; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 10px;
+  }
+  .artifact-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.03);
+    font-size: 13px;
+  }
+  .artifact-row:last-of-type { border-bottom: none; }
+  .a-icon { flex-shrink: 0; width: 18px; text-align: center; }
+  .a-name { font-weight: 500; min-width: 180px; }
+  .a-detail { color: var(--text-dim); flex: 1; }
+  .a-timing { color: var(--text-muted); font-size: 12px; white-space: nowrap; }
+  .a-cost { color: var(--amber); font-size: 12px; white-space: nowrap; min-width: 48px; text-align: right; }
+
+  /* Review section */
+  .review-section { margin-top: 20px; padding: 16px 20px; background: var(--surface-raised); border-radius: 10px; border: 1px solid var(--border); }
+  .review-title { font-size: 13px; font-weight: 600; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+  .review-metrics { display: flex; gap: 20px; margin-bottom: 12px; font-size: 13px; color: var(--text-dim); }
+  .review-metrics span { color: var(--text); font-weight: 500; }
+  .critique-row { display: flex; align-items: center; gap: 8px; padding: 5px 0; font-size: 13px; }
+  .severity {
+    font-size: 10px; font-weight: 600; padding: 2px 8px;
+    border-radius: 4px; text-transform: uppercase; flex-shrink: 0;
+  }
+  .severity.major { background: rgba(239,68,68,0.15); color: var(--red); }
+  .severity.minor { background: var(--amber-dim); color: var(--amber); }
+  .actions-list { margin-top: 10px; font-size: 12px; color: var(--text-dim); }
+  .actions-list li { padding: 2px 0; }
+
+  /* ── Paper & Repo ──────────────────────────────────── */
+  .paper-steps { display: flex; flex-direction: column; gap: 0; }
+  .paper-step {
+    display: flex; align-items: center; gap: 14px;
+    padding: 16px 20px; background: var(--surface-raised);
+    border: 1px solid var(--border); border-left: 3px solid var(--border);
+    cursor: pointer; transition: all 250ms var(--ease);
+  }
+  .paper-step:first-child { border-radius: 10px 10px 0 0; }
+  .paper-step:last-child  { border-radius: 0 0 10px 10px; }
+  .paper-step + .paper-step { border-top: none; }
+  .paper-step:hover { background: var(--surface-hover); }
+  .ps-circle {
+    width: 28px; height: 28px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; border: 2px solid var(--border);
+    background: transparent; color: var(--text-muted); flex-shrink: 0;
+  }
+  .ps-name { font-weight: 500; flex: 1; }
+  .ps-meta { font-size: 12px; color: var(--text-muted); }
+
+  /* ================================================================
+     STATS BAR (BOTTOM)
+     ================================================================ */
+  .stats-bar {
+    height: 38px; min-height: 38px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    gap: 32px; font-size: 12px; color: var(--text-dim);
+    padding: 0 24px; user-select: none;
+  }
+  .stats-bar .stat { display: flex; align-items: center; gap: 6px; }
+  .stat-val { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .stat-label { color: var(--text-muted); }
+
+  /* ================================================================
+     KEYBOARD HINT
+     ================================================================ */
+  .key-hint {
+    position: fixed; bottom: 52px; right: 20px;
+    font-size: 11px; color: var(--text-muted);
+    display: flex; align-items: center; gap: 6px;
+    z-index: 100;
+  }
+  .key-hint kbd {
+    background: var(--surface-raised); border: 1px solid var(--border);
+    border-radius: 4px; padding: 2px 7px; font-family: inherit;
+    font-size: 11px; color: var(--text-dim);
+  }
+
+  /* ================================================================
+     UTILITY
+     ================================================================ */
+  .tag-green  { color: var(--green); }
+  .tag-blue   { color: var(--blue); }
+  .tag-purple { color: var(--purple); }
+  .tag-amber  { color: var(--amber); }
+  .tag-red    { color: var(--red); }
+  .tag-dim    { color: var(--text-muted); }
+</style>
+</head>
+<body>
+
+<!-- Hidden SVG definitions for filters and gradients -->
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <!-- Glow filters -->
+    <filter id="glow-green" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feFlood flood-color="#34d399" flood-opacity="0.5" result="color"/>
+      <feComposite in="color" in2="blur" operator="in" result="shadow"/>
+      <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow-purple" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feFlood flood-color="#a78bfa" flood-opacity="0.5" result="color"/>
+      <feComposite in="color" in2="blur" operator="in" result="shadow"/>
+      <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow-blue" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feFlood flood-color="#60a5fa" flood-opacity="0.5" result="color"/>
+      <feComposite in="color" in2="blur" operator="in" result="shadow"/>
+      <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow-blue-bright" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
+      <feFlood flood-color="#60a5fa" flood-opacity="0.7" result="color"/>
+      <feComposite in="color" in2="blur" operator="in" result="shadow"/>
+      <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+
+    <!-- Selection outer glow -->
+    <filter id="select-glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feFlood flood-opacity="0.35" result="color"/>
+      <feComposite in="color" in2="blur" operator="in" result="shadow"/>
+      <feMerge><feMergeNode in="shadow"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+
+    <!-- Gradient strokes -->
+    <linearGradient id="grad-green" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#34d399"/>
+      <stop offset="100%" stop-color="#6ee7b7"/>
+    </linearGradient>
+    <linearGradient id="grad-purple" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8b5cf6"/>
+      <stop offset="100%" stop-color="#c4b5fd"/>
+    </linearGradient>
+    <linearGradient id="grad-blue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#93c5fd"/>
+    </linearGradient>
+    <linearGradient id="grad-gray" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3a3f55"/>
+      <stop offset="100%" stop-color="#2a2e40"/>
+    </linearGradient>
+  </defs>
+</svg>
+
+<!-- ================================================================
+     TOP STRIP: RING GAUGES
+     ================================================================ -->
+<div class="ring-strip" id="ringStrip"></div>
+
+<!-- ================================================================
+     CONTENT AREA
+     ================================================================ -->
+<div class="content-area" id="contentArea">
+
+  <!-- Module 0: Seed Hypothesis -->
+  <div class="module-view" id="module-0">
+    <div class="module-header">
+      <div class="module-title">Seed Hypothesis</div>
+      <div class="module-badge completed">Completed</div>
+    </div>
+    <div class="seed-flow">
+      <div class="seed-card">
+        <div class="seed-icon mine">&#128218;</div>
+        <div class="seed-info"><div class="label">Papers Mined</div><div class="value">847</div></div>
+      </div>
+      <div class="seed-arrow">&#10132;</div>
+      <div class="seed-card">
+        <div class="seed-icon kg">&#128300;</div>
+        <div class="seed-info"><div class="label">KG Triples</div><div class="value">2,341</div></div>
+      </div>
+      <div class="seed-arrow">&#10132;</div>
+      <div class="seed-card">
+        <div class="seed-icon gap">&#128269;</div>
+        <div class="seed-info"><div class="label">Gaps Found</div><div class="value">12</div></div>
+      </div>
+      <div class="seed-arrow">&#10132;</div>
+      <div class="seed-card">
+        <div class="seed-icon select">&#127919;</div>
+        <div class="seed-info"><div class="label">Seeds Selected</div><div class="value">5</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Module 1: Hypothesis Loop -->
+  <div class="module-view" id="module-1">
+    <div class="module-header">
+      <div class="module-title">Hypothesis Loop</div>
+      <div class="module-badge completed">Completed</div>
+    </div>
+    <div class="hypo-iterations" id="hypoIterations"></div>
+  </div>
+
+  <!-- Module 2: Invention Loop -->
+  <div class="module-view visible" id="module-2">
+    <div class="module-header">
+      <div class="module-title">Invention Loop</div>
+      <div class="module-badge running">Running</div>
+    </div>
+    <div class="iter-tabs" id="iterTabs"></div>
+    <div id="iterContent"></div>
+  </div>
+
+  <!-- Module 3: Paper & Repo -->
+  <div class="module-view" id="module-3">
+    <div class="module-header">
+      <div class="module-title">Paper &amp; Repo</div>
+      <div class="module-badge pending">Pending</div>
+    </div>
+    <div class="paper-steps" id="paperSteps"></div>
+  </div>
+
+</div>
+
+<!-- ================================================================
+     STATS BAR
+     ================================================================ -->
+<div class="stats-bar">
+  <div class="stat"><span class="stat-label">Run</span> <span class="stat-val">ssl-low-resource-v3</span></div>
+  <div class="stat"><span class="stat-label">Time</span> <span class="stat-val" id="statTime">02:34:17</span></div>
+  <div class="stat"><span class="stat-label">Cost</span> <span class="stat-val tag-amber">$12.47</span></div>
+  <div class="stat"><span class="stat-label">Tokens</span> <span class="stat-val">847K / 234K</span></div>
+</div>
+
+<!-- Keyboard hint -->
+<div class="key-hint">
+  <kbd>&larr;</kbd> <kbd>&rarr;</kbd> navigate modules
+</div>
+
+<script>
+/* ══════════════════════════════════════════════════════════════════
+   DATA
+   ══════════════════════════════════════════════════════════════════ */
+const MODULES = [
+  {
+    name: 'Seed',
+    status: 'completed',
+    pct: 1.0,
+    centerText: '\u2713',
+    color: 'green',
+    gradient: 'url(#grad-green)',
+    glow: 'url(#glow-green)',
+  },
+  {
+    name: 'Hypothesis',
+    status: 'completed',
+    pct: 1.0,
+    centerText: '8.4',
+    color: 'purple',
+    gradient: 'url(#grad-purple)',
+    glow: 'url(#glow-purple)',
+  },
+  {
+    name: 'Invention',
+    status: 'active',
+    pct: 0.6,
+    centerText: '3/5',
+    color: 'blue',
+    gradient: 'url(#grad-blue)',
+    glow: 'url(#glow-blue)',
+  },
+  {
+    name: 'Paper',
+    status: 'pending',
+    pct: 0,
+    centerText: '\u25CB',
+    color: 'gray',
+    gradient: 'url(#grad-gray)',
+    glow: null,
+  },
+];
+
+const HYPO_ITERS = [
+  { gen: { title: 'Gen Hypo', time: '6m 12s', score: 6.2 }, review: { title: 'Review', time: '3m 45s', verdict: 'Revise' }},
+  { gen: { title: 'Gen Hypo', time: '5m 48s', score: 7.8 }, review: { title: 'Review', time: '4m 02s', verdict: 'Revise' }},
+  { gen: { title: 'Gen Hypo', time: '4m 33s', score: 8.4 }, review: { title: 'Review', time: '3m 10s', verdict: 'Accept' }},
+];
+
+const INV_ITERS = [
+  {
+    label: 'Iter 1', status: 'completed',
+    steps: [
+      { name: 'gen_strat', status: 'completed', time: '3m 22s', cost: '$1.08' },
+      { name: 'gen_plan',  status: 'completed', time: '4m 11s', cost: '$1.44' },
+      { name: 'gen_art',   status: 'completed', time: '14m 05s', cost: '$4.87', detail: '5/5 artifacts' },
+      { name: 'gen_paper', status: 'completed', time: '8m 32s', cost: '$2.91' },
+      { name: 'review',    status: 'completed', time: '5m 18s', cost: '$1.62', score: '6.8' },
+      { name: 'upd_hypo',  status: 'completed', time: '2m 14s', cost: '$0.72' },
+    ],
+  },
+  {
+    label: 'Iter 2', status: 'active',
+    steps: [
+      { name: 'gen_strat', status: 'completed', time: '2m 58s', cost: '$0.96' },
+      { name: 'gen_plan',  status: 'completed', time: '3m 47s', cost: '$1.31' },
+      { name: 'gen_art',   status: 'running',   time: '12m 08s', cost: '$5.41', detail: '3/5 artifacts' },
+      { name: 'gen_paper', status: 'pending',   time: '---', cost: '---' },
+      { name: 'review',    status: 'pending',   time: '---', cost: '---' },
+      { name: 'upd_hypo',  status: 'pending',   time: '---', cost: '---' },
+    ],
+  },
+  {
+    label: 'Iter 3', status: 'pending',
+    steps: [
+      { name: 'gen_strat', status: 'pending', time: '---', cost: '---' },
+      { name: 'gen_plan',  status: 'pending', time: '---', cost: '---' },
+      { name: 'gen_art',   status: 'pending', time: '---', cost: '---' },
+      { name: 'gen_paper', status: 'pending', time: '---', cost: '---' },
+      { name: 'review',    status: 'pending', time: '---', cost: '---' },
+      { name: 'upd_hypo',  status: 'pending', time: '---', cost: '---' },
+    ],
+  },
+];
+
+const ARTIFACTS_ITER2 = [
+  { icon: '\u2713', cls: 'tag-green',  name: 'Contrastive Baseline',      detail: 'acc 0.847 vs baseline 0.721 (+17.5%)', time: '4m 32s', cost: '$2.14' },
+  { icon: '\u2713', cls: 'tag-green',  name: 'Multilingual Pairs Dataset', detail: '2,400 examples, 12 languages',          time: '3m 15s', cost: '$1.02' },
+  { icon: '\u2713', cls: 'tag-green',  name: 'Convergence Proof',          detail: 'Verified in Lean 4, 3 lemmas',           time: '2m 41s', cost: '$0.89' },
+  { icon: '\u25B6', cls: 'tag-blue',   name: 'Ablation Study',             detail: 'Running...',                              time: '1m 20s', cost: '$1.36' },
+  { icon: '\u25CB', cls: 'tag-dim',    name: 'Cross-lingual Evaluation',   detail: 'Pending',                                 time: '---',    cost: '---'   },
+];
+
+const REVIEW_ITER1 = {
+  score: '6.8 / 10', confidence: '3 / 5',
+  critiques: [
+    { text: 'Missing ablation study',   severity: 'major' },
+    { text: 'Weak baseline comparison',  severity: 'major' },
+    { text: 'Abstract too long',         severity: 'minor' },
+  ],
+  actions: ['Add ablation across 3 axes', 'Include 2 additional baselines (SimCLR, MoCo)', 'Trim abstract to 150 words'],
+};
+
+const PAPER_STEPS = [
+  { name: 'Initialize Repo',       meta: '' },
+  { name: 'Generate Demos + Viz',  meta: '' },
+  { name: 'Deploy Source',         meta: '' },
+  { name: 'Generate Full Paper',   meta: '' },
+  { name: 'Deploy Paper',          meta: '' },
+];
+
+
+/* ══════════════════════════════════════════════════════════════════
+   RING GAUGE RENDERING
+   ══════════════════════════════════════════════════════════════════ */
+const R = 23;           // ring radius
+const STROKE = 4.5;     // stroke width
+const CX = 28, CY = 28; // center of 56x56 viewBox
+const CIRCUMFERENCE = 2 * Math.PI * R;
+
+let activeIdx = 2;      // Invention is active
+
+function createRingSVG(mod, idx) {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg');
+  svg.setAttribute('viewBox', '0 0 56 56');
+  svg.setAttribute('width', '56');
+  svg.setAttribute('height', '56');
+  svg.style.overflow = 'visible';
+  svg.id = `ring-svg-${idx}`;
+
+  // Background track
+  const trackCircle = document.createElementNS(ns, 'circle');
+  trackCircle.setAttribute('cx', CX);
+  trackCircle.setAttribute('cy', CY);
+  trackCircle.setAttribute('r', R);
+  trackCircle.setAttribute('fill', 'none');
+  trackCircle.setAttribute('stroke', mod.status === 'pending' ? 'none' : 'rgba(255,255,255,0.04)');
+  trackCircle.setAttribute('stroke-width', STROKE);
+  svg.appendChild(trackCircle);
+
+  // Dashed ring for pending
+  if (mod.status === 'pending') {
+    const dashedCircle = document.createElementNS(ns, 'circle');
+    dashedCircle.setAttribute('cx', CX);
+    dashedCircle.setAttribute('cy', CY);
+    dashedCircle.setAttribute('r', R);
+    dashedCircle.setAttribute('fill', 'none');
+    dashedCircle.setAttribute('stroke', 'var(--gray-ring)');
+    dashedCircle.setAttribute('stroke-width', STROKE - 1);
+    dashedCircle.setAttribute('stroke-dasharray', '6 4');
+    dashedCircle.setAttribute('stroke-linecap', 'round');
+    dashedCircle.setAttribute('opacity', '0.6');
+    svg.appendChild(dashedCircle);
+  }
+
+  // Filled arc
+  if (mod.pct > 0) {
+    const arcCircle = document.createElementNS(ns, 'circle');
+    arcCircle.setAttribute('cx', CX);
+    arcCircle.setAttribute('cy', CY);
+    arcCircle.setAttribute('r', R);
+    arcCircle.setAttribute('fill', 'none');
+    arcCircle.setAttribute('stroke', mod.gradient);
+    arcCircle.setAttribute('stroke-width', STROKE);
+    arcCircle.setAttribute('stroke-linecap', 'round');
+    arcCircle.setAttribute('stroke-dasharray', CIRCUMFERENCE);
+    arcCircle.setAttribute('stroke-dashoffset', CIRCUMFERENCE);
+    arcCircle.setAttribute('transform', `rotate(-90 ${CX} ${CY})`);
+    arcCircle.id = `ring-arc-${idx}`;
+    if (mod.glow) {
+      arcCircle.setAttribute('filter', mod.glow);
+    }
+    svg.appendChild(arcCircle);
+
+    // Endpoint glow dot for active ring
+    if (mod.status === 'active') {
+      const endDot = document.createElementNS(ns, 'circle');
+      endDot.setAttribute('r', '3.5');
+      endDot.setAttribute('fill', getColorVar(mod.color));
+      endDot.setAttribute('filter', 'url(#glow-blue-bright)');
+      endDot.id = `ring-dot-${idx}`;
+      svg.appendChild(endDot);
+    }
+  }
+
+  // Center text
+  const text = document.createElementNS(ns, 'text');
+  text.setAttribute('x', CX);
+  text.setAttribute('y', CY);
+  text.setAttribute('text-anchor', 'middle');
+  text.setAttribute('dominant-baseline', 'central');
+  text.setAttribute('fill', mod.status === 'pending' ? 'var(--text-muted)' : getColorVar(mod.color));
+  text.setAttribute('font-family', 'Inter, system-ui, sans-serif');
+  text.setAttribute('font-weight', '700');
+  text.setAttribute('font-size', mod.centerText === '\u2713' ? '18' : mod.centerText === '\u25CB' ? '14' : '12');
+  text.textContent = mod.centerText;
+  svg.appendChild(text);
+
+  return svg;
+}
+
+function getColorVar(color) {
+  const map = { green: '#34d399', purple: '#a78bfa', blue: '#60a5fa', gray: '#454b64' };
+  return map[color] || '#fff';
+}
+
+function getConnectorColor(color) {
+  const map = { green: '#34d399', purple: '#a78bfa', blue: '#60a5fa', gray: 'var(--border)' };
+  return map[color] || 'var(--border)';
+}
+
+function renderRingStrip() {
+  const strip = document.getElementById('ringStrip');
+  strip.innerHTML = '';
+
+  MODULES.forEach((mod, i) => {
+    // Ring node
+    const node = document.createElement('div');
+    node.className = `ring-node${i === activeIdx ? ' selected' : ''}`;
+    node.dataset.idx = i;
+    node.addEventListener('click', () => selectModule(i));
+
+    const svgWrap = document.createElement('div');
+    svgWrap.className = 'ring-svg-wrap';
+    svgWrap.appendChild(createRingSVG(mod, i));
+    node.appendChild(svgWrap);
+
+    const label = document.createElement('div');
+    label.className = 'ring-label';
+    label.textContent = mod.name;
+    label.style.color = i === activeIdx ? getColorVar(mod.color) : '';
+    node.appendChild(label);
+
+    strip.appendChild(node);
+
+    // Connector between rings (except after last)
+    if (i < MODULES.length - 1) {
+      const conn = document.createElement('div');
+      conn.className = 'ring-connector';
+
+      const line = document.createElement('div');
+      line.className = 'ring-connector-line';
+      conn.appendChild(line);
+
+      const fill = document.createElement('div');
+      fill.className = 'ring-connector-fill';
+      fill.style.background = getConnectorColor(mod.color);
+      conn.appendChild(fill);
+
+      // Determine fill state
+      if (mod.status === 'completed' && MODULES[i + 1].status === 'completed') {
+        conn.classList.add('done');
+      } else if (mod.status === 'completed' && MODULES[i + 1].status === 'active') {
+        conn.classList.add('partial');
+      } else {
+        conn.classList.add('none');
+      }
+
+      strip.appendChild(conn);
+    }
+  });
+
+  // Animate arcs in after a brief delay
+  requestAnimationFrame(() => {
+    setTimeout(() => {
+      MODULES.forEach((mod, i) => {
+        if (mod.pct > 0) {
+          const arc = document.getElementById(`ring-arc-${i}`);
+          if (arc) {
+            const target = CIRCUMFERENCE * (1 - mod.pct);
+            arc.style.transition = 'stroke-dashoffset 1.2s cubic-bezier(0.4, 0, 0.2, 1)';
+            arc.setAttribute('stroke-dashoffset', target);
+          }
+        }
+      });
+      // Position endpoint dot for active ring
+      updateEndpointDot();
+    }, 100);
+  });
+}
+
+function updateEndpointDot() {
+  MODULES.forEach((mod, i) => {
+    if (mod.status === 'active') {
+      const dot = document.getElementById(`ring-dot-${i}`);
+      if (!dot) return;
+      const angle = -90 + (mod.pct * 360);
+      const rad = (angle * Math.PI) / 180;
+      const dx = CX + R * Math.cos(rad);
+      const dy = CY + R * Math.sin(rad);
+      dot.setAttribute('cx', dx);
+      dot.setAttribute('cy', dy);
+    }
+  });
+}
+
+/* ── Endpoint drift animation ──────────────────────── */
+let driftPhase = 0;
+function animateEndpointDrift() {
+  driftPhase += 0.015;
+  MODULES.forEach((mod, i) => {
+    if (mod.status === 'active') {
+      const drift = Math.sin(driftPhase) * 0.025; // small oscillation
+      const effectivePct = mod.pct + drift;
+      const target = CIRCUMFERENCE * (1 - effectivePct);
+      const arc = document.getElementById(`ring-arc-${i}`);
+      if (arc) {
+        arc.setAttribute('stroke-dashoffset', target);
+      }
+      // Update dot position
+      const dot = document.getElementById(`ring-dot-${i}`);
+      if (dot) {
+        const angle = -90 + (effectivePct * 360);
+        const rad = (angle * Math.PI) / 180;
+        dot.setAttribute('cx', CX + R * Math.cos(rad));
+        dot.setAttribute('cy', CY + R * Math.sin(rad));
+        // Pulsing opacity
+        const pulse = 0.7 + 0.3 * Math.sin(driftPhase * 3);
+        dot.setAttribute('opacity', pulse);
+      }
+    }
+  });
+  requestAnimationFrame(animateEndpointDrift);
+}
+
+/* ── Selection glow for rings ──────────────────────── */
+function updateRingSelection() {
+  document.querySelectorAll('.ring-node').forEach((node, i) => {
+    const isSelected = i === activeIdx;
+    node.classList.toggle('selected', isSelected);
+
+    // Update label color
+    const label = node.querySelector('.ring-label');
+    label.style.color = isSelected ? getColorVar(MODULES[i].color) : '';
+
+    // Outer glow on the SVG wrap
+    const wrap = node.querySelector('.ring-svg-wrap');
+    if (isSelected) {
+      wrap.style.filter = `drop-shadow(0 0 10px ${getColorVar(MODULES[i].color)}40)`;
+    } else {
+      wrap.style.filter = '';
+    }
+  });
+}
+
+
+/* ══════════════════════════════════════════════════════════════════
+   MODULE NAVIGATION
+   ══════════════════════════════════════════════════════════════════ */
+function selectModule(idx) {
+  if (idx < 0 || idx >= MODULES.length) return;
+  activeIdx = idx;
+  updateRingSelection();
+
+  document.querySelectorAll('.module-view').forEach((el, i) => {
+    if (i === idx) {
+      el.classList.add('visible');
+      el.style.animation = 'none';
+      void el.offsetWidth;
+      el.style.animation = '';
+    } else {
+      el.classList.remove('visible');
+    }
+  });
+}
+
+/* ── Arrow key handling ────────────────────────────── */
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowLeft')  { e.preventDefault(); selectModule(activeIdx - 1); }
+  if (e.key === 'ArrowRight') { e.preventDefault(); selectModule(activeIdx + 1); }
+});
+
+
+/* ══════════════════════════════════════════════════════════════════
+   HYPOTHESIS LOOP
+   ══════════════════════════════════════════════════════════════════ */
+function renderHypoLoop() {
+  const container = document.getElementById('hypoIterations');
+  container.innerHTML = '';
+  const maxScore = 10;
+
+  HYPO_ITERS.forEach((iter, i) => {
+    if (i > 0) {
+      const inter = document.createElement('div');
+      inter.className = 'hypo-inter-arrow';
+      inter.innerHTML = '<span style="transform:rotate(90deg);display:inline-block">&#10132;</span> Feedback fed to next iteration';
+      container.appendChild(inter);
+    }
+
+    const row = document.createElement('div');
+    row.className = 'hypo-iter';
+
+    const label = document.createElement('div');
+    label.className = 'hypo-iter-label';
+    label.textContent = `Iter ${i + 1}`;
+
+    const pair = document.createElement('div');
+    pair.className = 'hypo-pair';
+
+    // Gen card
+    const genWrap = document.createElement('div');
+    genWrap.style.cssText = 'flex:1;display:flex;flex-direction:column;';
+    const genCard = document.createElement('div');
+    genCard.className = 'hypo-card';
+    genCard.innerHTML = `
+      <div class="card-head">
+        <div class="card-title">${iter.gen.title}</div>
+        <div class="card-status done">\u2713 Done</div>
+      </div>
+      <div class="card-meta"><span>${iter.gen.time}</span></div>
+      <div class="score-bar-wrap">
+        <div class="score-bar-bg"><div class="score-bar-fill" style="width:${(iter.gen.score / maxScore) * 100}%"></div></div>
+        <div class="score-val">${iter.gen.score}</div>
+      </div>
+    `;
+    genWrap.appendChild(genCard);
+
+    const genPanel = createExpandPanel(`gen-${i}`, `
+      <div class="ep-status-bar"><span>Score: ${iter.gen.score} / 10</span> &nbsp;|&nbsp; Time: ${iter.gen.time}</div>
+      <div class="ep-detail">
+        ${i === 0 ? 'Initial formulation targeting contrastive pre-training with multilingual transfer for low-resource languages.' : ''}
+        ${i === 1 ? 'Refined hypothesis incorporating reviewer feedback on ablation coverage and baseline comparisons.' : ''}
+        ${i === 2 ? 'Final hypothesis with strengthened experimental design and formal convergence guarantees.' : ''}
+      </div>
+    `);
+    genCard.addEventListener('click', () => togglePanel(genPanel));
+    genWrap.appendChild(genPanel);
+    pair.appendChild(genWrap);
+
+    const arrow = document.createElement('div');
+    arrow.className = 'hypo-arrow';
+    arrow.textContent = '\u2192';
+    pair.appendChild(arrow);
+
+    // Review card
+    const revWrap = document.createElement('div');
+    revWrap.style.cssText = 'flex:1;display:flex;flex-direction:column;';
+    const revCard = document.createElement('div');
+    revCard.className = 'hypo-card';
+    revCard.style.borderLeftColor = iter.review.verdict === 'Accept' ? 'var(--green)' : 'var(--amber)';
+    revCard.innerHTML = `
+      <div class="card-head">
+        <div class="card-title">${iter.review.title}</div>
+        <div class="card-status done">${iter.review.verdict}</div>
+      </div>
+      <div class="card-meta"><span>${iter.review.time}</span></div>
+    `;
+    revWrap.appendChild(revCard);
+
+    const revPanel = createExpandPanel(`rev-${i}`, `
+      <div class="ep-status-bar"><span>Verdict: ${iter.review.verdict}</span> &nbsp;|&nbsp; Time: ${iter.review.time}</div>
+      <div class="ep-detail">
+        ${iter.review.verdict === 'Accept'
+          ? 'Hypothesis accepted. Strong experimental design, clear novelty, adequate baselines.'
+          : 'Hypothesis requires revision. Key concerns flagged for next iteration.'}
+      </div>
+    `);
+    revCard.addEventListener('click', () => togglePanel(revPanel));
+    revWrap.appendChild(revPanel);
+    pair.appendChild(revWrap);
+
+    row.appendChild(label);
+    row.appendChild(pair);
+    container.appendChild(row);
+  });
+}
+
+
+/* ══════════════════════════════════════════════════════════════════
+   EXPAND PANELS
+   ══════════════════════════════════════════════════════════════════ */
+function createExpandPanel(id, html) {
+  const panel = document.createElement('div');
+  panel.className = 'expand-panel';
+  panel.id = `panel-${id}`;
+  panel.innerHTML = html + `<button class="collapse-btn" onclick="togglePanel(this.parentElement)">\u25B2 Collapse</button>`;
+  return panel;
+}
+
+function togglePanel(panel) {
+  panel.classList.toggle('open');
+}
+
+
+/* ══════════════════════════════════════════════════════════════════
+   INVENTION LOOP
+   ══════════════════════════════════════════════════════════════════ */
+let activeIterIdx = 1;
+
+function renderIterTabs() {
+  const tabs = document.getElementById('iterTabs');
+  tabs.innerHTML = '';
+  INV_ITERS.forEach((iter, i) => {
+    const btn = document.createElement('button');
+    btn.className = `iter-tab${i === activeIterIdx ? ' active' : ''}`;
+    const icon = iter.status === 'completed' ? ' \u2713' : iter.status === 'active' ? ' \u25B6' : ' \u25CB';
+    btn.textContent = iter.label + icon;
+    btn.addEventListener('click', () => { activeIterIdx = i; renderIterTabs(); renderIterContent(); });
+    tabs.appendChild(btn);
+  });
+}
+
+function renderIterContent() {
+  const container = document.getElementById('iterContent');
+  container.innerHTML = '';
+
+  const iter = INV_ITERS[activeIterIdx];
+  const flow = document.createElement('div');
+  flow.className = 'substep-flow';
+
+  const STEP_ICONS = {
+    gen_strat: '\uD83C\uDFAF', gen_plan: '\uD83D\uDCCB', gen_art: '\uD83D\uDD27',
+    gen_paper: '\uD83D\uDCC4', review: '\uD83D\uDD0D', upd_hypo: '\uD83D\uDD04',
+  };
+
+  iter.steps.forEach((step, i) => {
+    if (i > 0) {
+      const arrow = document.createElement('div');
+      arrow.className = 'substep-arrow';
+      arrow.textContent = '\u2192';
+      flow.appendChild(arrow);
+    }
+
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'display:flex;flex-direction:column;';
+
+    const card = document.createElement('div');
+    const statusCls = step.status === 'completed' ? 'completed' : step.status === 'running' ? 'running' : 'pending';
+    card.className = `substep-card ${statusCls}`;
+
+    const statusIcon = step.status === 'completed' ? '\u2713' : step.status === 'running' ? '\u25B6' : '\u25CB';
+    card.innerHTML = `
+      <div class="ss-icon">${STEP_ICONS[step.name] || '\u25CB'}</div>
+      <div class="ss-name">${step.name}</div>
+      <div class="ss-meta">${step.time} &middot; ${step.cost}</div>
+      ${step.detail ? `<div class="ss-meta" style="margin-top:2px;color:var(--text)">${step.detail}</div>` : ''}
+      <div class="ss-progress"><div class="bar" style="width:${step.status === 'completed' ? '100' : step.status === 'running' ? '60' : '0'}%"></div></div>
+    `;
+
+    // Expand behavior for gen_art when running
+    if (step.name === 'gen_art' && step.status === 'running' && activeIterIdx === 1) {
+      card.addEventListener('click', () => {
+        const existingPanel = wrap.querySelector('.expand-panel');
+        if (existingPanel) { togglePanel(existingPanel); return; }
+
+        const panel = createExpandPanel('artifacts', renderArtifactRows());
+        wrap.appendChild(panel);
+        requestAnimationFrame(() => panel.classList.add('open'));
+      });
+    }
+
+    // Expand behavior for review when completed
+    if (step.name === 'review' && step.status === 'completed' && activeIterIdx === 0) {
+      card.addEventListener('click', () => {
+        const existingPanel = wrap.querySelector('.expand-panel');
+        if (existingPanel) { togglePanel(existingPanel); return; }
+
+        const panel = createExpandPanel('review', renderReviewContent());
+        wrap.appendChild(panel);
+        requestAnimationFrame(() => panel.classList.add('open'));
+      });
+    }
+
+    wrap.appendChild(card);
+    flow.appendChild(wrap);
+  });
+
+  container.appendChild(flow);
+
+  // Show artifacts inline for iter 2
+  if (activeIterIdx === 1) {
+    const section = document.createElement('div');
+    section.className = 'artifact-section';
+    section.innerHTML = `<div class="artifact-section-title">Artifacts -- Iteration 2</div>` + renderArtifactRowsHTML();
+    container.appendChild(section);
+  }
+
+  // Show review for iter 1
+  if (activeIterIdx === 0) {
+    const section = document.createElement('div');
+    section.innerHTML = renderReviewContent();
+    section.className = 'review-section';
+    container.appendChild(section);
+  }
+}
+
+function renderArtifactRows() {
+  return renderArtifactRowsHTML() + '';
+}
+
+function renderArtifactRowsHTML() {
+  return ARTIFACTS_ITER2.map(a => `
+    <div class="artifact-row">
+      <div class="a-icon ${a.cls}">${a.icon}</div>
+      <div class="a-name">${a.name}</div>
+      <div class="a-detail">${a.detail}</div>
+      <div class="a-timing">${a.time}</div>
+      <div class="a-cost">${a.cost}</div>
+    </div>
+  `).join('');
+}
+
+function renderReviewContent() {
+  const r = REVIEW_ITER1;
+  return `
+    <div class="review-title">\uD83D\uDD0D Review -- Iteration 1</div>
+    <div class="review-metrics">
+      Score: <span>${r.score}</span> &nbsp;&nbsp; Confidence: <span>${r.confidence}</span>
+    </div>
+    ${r.critiques.map(c => `
+      <div class="critique-row">
+        <div class="severity ${c.severity}">${c.severity}</div>
+        <div>${c.text}</div>
+      </div>
+    `).join('')}
+    <div class="actions-list">
+      <strong style="color:var(--text);font-size:12px;">Actions:</strong>
+      <ul style="margin-top:4px;padding-left:18px;">
+        ${r.actions.map(a => `<li>${a}</li>`).join('')}
+      </ul>
+    </div>
+  `;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════
+   PAPER STEPS
+   ══════════════════════════════════════════════════════════════════ */
+function renderPaperSteps() {
+  const container = document.getElementById('paperSteps');
+  container.innerHTML = '';
+  PAPER_STEPS.forEach((step, i) => {
+    const el = document.createElement('div');
+    el.className = 'paper-step';
+    el.innerHTML = `
+      <div class="ps-circle">${i + 1}</div>
+      <div class="ps-name">${step.name}</div>
+      <div class="ps-meta tag-dim">Pending</div>
+    `;
+    container.appendChild(el);
+  });
+}
+
+
+/* ══════════════════════════════════════════════════════════════════
+   TIMER
+   ══════════════════════════════════════════════════════════════════ */
+let timerSeconds = 2 * 3600 + 34 * 60 + 17;
+function tickTimer() {
+  timerSeconds++;
+  const h = String(Math.floor(timerSeconds / 3600)).padStart(2, '0');
+  const m = String(Math.floor((timerSeconds % 3600) / 60)).padStart(2, '0');
+  const s = String(timerSeconds % 60).padStart(2, '0');
+  document.getElementById('statTime').textContent = `${h}:${m}:${s}`;
+}
+setInterval(tickTimer, 1000);
+
+
+/* ══════════════════════════════════════════════════════════════════
+   INIT
+   ══════════════════════════════════════════════════════════════════ */
+renderRingStrip();
+renderHypoLoop();
+renderIterTabs();
+renderIterContent();
+renderPaperSteps();
+updateRingSelection();
+requestAnimationFrame(animateEndpointDrift);
+</script>
+</body>
+</html>

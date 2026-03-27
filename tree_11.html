@@ -1,0 +1,1649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Dotted Tree</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    /* Slate palette */
+    --bg: #0f1218;
+    --bg-deep: #0a0d12;
+    --surface: #161b24;
+    --surface-2: #1c222e;
+    --surface-3: #232a38;
+    --surface-4: #2a3244;
+    --border: #2a3244;
+    --border-subtle: #333d52;
+    --border-faint: #1e2636;
+
+    /* Accent colors */
+    --cyan: #67e8f9;
+    --cyan-dim: rgba(103, 232, 249, 0.12);
+    --cyan-glow: rgba(103, 232, 249, 0.25);
+    --green: #4ade80;
+    --green-dim: rgba(74, 222, 128, 0.10);
+    --green-glow: rgba(74, 222, 128, 0.20);
+    --amber: #fbbf24;
+    --amber-dim: rgba(251, 191, 36, 0.10);
+    --amber-glow: rgba(251, 191, 36, 0.20);
+    --slate-blue: #94a3b8;
+    --slate-blue-dim: rgba(148, 163, 184, 0.08);
+
+    /* Text */
+    --text: #e2e8f0;
+    --text-dim: #94a3b8;
+    --text-muted: #64748b;
+    --text-faint: #475569;
+
+    /* Dot connector system */
+    --dot-spacing: 4px;
+    --dot-active: var(--cyan);
+    --dot-done: var(--green);
+    --dot-dimmed: #334155;
+    --dot-pending: #1e293b;
+
+    /* Glass */
+    --glass-bg: rgba(22, 27, 36, 0.82);
+    --glass-border: rgba(255, 255, 255, 0.05);
+
+    --transition: 300ms ease;
+  }
+
+  html, body {
+    height: 100%;
+    width: 100%;
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  #app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+
+  /* -- Top Bar -- */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+    height: 48px;
+    min-height: 48px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border-faint);
+    z-index: 100;
+    flex-shrink: 0;
+  }
+
+  .topbar-left {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .brand {
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    text-transform: uppercase;
+  }
+  .brand-accent { color: var(--cyan); }
+
+  .sep {
+    width: 1px;
+    height: 18px;
+    background: var(--border-faint);
+  }
+
+  .run-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 12px;
+    border-radius: 100px;
+    background: var(--cyan-dim);
+    border: 1px solid rgba(103, 232, 249, 0.12);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--cyan);
+  }
+
+  .live-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--cyan);
+    animation: livePulse 1.8s ease-in-out infinite;
+  }
+  @keyframes livePulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.7); }
+  }
+
+  .topbar-center {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .topbar-center .val {
+    font-weight: 600;
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .topbar-right .cost {
+    font-weight: 600;
+    color: var(--green);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* -- Tree Viewport -- */
+  .tree-viewport {
+    flex: 1;
+    position: relative;
+    overflow-x: hidden;
+    overflow-y: auto;
+    background:
+      radial-gradient(ellipse 80% 60% at 50% 50%, rgba(103, 232, 249, 0.015), transparent),
+      var(--bg);
+    scrollbar-width: thin;
+    scrollbar-color: var(--surface-4) transparent;
+  }
+  .tree-viewport::-webkit-scrollbar { width: 6px; }
+  .tree-viewport::-webkit-scrollbar-track { background: transparent; }
+  .tree-viewport::-webkit-scrollbar-thumb {
+    background: var(--surface-4);
+    border-radius: 3px;
+  }
+
+  /* Subtle grid pattern */
+  .tree-viewport::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      radial-gradient(circle at 1px 1px, rgba(148, 163, 184, 0.03) 1px, transparent 1px);
+    background-size: 32px 32px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .tree-canvas {
+    position: relative;
+    width: 100%;
+    min-height: 100%;
+  }
+
+  /* -- SVG Dotted Connectors -- */
+  .branch-svg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 2;
+    overflow: visible;
+  }
+
+  /* -- Particle Canvas -- */
+  .particle-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    pointer-events: none;
+    z-index: 3;
+  }
+
+  /* -- Tree Nodes -- */
+
+  /* Root node */
+  .root-node-wrap {
+    position: absolute;
+    z-index: 10;
+    cursor: pointer;
+  }
+
+  .root-node {
+    width: 56px;
+    height: 56px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, var(--surface-3), var(--surface));
+    border: 1.5px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow:
+      0 0 40px rgba(103, 232, 249, 0.06),
+      0 0 80px rgba(103, 232, 249, 0.03);
+    animation: rootBreathe 5s ease-in-out infinite;
+    position: relative;
+    transition: border-color 0.3s, box-shadow 0.3s;
+  }
+  .root-node:hover {
+    border-color: rgba(103, 232, 249, 0.25);
+  }
+  .root-node::after {
+    content: '';
+    position: absolute;
+    inset: -6px;
+    border-radius: 18px;
+    border: 1px solid rgba(103, 232, 249, 0.06);
+    animation: rootRing 5s ease-in-out infinite;
+  }
+  @keyframes rootBreathe {
+    0%, 100% { box-shadow: 0 0 40px rgba(103, 232, 249, 0.06), 0 0 80px rgba(103, 232, 249, 0.03); }
+    50% { box-shadow: 0 0 50px rgba(103, 232, 249, 0.10), 0 0 100px rgba(103, 232, 249, 0.05); }
+  }
+  @keyframes rootRing {
+    0%, 100% { transform: scale(1); opacity: 0.5; }
+    50% { transform: scale(1.08); opacity: 0.2; }
+  }
+  .root-icon {
+    font-size: 20px;
+    filter: grayscale(0.1);
+  }
+  .root-label {
+    position: absolute;
+    top: calc(100% + 10px);
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 10px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    text-align: center;
+    font-weight: 500;
+    letter-spacing: 0.03em;
+  }
+
+  /* ── Module Nodes (36px height) ── */
+  .module-node-wrap {
+    position: absolute;
+    z-index: 10;
+    cursor: pointer;
+    transition: opacity 0.4s, transform 0.4s;
+  }
+  .module-node-wrap.entering {
+    opacity: 0;
+    transform: translateX(-16px) scale(0.94);
+  }
+
+  .module-node {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 36px;
+    padding: 0 14px;
+    border-radius: 10px;
+    background: var(--glass-bg);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--glass-border);
+    transition: all 0.3s ease;
+    position: relative;
+    white-space: nowrap;
+    animation: nodeFloat 7s ease-in-out infinite;
+  }
+  .module-node::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 3px;
+    border-radius: 10px 0 0 10px;
+  }
+  .module-node:hover {
+    border-color: rgba(255, 255, 255, 0.10);
+    transform: translateX(3px);
+    animation-play-state: paused;
+  }
+  @keyframes nodeFloat {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-2px); }
+  }
+
+  .module-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  .module-info {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+  .module-name {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.1;
+  }
+  .module-meta {
+    font-size: 9px;
+    color: var(--text-faint);
+    font-variant-numeric: tabular-nums;
+    line-height: 1.1;
+  }
+
+  .module-expand {
+    margin-left: auto;
+    font-size: 9px;
+    color: var(--text-faint);
+    transition: transform 0.3s, color 0.3s;
+    padding-left: 6px;
+  }
+  .module-node-wrap.expanded .module-expand {
+    transform: rotate(90deg);
+    color: var(--text-muted);
+  }
+
+  /* Color variants */
+  .mod-done::before { background: var(--green); }
+  .mod-done .module-dot { background: var(--green); box-shadow: 0 0 6px var(--green-glow); }
+  .mod-done .module-name { color: var(--text-dim); }
+
+  .mod-active::before { background: var(--cyan); }
+  .mod-active .module-dot {
+    background: var(--cyan);
+    box-shadow: 0 0 8px var(--cyan-glow);
+    animation: dotPulse 1.8s ease-in-out infinite;
+  }
+  .mod-active {
+    border-color: rgba(103, 232, 249, 0.15);
+    box-shadow: 0 0 24px rgba(103, 232, 249, 0.06);
+  }
+
+  .mod-pending::before { background: var(--text-faint); opacity: 0.4; }
+  .mod-pending .module-dot { background: var(--text-faint); opacity: 0.4; }
+  .mod-pending .module-name { color: var(--text-faint); }
+  .mod-pending .module-meta { color: rgba(71, 85, 105, 0.5); }
+
+  @keyframes dotPulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.75); }
+  }
+
+  /* ── Sub-step Nodes (36px) ── */
+  .step-node-wrap {
+    position: absolute;
+    z-index: 10;
+    cursor: pointer;
+    transition: opacity 0.4s ease, transform 0.4s ease;
+  }
+  .step-node-wrap.hidden { opacity: 0; transform: scale(0.9); pointer-events: none; }
+
+  .step-node {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    height: 36px;
+    padding: 0 12px;
+    border-radius: 8px;
+    background: var(--glass-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    transition: all 0.3s;
+    white-space: nowrap;
+    animation: nodeFloat 8s ease-in-out infinite;
+    position: relative;
+  }
+  .step-node:hover {
+    border-color: rgba(255, 255, 255, 0.1);
+    transform: scale(1.04);
+    animation-play-state: paused;
+  }
+
+  .step-icon {
+    font-size: 9px;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 5px;
+    flex-shrink: 0;
+    font-weight: 600;
+  }
+  .si-done { background: var(--green-dim); color: var(--green); }
+  .si-active {
+    background: var(--cyan-dim);
+    color: var(--cyan);
+    animation: dotPulse 1.8s ease-in-out infinite;
+  }
+  .si-pending { background: var(--slate-blue-dim); color: var(--text-faint); }
+
+  .step-label {
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-muted);
+  }
+  .step-node.is-done .step-label { color: var(--text-dim); }
+  .step-node.is-active .step-label { color: var(--cyan); font-weight: 600; }
+  .step-node.is-active {
+    border-color: rgba(103, 232, 249, 0.18);
+    box-shadow: 0 0 16px rgba(103, 232, 249, 0.08);
+  }
+
+  .step-time {
+    font-size: 9px;
+    color: var(--text-faint);
+    margin-left: auto;
+    padding-left: 8px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ── Iteration badge ── */
+  .iter-badge-wrap {
+    position: absolute;
+    z-index: 10;
+    cursor: pointer;
+  }
+  .iter-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 26px;
+    padding: 0 10px;
+    border-radius: 100px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    transition: all 0.3s;
+  }
+  .iter-done {
+    background: var(--green-dim);
+    color: var(--green);
+    border: 1px solid rgba(74, 222, 128, 0.12);
+  }
+  .iter-active {
+    background: var(--cyan-dim);
+    color: var(--cyan);
+    border: 1px solid rgba(103, 232, 249, 0.15);
+    animation: iterGlow 3s ease-in-out infinite;
+  }
+  .iter-pending {
+    background: rgba(71, 85, 105, 0.08);
+    color: var(--text-faint);
+    border: 1px solid rgba(71, 85, 105, 0.12);
+  }
+  @keyframes iterGlow {
+    0%, 100% { box-shadow: 0 0 12px rgba(103, 232, 249, 0.06); }
+    50% { box-shadow: 0 0 20px rgba(103, 232, 249, 0.12); }
+  }
+
+  /* ── Detail Panel ── */
+  .detail-panel {
+    position: fixed;
+    z-index: 60;
+    width: 280px;
+    background: var(--glass-bg);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid var(--glass-border);
+    border-radius: 14px;
+    padding: 16px;
+    box-shadow:
+      0 8px 40px rgba(0, 0, 0, 0.5),
+      0 0 1px rgba(255, 255, 255, 0.06);
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+    transition: all 0.3s ease;
+    pointer-events: none;
+  }
+  .detail-panel.visible {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
+  }
+  .detail-panel::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(103, 232, 249, 0.2), transparent);
+  }
+  .detail-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,0.04); }
+  .detail-title { font-size: 12px; font-weight: 600; color: var(--text); }
+  .detail-status { font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 100px; }
+  .ds-done { background: var(--green-dim); color: var(--green); }
+  .ds-active { background: var(--cyan-dim); color: var(--cyan); }
+  .detail-rows { display: flex; flex-direction: column; gap: 6px; }
+  .detail-row { display: flex; justify-content: space-between; font-size: 11px; }
+  .detail-row-key { color: var(--text-faint); }
+  .detail-row-val { color: var(--text-dim); font-weight: 500; font-variant-numeric: tabular-nums; }
+  .detail-divider { height: 1px; background: rgba(255,255,255,0.03); margin: 6px 0; }
+  .detail-substeps { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+  .detail-substep { display: flex; align-items: center; gap: 8px; font-size: 10px; color: var(--text-faint); }
+  .detail-substep-icon { width: 14px; text-align: center; font-size: 9px; flex-shrink: 0; }
+  .dsi-done { color: var(--green); }
+  .dsi-active { color: var(--cyan); }
+  .dsi-pending { color: var(--text-faint); }
+  .detail-substep-name { flex: 1; }
+  .detail-substep-time { font-variant-numeric: tabular-nums; font-size: 9px; color: var(--text-faint); opacity: 0.6; }
+
+  /* -- Bottom Bar -- */
+  .bottombar { display: flex; align-items: center; justify-content: space-between; padding: 0 24px; height: 34px; min-height: 34px; background: var(--surface); border-top: 1px solid var(--border-faint); font-size: 11px; color: var(--text-faint); z-index: 100; flex-shrink: 0; }
+  .bottombar .stats { display: flex; gap: 20px; }
+  .stat-v { color: var(--text-muted); font-weight: 500; font-variant-numeric: tabular-nums; }
+  .bottombar .hint { font-size: 10px; color: rgba(71,85,105,0.5); }
+  .hint kbd { background: var(--surface-3); padding: 1px 5px; border-radius: 3px; font-family: inherit; font-size: 10px; border: 1px solid var(--border-faint); color: var(--text-faint); }
+
+  /* ── Ambient background particles ── */
+  .ambient-canvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.4;
+  }
+
+  /* ── Fade-in animation for nodes ── */
+  @keyframes nodeEnter {
+    from {
+      opacity: 0;
+      transform: translateY(12px) scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+  .node-anim {
+    animation: nodeEnter 0.5s ease forwards;
+    opacity: 0;
+  }
+
+  /* ── Progress ring on active module ── */
+  .progress-ring {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    width: 20px;
+    height: 20px;
+  }
+  .progress-ring circle {
+    fill: none;
+    stroke-width: 2;
+    stroke-linecap: round;
+  }
+  .progress-ring .track {
+    stroke: var(--border-faint);
+  }
+  .progress-ring .fill {
+    stroke: var(--cyan);
+    stroke-dasharray: 50.3;
+    transform: rotate(-90deg);
+    transform-origin: center;
+    animation: progressSpin 4s linear infinite;
+  }
+  @keyframes progressSpin {
+    from { stroke-dashoffset: 50.3; }
+    to { stroke-dashoffset: 12.6; }
+  }
+
+  /* Legend */
+  .legend { position: fixed; bottom: 46px; left: 20px; z-index: 50; display: flex; flex-direction: column; gap: 6px; padding: 10px 14px; border-radius: 10px; background: var(--glass-bg); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border: 1px solid var(--glass-border); font-size: 10px; color: var(--text-faint); }
+  .legend-row { display: flex; align-items: center; gap: 8px; }
+  .legend-dots { display: flex; gap: 4px; }
+  .legend-dot { width: 3px; height: 3px; border-radius: 50%; }
+  .ld-active { background: var(--cyan); box-shadow: 0 0 4px var(--cyan-glow); }
+  .ld-done { background: var(--green); opacity: 0.6; }
+  .ld-dim { background: var(--dot-dimmed); }
+  .ld-pending { background: var(--dot-pending); }
+
+</style>
+</head>
+<body>
+
+<canvas class="ambient-canvas" id="ambientCanvas"></canvas>
+<div id="app">
+  <!-- Top Bar -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <span class="brand">AI <span class="brand-accent">Inventor</span></span>
+      <span class="sep"></span>
+      <div class="run-badge">
+        <span class="live-dot"></span>
+        <span>nanofiber-struct-v2</span>
+      </div>
+    </div>
+    <div class="topbar-center">
+      <span>Elapsed <span class="val" id="elapsed">47m 12s</span></span>
+      <span class="sep"></span>
+      <span>Iteration <span class="val">2 / 3</span></span>
+    </div>
+    <div class="topbar-right">
+      <span>Tokens <span class="cost">1.8M</span></span>
+      <span class="sep"></span>
+      <span>Cost <span class="cost">$3.21</span></span>
+    </div>
+  </div>
+
+  <!-- Tree viewport -->
+  <div class="tree-viewport" id="treeViewport">
+    <div class="tree-canvas" id="treeCanvas">
+      <svg class="branch-svg" id="branchSvg"></svg>
+      <canvas class="particle-canvas" id="particleCanvas"></canvas>
+    </div>
+
+  </div>
+
+  <!-- Legend (fixed) -->
+  <div class="legend">
+    <div class="legend-row">
+      <div class="legend-dots">
+        <span class="legend-dot ld-active"></span>
+        <span class="legend-dot ld-active"></span>
+        <span class="legend-dot ld-active"></span>
+      </div>
+      <span>Active branch</span>
+    </div>
+    <div class="legend-row">
+      <div class="legend-dots">
+        <span class="legend-dot ld-done"></span>
+        <span class="legend-dot ld-done"></span>
+        <span class="legend-dot ld-done"></span>
+      </div>
+      <span>Completed</span>
+    </div>
+    <div class="legend-row">
+      <div class="legend-dots">
+        <span class="legend-dot ld-dim"></span>
+        <span class="legend-dot ld-dim"></span>
+        <span class="legend-dot ld-dim"></span>
+      </div>
+      <span>Dimmed</span>
+    </div>
+    <div class="legend-row">
+      <div class="legend-dots">
+        <span class="legend-dot ld-pending"></span>
+        <span class="legend-dot ld-pending"></span>
+        <span class="legend-dot ld-pending"></span>
+      </div>
+      <span>Pending</span>
+    </div>
+  </div>
+
+  <!-- Detail panel (fixed) -->
+  <div class="detail-panel" id="detailPanel">
+    <div class="detail-header">
+      <span class="detail-title" id="dpTitle"></span>
+      <span class="detail-status" id="dpStatus"></span>
+    </div>
+    <div class="detail-rows" id="dpRows"></div>
+    <div class="detail-divider"></div>
+    <div class="detail-substeps" id="dpSubsteps"></div>
+  </div>
+
+  <!-- Bottom bar -->
+  <div class="bottombar">
+    <div class="stats">
+      <span>Steps <span class="stat-v">14 / 22</span></span>
+      <span>Hypotheses <span class="stat-v">3</span></span>
+      <span>Papers <span class="stat-v">1 drafted</span></span>
+    </div>
+    <div class="hint">
+      Click nodes to inspect &middot; <kbd>Esc</kbd> close panel
+    </div>
+  </div>
+</div>
+
+<script>
+// -- Constants & State --
+const DOT_SPACING = 4; // px between dot centers
+const DOT_RADIUS = 1.2;
+const DOT_ACTIVE_RADIUS = 1.6;
+const PARTICLE_RADIUS = 3;
+const PARTICLE_TRAIL = 6;
+
+const COLORS = {
+  active:   { r: 103, g: 232, b: 249 },  // cyan
+  done:     { r: 74,  g: 222, b: 128 },   // green
+  dimmed:   { r: 51,  g: 65,  b: 85 },    // slate-700
+  pending:  { r: 30,  g: 41,  b: 59 },    // slate-800
+  amber:    { r: 251, g: 191, b: 36 },
+};
+
+function rgba(c, a) { return `rgba(${c.r},${c.g},${c.b},${a})`; }
+
+// -- Ambient Background Particles --
+const ambientCvs = document.getElementById('ambientCanvas');
+const aCtx = ambientCvs.getContext('2d');
+const ambientDots = [];
+
+function initAmbient() {
+  const DPR = window.devicePixelRatio || 1;
+  const w = window.innerWidth, h = window.innerHeight;
+  ambientCvs.width = w * DPR; ambientCvs.height = h * DPR;
+  ambientCvs.style.width = w + 'px'; ambientCvs.style.height = h + 'px';
+  aCtx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ambientDots.length = 0;
+  for (let i = 0; i < 50; i++) ambientDots.push({
+    x: Math.random() * w, y: Math.random() * h,
+    vx: (Math.random() - 0.5) * 0.15, vy: (Math.random() - 0.5) * 0.1,
+    r: 0.5 + Math.random() * 1.2, phase: Math.random() * Math.PI * 2, speed: 0.3 + Math.random() * 0.5,
+  });
+}
+
+function drawAmbient(t) {
+  const w = window.innerWidth, h = window.innerHeight;
+  aCtx.clearRect(0, 0, w, h);
+  for (const d of ambientDots) {
+    d.x += d.vx; d.y += d.vy;
+    if (d.x < -5) d.x = w + 5; if (d.x > w + 5) d.x = -5;
+    if (d.y < -5) d.y = h + 5; if (d.y > h + 5) d.y = -5;
+    aCtx.beginPath();
+    aCtx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
+    aCtx.fillStyle = rgba(COLORS.dimmed, 0.15 + 0.12 * Math.sin(t * d.speed + d.phase));
+    aCtx.fill();
+  }
+  for (let i = 0; i < ambientDots.length; i++) for (let j = i + 1; j < ambientDots.length; j++) {
+    const dx = ambientDots[i].x - ambientDots[j].x, dy = ambientDots[i].y - ambientDots[j].y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < 120) {
+      aCtx.beginPath(); aCtx.moveTo(ambientDots[i].x, ambientDots[i].y);
+      aCtx.lineTo(ambientDots[j].x, ambientDots[j].y);
+      aCtx.strokeStyle = rgba(COLORS.dimmed, (1 - dist / 120) * 0.04);
+      aCtx.lineWidth = 0.5; aCtx.stroke();
+    }
+  }
+}
+initAmbient();
+window.addEventListener('resize', initAmbient);
+
+// -- Pipeline Data Model --
+const pipelineData = {
+  root: { id: 'root', label: 'Pipeline', icon: '\u2699\uFE0F' },
+  stages: [
+    {
+      id: 'seed_hypo',
+      label: 'Seed Hypothesis',
+      status: 'done',
+      duration: '4m 22s',
+      tokens: '142K',
+      substeps: [
+        { label: 'Parse domain input', status: 'done', time: '0m 48s' },
+        { label: 'Build knowledge graph', status: 'done', time: '2m 11s' },
+        { label: 'Extract seed ideas', status: 'done', time: '1m 23s' },
+      ]
+    },
+    {
+      id: 'hypo_loop',
+      label: 'Hypothesis Loop',
+      status: 'done',
+      duration: '12m 06s',
+      tokens: '480K',
+      iterations: [
+        {
+          id: 'hypo_iter_1',
+          label: 'Iter 1',
+          status: 'done',
+          steps: [
+            { label: 'gen_hypo', status: 'done', time: '2m 14s' },
+            { label: 'review_hypo', status: 'done', time: '1m 48s' },
+          ]
+        },
+        {
+          id: 'hypo_iter_2',
+          label: 'Iter 2',
+          status: 'done',
+          steps: [
+            { label: 'gen_hypo', status: 'done', time: '2m 31s' },
+            { label: 'review_hypo', status: 'done', time: '2m 02s' },
+          ]
+        },
+        {
+          id: 'hypo_iter_3',
+          label: 'Iter 3',
+          status: 'done',
+          steps: [
+            { label: 'gen_hypo', status: 'done', time: '1m 56s' },
+            { label: 'review_hypo', status: 'done', time: '1m 35s' },
+          ]
+        },
+      ]
+    },
+    {
+      id: 'invention_loop',
+      label: 'Invention Loop',
+      status: 'active',
+      duration: '28m 44s',
+      tokens: '1.1M',
+      iterations: [
+        {
+          id: 'inv_iter_1',
+          label: 'Iter 1',
+          status: 'done',
+          steps: [
+            { label: 'gen_strat', status: 'done', time: '1m 52s' },
+            { label: 'gen_plan', status: 'done', time: '2m 38s' },
+            { label: 'gen_narrative', status: 'done', time: '3m 14s' },
+            { label: 'gen_paper_text', status: 'done', time: '4m 22s' },
+            { label: 'review_paper', status: 'done', time: '2m 06s' },
+            { label: 'revise', status: 'done', time: '1m 58s' },
+          ]
+        },
+        {
+          id: 'inv_iter_2',
+          label: 'Iter 2',
+          status: 'active',
+          steps: [
+            { label: 'gen_strat', status: 'done', time: '1m 44s' },
+            { label: 'gen_plan', status: 'done', time: '2m 21s' },
+            { label: 'gen_narrative', status: 'done', time: '3m 08s' },
+            { label: 'gen_paper_text', status: 'active', time: '2m 41s' },
+            { label: 'review_paper', status: 'pending', time: '--' },
+            { label: 'revise', status: 'pending', time: '--' },
+          ]
+        },
+        {
+          id: 'inv_iter_3',
+          label: 'Iter 3',
+          status: 'pending',
+          steps: [
+            { label: 'gen_strat', status: 'pending', time: '--' },
+            { label: 'gen_plan', status: 'pending', time: '--' },
+            { label: 'gen_narrative', status: 'pending', time: '--' },
+            { label: 'gen_paper_text', status: 'pending', time: '--' },
+            { label: 'review_paper', status: 'pending', time: '--' },
+            { label: 'revise', status: 'pending', time: '--' },
+          ]
+        },
+      ]
+    },
+    {
+      id: 'gen_paper_repo',
+      label: 'Paper Repository',
+      status: 'pending',
+      duration: '--',
+      tokens: '--',
+      substeps: [
+        { label: 'gen_artifact_demos', status: 'pending', time: '--' },
+        { label: 'gen_viz', status: 'pending', time: '--' },
+        { label: 'gen_full_paper', status: 'pending', time: '--' },
+        { label: 'compile_repo', status: 'pending', time: '--' },
+      ]
+    },
+  ]
+};
+
+// -- Layout Engine --
+const viewport = document.getElementById('treeViewport');
+const treeCanvas = document.getElementById('treeCanvas');
+const branchSvg = document.getElementById('branchSvg');
+const particleCvs = document.getElementById('particleCanvas');
+const pCtx = particleCvs.getContext('2d');
+
+let VW, VH;
+const nodes = [];       // { id, el, x, y, w, h, status, type, parentId, data }
+const branches = [];    // { from: nodeId, to: nodeId, dots: [{x,y}], status }
+const particles = [];   // { branchIdx, dotIdx, frac, speed, color, trail }
+
+let expandedModules = new Set(['invention_loop']);
+let activeDetail = null;
+let treeCanvasH = 0;
+const dotFlashes = [];  // { branchIdx, dotIdx, intensity (1->0) }
+
+function layout() {
+  VW = viewport.clientWidth;
+  VH = viewport.clientHeight;
+
+  // Clear (preserve SVG and canvas elements)
+  const childrenToRemove = [];
+  for (let i = treeCanvas.children.length - 1; i >= 0; i--) {
+    const ch = treeCanvas.children[i];
+    if (ch !== branchSvg && ch !== particleCvs) {
+      childrenToRemove.push(ch);
+    }
+  }
+  childrenToRemove.forEach(ch => ch.remove());
+
+  branchSvg.innerHTML = '';
+  nodes.length = 0;
+  branches.length = 0;
+
+  const cx = VW / 2;
+  const topPad = 40;
+  let curY = topPad;
+
+  // Root node
+  const rootX = cx - 28;
+  const rootY = curY;
+  createRootNode(rootX, rootY);
+  nodes.push({ id: 'root', x: cx, y: rootY + 28, w: 56, h: 56, status: 'active', type: 'root' });
+  curY += 80;
+
+  // Stage layout
+  const stageSpacing = 16;
+  const data = pipelineData.stages;
+
+  for (let si = 0; si < data.length; si++) {
+    const stage = data[si];
+    const stageY = curY;
+
+    // Module node
+    const modW = estimateModuleWidth(stage.label);
+    const modX = cx - modW / 2;
+    const modNode = createModuleNode(stage, modX, stageY);
+    const modId = stage.id;
+    nodes.push({ id: modId, x: cx, y: stageY + 18, w: modW, h: 36, status: stage.status, type: 'module', data: stage });
+
+    // Branch from previous node
+    const prevNodeId = si === 0 ? 'root' : data[si - 1].id;
+    const prevNode = nodes.find(n => n.id === prevNodeId);
+    if (prevNode) {
+      branches.push(createBranch(prevNode, nodes[nodes.length - 1], stage.status === 'pending' ? 'pending' : (stage.status === 'active' ? 'active' : 'done')));
+    }
+
+    curY += 36 + stageSpacing;
+
+    // Expanded content
+    const isExpanded = expandedModules.has(stage.id);
+    if (isExpanded && stage.iterations) {
+      // Iterations layout — horizontal spread
+      const iterCount = stage.iterations.length;
+      const iterSpread = Math.min(280, (VW - 120) / iterCount);
+      const startX = cx - (iterCount - 1) * iterSpread / 2;
+
+      for (let ii = 0; ii < iterCount; ii++) {
+        const iter = stage.iterations[ii];
+        const iterX = startX + ii * iterSpread;
+        const iterY = curY;
+        const iterId = iter.id;
+
+        createIterBadge(iter, iterX - 28, iterY);
+        nodes.push({ id: iterId, x: iterX, y: iterY + 13, w: 60, h: 26, status: iter.status, type: 'iter', data: iter, parentId: modId });
+
+        // Branch from module to iter
+        branches.push(createBranch(
+          nodes.find(n => n.id === modId),
+          nodes[nodes.length - 1],
+          iter.status === 'pending' ? 'pending' : (iter.status === 'active' ? 'active' : 'done')
+        ));
+
+        // Steps under this iteration
+        if (iter.steps && iter.steps.length > 0) {
+          let stepY = iterY + 38;
+          for (let sti = 0; sti < iter.steps.length; sti++) {
+            const step = iter.steps[sti];
+            const stepId = `${iterId}_step_${sti}`;
+            const stepW = estimateStepWidth(step.label, step.time);
+            const stepX = iterX - stepW / 2;
+            createStepNode(step, stepX, stepY, stepId);
+            nodes.push({ id: stepId, x: iterX, y: stepY + 18, w: stepW, h: 36, status: step.status, type: 'step', data: step, parentId: iterId });
+
+            // Branch from iter (or prev step) to step
+            const fromId = sti === 0 ? iterId : `${iterId}_step_${sti - 1}`;
+            const fromNode = nodes.find(n => n.id === fromId);
+            if (fromNode) {
+              branches.push(createBranch(fromNode, nodes[nodes.length - 1], step.status === 'pending' ? 'pending' : (step.status === 'active' ? 'active' : 'done')));
+            }
+
+            stepY += 36 + 10;
+          }
+          curY = Math.max(curY, stepY);
+        }
+      }
+      curY += 20;
+    } else if (isExpanded && stage.substeps) {
+      // Simple substeps layout — vertical
+      let stepY = curY;
+      for (let sti = 0; sti < stage.substeps.length; sti++) {
+        const step = stage.substeps[sti];
+        const stepId = `${stage.id}_sub_${sti}`;
+        const stepW = estimateStepWidth(step.label, step.time);
+        const stepX = cx - stepW / 2 + 30;
+        createStepNode(step, stepX, stepY, stepId);
+        nodes.push({ id: stepId, x: cx + 30, y: stepY + 18, w: stepW, h: 36, status: step.status, type: 'step', data: step, parentId: modId });
+
+        const fromId = sti === 0 ? modId : `${stage.id}_sub_${sti - 1}`;
+        const fromNode = nodes.find(n => n.id === fromId);
+        if (fromNode) {
+          branches.push(createBranch(fromNode, nodes[nodes.length - 1], step.status === 'pending' ? 'pending' : (step.status === 'active' ? 'active' : 'done')));
+        }
+        stepY += 36 + 10;
+      }
+      curY = stepY + 10;
+    }
+  }
+
+  // Set tree canvas total height
+  const totalH = Math.max(VH, curY + 60);
+  treeCanvas.style.height = totalH + 'px';
+  branchSvg.style.height = totalH + 'px';
+
+  // Size particle canvas
+  const DPR = window.devicePixelRatio || 1;
+  particleCvs.width = VW * DPR;
+  particleCvs.height = totalH * DPR;
+  particleCvs.style.width = VW + 'px';
+  particleCvs.style.height = totalH + 'px';
+  pCtx.setTransform(DPR, 0, 0, DPR, 0, 0);
+
+  // Render all dotted branches as SVG
+  renderBranches();
+
+  // Spawn particles
+  spawnParticles();
+
+  // Store totalH for animation
+  treeCanvasH = totalH;
+}
+
+// -- Node Creation --
+let nodeAnimCounter = 0;
+
+function createRootNode(x, y) {
+  nodeAnimCounter = 0;
+  const wrap = document.createElement('div');
+  wrap.className = 'root-node-wrap node-anim';
+  wrap.style.cssText = `left:${x}px; top:${y}px; animation-delay:${nodeAnimCounter * 60}ms;`;
+  nodeAnimCounter++;
+  wrap.innerHTML = `
+    <div class="root-node">
+      <span class="root-icon">\u2699\uFE0F</span>
+    </div>
+    <div class="root-label">Pipeline Root</div>
+  `;
+  treeCanvas.appendChild(wrap);
+}
+
+function estimateModuleWidth(label) {
+  return Math.max(140, label.length * 7.5 + 70);
+}
+
+function estimateStepWidth(label, time) {
+  return Math.max(120, label.length * 6.5 + (time ? time.length * 5.5 : 0) + 60);
+}
+
+function createModuleNode(stage, x, y) {
+  const wrap = document.createElement('div');
+  wrap.className = `module-node-wrap node-anim${expandedModules.has(stage.id) ? ' expanded' : ''}`;
+  wrap.style.cssText = `left:${x}px; top:${y}px; animation-delay:${nodeAnimCounter * 60}ms;`;
+  nodeAnimCounter++;
+  wrap.dataset.nodeId = stage.id;
+
+  const statusClass = stage.status === 'done' ? 'mod-done' : (stage.status === 'active' ? 'mod-active' : 'mod-pending');
+  const hasChildren = stage.iterations || stage.substeps;
+
+  const progressRing = stage.status === 'active' ? `
+    <svg class="progress-ring" viewBox="0 0 20 20">
+      <circle class="track" cx="10" cy="10" r="8" />
+      <circle class="fill" cx="10" cy="10" r="8" />
+    </svg>` : '';
+
+  wrap.innerHTML = `
+    <div class="module-node ${statusClass}">
+      <span class="module-dot"></span>
+      <div class="module-info">
+        <span class="module-name">${stage.label}</span>
+        <span class="module-meta">${stage.duration}${stage.tokens !== '--' ? ' \u00B7 ' + stage.tokens : ''}</span>
+      </div>
+      ${hasChildren ? '<span class="module-expand">\u25B6</span>' : ''}
+      ${progressRing}
+    </div>
+  `;
+
+  wrap.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (hasChildren) {
+      toggleModule(stage.id);
+    }
+    showDetail(stage, wrap, x, y);
+  });
+
+  treeCanvas.appendChild(wrap);
+  return wrap;
+}
+
+function createIterBadge(iter, x, y) {
+  const wrap = document.createElement('div');
+  wrap.className = 'iter-badge-wrap node-anim';
+  wrap.style.cssText = `left:${x}px; top:${y}px; animation-delay:${nodeAnimCounter * 60}ms;`;
+  nodeAnimCounter++;
+  const cls = iter.status === 'done' ? 'iter-done' : (iter.status === 'active' ? 'iter-active' : 'iter-pending');
+  const icon = iter.status === 'done' ? '\u2713' : (iter.status === 'active' ? '\u25CF' : '\u25CB');
+  wrap.innerHTML = `<div class="iter-badge ${cls}">${icon} ${iter.label}</div>`;
+  wrap.addEventListener('click', (e) => {
+    e.stopPropagation();
+    showIterDetail(iter, wrap);
+  });
+  treeCanvas.appendChild(wrap);
+  return wrap;
+}
+
+function createStepNode(step, x, y, stepId) {
+  const wrap = document.createElement('div');
+  wrap.className = 'step-node-wrap node-anim';
+  wrap.style.cssText = `left:${x}px; top:${y}px; animation-delay:${nodeAnimCounter * 60}ms;`;
+  nodeAnimCounter++;
+  wrap.dataset.nodeId = stepId;
+
+  const statusClass = step.status === 'done' ? 'is-done' : (step.status === 'active' ? 'is-active' : '');
+  const iconClass = step.status === 'done' ? 'si-done' : (step.status === 'active' ? 'si-active' : 'si-pending');
+  const icon = step.status === 'done' ? '\u2713' : (step.status === 'active' ? '\u25CF' : '\u25CB');
+
+  wrap.innerHTML = `
+    <div class="step-node ${statusClass}">
+      <span class="step-icon ${iconClass}">${icon}</span>
+      <span class="step-label">${step.label}</span>
+      <span class="step-time">${step.time}</span>
+    </div>
+  `;
+  treeCanvas.appendChild(wrap);
+  return wrap;
+}
+
+// -- Dotted Branch System --
+function createBranch(fromNode, toNode, status) {
+  // Compute a path from fromNode bottom-center to toNode top-center
+  const x1 = fromNode.x;
+  const y1 = fromNode.y + fromNode.h / 2;
+  const x2 = toNode.x;
+  const y2 = toNode.y - toNode.h / 2;
+
+  // Generate dots along the path with DOT_SPACING
+  const dots = computeDottedPath(x1, y1, x2, y2);
+  return { from: fromNode.id, to: toNode.id, dots, status, x1, y1, x2, y2 };
+}
+
+function computeDottedPath(x1, y1, x2, y2) {
+  const dots = [];
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+
+  // If mostly vertical, use a slight S-curve
+  // If horizontal offset, use an L-shaped path with rounded elbow
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  if (dist < 2) return dots;
+
+  // Use a cubic bezier for smooth curves
+  const midY = (y1 + y2) / 2;
+  const cp1 = { x: x1, y: midY };
+  const cp2 = { x: x2, y: midY };
+
+  // Sample the bezier and place dots at DOT_SPACING intervals
+  const sampleCount = Math.max(20, Math.ceil(dist / 1.5));
+  const points = [];
+  for (let i = 0; i <= sampleCount; i++) {
+    const t = i / sampleCount;
+    points.push(cubicBezier(t, { x: x1, y: y1 }, cp1, cp2, { x: x2, y: y2 }));
+  }
+
+  // Walk the polyline and place dots
+  let accumDist = 0;
+  dots.push({ x: points[0].x, y: points[0].y });
+  for (let i = 1; i < points.length; i++) {
+    const segDx = points[i].x - points[i - 1].x;
+    const segDy = points[i].y - points[i - 1].y;
+    const segLen = Math.sqrt(segDx * segDx + segDy * segDy);
+    accumDist += segLen;
+    while (accumDist >= DOT_SPACING) {
+      accumDist -= DOT_SPACING;
+      // Interpolate back
+      const overshoot = accumDist / segLen;
+      const px = points[i].x - segDx * overshoot;
+      const py = points[i].y - segDy * overshoot;
+      dots.push({ x: px, y: py });
+    }
+  }
+  return dots;
+}
+
+function cubicBezier(t, p0, p1, p2, p3) {
+  const u = 1 - t;
+  const uu = u * u;
+  const uuu = uu * u;
+  const tt = t * t;
+  const ttt = tt * t;
+  return {
+    x: uuu * p0.x + 3 * uu * t * p1.x + 3 * u * tt * p2.x + ttt * p3.x,
+    y: uuu * p0.y + 3 * uu * t * p1.y + 3 * u * tt * p2.y + ttt * p3.y,
+  };
+}
+
+// -- SVG Rendering --
+function renderBranches() {
+  const ns = 'http://www.w3.org/2000/svg';
+
+  for (let bi = 0; bi < branches.length; bi++) {
+    const branch = branches[bi];
+    const dots = branch.dots;
+    if (dots.length < 2) continue;
+
+    // Draw each dot as a tiny circle
+    const group = document.createElementNS(ns, 'g');
+    group.setAttribute('class', `branch-group branch-${branch.status}`);
+
+    // Glow path for active branches
+    if (branch.status === 'active') {
+      const glowPath = document.createElementNS(ns, 'path');
+      let d = `M ${dots[0].x} ${dots[0].y}`;
+      for (let i = 1; i < dots.length; i += 3) {
+        d += ` L ${dots[i].x} ${dots[i].y}`;
+      }
+      glowPath.setAttribute('d', d);
+      glowPath.setAttribute('fill', 'none');
+      glowPath.setAttribute('stroke', rgba(COLORS.active, 0.08));
+      glowPath.setAttribute('stroke-width', '6');
+      glowPath.setAttribute('filter', 'url(#blurFilter)');
+      group.appendChild(glowPath);
+    }
+
+    for (let di = 0; di < dots.length; di++) {
+      const dot = dots[di];
+      const circle = document.createElementNS(ns, 'circle');
+      circle.setAttribute('cx', dot.x);
+      circle.setAttribute('cy', dot.y);
+
+      let color, radius, opacity;
+      if (branch.status === 'active') {
+        color = COLORS.active;
+        radius = DOT_ACTIVE_RADIUS;
+        opacity = 0.7 + 0.3 * Math.sin(di * 0.3);
+      } else if (branch.status === 'done') {
+        color = COLORS.done;
+        radius = DOT_RADIUS;
+        opacity = 0.35;
+      } else {
+        color = COLORS.pending;
+        radius = DOT_RADIUS;
+        opacity = 0.25;
+      }
+
+      circle.setAttribute('r', radius);
+      circle.setAttribute('fill', rgba(color, opacity));
+      group.appendChild(circle);
+    }
+
+    branchSvg.appendChild(group);
+  }
+
+  // Add blur filter definition
+  const defs = document.createElementNS(ns, 'defs');
+  const filter = document.createElementNS(ns, 'filter');
+  filter.setAttribute('id', 'blurFilter');
+  const blur = document.createElementNS(ns, 'feGaussianBlur');
+  blur.setAttribute('stdDeviation', '3');
+  filter.appendChild(blur);
+  defs.appendChild(filter);
+  branchSvg.insertBefore(defs, branchSvg.firstChild);
+}
+
+// -- Particle System (dot-hopping) --
+function spawnParticles() {
+  particles.length = 0;
+  for (let bi = 0; bi < branches.length; bi++) {
+    const branch = branches[bi];
+    if (branch.status !== 'active' || branch.dots.length < 4) continue;
+
+    // Spawn 2-3 particles per active branch
+    const count = 2 + Math.floor(Math.random() * 2);
+    for (let p = 0; p < count; p++) {
+      particles.push({
+        branchIdx: bi,
+        dotIdx: Math.floor(Math.random() * branch.dots.length),
+        targetDotIdx: 0,
+        progress: 0,       // 0-1 between current and target dot
+        speed: 0.04 + Math.random() * 0.04,
+        hopPause: 0,
+        color: COLORS.active,
+        trail: [],
+        hopHeight: 2 + Math.random() * 3,
+        phase: Math.random() * Math.PI * 2,
+        size: PARTICLE_RADIUS * (0.7 + Math.random() * 0.6),
+      });
+      // Set initial target
+      const particle = particles[particles.length - 1];
+      particle.targetDotIdx = Math.min(particle.dotIdx + 1, branch.dots.length - 1);
+    }
+  }
+
+  // Also spawn slower particles on done branches
+  for (let bi = 0; bi < branches.length; bi++) {
+    const branch = branches[bi];
+    if (branch.status !== 'done' || branch.dots.length < 6) continue;
+    // One subtle particle per done branch
+    if (Math.random() < 0.6) {
+      particles.push({
+        branchIdx: bi,
+        dotIdx: 0,
+        targetDotIdx: 1,
+        progress: 0,
+        speed: 0.015 + Math.random() * 0.015,
+        hopPause: 0,
+        color: COLORS.done,
+        trail: [],
+        hopHeight: 1.5,
+        phase: Math.random() * Math.PI * 2,
+        size: PARTICLE_RADIUS * 0.5,
+      });
+    }
+  }
+}
+
+// -- Animation Loop --
+let animFrame;
+let time = 0;
+
+function animate() {
+  time += 0.016;
+  pCtx.clearRect(0, 0, VW, treeCanvasH || VH);
+
+  // Update and draw particles
+  for (let pi = particles.length - 1; pi >= 0; pi--) {
+    const p = particles[pi];
+    const branch = branches[p.branchIdx];
+    if (!branch || branch.dots.length < 2) continue;
+
+    // Hop pause
+    if (p.hopPause > 0) {
+      p.hopPause -= 0.016;
+      // Still draw the particle sitting on the dot
+      drawParticleAt(p, branch.dots[p.dotIdx].x, branch.dots[p.dotIdx].y);
+      continue;
+    }
+
+    // Advance progress toward target dot
+    p.progress += p.speed;
+
+    if (p.progress >= 1) {
+      // Arrived at target dot
+      p.dotIdx = p.targetDotIdx;
+      p.progress = 0;
+
+      // Brief pause at the dot (the "hop" landing)
+      p.hopPause = 0.02 + Math.random() * 0.04;
+
+      // Flash the dot we landed on
+      dotFlashes.push({ branchIdx: p.branchIdx, dotIdx: p.dotIdx, intensity: 1.0 });
+
+      // Next target
+      p.targetDotIdx = p.dotIdx + 1;
+      if (p.targetDotIdx >= branch.dots.length) {
+        // Wrap around
+        p.dotIdx = 0;
+        p.targetDotIdx = 1;
+        p.progress = 0;
+      }
+    }
+
+    // Interpolate position between dots
+    const d0 = branch.dots[p.dotIdx];
+    const d1 = branch.dots[p.targetDotIdx] || d0;
+    const t = p.progress;
+    const px = d0.x + (d1.x - d0.x) * t;
+    const py = d0.y + (d1.y - d0.y) * t;
+
+    // Add hop arc (sine wave)
+    const hopOffset = -Math.sin(t * Math.PI) * p.hopHeight;
+
+    const finalX = px;
+    const finalY = py + hopOffset;
+
+    // Record trail
+    p.trail.push({ x: finalX, y: finalY, age: 0 });
+    if (p.trail.length > PARTICLE_TRAIL) p.trail.shift();
+
+    drawParticleAt(p, finalX, finalY);
+  }
+
+  // Decay dot flashes
+  for (let fi = dotFlashes.length - 1; fi >= 0; fi--) {
+    dotFlashes[fi].intensity -= 0.04;
+    if (dotFlashes[fi].intensity <= 0) {
+      dotFlashes.splice(fi, 1);
+    }
+  }
+
+  // Draw landing flashes on canvas
+  for (const flash of dotFlashes) {
+    const branch = branches[flash.branchIdx];
+    if (!branch || flash.dotIdx >= branch.dots.length) continue;
+    const dot = branch.dots[flash.dotIdx];
+    const r = 4 + flash.intensity * 4;
+    const grad = pCtx.createRadialGradient(dot.x, dot.y, 0, dot.x, dot.y, r);
+    const col = branch.status === 'active' ? COLORS.active : COLORS.done;
+    grad.addColorStop(0, rgba(col, 0.5 * flash.intensity));
+    grad.addColorStop(1, rgba(col, 0));
+    pCtx.beginPath();
+    pCtx.arc(dot.x, dot.y, r, 0, Math.PI * 2);
+    pCtx.fillStyle = grad;
+    pCtx.fill();
+  }
+
+  // Animate dot brightness on active branches (shimmer)
+  animateDotShimmer();
+
+  // Draw ambient background
+  drawAmbient(time);
+
+  animFrame = requestAnimationFrame(animate);
+}
+
+function drawParticleAt(p, x, y) {
+  // Trail
+  for (let ti = 0; ti < p.trail.length; ti++) {
+    const tr = p.trail[ti];
+    const alpha = (ti / p.trail.length) * 0.3;
+    const r = p.size * (0.3 + 0.7 * ti / p.trail.length);
+    pCtx.beginPath();
+    pCtx.arc(tr.x, tr.y, r, 0, Math.PI * 2);
+    pCtx.fillStyle = rgba(p.color, alpha);
+    pCtx.fill();
+  }
+
+  // Main particle
+  pCtx.beginPath();
+  pCtx.arc(x, y, p.size, 0, Math.PI * 2);
+  pCtx.fillStyle = rgba(p.color, 0.9);
+  pCtx.fill();
+
+  // Glow
+  pCtx.beginPath();
+  pCtx.arc(x, y, p.size * 2.5, 0, Math.PI * 2);
+  const grad = pCtx.createRadialGradient(x, y, 0, x, y, p.size * 2.5);
+  grad.addColorStop(0, rgba(p.color, 0.25));
+  grad.addColorStop(1, rgba(p.color, 0));
+  pCtx.fillStyle = grad;
+  pCtx.fill();
+}
+
+// -- Dot Shimmer --
+function animateDotShimmer() {
+  // Active branches: traveling wave of brightness
+  const activeGroups = branchSvg.querySelectorAll('.branch-active');
+  activeGroups.forEach(group => {
+    const circles = group.querySelectorAll('circle');
+    const total = circles.length;
+    circles.forEach((c, i) => {
+      // Traveling wave: dots light up in sequence
+      const wavePos = ((time * 2) % 1) * total;
+      const distFromWave = Math.abs(i - wavePos);
+      const waveBright = Math.max(0, 1 - distFromWave / 8) * 0.3;
+      const baseOpacity = 0.45 + 0.15 * Math.sin(time * 2.5 + i * 0.12);
+      const finalOpacity = Math.min(1, baseOpacity + waveBright);
+
+      // Check if any flash is on this dot
+      let flashBoost = 0;
+      for (const f of dotFlashes) {
+        if (f.dotIdx === i) flashBoost = Math.max(flashBoost, f.intensity * 0.4);
+      }
+
+      c.setAttribute('fill', rgba(COLORS.active, finalOpacity + flashBoost));
+      c.setAttribute('r', DOT_ACTIVE_RADIUS + flashBoost * 1.5);
+    });
+  });
+
+  // Done branches: very subtle breathing
+  const doneGroups = branchSvg.querySelectorAll('.branch-done');
+  doneGroups.forEach(group => {
+    const circles = group.querySelectorAll('circle');
+    circles.forEach((c, i) => {
+      const baseOpacity = 0.25 + 0.08 * Math.sin(time * 0.8 + i * 0.2);
+      c.setAttribute('fill', rgba(COLORS.done, baseOpacity));
+    });
+  });
+}
+
+// -- Interactions --
+function toggleModule(moduleId) {
+  if (expandedModules.has(moduleId)) {
+    expandedModules.delete(moduleId);
+  } else {
+    expandedModules.add(moduleId);
+  }
+  hideDetail();
+  layout();
+}
+
+function showDetail(stage, wrapEl, x, y) {
+  const panel = document.getElementById('detailPanel');
+  const dpTitle = document.getElementById('dpTitle');
+  const dpStatus = document.getElementById('dpStatus');
+  const dpRows = document.getElementById('dpRows');
+  const dpSubsteps = document.getElementById('dpSubsteps');
+
+  dpTitle.textContent = stage.label;
+  dpStatus.textContent = stage.status === 'done' ? 'Complete' : (stage.status === 'active' ? 'Running' : 'Pending');
+  dpStatus.className = `detail-status ${stage.status === 'done' ? 'ds-done' : (stage.status === 'active' ? 'ds-active' : '')}`;
+
+  let rowsHtml = `<div class="detail-row"><span class="detail-row-key">Duration</span><span class="detail-row-val">${stage.duration}</span></div>`;
+  rowsHtml += `<div class="detail-row"><span class="detail-row-key">Tokens</span><span class="detail-row-val">${stage.tokens}</span></div>`;
+  if (stage.iterations) rowsHtml += `<div class="detail-row"><span class="detail-row-key">Iterations</span><span class="detail-row-val">${stage.iterations.length}</span></div>`;
+  dpRows.innerHTML = rowsHtml;
+
+  const steps = stage.substeps || (stage.iterations ? stage.iterations.flatMap(it => it.steps.map(s => ({...s, label: `${it.label}: ${s.label}`}))) : []);
+  let stepsHtml = '';
+  steps.slice(0, 8).forEach(s => {
+    const ic = s.status === 'done' ? 'dsi-done' : (s.status === 'active' ? 'dsi-active' : 'dsi-pending');
+    const sym = s.status === 'done' ? '\u2713' : (s.status === 'active' ? '\u25CF' : '\u25CB');
+    stepsHtml += `<div class="detail-substep"><span class="detail-substep-icon ${ic}">${sym}</span><span class="detail-substep-name">${s.label}</span><span class="detail-substep-time">${s.time}</span></div>`;
+  });
+  if (steps.length > 8) stepsHtml += `<div class="detail-substep"><span class="detail-substep-icon dsi-pending">\u2026</span><span class="detail-substep-name">+${steps.length - 8} more</span></div>`;
+  dpSubsteps.innerHTML = stepsHtml;
+
+  // Position panel (fixed positioning — use screen coords)
+  const rect = wrapEl.getBoundingClientRect();
+  let panelX = rect.right + 16;
+  let panelY = rect.top;
+
+  // Keep in bounds
+  if (panelX + 290 > window.innerWidth) panelX = rect.left - 296;
+  if (panelY + 300 > window.innerHeight) panelY = window.innerHeight - 310;
+  if (panelY < 60) panelY = 60;
+
+  panel.style.left = panelX + 'px';
+  panel.style.top = panelY + 'px';
+  panel.classList.add('visible');
+  activeDetail = stage.id;
+}
+
+function showIterDetail(iter, wrapEl) {
+  const panel = document.getElementById('detailPanel');
+  const dpTitle = document.getElementById('dpTitle');
+  const dpStatus = document.getElementById('dpStatus');
+  const dpRows = document.getElementById('dpRows');
+  const dpSubsteps = document.getElementById('dpSubsteps');
+
+  dpTitle.textContent = iter.label;
+  dpStatus.textContent = iter.status === 'done' ? 'Complete' : (iter.status === 'active' ? 'Running' : 'Pending');
+  dpStatus.className = `detail-status ${iter.status === 'done' ? 'ds-done' : (iter.status === 'active' ? 'ds-active' : '')}`;
+
+  const done = iter.steps.filter(s => s.status === 'done').length;
+  dpRows.innerHTML = `<div class="detail-row"><span class="detail-row-key">Steps</span><span class="detail-row-val">${done} / ${iter.steps.length}</span></div>`;
+  let stepsHtml = '';
+  iter.steps.forEach(s => {
+    const ic = s.status === 'done' ? 'dsi-done' : (s.status === 'active' ? 'dsi-active' : 'dsi-pending');
+    const sym = s.status === 'done' ? '\u2713' : (s.status === 'active' ? '\u25CF' : '\u25CB');
+    stepsHtml += `<div class="detail-substep"><span class="detail-substep-icon ${ic}">${sym}</span><span class="detail-substep-name">${s.label}</span><span class="detail-substep-time">${s.time}</span></div>`;
+  });
+  dpSubsteps.innerHTML = stepsHtml;
+
+  const rect = wrapEl.getBoundingClientRect();
+  let panelX = rect.right + 16;
+  let panelY = rect.top - 20;
+  if (panelX + 290 > window.innerWidth) panelX = rect.left - 296;
+  if (panelY + 250 > window.innerHeight) panelY = window.innerHeight - 260;
+  if (panelY < 60) panelY = 60;
+
+  panel.style.left = panelX + 'px';
+  panel.style.top = panelY + 'px';
+  panel.classList.add('visible');
+  activeDetail = iter.id;
+}
+
+function hideDetail() {
+  document.getElementById('detailPanel').classList.remove('visible');
+  activeDetail = null;
+}
+
+// Close detail on Esc or outside click
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') hideDetail();
+});
+viewport.addEventListener('click', e => {
+  if (e.target === viewport || e.target === treeCanvas || e.target === particleCvs) {
+    hideDetail();
+  }
+});
+
+// -- Elapsed Timer --
+let elapsedSec = 47 * 60 + 12;
+function updateElapsed() {
+  elapsedSec++;
+  const m = Math.floor(elapsedSec / 60);
+  const s = elapsedSec % 60;
+  const h = Math.floor(m / 60);
+  const mm = m % 60;
+  document.getElementById('elapsed').textContent =
+    h > 0 ? `${h}h ${String(mm).padStart(2, '0')}m ${String(s).padStart(2, '0')}s`
+           : `${mm}m ${String(s).padStart(2, '0')}s`;
+}
+setInterval(updateElapsed, 1000);
+
+// -- Init & Resize --
+function init() {
+  layout();
+  animate();
+}
+
+window.addEventListener('resize', () => {
+  cancelAnimationFrame(animFrame);
+  layout();
+  animate();
+});
+
+init();
+</script>
+</body>
+</html>

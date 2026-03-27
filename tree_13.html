@@ -1,0 +1,1394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AII Pipeline Tree - Status Badges</title>
+<style>
+  /* ===== Reset & Base ===== */
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --slate-950: #020617;
+    --slate-900: #0f172a;
+    --slate-800: #1e293b;
+    --slate-700: #334155;
+    --slate-600: #475569;
+    --slate-500: #64748b;
+    --slate-400: #94a3b8;
+    --slate-300: #cbd5e1;
+    --slate-200: #e2e8f0;
+    --slate-100: #f1f5f9;
+
+    --green-400: #4ade80;
+    --green-500: #22c55e;
+    --green-600: #16a34a;
+
+    --blue-400: #60a5fa;
+    --blue-500: #3b82f6;
+    --blue-600: #2563eb;
+
+    --glow-green: 0 0 8px rgba(74, 222, 128, 0.4);
+    --glow-blue: 0 0 10px rgba(59, 130, 246, 0.5);
+    --glow-gray: 0 0 4px rgba(100, 116, 139, 0.3);
+
+    --tree-line: rgba(100, 116, 139, 0.25);
+    --module-height: 40px;
+    --root-height: 52px;
+    --indent: 32px;
+    --line-weight: 2px;
+
+    --font-mono: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+
+  body {
+    background: var(--slate-950);
+    color: var(--slate-300);
+    font-family: var(--font-sans);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 40px 20px;
+    overflow-x: hidden;
+  }
+
+  /* ===== Canvas ===== */
+  #particle-canvas {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  /* ===== Container ===== */
+  .tree-container {
+    position: relative;
+    z-index: 1;
+    width: 680px;
+    max-width: 100%;
+  }
+
+  .tree-header { text-align: center; margin-bottom: 36px; }
+
+  .tree-header h1 {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    margin-bottom: 6px;
+    background: linear-gradient(135deg, var(--slate-100), var(--blue-400));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .tree-header p {
+    font-size: 13px;
+    color: var(--slate-500);
+    font-family: var(--font-mono);
+  }
+
+  /* ===== Progress bar ===== */
+  .progress-wrap {
+    margin-bottom: 32px;
+  }
+
+  .progress-track {
+    width: 100%;
+    height: 6px;
+    background: var(--slate-800);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    border-radius: 3px;
+    background: linear-gradient(90deg, var(--green-500), var(--blue-500));
+    width: 0%;
+    transition: width 1.2s cubic-bezier(0.22, 1, 0.36, 1);
+    position: relative;
+  }
+
+  .progress-fill::after {
+    content: '';
+    position: absolute;
+    right: 0; top: 0;
+    height: 100%; width: 40px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3));
+    animation: shimmer-bar 1.8s ease-in-out infinite;
+  }
+
+  @keyframes shimmer-bar {
+    0%, 100% { opacity: 0; }
+    50% { opacity: 1; }
+  }
+
+  .progress-labels {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--slate-500);
+    font-family: var(--font-mono);
+  }
+
+  /* ===== Root node ===== */
+  .root-node {
+    display: flex;
+    align-items: center;
+    height: var(--root-height);
+    padding: 0 16px;
+    background: linear-gradient(135deg, var(--slate-800), var(--slate-900));
+    border: 1px solid var(--slate-700);
+    border-radius: 10px;
+    margin-bottom: 4px;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .root-node::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(59,130,246,0.06), transparent);
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+
+  .root-node:hover::before { opacity: 1; }
+  .root-node:hover { border-color: var(--slate-600); }
+
+  .root-icon {
+    width: 28px; height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    background: var(--slate-700);
+    margin-right: 12px;
+    flex-shrink: 0;
+    font-size: 14px;
+  }
+
+  .root-label {
+    flex: 1;
+    font-weight: 600;
+    font-size: 15px;
+    color: var(--slate-100);
+  }
+
+  .root-meta {
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--slate-500);
+    margin-right: 12px;
+  }
+
+  .chevron {
+    width: 20px; height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--slate-500);
+    transition: transform 0.3s ease;
+  }
+
+  .collapsed .chevron { transform: rotate(-90deg); }
+
+  /* ===== Phase group ===== */
+  .phase-group {
+    position: relative;
+    margin-left: var(--indent);
+    padding-left: 20px;
+  }
+
+  .phase-group::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 20px;
+    width: var(--line-weight);
+    background: var(--tree-line);
+  }
+
+  .phase-group[data-last]::before { bottom: calc(100% - 26px); }
+
+  /* ===== Phase node ===== */
+  .phase-node {
+    display: flex;
+    align-items: center;
+    height: 44px;
+    padding: 0 14px;
+    margin: 3px 0;
+    background: var(--slate-900);
+    border: 1px solid transparent;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    position: relative;
+  }
+
+  .phase-node::before {
+    content: '';
+    position: absolute;
+    left: -20px; top: 50%;
+    width: 20px; height: var(--line-weight);
+    background: var(--tree-line);
+  }
+
+  .phase-node:hover {
+    background: var(--slate-800);
+    border-color: var(--slate-700);
+  }
+
+  .phase-node.all-done { border-left: 2px solid var(--green-500); }
+  .phase-node.has-running { border-left: 2px solid var(--blue-500); }
+
+  .phase-icon {
+    width: 24px; height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 5px;
+    margin-right: 10px;
+    flex-shrink: 0;
+    font-size: 12px;
+    background: var(--slate-800);
+    border: 1px solid var(--slate-700);
+  }
+
+  .phase-node.all-done .phase-icon {
+    background: rgba(34,197,94,0.1);
+    border-color: rgba(34,197,94,0.3);
+  }
+
+  .phase-node.has-running .phase-icon {
+    background: rgba(59,130,246,0.08);
+    border-color: rgba(59,130,246,0.25);
+  }
+
+  .phase-label {
+    flex: 1;
+    font-weight: 500;
+    font-size: 13px;
+    color: var(--slate-200);
+  }
+
+  /* Phase ring */
+  .phase-ring {
+    width: 22px; height: 22px;
+    margin-right: 8px;
+    flex-shrink: 0;
+  }
+
+  .ring-bg { fill: none; stroke: var(--slate-700); stroke-width: 2.5; }
+  .ring-arc {
+    fill: none; stroke-width: 2.5; stroke-linecap: round;
+    transition: stroke-dashoffset 0.8s ease;
+    transform-origin: center; transform: rotate(-90deg);
+  }
+
+  .ring-arc.clr-green { stroke: var(--green-500); }
+  .ring-arc.clr-blue { stroke: var(--blue-500); }
+  .ring-arc.clr-gray { stroke: var(--slate-600); }
+
+  /* Phase badge group */
+  .phase-badges { display: flex; gap: 4px; margin-right: 8px; align-items: center; }
+
+  .mini-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 14px;
+    padding: 0 5px;
+    border-radius: 7px;
+    font-size: 9px;
+    font-weight: 600;
+    font-family: var(--font-mono);
+  }
+
+  .mini-badge.mb-done { background: rgba(34,197,94,0.15); color: var(--green-400); }
+  .mini-badge.mb-run  { background: rgba(59,130,246,0.15); color: var(--blue-400); }
+  .mini-badge.mb-pend { background: rgba(100,116,139,0.12); color: var(--slate-500); }
+
+  .phase-count {
+    font-size: 10px;
+    font-family: var(--font-mono);
+    color: var(--slate-500);
+    margin-right: 8px;
+    background: var(--slate-800);
+    padding: 2px 7px;
+    border-radius: 4px;
+  }
+
+  /* ===== Sub-module group ===== */
+  .sub-group {
+    position: relative;
+    margin-left: var(--indent);
+    padding-left: 18px;
+    overflow: hidden;
+    transition: max-height 0.4s cubic-bezier(0.22,1,0.36,1), opacity 0.3s;
+  }
+
+  .sub-group.hidden {
+    max-height: 0 !important;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .sub-group::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 20px;
+    width: var(--line-weight);
+    background: var(--tree-line);
+  }
+
+  .sub-group[data-last-p]::before { bottom: calc(100% - 22px); }
+
+  /* ===== Sub-module node ===== */
+  .sub-node {
+    display: flex;
+    align-items: center;
+    height: var(--module-height);
+    padding: 0 10px 0 8px;
+    margin: 2px 0;
+    border-radius: 7px;
+    position: relative;
+    transition: all 0.2s ease;
+    cursor: pointer;
+  }
+
+  .sub-node::before {
+    content: '';
+    position: absolute;
+    left: -18px; top: 50%;
+    width: 18px; height: var(--line-weight);
+    background: var(--tree-line);
+  }
+
+  .sub-node:hover { background: rgba(30,41,59,0.6); }
+
+  .sub-node.is-running {
+    background: rgba(37,99,235,0.06);
+    border-left: 2px solid rgba(59,130,246,0.4);
+    padding-left: 6px;
+  }
+
+  .sub-node.is-done .sub-name { color: var(--slate-500); }
+
+  .sub-name {
+    flex: 1;
+    font-size: 12px;
+    font-family: var(--font-mono);
+    color: var(--slate-400);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding-right: 10px;
+  }
+
+  .sub-dur {
+    font-size: 10px;
+    font-family: var(--font-mono);
+    color: var(--slate-600);
+    margin-right: 10px;
+    flex-shrink: 0;
+  }
+
+  /* ===== Status Badge (pill) — 24px x 16px ===== */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    height: 16px;
+    padding: 0 7px;
+    border-radius: 8px;
+    font-size: 9px;
+    font-weight: 600;
+    font-family: var(--font-sans);
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    flex-shrink: 0;
+    position: relative;
+    overflow: hidden;
+    line-height: 1;
+  }
+
+  /* Done */
+  .badge.done {
+    background: linear-gradient(135deg, var(--green-600), var(--green-500));
+    color: #fff;
+    box-shadow: var(--glow-green);
+  }
+
+  .badge.done::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,0.15), transparent);
+  }
+
+  /* Running — with shimmer sweep */
+  .badge.running {
+    background: linear-gradient(135deg, var(--blue-600), var(--blue-500));
+    color: #fff;
+    box-shadow: var(--glow-blue);
+    animation: badge-pulse 2.5s ease-in-out infinite;
+  }
+
+  .badge.running::before {
+    content: '';
+    position: absolute;
+    top: 0; left: -100%;
+    width: 100%; height: 100%;
+    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.3) 50%, transparent 100%);
+    animation: shimmer-sweep 2s ease-in-out infinite;
+  }
+
+  @keyframes shimmer-sweep {
+    0% { left: -100%; }
+    100% { left: 200%; }
+  }
+
+  @keyframes badge-pulse {
+    0%, 100% { box-shadow: 0 0 8px rgba(59,130,246,0.4); }
+    50% { box-shadow: 0 0 16px rgba(59,130,246,0.7); }
+  }
+
+  /* Pending */
+  .badge.pending {
+    background: var(--slate-700);
+    color: var(--slate-400);
+    box-shadow: var(--glow-gray);
+    border: 1px solid var(--slate-600);
+  }
+
+  /* ===== Running spinner dot ===== */
+  .spinner-dot {
+    display: inline-block;
+    width: 4px; height: 4px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.7);
+    margin-left: 4px;
+    animation: spin-blink 1.2s ease-in-out infinite;
+  }
+
+  @keyframes spin-blink {
+    0%, 100% { opacity: 0.3; transform: scale(0.8); }
+    50% { opacity: 1; transform: scale(1.2); }
+  }
+
+  /* ===== Dot traveling on tree lines ===== */
+  @keyframes dot-travel {
+    0% { top: 0; opacity: 0; }
+    10% { opacity: 1; }
+    90% { opacity: 1; }
+    100% { top: 100%; opacity: 0; }
+  }
+
+  .line-dot {
+    position: absolute;
+    left: -1px;
+    width: 4px; height: 4px;
+    border-radius: 50%;
+    background: rgba(96,165,250,0.8);
+    box-shadow: 0 0 6px rgba(96,165,250,0.8);
+    animation: dot-travel 3s linear infinite;
+    pointer-events: none;
+  }
+
+  /* ===== Status flash ===== */
+  @keyframes flash-green {
+    0% { box-shadow: 0 0 0 0 rgba(74,222,128,0.6); }
+    50% { box-shadow: 0 0 20px 4px rgba(74,222,128,0.3); }
+    100% { box-shadow: none; }
+  }
+
+  @keyframes flash-blue {
+    0% { box-shadow: 0 0 0 0 rgba(59,130,246,0.6); }
+    50% { box-shadow: 0 0 20px 4px rgba(59,130,246,0.3); }
+    100% { box-shadow: none; }
+  }
+
+  .flash-done { animation: flash-green 0.8s ease-out; }
+  .flash-running { animation: flash-blue 0.8s ease-out; }
+
+  /* ===== Entrance ===== */
+  @keyframes fade-slide-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .anim-in { animation: fade-slide-in 0.4s ease forwards; opacity: 0; }
+
+  /* ===== Tooltip ===== */
+  .tip {
+    position: fixed;
+    z-index: 100;
+    padding: 8px 12px;
+    background: var(--slate-800);
+    border: 1px solid var(--slate-700);
+    border-radius: 6px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--slate-300);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    max-width: 260px;
+  }
+
+  .tip.visible { opacity: 1; }
+  .tip-title { font-weight: 600; color: var(--slate-100); margin-bottom: 4px; font-family: var(--font-sans); }
+  .tip-row { display: flex; justify-content: space-between; gap: 12px; margin-top: 2px; }
+  .tip-k { color: var(--slate-500); }
+  .tip-v { color: var(--slate-300); }
+
+  /* ===== Detail Panel ===== */
+  .detail {
+    position: fixed;
+    right: -380px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 340px;
+    max-height: 70vh;
+    background: var(--slate-900);
+    border: 1px solid var(--slate-700);
+    border-radius: 12px;
+    padding: 20px;
+    z-index: 50;
+    transition: right 0.4s cubic-bezier(0.22,1,0.36,1);
+    box-shadow: -8px 0 30px rgba(0,0,0,0.4);
+    overflow-y: auto;
+  }
+
+  .detail.open { right: 20px; }
+  .detail::-webkit-scrollbar { width: 4px; }
+  .detail::-webkit-scrollbar-thumb { background: var(--slate-700); border-radius: 2px; }
+
+  .detail-close {
+    position: absolute;
+    top: 12px; right: 12px;
+    width: 24px; height: 24px;
+    display: flex; align-items: center; justify-content: center;
+    border: none; background: var(--slate-800);
+    border-radius: 6px; color: var(--slate-400);
+    cursor: pointer; font-size: 14px;
+    transition: all 0.15s;
+  }
+
+  .detail-close:hover { background: var(--slate-700); color: var(--slate-200); }
+
+  .detail-hdr {
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--slate-800);
+  }
+
+  .detail-name {
+    font-size: 15px; font-weight: 600; color: var(--slate-100);
+    margin-bottom: 6px; font-family: var(--font-mono); word-break: break-all;
+  }
+
+  .detail-ring-wrap { display: flex; justify-content: center; padding: 12px 0 8px; }
+
+  .detail-ring { width: 80px; height: 80px; }
+  .dr-bg { fill: none; stroke: var(--slate-800); stroke-width: 5; }
+  .dr-fill { fill: none; stroke-width: 5; stroke-linecap: round; transition: stroke-dashoffset 0.8s ease; }
+  .dr-fill.green { stroke: var(--green-500); }
+  .dr-fill.blue { stroke: var(--blue-500); }
+  .dr-text { font-size: 14px; font-weight: 700; fill: var(--slate-200); font-family: var(--font-mono); text-anchor: middle; dominant-baseline: central; }
+  .dr-label { font-size: 8px; fill: var(--slate-500); text-anchor: middle; dominant-baseline: central; text-transform: uppercase; letter-spacing: 0.5px; }
+
+  .detail-section { margin-bottom: 14px; }
+  .detail-stitle { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; color: var(--slate-500); margin-bottom: 6px; }
+  .detail-row { display: flex; justify-content: space-between; padding: 5px 0; font-size: 12px; border-bottom: 1px solid rgba(30,41,59,0.5); }
+  .detail-row-k { color: var(--slate-500); font-family: var(--font-mono); }
+  .detail-row-v { color: var(--slate-300); font-weight: 500; }
+
+  /* ===== Toast ===== */
+  .toast-wrap {
+    position: fixed;
+    bottom: 20px; right: 20px;
+    z-index: 200;
+    display: flex;
+    flex-direction: column-reverse;
+    gap: 8px;
+  }
+
+  .toast {
+    padding: 10px 16px;
+    background: var(--slate-800);
+    border: 1px solid var(--slate-700);
+    border-radius: 8px;
+    font-size: 12px;
+    color: var(--slate-300);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+    animation: toast-in 0.3s ease forwards;
+    max-width: 320px;
+  }
+
+  .toast.out { animation: toast-out 0.3s ease forwards; }
+
+  @keyframes toast-in {
+    from { opacity: 0; transform: translateY(12px) scale(0.95); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  @keyframes toast-out {
+    from { opacity: 1; transform: translateY(0) scale(1); }
+    to { opacity: 0; transform: translateY(12px) scale(0.95); }
+  }
+
+  .toast-ico {
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; font-size: 10px;
+  }
+
+  .toast-ico.tg { background: rgba(34,197,94,0.2); color: var(--green-400); }
+  .toast-ico.tb { background: rgba(59,130,246,0.2); color: var(--blue-400); }
+  .toast-txt { flex: 1; font-family: var(--font-mono); font-size: 11px; }
+
+  /* ===== Legend + Stats ===== */
+  .legend {
+    display: flex; gap: 20px; justify-content: center;
+    margin-top: 28px; padding: 12px 0;
+    border-top: 1px solid var(--slate-800);
+  }
+
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--slate-500); }
+
+  .stats-row { display: flex; justify-content: center; gap: 28px; margin-top: 16px; }
+  .stat-block { text-align: center; }
+  .stat-val { font-size: 20px; font-weight: 700; color: var(--slate-100); font-family: var(--font-mono); }
+  .stat-val.green { color: var(--green-400); }
+  .stat-val.blue { color: var(--blue-400); }
+  .stat-val.gray { color: var(--slate-500); }
+  .stat-lbl { font-size: 10px; color: var(--slate-600); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
+
+  .kbd-hints { display: flex; gap: 14px; justify-content: center; margin-top: 12px; }
+  .kbd-hint { display: flex; align-items: center; gap: 4px; font-size: 10px; color: var(--slate-600); }
+  .kbd-key {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 18px; height: 18px;
+    background: var(--slate-800); border: 1px solid var(--slate-700);
+    border-radius: 3px; font-size: 9px; font-family: var(--font-mono); color: var(--slate-400);
+  }
+
+  /* ===== Scroll ===== */
+  .tree-body { max-height: 72vh; overflow-y: auto; padding-right: 4px; }
+  .tree-body::-webkit-scrollbar { width: 5px; }
+  .tree-body::-webkit-scrollbar-track { background: transparent; }
+  .tree-body::-webkit-scrollbar-thumb { background: var(--slate-700); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<canvas id="particle-canvas"></canvas>
+
+<div class="tree-container">
+  <div class="tree-header">
+    <h1>AII Pipeline Execution</h1>
+    <p>v2.3.1 / run-20260326-091522</p>
+  </div>
+
+  <div class="progress-wrap">
+    <div class="progress-track">
+      <div class="progress-fill" id="pFill"></div>
+    </div>
+    <div class="progress-labels">
+      <span id="pText">0 / 24 steps</span>
+      <span id="pPct">0%</span>
+    </div>
+  </div>
+
+  <div class="tree-body" id="treeBody"></div>
+
+  <div class="legend">
+    <div class="legend-item"><span class="badge done" style="font-size:8px">Done</span><span>Completed</span></div>
+    <div class="legend-item"><span class="badge running" style="font-size:8px">Running</span><span>In Progress</span></div>
+    <div class="legend-item"><span class="badge pending" style="font-size:8px">Pending</span><span>Queued</span></div>
+  </div>
+
+  <div class="stats-row">
+    <div class="stat-block"><div class="stat-val green" id="sDone">0</div><div class="stat-lbl">Done</div></div>
+    <div class="stat-block"><div class="stat-val blue" id="sRun">0</div><div class="stat-lbl">Running</div></div>
+    <div class="stat-block"><div class="stat-val gray" id="sPend">0</div><div class="stat-lbl">Pending</div></div>
+    <div class="stat-block"><div class="stat-val" id="sTime">04:16</div><div class="stat-lbl">Elapsed</div></div>
+  </div>
+
+  <div class="kbd-hints">
+    <div class="kbd-hint"><span class="kbd-key">C</span> collapse</div>
+    <div class="kbd-hint"><span class="kbd-key">E</span> expand</div>
+    <div class="kbd-hint"><span class="kbd-key">Esc</span> close</div>
+  </div>
+</div>
+
+<!-- Tooltip -->
+<div class="tip" id="tip">
+  <div class="tip-title" id="tipT"></div>
+  <div class="tip-row"><span class="tip-k">Status</span><span class="tip-v" id="tipS"></span></div>
+  <div class="tip-row"><span class="tip-k">Duration</span><span class="tip-v" id="tipD"></span></div>
+  <div class="tip-row"><span class="tip-k">Model</span><span class="tip-v" id="tipM"></span></div>
+</div>
+
+<!-- Detail Panel -->
+<div class="detail" id="detailPanel">
+  <button class="detail-close" id="detailClose">&times;</button>
+  <div class="detail-hdr">
+    <div class="detail-name" id="dName">--</div>
+    <div id="dBadge"></div>
+  </div>
+  <div class="detail-ring-wrap">
+    <svg class="detail-ring" viewBox="0 0 80 80">
+      <circle class="dr-bg" cx="40" cy="40" r="34"/>
+      <circle class="dr-fill green" id="drFill" cx="40" cy="40" r="34"
+        stroke-dasharray="213.6" stroke-dashoffset="213.6"
+        transform="rotate(-90 40 40)"/>
+      <text class="dr-text" x="40" y="36" id="drText">0%</text>
+      <text class="dr-label" x="40" y="50" id="drLabel">PHASE</text>
+    </svg>
+  </div>
+  <div class="detail-section">
+    <div class="detail-stitle">Execution</div>
+    <div class="detail-row"><span class="detail-row-k">duration</span><span class="detail-row-v" id="dDur">--</span></div>
+    <div class="detail-row"><span class="detail-row-k">model</span><span class="detail-row-v" id="dModel">--</span></div>
+    <div class="detail-row"><span class="detail-row-k">phase</span><span class="detail-row-v" id="dPhase">--</span></div>
+    <div class="detail-row"><span class="detail-row-k">position</span><span class="detail-row-v" id="dPos">--</span></div>
+  </div>
+  <div class="detail-section">
+    <div class="detail-stitle">Tokens</div>
+    <div class="detail-row"><span class="detail-row-k">input</span><span class="detail-row-v" id="dTokIn">--</span></div>
+    <div class="detail-row"><span class="detail-row-k">output</span><span class="detail-row-v" id="dTokOut">--</span></div>
+    <div class="detail-row"><span class="detail-row-k">cost</span><span class="detail-row-v" id="dCost">--</span></div>
+  </div>
+  <div class="detail-section">
+    <div class="detail-stitle">Dependencies</div>
+    <div class="detail-row"><span class="detail-row-k">depends_on</span><span class="detail-row-v" id="dDeps">--</span></div>
+    <div class="detail-row"><span class="detail-row-k">blocks</span><span class="detail-row-v" id="dBlocks">--</span></div>
+  </div>
+</div>
+
+<!-- Toasts -->
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script>
+// ============================================================
+//  PIPELINE DATA
+// ============================================================
+const DATA = {
+  name: "AII Pipeline",
+  icon: "\u26A1",
+  phases: [
+    {
+      name: "Seed Hypotheses",
+      icon: "\uD83C\uDF31",
+      steps: [
+        { name: "load_knowledge_graph",      status: "done",    duration: "2.1s",  model: "local" },
+        { name: "extract_research_gaps",     status: "done",    duration: "14.3s", model: "claude-opus-4" },
+        { name: "generate_seed_hypotheses",  status: "done",    duration: "22.7s", model: "claude-opus-4" },
+        { name: "deduplicate_hypotheses",    status: "done",    duration: "5.8s",  model: "claude-sonnet-4" },
+        { name: "rank_initial_seeds",        status: "done",    duration: "8.4s",  model: "claude-sonnet-4" },
+      ]
+    },
+    {
+      name: "Hypothesis Loop",
+      icon: "\uD83D\uDD04",
+      steps: [
+        { name: "expand_hypothesis_detail",  status: "done",    duration: "18.6s", model: "claude-opus-4" },
+        { name: "review_hypothesis",         status: "done",    duration: "31.2s", model: "claude-opus-4" },
+        { name: "refine_from_review",        status: "done",    duration: "15.9s", model: "claude-opus-4" },
+        { name: "feasibility_check",         status: "done",    duration: "12.1s", model: "claude-sonnet-4" },
+        { name: "novelty_verification",      status: "done",    duration: "9.7s",  model: "claude-sonnet-4" },
+      ]
+    },
+    {
+      name: "Invention Loop",
+      icon: "\uD83D\uDCA1",
+      steps: [
+        { name: "generate_strategy",         status: "done",    duration: "19.4s", model: "claude-opus-4" },
+        { name: "generate_plan",             status: "done",    duration: "24.8s", model: "claude-opus-4" },
+        { name: "gen_paper_text",            status: "running", duration: "41.3s", model: "claude-opus-4" },
+        { name: "gen_figures_tables",        status: "running", duration: "28.7s", model: "claude-sonnet-4" },
+        { name: "review_paper_draft",        status: "pending", duration: "--",    model: "claude-opus-4" },
+        { name: "revision_cycle",            status: "pending", duration: "--",    model: "claude-opus-4" },
+      ]
+    },
+    {
+      name: "Paper Repository",
+      icon: "\uD83D\uDCC4",
+      steps: [
+        { name: "gen_artifact_demos",        status: "pending", duration: "--",    model: "claude-sonnet-4" },
+        { name: "gen_visualizations",        status: "pending", duration: "--",    model: "claude-sonnet-4" },
+        { name: "gen_full_paper_latex",      status: "pending", duration: "--",    model: "claude-opus-4" },
+        { name: "compile_pdf",              status: "pending", duration: "--",    model: "local" },
+      ]
+    },
+    {
+      name: "Finalization",
+      icon: "\u2705",
+      steps: [
+        { name: "validate_references",      status: "pending", duration: "--",    model: "claude-sonnet-4" },
+        { name: "package_repository",       status: "pending", duration: "--",    model: "local" },
+        { name: "upload_artifacts",          status: "pending", duration: "--",    model: "local" },
+      ]
+    }
+  ]
+};
+
+// ============================================================
+//  STEP METADATA — tokens, costs, deps
+// ============================================================
+const META = {};
+
+function buildMeta() {
+  DATA.phases.forEach((phase, pi) => {
+    phase.steps.forEach((step, si) => {
+      const local = step.model === 'local';
+      const tIn = local ? 0 : Math.floor(2000 + Math.random() * 18000);
+      const tOut = local ? 0 : Math.floor(500 + Math.random() * 8000);
+      const cIn = step.model.includes('opus') ? 0.015 : 0.003;
+      const cOut = step.model.includes('opus') ? 0.075 : 0.015;
+      const cost = local ? 0 : ((tIn / 1000) * cIn + (tOut / 1000) * cOut);
+
+      const prev = si > 0 ? phase.steps[si - 1].name
+        : (pi > 0 ? DATA.phases[pi - 1].steps.slice(-1)[0].name : 'none');
+      const next = si < phase.steps.length - 1 ? phase.steps[si + 1].name
+        : (pi < DATA.phases.length - 1 ? DATA.phases[pi + 1].steps[0].name : 'none');
+
+      META[step.name] = {
+        tIn: local ? '--' : tIn.toLocaleString(),
+        tOut: local ? '--' : tOut.toLocaleString(),
+        cost: local ? '--' : '$' + cost.toFixed(4),
+        phase: phase.name, pos: `${si + 1} of ${phase.steps.length}`,
+        dep: prev, blocks: next, pi, si,
+      };
+    });
+  });
+}
+
+// ============================================================
+//  RENDER HELPERS
+// ============================================================
+const treeBody = document.getElementById('treeBody');
+
+function badge(status) {
+  const lbl = status === 'done' ? 'Done' : status === 'running' ? 'Running' : 'Pending';
+  return `<span class="badge ${status}">${lbl}</span>`;
+}
+
+function counts(steps) {
+  const c = { done: 0, running: 0, pending: 0 };
+  steps.forEach(s => c[s.status]++);
+  return c;
+}
+
+function phaseBadges(c) {
+  let h = '<div class="phase-badges">';
+  if (c.done > 0)    h += `<span class="mini-badge mb-done">${c.done}</span>`;
+  if (c.running > 0) h += `<span class="mini-badge mb-run">${c.running}</span>`;
+  if (c.pending > 0) h += `<span class="mini-badge mb-pend">${c.pending}</span>`;
+  return h + '</div>';
+}
+
+function phaseRing(c, total) {
+  const pct = total > 0 ? c.done / total : 0;
+  const circ = 2 * Math.PI * 8;
+  const off = circ - circ * pct;
+  let clr = 'clr-gray';
+  if (c.done === total) clr = 'clr-green';
+  else if (c.running > 0) clr = 'clr-blue';
+
+  return `<svg class="phase-ring" viewBox="0 0 22 22">
+    <circle class="ring-bg" cx="11" cy="11" r="8"/>
+    <circle class="ring-arc ${clr}" cx="11" cy="11" r="8"
+      stroke-dasharray="${circ.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}"
+      transform="rotate(-90 11 11)"/>
+  </svg>`;
+}
+
+const chevronSvg = (sz) => `<div class="chevron"><svg width="${sz}" height="${sz}" viewBox="0 0 16 16" fill="none"><path d="M6 4l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>`;
+
+// ============================================================
+//  BUILD TREE
+// ============================================================
+function buildTree() {
+  let h = '';
+
+  // Root
+  h += `<div class="root-node" data-tgt="root-ch">
+    <div class="root-icon">${DATA.icon}</div>
+    <div class="root-label">${DATA.name}</div>
+    <div class="root-meta">${DATA.phases.length} phases</div>
+    ${chevronSvg(16)}
+  </div>`;
+
+  h += '<div id="root-ch">';
+
+  DATA.phases.forEach((ph, pi) => {
+    const last = pi === DATA.phases.length - 1;
+    const c = counts(ph.steps);
+    const allDone = c.done === ph.steps.length;
+    const hasRun = c.running > 0;
+
+    let pcls = '';
+    if (allDone) pcls = ' all-done';
+    else if (hasRun) pcls = ' has-running';
+
+    h += `<div class="phase-group" ${last ? 'data-last' : ''}>`;
+
+    h += `<div class="phase-node anim-in${pcls}" style="animation-delay:${pi * 80}ms" data-tgt="ph-${pi}-ch">
+      <div class="phase-icon">${ph.icon}</div>
+      ${phaseRing(c, ph.steps.length)}
+      <div class="phase-label">${ph.name}</div>
+      ${phaseBadges(c)}
+      <div class="phase-count">${ph.steps.length}</div>
+      ${chevronSvg(14)}
+    </div>`;
+
+    h += `<div class="sub-group" id="ph-${pi}-ch" ${last ? 'data-last-p' : ''}>`;
+
+    if (hasRun) {
+      h += '<div class="line-dot" style="animation-delay:0s"></div>';
+      h += '<div class="line-dot" style="animation-delay:1.5s"></div>';
+    }
+
+    ph.steps.forEach((st, si) => {
+      const delay = pi * 80 + (si + 1) * 50;
+      let ncls = '';
+      if (st.status === 'running') ncls = ' is-running';
+      else if (st.status === 'done') ncls = ' is-done';
+
+      h += `<div class="sub-node anim-in${ncls}" style="animation-delay:${delay}ms"
+        data-n="${st.name}" data-s="${st.status}" data-d="${st.duration}" data-m="${st.model}">
+        <div class="sub-name">${st.name}</div>
+        <div class="sub-dur">${st.duration}</div>
+        ${badge(st.status)}
+      </div>`;
+    });
+
+    h += '</div></div>';
+  });
+
+  h += '</div>';
+  treeBody.innerHTML = h;
+}
+
+// ============================================================
+//  COLLAPSE / EXPAND
+// ============================================================
+function setupCollapse() {
+  document.querySelectorAll('[data-tgt]').forEach(node => {
+    node.addEventListener('click', (e) => {
+      // Don't trigger collapse from sub-node clicks bubbling up
+      if (e.target.closest('.sub-node')) return;
+
+      const tgt = document.getElementById(node.dataset.tgt);
+      if (!tgt) return;
+
+      const collapsed = node.classList.toggle('collapsed');
+      if (collapsed) {
+        tgt.style.maxHeight = tgt.scrollHeight + 'px';
+        requestAnimationFrame(() => tgt.classList.add('hidden'));
+      } else {
+        tgt.classList.remove('hidden');
+        tgt.style.maxHeight = tgt.scrollHeight + 'px';
+        setTimeout(() => { tgt.style.maxHeight = 'none'; }, 400);
+      }
+    });
+  });
+}
+
+// ============================================================
+//  TOOLTIP
+// ============================================================
+const tip = document.getElementById('tip');
+
+function setupTips() {
+  document.querySelectorAll('.sub-node').forEach(n => {
+    n.addEventListener('mouseenter', () => {
+      document.getElementById('tipT').textContent = n.dataset.n;
+      document.getElementById('tipS').textContent = n.dataset.s;
+      document.getElementById('tipD').textContent = n.dataset.d;
+      document.getElementById('tipM').textContent = n.dataset.m;
+      tip.classList.add('visible');
+    });
+    n.addEventListener('mousemove', (e) => {
+      tip.style.left = (e.clientX + 14) + 'px';
+      tip.style.top = (e.clientY - 10) + 'px';
+    });
+    n.addEventListener('mouseleave', () => tip.classList.remove('visible'));
+  });
+}
+
+// ============================================================
+//  DETAIL PANEL
+// ============================================================
+const dp = document.getElementById('detailPanel');
+
+function openDetail(name, status, dur, model) {
+  const m = META[name];
+  if (!m) return;
+
+  document.getElementById('dName').textContent = name;
+  document.getElementById('dBadge').innerHTML = badge(status);
+  document.getElementById('dDur').textContent = dur;
+  document.getElementById('dModel').textContent = model;
+  document.getElementById('dPhase').textContent = m.phase;
+  document.getElementById('dPos').textContent = m.pos;
+  document.getElementById('dTokIn').textContent = m.tIn;
+  document.getElementById('dTokOut').textContent = m.tOut;
+  document.getElementById('dCost').textContent = m.cost;
+  document.getElementById('dDeps').textContent = m.dep;
+  document.getElementById('dBlocks').textContent = m.blocks;
+
+  // Phase ring
+  const phase = DATA.phases[m.pi];
+  const done = phase.steps.filter(s => s.status === 'done').length;
+  const pct = Math.round((done / phase.steps.length) * 100);
+  const circ = 2 * Math.PI * 34;
+  const off = circ - circ * pct / 100;
+
+  const fill = document.getElementById('drFill');
+  fill.setAttribute('stroke-dashoffset', off);
+  fill.classList.remove('green', 'blue');
+  fill.classList.add(pct === 100 ? 'green' : 'blue');
+  document.getElementById('drText').textContent = pct + '%';
+  document.getElementById('drLabel').textContent = phase.name;
+
+  dp.classList.add('open');
+}
+
+document.getElementById('detailClose').addEventListener('click', () => dp.classList.remove('open'));
+
+function setupDetailClicks() {
+  document.querySelectorAll('.sub-node').forEach(n => {
+    n.addEventListener('click', () => openDetail(n.dataset.n, n.dataset.s, n.dataset.d, n.dataset.m));
+  });
+}
+
+// ============================================================
+//  TOAST NOTIFICATIONS
+// ============================================================
+const toastWrap = document.getElementById('toastWrap');
+
+function toast(msg, type) {
+  const t = document.createElement('div');
+  t.className = 'toast';
+  const ico = type === 'done' ? '\u2713' : '\u25B6';
+  const cls = type === 'done' ? 'tg' : 'tb';
+  t.innerHTML = `<div class="toast-ico ${cls}">${ico}</div><div class="toast-txt">${msg}</div>`;
+  toastWrap.appendChild(t);
+
+  setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 300); }, 3500);
+  while (toastWrap.children.length > 3) toastWrap.firstChild.remove();
+}
+
+// ============================================================
+//  PROGRESS & STATS
+// ============================================================
+function updateProgress() {
+  let done = 0, running = 0, pending = 0, total = 0;
+  DATA.phases.forEach(p => p.steps.forEach(s => {
+    total++;
+    if (s.status === 'done') done++;
+    else if (s.status === 'running') running++;
+    else pending++;
+  }));
+
+  const pct = Math.round(((done + running * 0.5) / total) * 100);
+  setTimeout(() => {
+    document.getElementById('pFill').style.width = pct + '%';
+    document.getElementById('pText').textContent = `${done} / ${total} steps`;
+    document.getElementById('pPct').textContent = pct + '%';
+  }, 300);
+
+  document.getElementById('sDone').textContent = done;
+  document.getElementById('sRun').textContent = running;
+  document.getElementById('sPend').textContent = pending;
+}
+
+// ============================================================
+//  ELAPSED TIMER
+// ============================================================
+let elapsed = 256;
+function tick() {
+  elapsed++;
+  const m = String(Math.floor(elapsed / 60)).padStart(2, '0');
+  const s = String(elapsed % 60).padStart(2, '0');
+  document.getElementById('sTime').textContent = `${m}:${s}`;
+}
+
+// ============================================================
+//  PARTICLE SYSTEM
+// ============================================================
+const canvas = document.getElementById('particle-canvas');
+const ctx = canvas.getContext('2d');
+let parts = [], ambient = [];
+let cW, cH;
+
+function resizeCanvas() { cW = canvas.width = innerWidth; cH = canvas.height = innerHeight; }
+
+class Particle {
+  constructor() { this.reset(); }
+
+  reset() {
+    const r = treeBody.getBoundingClientRect();
+    this.x = r.left + 20 + Math.random() * 60;
+    this.y = r.top + Math.random() * r.height;
+    this.sz = 1 + Math.random() * 2;
+    this.vy = -0.3 - Math.random() * 0.5;
+    this.vx = (Math.random() - 0.5) * 0.4;
+    this.life = 1;
+    this.decay = 0.003 + Math.random() * 0.006;
+    this.wA = 0.5 + Math.random();
+    this.wF = 0.02 + Math.random() * 0.03;
+    this.wP = Math.random() * Math.PI * 2;
+    this.t = 0;
+
+    const rr = Math.random();
+    this.clr = rr < 0.5 ? [74,222,128] : rr < 0.8 ? [96,165,250] : [148,163,184];
+  }
+
+  update() {
+    this.t++;
+    this.x += this.vx + Math.sin(this.t * this.wF + this.wP) * this.wA * 0.1;
+    this.y += this.vy;
+    this.life -= this.decay;
+    if (this.life <= 0) this.reset();
+  }
+
+  draw() {
+    const [r,g,b] = this.clr;
+    const a = this.life * 0.6;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.sz, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(${r},${g},${b},${a})`;
+    ctx.fill();
+    // glow
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.sz * 3, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(${r},${g},${b},${a * 0.15})`;
+    ctx.fill();
+  }
+}
+
+class AmbientP {
+  constructor(init) { this.reset(init); }
+
+  reset(init) {
+    this.x = Math.random() * cW;
+    this.y = init ? Math.random() * cH : cH + 10;
+    this.sz = 0.5 + Math.random() * 1.2;
+    this.vy = -0.1 - Math.random() * 0.2;
+    this.vx = (Math.random() - 0.5) * 0.15;
+    this.life = 1;
+    this.decay = 0.001 + Math.random() * 0.002;
+    this.clr = Math.random() < 0.5 ? [100,116,139] : [71,85,105];
+  }
+
+  update() {
+    this.x += this.vx;
+    this.y += this.vy;
+    this.life -= this.decay;
+    if (this.life <= 0 || this.y < -10) this.reset(false);
+  }
+
+  draw() {
+    const [r,g,b] = this.clr;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.sz, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(${r},${g},${b},${this.life * 0.3})`;
+    ctx.fill();
+  }
+}
+
+function initParticles() {
+  parts = []; ambient = [];
+  for (let i = 0; i < 50; i++) { const p = new Particle(); p.life = Math.random(); parts.push(p); }
+  for (let i = 0; i < 30; i++) ambient.push(new AmbientP(true));
+}
+
+function renderLoop() {
+  ctx.clearRect(0, 0, cW, cH);
+  ambient.forEach(p => { p.update(); p.draw(); });
+  parts.forEach(p => { p.update(); p.draw(); });
+  requestAnimationFrame(renderLoop);
+}
+
+// ============================================================
+//  CONNECTION BEAMS — dashed lines between running nodes
+// ============================================================
+let beamSvg = null;
+
+function initBeams() {
+  beamSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  beamSvg.style.cssText = 'position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:2;';
+  document.body.appendChild(beamSvg);
+}
+
+function updateBeams() {
+  if (!beamSvg) return;
+  beamSvg.innerHTML = '';
+  const nodes = document.querySelectorAll('.sub-node.is-running');
+  if (nodes.length < 2) return;
+  const rects = Array.from(nodes).map(n => n.getBoundingClientRect());
+
+  for (let i = 0; i < rects.length - 1; i++) {
+    const a = rects[i], b = rects[i + 1];
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', a.right); line.setAttribute('y1', a.top + a.height / 2);
+    line.setAttribute('x2', b.left); line.setAttribute('y2', b.top + b.height / 2);
+    line.setAttribute('stroke', 'rgba(59,130,246,0.12)');
+    line.setAttribute('stroke-width', '1');
+    line.setAttribute('stroke-dasharray', '4 4');
+
+    const anim = document.createElementNS('http://www.w3.org/2000/svg', 'animate');
+    anim.setAttribute('attributeName', 'stroke-dashoffset');
+    anim.setAttribute('from', '0'); anim.setAttribute('to', '-16');
+    anim.setAttribute('dur', '1s'); anim.setAttribute('repeatCount', 'indefinite');
+    line.appendChild(anim);
+    beamSvg.appendChild(line);
+  }
+}
+
+// ============================================================
+//  SIMULATION — advance statuses over time
+// ============================================================
+function allSteps() {
+  const s = [];
+  DATA.phases.forEach(p => p.steps.forEach(st => s.push(st)));
+  return s;
+}
+
+function simulate() {
+  const steps = allSteps();
+  let changed = null;
+
+  // Complete a running step
+  for (const s of steps) {
+    if (s.status === 'running' && Math.random() < 0.25) {
+      s.status = 'done';
+      s.duration = (5 + Math.random() * 40).toFixed(1) + 's';
+      changed = { type: 'done', name: s.name };
+      break;
+    }
+  }
+
+  // Start a pending step
+  if (Math.random() < 0.3) {
+    for (let i = 0; i < steps.length; i++) {
+      if (steps[i].status === 'pending') {
+        if (i === 0 || steps[i - 1].status === 'done' || steps[i - 1].status === 'running') {
+          steps[i].status = 'running';
+          if (!changed) changed = { type: 'running', name: steps[i].name };
+          break;
+        }
+      }
+    }
+  }
+
+  if (changed) {
+    rebuildAll();
+    const msg = changed.type === 'done' ? `${changed.name} completed` : `${changed.name} started`;
+    toast(msg, changed.type);
+
+    // Flash effect
+    setTimeout(() => {
+      const node = document.querySelector(`[data-n="${changed.name}"]`);
+      if (node) {
+        node.classList.add(changed.type === 'done' ? 'flash-done' : 'flash-running');
+        setTimeout(() => node.classList.remove('flash-done', 'flash-running'), 900);
+      }
+    }, 50);
+  }
+}
+
+// ============================================================
+//  POST-RENDER EFFECTS
+// ============================================================
+function addSpinners() {
+  document.querySelectorAll('.badge.running').forEach(b => {
+    if (!b.querySelector('.spinner-dot')) {
+      const d = document.createElement('span');
+      d.className = 'spinner-dot';
+      b.appendChild(d);
+    }
+  });
+}
+
+function updateLineGlow() {
+  document.querySelectorAll('.phase-group').forEach(g => {
+    const has = g.querySelector('.sub-node.is-running');
+    g.style.setProperty('--tree-line', has
+      ? 'rgba(96,165,250,0.35)'
+      : 'rgba(100,116,139,0.25)');
+  });
+}
+
+// ============================================================
+//  KEYBOARD
+// ============================================================
+function setupKeys() {
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'c' && !e.ctrlKey && !e.metaKey) {
+      document.querySelectorAll('.phase-node:not(.collapsed)').forEach(n => n.click());
+    }
+    if (e.key === 'e' && !e.ctrlKey && !e.metaKey) {
+      document.querySelectorAll('.phase-node.collapsed').forEach(n => n.click());
+    }
+    if (e.key === 'Escape') dp.classList.remove('open');
+  });
+}
+
+// ============================================================
+//  REBUILD ALL — after state changes
+// ============================================================
+function rebuildAll() {
+  buildTree();
+  setupCollapse();
+  setupTips();
+  setupDetailClicks();
+  updateProgress();
+  addSpinners();
+  updateLineGlow();
+  updateBeams();
+}
+
+// ============================================================
+//  INIT
+// ============================================================
+function init() {
+  resizeCanvas();
+  window.addEventListener('resize', () => { resizeCanvas(); updateBeams(); });
+
+  buildMeta();
+  rebuildAll();
+  setupKeys();
+
+  initParticles();
+  renderLoop();
+  initBeams();
+  updateBeams();
+
+  setInterval(tick, 1000);
+  setInterval(simulate, 4000);
+  setTimeout(() => { addSpinners(); updateLineGlow(); }, 600);
+}
+
+init();
+</script>
+
+</body>
+</html>

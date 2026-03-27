@@ -1,0 +1,1098 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Simple View</title>
+<style>
+  /* ── Reset & Base ───────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:          #0c0e14;
+    --bg-surface:  #12151e;
+    --bg-card:     #181c28;
+    --border:      #1e2333;
+    --text:        #c8cdd8;
+    --text-dim:    #5a6070;
+    --text-bright: #eef0f6;
+
+    --green:       #34d399;
+    --green-glow:  rgba(52, 211, 153, 0.55);
+    --purple:      #a78bfa;
+    --purple-glow: rgba(167, 139, 250, 0.55);
+    --blue:        #60a5fa;
+    --blue-glow:   rgba(96, 165, 250, 0.6);
+    --gray:        #4b5068;
+    --gray-glow:   rgba(75, 80, 104, 0.3);
+
+    --strip-w:     60px;
+    --node-size:   20px;
+    --node-active: 28px;
+    --content-max: 700px;
+    --transition:  0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  html, body {
+    height: 100%; width: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+    overflow: hidden;
+  }
+
+  /* ── Layout Shell ───────────────────────────────────── */
+  .shell {
+    display: flex;
+    height: 100vh;
+    width: 100vw;
+  }
+
+  /* ── Left Vertical Strip ────────────────────────────── */
+  .strip {
+    width: var(--strip-w);
+    min-width: var(--strip-w);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    z-index: 10;
+    background: var(--bg);
+    border-right: 1px solid var(--border);
+    user-select: none;
+  }
+
+  /* Vertical connecting line behind nodes */
+  .strip__line {
+    position: absolute;
+    width: 2px;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    height: 320px;
+    background: linear-gradient(
+      to bottom,
+      var(--green)  0%,
+      var(--purple) 33%,
+      var(--blue)   66%,
+      var(--gray)   100%
+    );
+    opacity: 0.25;
+    border-radius: 1px;
+    pointer-events: none;
+  }
+
+  .strip__nodes {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 80px;
+    z-index: 2;
+  }
+
+  /* ── Node ───────────────────────────────────────────── */
+  .node {
+    position: relative;
+    width: var(--node-size);
+    height: var(--node-size);
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all var(--transition);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    outline: none;
+  }
+
+  .node:focus-visible {
+    outline: 2px solid var(--blue);
+    outline-offset: 4px;
+  }
+
+  /* The visible dot */
+  .node__dot {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    transition: all var(--transition);
+    position: relative;
+    z-index: 2;
+  }
+
+  /* Label inside dot */
+  .node__label {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--bg);
+    letter-spacing: 0.02em;
+    z-index: 3;
+    transition: font-size var(--transition);
+    pointer-events: none;
+  }
+
+  /* Outer glow ring */
+  .node__glow {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    opacity: 0;
+    transition: all var(--transition);
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  /* Ambient light cast on strip background */
+  .node__ambient {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    opacity: 0;
+    filter: blur(30px);
+    transition: opacity 0.6s ease;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Tooltip */
+  .node__tooltip {
+    position: absolute;
+    left: calc(100% + 14px);
+    top: 50%;
+    transform: translateY(-50%) translateX(-6px);
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 14px;
+    white-space: nowrap;
+    font-size: 12px;
+    color: var(--text);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    z-index: 100;
+  }
+  .node__tooltip strong {
+    color: var(--text-bright);
+    display: block;
+    margin-bottom: 2px;
+    font-size: 13px;
+  }
+  .node__tooltip .status {
+    font-size: 11px;
+  }
+
+  .node:hover .node__tooltip {
+    opacity: 1;
+    transform: translateY(-50%) translateX(0);
+  }
+
+  /* ── Per-color theming ──────────────────────────────── */
+  /* Seed — green */
+  .node--seed .node__dot        { background: var(--green); }
+  .node--seed .node__glow       { background: var(--green-glow); }
+  .node--seed .node__ambient    { background: var(--green); }
+
+  /* Hypothesis — purple */
+  .node--hypo .node__dot        { background: var(--purple); }
+  .node--hypo .node__glow       { background: var(--purple-glow); }
+  .node--hypo .node__ambient    { background: var(--purple); }
+
+  /* Invention — blue */
+  .node--invention .node__dot   { background: var(--blue); }
+  .node--invention .node__glow  { background: var(--blue-glow); }
+  .node--invention .node__ambient { background: var(--blue); }
+
+  /* Paper — gray (dim) */
+  .node--paper .node__dot       { background: var(--gray); }
+  .node--paper .node__glow      { background: var(--gray-glow); }
+  .node--paper .node__ambient   { background: var(--gray); }
+
+  /* ── Active state ───────────────────────────────────── */
+  .node.is-active {
+    width: var(--node-active);
+    height: var(--node-active);
+  }
+  .node.is-active .node__label {
+    font-size: 13px;
+  }
+  .node.is-active .node__glow {
+    opacity: 1;
+    width: 56px;
+    height: 56px;
+  }
+  .node.is-active .node__ambient {
+    opacity: 0.35;
+  }
+
+  /* Pulse animation only for active node */
+  .node.is-active .node__glow {
+    animation: pulseGlow 2.4s ease-in-out infinite;
+  }
+  @keyframes pulseGlow {
+    0%, 100% { transform: translate(-50%, -50%) scale(1);   opacity: 0.7; }
+    50%      { transform: translate(-50%, -50%) scale(1.35); opacity: 0.35; }
+  }
+
+  /* Hover non-active */
+  .node:not(.is-active):hover {
+    width: 24px;
+    height: 24px;
+  }
+  .node:not(.is-active):hover .node__glow {
+    opacity: 0.4;
+    width: 44px;
+    height: 44px;
+  }
+  .node:not(.is-active):hover .node__ambient {
+    opacity: 0.12;
+  }
+
+  /* ── Right Content Panel ────────────────────────────── */
+  .content {
+    flex: 1;
+    height: 100vh;
+    overflow-y: auto;
+    padding: 48px 40px 80px 48px;
+    display: flex;
+    flex-direction: column;
+    max-width: var(--content-max);
+  }
+
+  /* Scrollbar */
+  .content::-webkit-scrollbar { width: 6px; }
+  .content::-webkit-scrollbar-track { background: transparent; }
+  .content::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 3px;
+  }
+
+  /* Fill space to the right of content-max */
+  .content-fill {
+    flex: 1;
+    background: var(--bg);
+  }
+
+  /* ── Module view (one per node) ─────────────────────── */
+  .module {
+    display: none;
+    animation: fadeIn 0.35s ease;
+  }
+  .module.is-visible { display: block; }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Header */
+  .module__header {
+    margin-bottom: 32px;
+  }
+  .module__tag {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 3px 10px;
+    border-radius: 4px;
+    margin-bottom: 12px;
+  }
+  .module__tag--green  { background: rgba(52,211,153,0.12); color: var(--green); }
+  .module__tag--purple { background: rgba(167,139,250,0.12); color: var(--purple); }
+  .module__tag--blue   { background: rgba(96,165,250,0.12); color: var(--blue); }
+  .module__tag--gray   { background: rgba(75,80,104,0.18); color: var(--text-dim); }
+
+  .module__title {
+    font-size: 26px;
+    font-weight: 700;
+    color: var(--text-bright);
+    line-height: 1.25;
+    margin-bottom: 8px;
+  }
+  .module__summary {
+    font-size: 14px;
+    color: var(--text-dim);
+    line-height: 1.65;
+    max-width: 580px;
+  }
+
+  /* ── Sub-stage accordion ────────────────────────────── */
+  .stages {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .stage {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--bg-surface);
+    overflow: hidden;
+    transition: border-color var(--transition), background var(--transition);
+  }
+  .stage:hover {
+    border-color: #2a2f44;
+  }
+  .stage.is-open {
+    background: var(--bg-card);
+    border-color: #2a2f44;
+  }
+
+  .stage__head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.15s;
+  }
+  .stage__head:hover {
+    background: rgba(255,255,255,0.02);
+  }
+
+  .stage__indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .stage__indicator--done    { background: var(--green); box-shadow: 0 0 6px var(--green-glow); }
+  .stage__indicator--running { background: var(--blue);  box-shadow: 0 0 6px var(--blue-glow);
+    animation: indicatorPulse 1.8s ease-in-out infinite; }
+  .stage__indicator--pending { background: var(--gray); opacity: 0.5; }
+
+  @keyframes indicatorPulse {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.4; }
+  }
+
+  .stage__name {
+    flex: 1;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text);
+  }
+
+  .stage__chevron {
+    width: 16px;
+    height: 16px;
+    fill: none;
+    stroke: var(--text-dim);
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    transition: transform var(--transition);
+    flex-shrink: 0;
+  }
+  .stage.is-open .stage__chevron {
+    transform: rotate(180deg);
+  }
+
+  .stage__body {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.4s ease, padding 0.3s ease;
+  }
+  .stage.is-open .stage__body {
+    max-height: 600px;
+    padding: 0 18px 16px;
+  }
+
+  .stage__detail {
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.7;
+    padding-top: 4px;
+    border-top: 1px solid var(--border);
+  }
+  .stage__detail p { margin-bottom: 8px; }
+  .stage__detail p:last-child { margin-bottom: 0; }
+  .stage__detail code {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 12px;
+    background: rgba(255,255,255,0.04);
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: var(--text);
+  }
+
+  /* Metric mini-row inside stage detail */
+  .stage__metrics {
+    display: flex;
+    gap: 20px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+  }
+  .metric {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .metric__value {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-bright);
+  }
+  .metric__label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+  }
+
+  /* ── Keyboard hint ──────────────────────────────────── */
+  .kbd-hint {
+    position: fixed;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 11px;
+    color: var(--text-dim);
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 16px;
+    display: flex;
+    gap: 14px;
+    z-index: 50;
+    user-select: none;
+  }
+  .kbd-hint kbd {
+    display: inline-block;
+    font-family: inherit;
+    font-size: 11px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 6px;
+    margin: 0 2px;
+    color: var(--text);
+  }
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <!-- ═══════════ LEFT VERTICAL STRIP ═══════════ -->
+  <nav class="strip" aria-label="Pipeline modules">
+    <div class="strip__line"></div>
+    <div class="strip__nodes">
+
+      <!-- Seed -->
+      <div class="node node--seed" data-idx="0" tabindex="0" role="button"
+           aria-label="Seed module">
+        <div class="node__dot"></div>
+        <span class="node__label">S</span>
+        <div class="node__glow"></div>
+        <div class="node__ambient"></div>
+        <div class="node__tooltip">
+          <strong>Seed Hypotheses</strong>
+          <span class="status" style="color:var(--green)">Completed</span>
+        </div>
+      </div>
+
+      <!-- Hypothesis -->
+      <div class="node node--hypo" data-idx="1" tabindex="0" role="button"
+           aria-label="Hypothesis module">
+        <div class="node__dot"></div>
+        <span class="node__label">H</span>
+        <div class="node__glow"></div>
+        <div class="node__ambient"></div>
+        <div class="node__tooltip">
+          <strong>Hypothesis Loop</strong>
+          <span class="status" style="color:var(--green)">Completed</span>
+        </div>
+      </div>
+
+      <!-- Invention (default active) -->
+      <div class="node node--invention is-active" data-idx="2" tabindex="0" role="button"
+           aria-label="Invention module">
+        <div class="node__dot"></div>
+        <span class="node__label">I</span>
+        <div class="node__glow"></div>
+        <div class="node__ambient"></div>
+        <div class="node__tooltip">
+          <strong>Invention Loop</strong>
+          <span class="status" style="color:var(--blue)">Running &mdash; Step 3/5</span>
+        </div>
+      </div>
+
+      <!-- Paper -->
+      <div class="node node--paper" data-idx="3" tabindex="0" role="button"
+           aria-label="Paper module">
+        <div class="node__dot"></div>
+        <span class="node__label">P</span>
+        <div class="node__glow"></div>
+        <div class="node__ambient"></div>
+        <div class="node__tooltip">
+          <strong>Paper Generation</strong>
+          <span class="status" style="color:var(--text-dim)">Pending</span>
+        </div>
+      </div>
+
+    </div>
+  </nav>
+
+  <!-- ═══════════ RIGHT CONTENT ═══════════ -->
+  <main class="content" id="content">
+
+    <!-- ──── Module 0: Seed ──── -->
+    <section class="module" data-module="0">
+      <div class="module__header">
+        <span class="module__tag module__tag--green">Stage 1</span>
+        <h1 class="module__title">Seed Hypotheses</h1>
+        <p class="module__summary">
+          Knowledge-graph traversal over the invention domain generates an
+          initial pool of candidate hypotheses. Each seed captures a core
+          claim, supporting evidence nodes, and a novelty score derived
+          from citation-gap analysis.
+        </p>
+      </div>
+
+      <div class="stages">
+        <!-- sub-stage 1 -->
+        <div class="stage">
+          <div class="stage__head" role="button" tabindex="0" aria-expanded="false">
+            <span class="stage__indicator stage__indicator--done"></span>
+            <span class="stage__name">Build Knowledge Graph</span>
+            <svg class="stage__chevron" viewBox="0 0 16 16">
+              <polyline points="4 6 8 10 12 6"/>
+            </svg>
+          </div>
+          <div class="stage__body">
+            <div class="stage__detail">
+              <p>Parses domain corpus into a typed knowledge graph.
+                 Entity nodes (<code>Concept</code>, <code>Method</code>,
+                 <code>Finding</code>) are linked by directed edges
+                 representing causal, comparative, and co-occurrence
+                 relations.</p>
+              <div class="stage__metrics">
+                <div class="metric">
+                  <span class="metric__value">2,418</span>
+                  <span class="metric__label">Nodes</span>
+                </div>
+                <div class="metric">
+                  <span class="metric__value">7,203</span>
+                  <span class="metric__label">Edges</span>
+                </div>
+                <div class="metric">
+                  <span class="metric__value">34s</span>
+                  <span class="metric__label">Elapsed</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- sub-stage 2 -->
+        <div class="stage">
+          <div class="stage__head" role="button" tabindex="0" aria-expanded="false">
+            <span class="stage__indicator stage__indicator--done"></span>
+            <span class="stage__name">Citation-Gap Analysis</span>
+            <svg class="stage__chevron" viewBox="0 0 16 16">
+              <polyline points="4 6 8 10 12 6"/>
+            </svg>
+          </div>
+          <div class="stage__body">
+            <div class="stage__detail">
+              <p>Identifies under-explored subgraph regions where two or
+                 more high-centrality concepts lack a bridging citation.
+                 These gaps form the raw material for hypothesis
+                 generation.</p>
+              <div class="stage__metrics">
+                <div class="metric">
+                  <span class="metric__value">83</span>
+                  <span class="metric__label">Gaps Found</span>
+                </div>
+                <div class="metric">
+                  <span class="metric__value">12s</span>
+                  <span class="metric__label">Elapsed</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- sub-stage 3 -->
+        <div class="stage">
+          <div class="stage__head" role="button" tabindex="0" aria-expanded="false">
+            <span class="stage__indicator stage__indicator--done"></span>
+            <span class="stage__name">Generate Seed Pool</span>
+            <svg class="stage__chevron" viewBox="0 0 16 16">
+              <polyline points="4 6 8 10 12 6"/>
+            </svg>
+          </div>
+          <div class="stage__body">
+            <div class="stage__detail">
+              <p>An LLM agent proposes one hypothesis per citation gap,
+                 attaching evidence anchors and an estimated novelty
+                 score. Duplicates and near-duplicates are collapsed
+                 via embedding similarity.</p>
+              <div class="stage__metrics">
+                <div class="metric">
+                  <span class="metric__value">41</span>
+                  <span class="metric__label">Seeds</span>
+                </div>
+                <div class="metric">
+                  <span class="metric__value">0.72</span>
+                  <span class="metric__label">Avg Novelty</span>
+                </div>
+                <div class="metric">
+                  <span class="metric__value">1m 48s</span>
+                  <span class="metric__label">Elapsed</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ──── Module 1: Hypothesis ──── -->
+    <section class="module" data-module="1">
+      <div class="module__header">
+        <span class="module__tag module__tag--purple">Stage 2</span>
+        <h1 class="module__title">Hypothesis Loop</h1>
+        <p class="module__summary">
+          Iterative refinement cycle that stress-tests each seed hypothesis.
+          A review agent critiques feasibility, novelty, and grounding
+          while a revision agent strengthens the claim until the hypothesis
+          passes all quality gates or is discarded.
+        </p>
+      </div>
+
+      <div class="stages">
+        <div class="stage">
+          <div class="stage__head" role="button" tabindex="0" aria-expanded="false">
+            <span class="stage__indicator stage__indicator--done"></span>
+            <span class="stage__name">Generate Hypotheses</span>
+            <svg class="stage__chevron" viewBox="0 0 16 16">
+              <polyline points="4 6 8 10 12 6"/>
+            </svg>
+          </div>
+          <div class="stage__body">
+            <div class="stage__detail">
+              <p>Expands each seed into a structured hypothesis with a
+                 formal claim, mechanism sketch, and predicted outcomes.
+                 Output follows the <code>HypothesisSchema</code>
+                 Pydantic model for downstream validation.</p>
+              <div class="stage__metrics">
+                <div class="metric">
+                  <span class="metric__value">41</span>
+                  <span class="metric__label">Generated</span>
+                </div>
+                <div class="metric">
+                  <span class="metric__value">2m 12s</span>
+                  <span class="metric__label">Elapsed</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="stage">
+          <div class="stage__head" role="button" tabindex="0" aria-expanded="false">
+            <span class="stage__indicator stage__indicator--done"></span>
+            <span class="stage__name">Review Hypotheses</span>
+            <svg class="stage__chevron" viewBox="0 0 16 16">
+              <polyline points="4 6 8 10 12 6"/>
+            </svg>
+          </div>
+          <div class="stage__body">
+            <div class="stage__detail">
+              <p>Each hypothesis is critiqued across four dimensions:
+                 <strong>novelty</strong>, <strong>feasibility</strong>,
+                 <strong>grounding</strong>, and <strong>clarity</strong>.
+                 The review agent assigns a verdict of
+                 <code>accept</code>, <code>revise</code>, or
+                 <code>reject</code>.</p>
+              <div class="stage__metrics">
+                <div class="metric">
+                  <span class="metric__value">18</span>
+                  <span class="metric__label">Accepted</span>
+                </div>
+                <div class="metric">
+                  <span class="metric__value">15</span>
+                  <span class="metric__label">Revised</span>
+                </div>
+                <div class="metric">
+                  <span class="metric__value">8</span>
+                  <span class="metric__label">Rejected</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="stage">
+          <div class="stage__head" role="button" tabindex="0" aria-expanded="false">
+            <span class="stage__indicator stage__indicator--done"></span>
+            <span class="stage__name">Select Top Hypotheses</span>
+            <svg class="stage__chevron" viewBox="0 0 16 16">
+              <polyline points="4 6 8 10 12 6"/>
+            </svg>
+          </div>
+          <div class="stage__body">
+            <div class="stage__detail">
+              <p>Final ranking via composite score (novelty x feasibility
+                 x grounding). The top-<em>k</em> survivors advance to
+                 the invention loop. Ties are broken by estimated
+                 impact breadth.</p>
+              <div class="stage__metrics">
+                <div class="metric">
+                  <span class="metric__value">5</span>
+                  <span class="metric__label">Advanced</span>
+                </div>
+                <div class="metric">
+                  <span class="metric__value">0.89</span>
+                  <span class="metric__label">Top Score</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ──── Module 2: Invention (active) ──── -->
+    <section class="module is-visible" data-module="2">
+      <div class="module__header">
+        <span class="module__tag module__tag--blue">Stage 3 &mdash; Active</span>
+        <h1 class="module__title">Invention Loop</h1>
+        <p class="module__summary">
+          Each surviving hypothesis is developed into a full invention.
+          The loop generates a research strategy, detailed plan, paper
+          text, and an iterative review cycle that refines the output
+          until quality thresholds are met.
+        </p>
+      </div>
+
+      <div class="stages">
+        <div class="stage">
+          <div class="stage__head" role="button" tabindex="0" aria-expanded="false">
+            <span class="stage__indicator stage__indicator--done"></span>
+            <span class="stage__name">Generate Strategy</span>
+            <svg class="stage__chevron" viewBox="0 0 16 16">
+              <polyline points="4 6 8 10 12 6"/>
+            </svg>
+          </div>
+          <div class="stage__body">
+            <div class="stage__detail">
+              <p>Produces a high-level research strategy: methodology
+                 choice, experiment sketch, comparison baselines, and
+                 expected contribution type (empirical, theoretical,
+                 system). Outputs a <code>StrategyPlan</code> object.</p>
+              <div class="stage__metrics">
+                <div class="metric">
+                  <span class="metric__value">5</span>
+                  <span class="metric__label">Strategies</span>
+                </div>
+                <div class="metric">
+                  <span class="metric__value">1m 36s</span>
+                  <span class="metric__label">Elapsed</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="stage">
+          <div class="stage__head" role="button" tabindex="0" aria-expanded="false">
+            <span class="stage__indicator stage__indicator--done"></span>
+            <span class="stage__name">Generate Plan</span>
+            <svg class="stage__chevron" viewBox="0 0 16 16">
+              <polyline points="4 6 8 10 12 6"/>
+            </svg>
+          </div>
+          <div class="stage__body">
+            <div class="stage__detail">
+              <p>Decomposes the strategy into a section-by-section paper
+                 outline. Each section receives a target word count,
+                 key claims, and figure/table slots. The plan serves as
+                 the scaffold for text generation.</p>
+              <div class="stage__metrics">
+                <div class="metric">
+                  <span class="metric__value">5</span>
+                  <span class="metric__label">Plans</span>
+                </div>
+                <div class="metric">
+                  <span class="metric__value">2m 04s</span>
+                  <span class="metric__label">Elapsed</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="stage is-open">
+          <div class="stage__head" role="button" tabindex="0" aria-expanded="true">
+            <span class="stage__indicator stage__indicator--running"></span>
+            <span class="stage__name">Generate Paper Text</span>
+            <svg class="stage__chevron" viewBox="0 0 16 16">
+              <polyline points="4 6 8 10 12 6"/>
+            </svg>
+          </div>
+          <div class="stage__body">
+            <div class="stage__detail">
+              <p>Writes the full paper body section by section, following
+                 the plan scaffold. Each section is generated with inline
+                 citations referencing the knowledge graph. Currently
+                 processing <strong>hypothesis 3 of 5</strong>.</p>
+              <div class="stage__metrics">
+                <div class="metric">
+                  <span class="metric__value">2 / 5</span>
+                  <span class="metric__label">Complete</span>
+                </div>
+                <div class="metric">
+                  <span class="metric__value">4,820</span>
+                  <span class="metric__label">Words Written</span>
+                </div>
+                <div class="metric">
+                  <span class="metric__value">6m 11s</span>
+                  <span class="metric__label">Elapsed</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="stage">
+          <div class="stage__head" role="button" tabindex="0" aria-expanded="false">
+            <span class="stage__indicator stage__indicator--pending"></span>
+            <span class="stage__name">Review &amp; Revise</span>
+            <svg class="stage__chevron" viewBox="0 0 16 16">
+              <polyline points="4 6 8 10 12 6"/>
+            </svg>
+          </div>
+          <div class="stage__body">
+            <div class="stage__detail">
+              <p>A review agent evaluates each draft against rubric
+                 criteria (coherence, evidence density, novelty
+                 articulation). Papers that fail are sent back for
+                 targeted revision up to <code>max_revisions</code>
+                 times.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="stage">
+          <div class="stage__head" role="button" tabindex="0" aria-expanded="false">
+            <span class="stage__indicator stage__indicator--pending"></span>
+            <span class="stage__name">Select Best Paper</span>
+            <svg class="stage__chevron" viewBox="0 0 16 16">
+              <polyline points="4 6 8 10 12 6"/>
+            </svg>
+          </div>
+          <div class="stage__body">
+            <div class="stage__detail">
+              <p>Comparative ranking of all finalized papers. The winning
+                 paper and its associated hypothesis advance to
+                 repository generation.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ──── Module 3: Paper ──── -->
+    <section class="module" data-module="3">
+      <div class="module__header">
+        <span class="module__tag module__tag--gray">Stage 4 &mdash; Pending</span>
+        <h1 class="module__title">Paper Generation</h1>
+        <p class="module__summary">
+          Transforms the winning invention into a complete, publishable
+          artifact repository: LaTeX source, visualizations, demo code,
+          and supplementary materials. This stage is waiting for the
+          invention loop to complete.
+        </p>
+      </div>
+
+      <div class="stages">
+        <div class="stage">
+          <div class="stage__head" role="button" tabindex="0" aria-expanded="false">
+            <span class="stage__indicator stage__indicator--pending"></span>
+            <span class="stage__name">Generate Artifact Demos</span>
+            <svg class="stage__chevron" viewBox="0 0 16 16">
+              <polyline points="4 6 8 10 12 6"/>
+            </svg>
+          </div>
+          <div class="stage__body">
+            <div class="stage__detail">
+              <p>Creates runnable Python demonstrations for each key
+                 finding. Demos are self-contained scripts with
+                 synthetic data that reproduce the paper's central
+                 claims.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="stage">
+          <div class="stage__head" role="button" tabindex="0" aria-expanded="false">
+            <span class="stage__indicator stage__indicator--pending"></span>
+            <span class="stage__name">Generate Visualizations</span>
+            <svg class="stage__chevron" viewBox="0 0 16 16">
+              <polyline points="4 6 8 10 12 6"/>
+            </svg>
+          </div>
+          <div class="stage__body">
+            <div class="stage__detail">
+              <p>Produces publication-quality figures (matplotlib / D3)
+                 for each figure slot defined in the paper plan.
+                 Includes ablation charts, architecture diagrams, and
+                 comparison tables.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="stage">
+          <div class="stage__head" role="button" tabindex="0" aria-expanded="false">
+            <span class="stage__indicator stage__indicator--pending"></span>
+            <span class="stage__name">Compile Full Paper</span>
+            <svg class="stage__chevron" viewBox="0 0 16 16">
+              <polyline points="4 6 8 10 12 6"/>
+            </svg>
+          </div>
+          <div class="stage__body">
+            <div class="stage__detail">
+              <p>Assembles all sections, figures, and references into a
+                 final LaTeX document. Compiles to PDF with BibTeX
+                 citations and packages everything into a reproducible
+                 repository.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <div class="content-fill"></div>
+</div>
+
+<!-- Keyboard hint -->
+<div class="kbd-hint">
+  <span><kbd>&uarr;</kbd> <kbd>&darr;</kbd> switch module</span>
+  <span><kbd>&larr;</kbd> <kbd>&rarr;</kbd> also works</span>
+  <span><kbd>Enter</kbd> toggle stage</span>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ── State ──────────────────────────────────────────── */
+  const nodes   = Array.from(document.querySelectorAll(".node"));
+  const modules = Array.from(document.querySelectorAll(".module"));
+  let activeIdx = 2; // Invention is default
+
+  /* ── Helpers ────────────────────────────────────────── */
+  function activate(idx) {
+    if (idx < 0 || idx >= nodes.length) return;
+    const prev = activeIdx;
+    activeIdx = idx;
+
+    /* Update nodes */
+    nodes.forEach((n, i) => {
+      n.classList.toggle("is-active", i === idx);
+    });
+
+    /* Update content panels */
+    modules.forEach((m, i) => {
+      if (i === idx) {
+        m.classList.add("is-visible");
+        /* Re-trigger fade animation */
+        m.style.animation = "none";
+        void m.offsetHeight;          // reflow
+        m.style.animation = "";
+      } else {
+        m.classList.remove("is-visible");
+      }
+    });
+  }
+
+  /* ── Node click ─────────────────────────────────────── */
+  nodes.forEach((n) => {
+    n.addEventListener("click", () => {
+      activate(parseInt(n.dataset.idx, 10));
+    });
+  });
+
+  /* ── Stage accordion ────────────────────────────────── */
+  document.querySelectorAll(".stage__head").forEach((head) => {
+    head.addEventListener("click", () => {
+      const stage = head.parentElement;
+      const isOpen = stage.classList.contains("is-open");
+      head.setAttribute("aria-expanded", String(!isOpen));
+      stage.classList.toggle("is-open");
+    });
+
+    head.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        head.click();
+      }
+    });
+  });
+
+  /* ── Keyboard navigation ────────────────────────────── */
+  document.addEventListener("keydown", (e) => {
+    /* Don't intercept if user is in an input */
+    if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+
+    switch (e.key) {
+      case "ArrowUp":
+      case "ArrowLeft":
+        e.preventDefault();
+        activate(activeIdx - 1);
+        nodes[activeIdx].focus();
+        break;
+
+      case "ArrowDown":
+      case "ArrowRight":
+        e.preventDefault();
+        activate(activeIdx + 1);
+        nodes[activeIdx].focus();
+        break;
+
+      case "Enter":
+        /* Toggle the first non-open stage, or close all if all open */
+        {
+          const visibleModule = modules[activeIdx];
+          if (!visibleModule) break;
+          const stages = visibleModule.querySelectorAll(".stage");
+          /* Find focused stage head */
+          const focused = document.activeElement;
+          if (focused && focused.classList.contains("stage__head")) {
+            focused.click();
+          }
+        }
+        break;
+    }
+  });
+
+  /* ── Initial state ──────────────────────────────────── */
+  activate(activeIdx);
+
+})();
+</script>
+</body>
+</html>

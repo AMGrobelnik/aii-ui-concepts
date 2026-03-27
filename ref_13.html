@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Simple View</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+  :root{
+    --bg:#0a0a0f;
+    --surface:#111118;
+    --border:#1a1a25;
+    --text:#c8c8d8;
+    --text-dim:#555568;
+    --text-bright:#eeeef5;
+
+    --green:#34d399;
+    --purple:#a78bfa;
+    --blue:#3b82f6;
+    --gray:#3a3a4a;
+
+    --glow-green:0 0 8px 2px rgba(52,211,153,.45);
+    --glow-purple:0 0 8px 2px rgba(167,139,250,.45);
+    --glow-blue:0 0 40px 12px rgba(59,130,246,.5), 0 0 14px 4px rgba(59,130,246,.7);
+    --glow-blue-intense:0 0 50px 16px rgba(59,130,246,.6), 0 0 18px 6px rgba(59,130,246,.85);
+  }
+
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    min-height:100vh;
+    overflow-x:hidden;
+  }
+
+  /* ─── TOP STRIP ─── */
+  .strip{
+    position:relative;
+    height:50px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    user-select:none;
+  }
+
+  .line-container{
+    position:relative;
+    width:80vw;
+    height:50px;
+    display:flex;
+    align-items:center;
+  }
+
+  /* The base line */
+  .line{
+    position:absolute;
+    top:50%;
+    left:0;
+    width:100%;
+    height:2px;
+    background:var(--gray);
+    transform:translateY(-50%);
+    border-radius:1px;
+  }
+
+  /* Gradient fill from point 1 to point 3 */
+  .line-fill{
+    position:absolute;
+    top:50%;
+    left:0;
+    width:65%;
+    height:2px;
+    transform:translateY(-50%);
+    border-radius:1px;
+    background:linear-gradient(
+      90deg,
+      var(--green) 0%,
+      var(--green) 30%,
+      var(--purple) 55%,
+      var(--blue) 100%
+    );
+    opacity:.8;
+  }
+
+  /* ─── GLOW POINTS ─── */
+  .point{
+    position:absolute;
+    top:50%;
+    transform:translate(-50%,-50%);
+    cursor:pointer;
+    z-index:2;
+    transition:all .25s ease;
+  }
+
+  .point .dot{
+    width:8px;
+    height:8px;
+    border-radius:50%;
+    position:relative;
+    z-index:2;
+    transition:all .25s ease;
+  }
+
+  .point .halo{
+    position:absolute;
+    top:50%;
+    left:50%;
+    transform:translate(-50%,-50%);
+    border-radius:50%;
+    pointer-events:none;
+    z-index:1;
+    transition:all .25s ease;
+  }
+
+  /* Selection ring */
+  .point .ring{
+    position:absolute;
+    top:50%;
+    left:50%;
+    transform:translate(-50%,-50%);
+    border-radius:50%;
+    border:1.5px solid rgba(255,255,255,0);
+    pointer-events:none;
+    z-index:3;
+    transition:all .25s ease;
+  }
+
+  .point.selected .ring{
+    border-color:rgba(255,255,255,.85);
+  }
+
+  /* Point 1: green */
+  .point[data-idx="0"]{ left:20%; }
+  .point[data-idx="0"] .dot{
+    background:var(--green);
+    box-shadow:var(--glow-green);
+  }
+  .point[data-idx="0"] .halo{
+    width:16px; height:16px;
+    background:radial-gradient(circle,rgba(52,211,153,.2) 0%,transparent 70%);
+  }
+  .point[data-idx="0"] .ring{ width:18px; height:18px; }
+  .point[data-idx="0"].selected .dot{
+    box-shadow:0 0 12px 4px rgba(52,211,153,.65);
+  }
+
+  /* Point 2: purple */
+  .point[data-idx="1"]{ left:40%; }
+  .point[data-idx="1"] .dot{
+    background:var(--purple);
+    box-shadow:var(--glow-purple);
+  }
+  .point[data-idx="1"] .halo{
+    width:16px; height:16px;
+    background:radial-gradient(circle,rgba(167,139,250,.2) 0%,transparent 70%);
+  }
+  .point[data-idx="1"] .ring{ width:18px; height:18px; }
+  .point[data-idx="1"].selected .dot{
+    box-shadow:0 0 12px 4px rgba(167,139,250,.65);
+  }
+
+  /* Point 3: blue — LARGE, pulsing */
+  .point[data-idx="2"]{ left:65%; }
+  .point[data-idx="2"] .dot{
+    width:10px; height:10px;
+    background:var(--blue);
+    box-shadow:var(--glow-blue);
+    animation:pulse-blue 2.4s ease-in-out infinite;
+  }
+  .point[data-idx="2"] .halo{
+    width:40px; height:40px;
+    background:radial-gradient(circle,rgba(59,130,246,.18) 0%,transparent 70%);
+    animation:pulse-halo 2.4s ease-in-out infinite;
+  }
+  .point[data-idx="2"] .ring{ width:22px; height:22px; }
+  .point[data-idx="2"].selected .dot{
+    box-shadow:var(--glow-blue-intense);
+  }
+  .point[data-idx="2"].selected .halo{
+    width:50px; height:50px;
+  }
+
+  @keyframes pulse-blue{
+    0%,100%{ box-shadow:var(--glow-blue); }
+    50%{ box-shadow:var(--glow-blue-intense); }
+  }
+  @keyframes pulse-halo{
+    0%,100%{ opacity:.7; transform:translate(-50%,-50%) scale(1); }
+    50%{ opacity:1; transform:translate(-50%,-50%) scale(1.15); }
+  }
+
+  /* Point 4: gray, no glow */
+  .point[data-idx="3"]{ left:85%; }
+  .point[data-idx="3"] .dot{
+    background:var(--gray);
+    box-shadow:none;
+  }
+  .point[data-idx="3"] .halo{
+    width:0; height:0;
+  }
+  .point[data-idx="3"] .ring{ width:18px; height:18px; }
+  .point[data-idx="3"].selected .dot{
+    box-shadow:0 0 8px 3px rgba(58,58,74,.5);
+  }
+
+  /* ─── LABELS (alternate above/below) ─── */
+  .label{
+    position:absolute;
+    left:50%;
+    transform:translateX(-50%);
+    font-size:11px;
+    letter-spacing:.03em;
+    white-space:nowrap;
+    pointer-events:none;
+    transition:color .25s ease, opacity .25s ease;
+  }
+  .label-above{ bottom:calc(50% + 14px); }
+  .label-below{ top:calc(50% + 14px); }
+
+  .point[data-idx="0"] .label{ color:var(--green); opacity:.7; }
+  .point[data-idx="1"] .label{ color:var(--purple); opacity:.7; }
+  .point[data-idx="2"] .label{ color:var(--blue); opacity:.9; font-weight:600; }
+  .point[data-idx="3"] .label{ color:var(--text-dim); opacity:.5; }
+
+  .point.selected .label{ opacity:1 !important; }
+
+  /* ─── CONTENT AREA ─── */
+  .content{
+    max-width:680px;
+    margin:32px auto 0;
+    padding:0 24px 60px;
+    position:relative;
+  }
+
+  .content-header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-bottom:20px;
+  }
+
+  .content-title{
+    font-size:15px;
+    font-weight:600;
+    color:var(--text-bright);
+    letter-spacing:.01em;
+  }
+
+  .content-subtitle{
+    font-size:12px;
+    color:var(--text-dim);
+    margin-top:2px;
+  }
+
+  .arrow-nav{
+    display:flex;
+    gap:6px;
+  }
+
+  .arrow-btn{
+    width:30px;
+    height:30px;
+    border-radius:6px;
+    border:1px solid var(--border);
+    background:var(--surface);
+    color:var(--text-dim);
+    font-size:14px;
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    transition:all .2s ease;
+  }
+  .arrow-btn:hover{
+    border-color:#2a2a3a;
+    color:var(--text);
+    background:#161622;
+  }
+  .arrow-btn:active{
+    transform:scale(.95);
+  }
+  .arrow-btn.disabled{
+    opacity:.3;
+    pointer-events:none;
+  }
+
+  /* ─── PANELS ─── */
+  .panel{
+    display:none;
+    animation:fade-in .3s ease;
+  }
+  .panel.active{ display:block; }
+
+  @keyframes fade-in{
+    from{ opacity:0; transform:translateY(6px); }
+    to{ opacity:1; transform:translateY(0); }
+  }
+
+  .card{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:18px 20px;
+    margin-bottom:12px;
+  }
+
+  .card-label{
+    font-size:10px;
+    text-transform:uppercase;
+    letter-spacing:.08em;
+    color:var(--text-dim);
+    margin-bottom:8px;
+  }
+
+  .card-value{
+    font-size:14px;
+    color:var(--text-bright);
+    line-height:1.55;
+  }
+
+  .card-value .dim{ color:var(--text-dim); }
+
+  .tag{
+    display:inline-block;
+    font-size:10px;
+    padding:2px 8px;
+    border-radius:4px;
+    letter-spacing:.04em;
+    margin-right:4px;
+    margin-bottom:4px;
+  }
+  .tag-green{ background:rgba(52,211,153,.12); color:var(--green); }
+  .tag-purple{ background:rgba(167,139,250,.12); color:var(--purple); }
+  .tag-blue{ background:rgba(59,130,246,.12); color:var(--blue); }
+  .tag-gray{ background:rgba(255,255,255,.05); color:var(--text-dim); }
+
+  /* Score bar */
+  .score-row{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin-bottom:8px;
+  }
+  .score-label{
+    font-size:12px;
+    color:var(--text-dim);
+    width:80px;
+    flex-shrink:0;
+  }
+  .score-track{
+    flex:1;
+    height:4px;
+    background:rgba(255,255,255,.05);
+    border-radius:2px;
+    overflow:hidden;
+  }
+  .score-fill{
+    height:100%;
+    border-radius:2px;
+    transition:width .5s ease;
+  }
+  .score-num{
+    font-size:12px;
+    color:var(--text-bright);
+    width:28px;
+    text-align:right;
+    flex-shrink:0;
+  }
+
+  /* Iteration list */
+  .iter-row{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:8px 0;
+    border-bottom:1px solid var(--border);
+    font-size:13px;
+  }
+  .iter-row:last-child{ border-bottom:none; }
+  .iter-num{
+    width:20px;
+    height:20px;
+    border-radius:50%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:10px;
+    font-weight:600;
+    flex-shrink:0;
+  }
+  .iter-num.done{ background:rgba(59,130,246,.15); color:var(--blue); }
+  .iter-num.current{ background:var(--blue); color:#fff; }
+  .iter-num.pending{ background:rgba(255,255,255,.05); color:var(--text-dim); }
+  .iter-text{ color:var(--text); flex:1; }
+  .iter-text .dim{ color:var(--text-dim); font-size:11px; }
+
+  /* Status badge */
+  .status{
+    display:inline-flex;
+    align-items:center;
+    gap:5px;
+    font-size:11px;
+    padding:3px 10px;
+    border-radius:10px;
+  }
+  .status-done{
+    background:rgba(52,211,153,.1);
+    color:var(--green);
+  }
+  .status-active{
+    background:rgba(59,130,246,.1);
+    color:var(--blue);
+  }
+  .status-pending{
+    background:rgba(255,255,255,.04);
+    color:var(--text-dim);
+  }
+
+  .status-dot{
+    width:5px;
+    height:5px;
+    border-radius:50%;
+  }
+  .status-done .status-dot{ background:var(--green); }
+  .status-active .status-dot{ background:var(--blue); animation:blink 1.5s ease infinite; }
+  .status-pending .status-dot{ background:var(--text-dim); }
+
+  @keyframes blink{
+    0%,100%{ opacity:1; }
+    50%{ opacity:.3; }
+  }
+
+  /* Simple divider */
+  .divider{
+    height:1px;
+    background:var(--border);
+    margin:16px 0;
+  }
+
+  /* Metric inline */
+  .metric-row{
+    display:flex;
+    justify-content:space-between;
+    padding:6px 0;
+    font-size:13px;
+  }
+  .metric-key{ color:var(--text-dim); }
+  .metric-val{ color:var(--text-bright); font-weight:500; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════ STRIP ═══════════ -->
+<div class="strip">
+  <div class="line-container">
+    <div class="line"></div>
+    <div class="line-fill"></div>
+
+    <!-- Point 1: Seed -->
+    <div class="point" data-idx="0" onclick="selectPoint(0)">
+      <div class="halo"></div>
+      <div class="dot"></div>
+      <div class="ring"></div>
+      <div class="label label-above">Seed &#10003;</div>
+    </div>
+
+    <!-- Point 2: Hypo -->
+    <div class="point" data-idx="1" onclick="selectPoint(1)">
+      <div class="halo"></div>
+      <div class="dot"></div>
+      <div class="ring"></div>
+      <div class="label label-below">Hypo 8.4</div>
+    </div>
+
+    <!-- Point 3: Invention (you are here) -->
+    <div class="point selected" data-idx="2" onclick="selectPoint(2)">
+      <div class="halo"></div>
+      <div class="dot"></div>
+      <div class="ring"></div>
+      <div class="label label-above">Invention 3/5</div>
+    </div>
+
+    <!-- Point 4: Paper -->
+    <div class="point" data-idx="3" onclick="selectPoint(3)">
+      <div class="halo"></div>
+      <div class="dot"></div>
+      <div class="ring"></div>
+      <div class="label label-below">Paper &#9675;</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════ CONTENT ═══════════ -->
+<div class="content">
+  <div class="content-header">
+    <div>
+      <div class="content-title" id="contentTitle">Invention Loop</div>
+      <div class="content-subtitle" id="contentSubtitle">Iteration 3 of 5 &mdash; generating plan</div>
+    </div>
+    <div class="arrow-nav">
+      <button class="arrow-btn" id="btnPrev" onclick="navigate(-1)">&larr;</button>
+      <button class="arrow-btn" id="btnNext" onclick="navigate(1)">&rarr;</button>
+    </div>
+  </div>
+
+  <!-- ─── Panel 0: Seed ─── -->
+  <div class="panel" data-panel="0">
+    <div class="card">
+      <div class="card-label">Status</div>
+      <div class="card-value">
+        <span class="status status-done"><span class="status-dot"></span>Complete</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Research Domain</div>
+      <div class="card-value">
+        Hierarchical attention routing in sparse mixture-of-experts transformers
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Seed Papers</div>
+      <div class="card-value">
+        <span class="tag tag-green">MoE Scaling</span>
+        <span class="tag tag-green">Sparse Attention</span>
+        <span class="tag tag-green">Expert Selection</span>
+        <span class="tag tag-green">Token Routing</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Knowledge Graph</div>
+      <div class="metric-row">
+        <span class="metric-key">Entities</span>
+        <span class="metric-val">142</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-key">Relations</span>
+        <span class="metric-val">318</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-key">Papers ingested</span>
+        <span class="metric-val">24</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Duration</div>
+      <div class="card-value">4m 12s</div>
+    </div>
+  </div>
+
+  <!-- ─── Panel 1: Hypo ─── -->
+  <div class="panel" data-panel="1">
+    <div class="card">
+      <div class="card-label">Status</div>
+      <div class="card-value">
+        <span class="status status-done"><span class="status-dot"></span>Complete</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Hypothesis</div>
+      <div class="card-value">
+        Hierarchical gating with per-layer capacity constraints reduces expert
+        collapse in MoE models while maintaining compute parity with dense
+        baselines, by routing tokens through a two-stage selection process that
+        balances load across expert groups.
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Review Score</div>
+      <div class="score-row">
+        <span class="score-label">Novelty</span>
+        <span class="score-track"><span class="score-fill" style="width:88%;background:var(--purple)"></span></span>
+        <span class="score-num">8.8</span>
+      </div>
+      <div class="score-row">
+        <span class="score-label">Feasibility</span>
+        <span class="score-track"><span class="score-fill" style="width:82%;background:var(--purple)"></span></span>
+        <span class="score-num">8.2</span>
+      </div>
+      <div class="score-row">
+        <span class="score-label">Impact</span>
+        <span class="score-track"><span class="score-fill" style="width:82%;background:var(--purple)"></span></span>
+        <span class="score-num">8.2</span>
+      </div>
+      <div class="divider"></div>
+      <div class="score-row">
+        <span class="score-label" style="font-weight:600;color:var(--text-bright)">Overall</span>
+        <span class="score-track"><span class="score-fill" style="width:84%;background:var(--purple)"></span></span>
+        <span class="score-num" style="font-weight:600">8.4</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Tags</div>
+      <div class="card-value">
+        <span class="tag tag-purple">mixture-of-experts</span>
+        <span class="tag tag-purple">gating</span>
+        <span class="tag tag-purple">load balancing</span>
+        <span class="tag tag-purple">capacity constraints</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Iterations</div>
+      <div class="metric-row">
+        <span class="metric-key">Rounds</span>
+        <span class="metric-val">3</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-key">Duration</span>
+        <span class="metric-val">6m 48s</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Panel 2: Invention (active) ─── -->
+  <div class="panel active" data-panel="2">
+    <div class="card">
+      <div class="card-label">Status</div>
+      <div class="card-value">
+        <span class="status status-active"><span class="status-dot"></span>Running</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Iterations</div>
+      <div class="iter-row">
+        <span class="iter-num done">1</span>
+        <span class="iter-text">
+          Plan + paper text generated
+          <span class="dim">&mdash; 2m 34s</span>
+        </span>
+        <span class="status status-done"><span class="status-dot"></span>Done</span>
+      </div>
+      <div class="iter-row">
+        <span class="iter-num done">2</span>
+        <span class="iter-text">
+          Reviewer flagged weak ablation section
+          <span class="dim">&mdash; 3m 10s</span>
+        </span>
+        <span class="status status-done"><span class="status-dot"></span>Done</span>
+      </div>
+      <div class="iter-row">
+        <span class="iter-num current">3</span>
+        <span class="iter-text">
+          Generating revised plan
+        </span>
+        <span class="status status-active"><span class="status-dot"></span>Active</span>
+      </div>
+      <div class="iter-row">
+        <span class="iter-num pending">4</span>
+        <span class="iter-text dim">Paper text</span>
+        <span class="status status-pending"><span class="status-dot"></span>Pending</span>
+      </div>
+      <div class="iter-row">
+        <span class="iter-num pending">5</span>
+        <span class="iter-text dim">Final review</span>
+        <span class="status status-pending"><span class="status-dot"></span>Pending</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Latest Review Feedback</div>
+      <div class="card-value" style="font-size:13px;line-height:1.6">
+        The ablation study in Section 4.3 lacks a comparison against
+        top-k routing without capacity constraints. Add a row for
+        "unconstrained top-2" to Table 2 and discuss the load-balance
+        variance in the appendix.
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Metrics</div>
+      <div class="metric-row">
+        <span class="metric-key">Plan iterations</span>
+        <span class="metric-val">3</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-key">Paper revisions</span>
+        <span class="metric-val">2</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-key">Elapsed</span>
+        <span class="metric-val">8m 22s</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-key">Cost</span>
+        <span class="metric-val">$1.84</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Panel 3: Paper ─── -->
+  <div class="panel" data-panel="3">
+    <div class="card">
+      <div class="card-label">Status</div>
+      <div class="card-value">
+        <span class="status status-pending"><span class="status-dot"></span>Pending</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Outputs</div>
+      <div class="card-value dim" style="font-size:13px;">
+        Waiting for Invention Loop to complete.
+        <br><br>
+        Will generate:
+      </div>
+      <div style="margin-top:10px">
+        <span class="tag tag-gray">paper.tex</span>
+        <span class="tag tag-gray">figures/</span>
+        <span class="tag tag-gray">demo.py</span>
+        <span class="tag tag-gray">viz.html</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-label">Estimated</div>
+      <div class="metric-row">
+        <span class="metric-key">Duration</span>
+        <span class="metric-val">~5m</span>
+      </div>
+      <div class="metric-row">
+        <span class="metric-key">Cost</span>
+        <span class="metric-val">~$0.90</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const points = document.querySelectorAll('.point');
+  const panels = document.querySelectorAll('.panel');
+  const titles = [
+    { title: 'Seed Hypotheses', sub: 'Knowledge graph built from 24 papers' },
+    { title: 'Hypothesis Review', sub: 'Score 8.4 / 10 after 3 rounds' },
+    { title: 'Invention Loop', sub: 'Iteration 3 of 5 \u2014 generating plan' },
+    { title: 'Paper Repository', sub: 'Pending' }
+  ];
+
+  let current = 2;
+
+  function selectPoint(idx) {
+    current = idx;
+    render();
+  }
+
+  function navigate(dir) {
+    const next = current + dir;
+    if (next < 0 || next > 3) return;
+    current = next;
+    render();
+  }
+
+  function render() {
+    points.forEach(p => p.classList.remove('selected'));
+    points[current].classList.add('selected');
+
+    panels.forEach(p => p.classList.remove('active'));
+    const target = document.querySelector(`.panel[data-panel="${current}"]`);
+    if (target) {
+      target.classList.add('active');
+      /* re-trigger animation */
+      target.style.animation = 'none';
+      target.offsetHeight; /* reflow */
+      target.style.animation = '';
+    }
+
+    document.getElementById('contentTitle').textContent = titles[current].title;
+    document.getElementById('contentSubtitle').textContent = titles[current].sub;
+
+    document.getElementById('btnPrev').classList.toggle('disabled', current === 0);
+    document.getElementById('btnNext').classList.toggle('disabled', current === 3);
+  }
+
+  /* Keyboard nav */
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowLeft') navigate(-1);
+    if (e.key === 'ArrowRight') navigate(1);
+  });
+
+  render();
+</script>
+</body>
+</html>

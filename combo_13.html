@@ -1,0 +1,1020 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Diamond Expansion Nav</title>
+<style>
+  /* ── Reset & base ─────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #0e1117;
+    --surface:   #161b22;
+    --border:    #30363d;
+    --text:      #e6edf3;
+    --dim:       #8b949e;
+    --accent:    #58a6ff;
+    --green:     #3fb950;
+    --amber:     #d29922;
+    --red:       #f85149;
+    --purple:    #bc8cff;
+
+    --marker-sz:       40px;
+    --marker-sz-small: 32px;
+    --capsule-h:       56px;
+    --capsule-min-w:   280px;
+    --trans:           0.35s cubic-bezier(.4,0,.2,1);
+    --trans-fast:      0.2s  cubic-bezier(.4,0,.2,1);
+  }
+
+  body {
+    font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont,
+                 'Segoe UI', Roboto, Oxygen, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Top strip container ──────────────────────────────── */
+  .top-strip {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    min-height: 80px;
+    box-shadow: 0 2px 16px rgba(0,0,0,.4);
+  }
+
+  /* ── Connector lines between markers ──────────────────── */
+  .connector {
+    width: 40px;
+    height: 2px;
+    background: var(--border);
+    flex-shrink: 0;
+    transition: background var(--trans), width var(--trans);
+  }
+  .connector.done { background: var(--green); }
+  .connector.squeeze { width: 20px; }
+
+  /* ── Marker (diamond-in-ring) ─────────────────────────── */
+  .marker {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    cursor: pointer;
+    outline: none;
+    transition: all var(--trans);
+  }
+
+  /* Collapsed state — single diamond */
+  .marker.collapsed {
+    width: var(--marker-sz);
+    height: var(--marker-sz);
+  }
+  .marker.collapsed.squeezed {
+    width: var(--marker-sz-small);
+    height: var(--marker-sz-small);
+  }
+
+  /* Ring */
+  .marker-ring {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--trans);
+  }
+  .marker.collapsed .marker-ring {
+    width: 100%;
+    height: 100%;
+    border: 2px solid var(--border);
+    border-radius: 50%;
+  }
+  .marker.collapsed.done .marker-ring     { border-color: var(--green); }
+  .marker.collapsed.active .marker-ring   { border-color: var(--accent); box-shadow: 0 0 10px rgba(88,166,255,.3); }
+  .marker.collapsed.future .marker-ring   { border-color: var(--border); opacity: .55; }
+
+  /* Diamond inside ring */
+  .diamond {
+    width: 14px;
+    height: 14px;
+    transform: rotate(45deg);
+    transition: all var(--trans);
+  }
+  .marker.collapsed.squeezed .diamond { width: 11px; height: 11px; }
+  .marker.done   .diamond { background: var(--green); }
+  .marker.active .diamond { background: var(--accent); }
+  .marker.future .diamond { background: transparent; border: 1.5px solid var(--border); }
+
+  /* Tiny label below collapsed marker */
+  .marker-label {
+    position: absolute;
+    bottom: -20px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: .4px;
+    text-transform: uppercase;
+    white-space: nowrap;
+    color: var(--dim);
+    transition: all var(--trans);
+    pointer-events: none;
+  }
+  .marker.active .marker-label  { color: var(--accent); }
+  .marker.done   .marker-label  { color: var(--green); }
+
+  /* Status badge (e.g. "3/5", checkmark) */
+  .marker-badge {
+    position: absolute;
+    top: -6px;
+    right: -10px;
+    font-size: 9px;
+    font-weight: 700;
+    padding: 1px 4px;
+    border-radius: 6px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--dim);
+    transition: all var(--trans);
+    pointer-events: none;
+  }
+  .marker.done .marker-badge   { color: var(--green); border-color: var(--green); }
+  .marker.active .marker-badge { color: var(--accent); border-color: var(--accent); }
+
+  /* ── Expanded capsule state ───────────────────────────── */
+  .marker.expanded {
+    height: var(--capsule-h);
+    min-width: var(--capsule-min-w);
+    background: rgba(88,166,255,.06);
+    border: 1.5px solid var(--accent);
+    border-radius: 28px;
+    padding: 0 18px;
+    gap: 10px;
+    box-shadow: 0 0 20px rgba(88,166,255,.12), inset 0 0 30px rgba(88,166,255,.04);
+  }
+
+  .marker.expanded .marker-ring {
+    width: 32px;
+    height: 32px;
+    border: 2px solid var(--accent);
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .marker.expanded .diamond {
+    width: 11px;
+    height: 11px;
+    background: var(--accent);
+  }
+  .marker.expanded .marker-label {
+    bottom: -22px;
+    font-size: 11px;
+    color: var(--accent);
+  }
+  .marker.expanded .marker-badge { display: none; }
+
+  /* Sub-step dots container */
+  .sub-dots {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    overflow: hidden;
+    max-width: 0;
+    opacity: 0;
+    transition: max-width var(--trans), opacity var(--trans);
+  }
+  .marker.expanded .sub-dots {
+    max-width: 400px;
+    opacity: 1;
+  }
+
+  /* Individual sub-dot */
+  .sub-dot {
+    position: relative;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    cursor: pointer;
+    transition: all var(--trans-fast);
+    outline: none;
+  }
+  .sub-dot.done    { background: var(--green); }
+  .sub-dot.active  { background: var(--accent); box-shadow: 0 0 10px rgba(88,166,255,.6); }
+  .sub-dot.future  { background: transparent; border: 1.5px solid var(--border); }
+
+  /* Pulsing glow on active sub-dot */
+  .sub-dot.active::after {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+    border: 1.5px solid var(--accent);
+    animation: pulse-ring 2s ease-out infinite;
+  }
+  @keyframes pulse-ring {
+    0%   { transform: scale(.85); opacity: .8; }
+    70%  { transform: scale(1.3);  opacity: 0; }
+    100% { transform: scale(1.3);  opacity: 0; }
+  }
+
+  /* Sub-dot tooltip */
+  .sub-dot-tip {
+    position: absolute;
+    bottom: -22px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 8px;
+    font-weight: 600;
+    letter-spacing: .3px;
+    text-transform: uppercase;
+    white-space: nowrap;
+    color: var(--dim);
+    opacity: 0;
+    transition: opacity var(--trans-fast);
+    pointer-events: none;
+  }
+  .sub-dot:hover .sub-dot-tip,
+  .sub-dot.active .sub-dot-tip,
+  .sub-dot:focus .sub-dot-tip { opacity: 1; }
+
+  /* ── Deep-expanded: sub-dot becomes capsule ───────────── */
+  .sub-dot.deep-expanded {
+    width: auto;
+    min-width: 120px;
+    height: 26px;
+    border-radius: 13px;
+    background: rgba(88,166,255,.12);
+    border: 1px solid var(--accent);
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+    gap: 5px;
+    box-shadow: 0 0 8px rgba(88,166,255,.2);
+  }
+  .sub-dot.deep-expanded .sub-dot-tip { display: none; }
+  .sub-dot.deep-expanded::after { display: none; }
+
+  /* Micro-dots inside deep-expanded sub-dot */
+  .micro-dots {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    overflow: hidden;
+    max-width: 0;
+    opacity: 0;
+    transition: max-width var(--trans), opacity var(--trans);
+  }
+  .sub-dot.deep-expanded .micro-dots {
+    max-width: 200px;
+    opacity: 1;
+  }
+
+  .micro-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    cursor: pointer;
+    transition: all var(--trans-fast);
+    outline: none;
+  }
+  .micro-dot.done   { background: var(--green); }
+  .micro-dot.active { background: var(--accent); box-shadow: 0 0 6px rgba(88,166,255,.5); }
+  .micro-dot.future { background: transparent; border: 1px solid var(--border); }
+
+  .micro-label {
+    font-size: 7px;
+    color: var(--accent);
+    font-weight: 700;
+    letter-spacing: .2px;
+    text-transform: uppercase;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* ── Keyboard focus indicator ─────────────────────────── */
+  .marker:focus-visible,
+  .sub-dot:focus-visible,
+  .micro-dot:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+
+  /* ── Content area ─────────────────────────────────────── */
+  .content-area {
+    max-width: 840px;
+    margin: 48px auto 80px;
+    padding: 0 32px;
+  }
+
+  .content-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px 32px;
+    animation: fade-up .35s ease-out;
+  }
+  @keyframes fade-up {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .content-card h2 {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .content-card .breadcrumb {
+    font-size: 11px;
+    color: var(--dim);
+    margin-bottom: 16px;
+    letter-spacing: .3px;
+  }
+  .content-card .breadcrumb span { color: var(--accent); }
+
+  .status-pill {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 10px;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+  }
+  .status-pill.done    { background: rgba(63,185,80,.15); color: var(--green); }
+  .status-pill.running { background: rgba(88,166,255,.15); color: var(--accent); }
+  .status-pill.pending { background: rgba(139,148,158,.1); color: var(--dim); }
+
+  .detail-grid {
+    display: grid;
+    grid-template-columns: 120px 1fr;
+    gap: 8px 16px;
+    margin-top: 16px;
+    font-size: 13px;
+  }
+  .detail-grid dt { color: var(--dim); font-weight: 600; }
+  .detail-grid dd { color: var(--text); }
+
+  .progress-bar-wrap {
+    height: 6px;
+    background: var(--border);
+    border-radius: 3px;
+    margin-top: 16px;
+    overflow: hidden;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    background: linear-gradient(90deg, var(--green), var(--accent));
+    transition: width var(--trans);
+  }
+
+  .log-lines {
+    margin-top: 16px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--dim);
+    max-height: 180px;
+    overflow-y: auto;
+    padding: 12px;
+    background: rgba(0,0,0,.25);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+  .log-lines .log-ts  { color: var(--green); }
+  .log-lines .log-lvl { font-weight: 700; }
+  .log-lines .log-lvl.info  { color: var(--accent); }
+  .log-lines .log-lvl.warn  { color: var(--amber); }
+  .log-lines .log-lvl.ok    { color: var(--green); }
+
+  /* ── Keyboard hint bar ────────────────────────────────── */
+  .key-hints {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 8px 24px;
+    display: flex;
+    gap: 24px;
+    justify-content: center;
+    font-size: 11px;
+    color: var(--dim);
+    z-index: 200;
+  }
+  .key-hints kbd {
+    display: inline-block;
+    background: var(--border);
+    color: var(--text);
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-family: 'SF Mono', monospace;
+    margin: 0 2px;
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ TOP STRIP ============ -->
+<nav class="top-strip" id="topStrip" role="navigation" aria-label="Pipeline stages"></nav>
+
+<!-- ============ CONTENT ============== -->
+<main class="content-area" id="contentArea"></main>
+
+<!-- ============ KEYBOARD HINTS ======= -->
+<footer class="key-hints">
+  <span><kbd>&larr;</kbd><kbd>&rarr;</kbd> Navigate stages</span>
+  <span><kbd>Enter</kbd> / <kbd>&darr;</kbd> Expand</span>
+  <span><kbd>Esc</kbd> / <kbd>&uarr;</kbd> Collapse</span>
+  <span><kbd>&larr;</kbd><kbd>&rarr;</kbd> Sub-steps (when expanded)</span>
+</footer>
+
+<script>
+// ── Pipeline data model ────────────────────────────────────
+const PIPELINE = [
+  {
+    id: 'seed',
+    label: 'Seed',
+    badge: '\u2713',
+    status: 'done',
+    detail: {
+      title: 'Seed Hypotheses',
+      statusLabel: 'done',
+      fields: { 'Source': 'Knowledge-graph traversal', 'Hypotheses': '42 generated', 'Duration': '3m 12s', 'Model': 'claude-opus-4-20250514' },
+      progress: 1.0,
+      logs: [
+        { ts: '09:41:02', lvl: 'info', msg: 'Loading invention KG (1,247 nodes)...' },
+        { ts: '09:41:08', lvl: 'info', msg: 'Traversal complete -- 42 seed hypotheses extracted' },
+        { ts: '09:44:14', lvl: 'ok',   msg: 'Seed stage finished successfully' },
+      ]
+    },
+    subs: null
+  },
+  {
+    id: 'hypo',
+    label: 'Hypo',
+    badge: '8.4',
+    status: 'done',
+    detail: {
+      title: 'Hypothesis Loop',
+      statusLabel: 'done',
+      fields: { 'Iterations': '3 rounds', 'Best score': '8.4 / 10', 'Hypotheses kept': '12 of 42', 'Duration': '18m 47s' },
+      progress: 1.0,
+      logs: [
+        { ts: '09:44:15', lvl: 'info', msg: 'Starting hypothesis review loop (max 5 rounds)...' },
+        { ts: '09:52:33', lvl: 'info', msg: 'Round 2 — mean score 7.1, pruning 18 below threshold' },
+        { ts: '10:02:01', lvl: 'info', msg: 'Round 3 — top hypothesis score 8.4' },
+        { ts: '10:03:02', lvl: 'ok',   msg: 'Converged after 3 rounds — 12 hypotheses retained' },
+      ]
+    },
+    subs: [
+      { id: 'gen_hypo',    label: 'Generate',  status: 'done' },
+      { id: 'review_hypo', label: 'Review',    status: 'done' },
+      { id: 'refine_hypo', label: 'Refine',    status: 'done' },
+    ]
+  },
+  {
+    id: 'invention',
+    label: 'Invention',
+    badge: '3/5',
+    status: 'active',
+    detail: {
+      title: 'Invention Loop',
+      statusLabel: 'running',
+      fields: { 'Iteration': '3 of 5', 'Current step': 'Artifacts', 'Elapsed': '24m 09s', 'Model': 'claude-opus-4-20250514' },
+      progress: 0.55,
+      logs: [
+        { ts: '10:03:05', lvl: 'info', msg: 'Starting invention loop iteration 1/5...' },
+        { ts: '10:09:22', lvl: 'info', msg: 'Strategy generated — "compositional adapter" approach' },
+        { ts: '10:15:40', lvl: 'info', msg: 'Plan accepted — 6 sections, 3 figures' },
+        { ts: '10:21:08', lvl: 'info', msg: 'Paper text generated (4,200 tokens)' },
+        { ts: '10:24:30', lvl: 'warn', msg: 'Generating artifacts — demo.py + 2 visualizations...' },
+      ]
+    },
+    subs: [
+      { id: 'gen_strat',  label: 'Strategy',  status: 'done' },
+      { id: 'gen_plan',   label: 'Plan',      status: 'done' },
+      { id: 'gen_paper',  label: 'Paper',     status: 'done' },
+      {
+        id: 'gen_artifacts', label: 'Artifacts', status: 'active',
+        deep: [
+          { id: 'art_demo',  label: 'Demo',    status: 'done' },
+          { id: 'art_viz1',  label: 'Fig 1',   status: 'active' },
+          { id: 'art_viz2',  label: 'Fig 2',   status: 'future' },
+        ]
+      },
+      { id: 'review',     label: 'Review',    status: 'future' },
+      { id: 'revise',     label: 'Revise',    status: 'future' },
+    ]
+  },
+  {
+    id: 'paper',
+    label: 'Paper',
+    badge: '\u25CB',
+    status: 'future',
+    detail: {
+      title: 'Paper Repository',
+      statusLabel: 'pending',
+      fields: { 'Status': 'Waiting for invention loop', 'Steps': 'Full paper, repo, viz, README', 'Estimated': '~12 min' },
+      progress: 0,
+      logs: []
+    },
+    subs: [
+      { id: 'paper_full',  label: 'Full paper', status: 'future' },
+      { id: 'paper_repo',  label: 'Repo',       status: 'future' },
+      { id: 'paper_viz',   label: 'Viz',        status: 'future' },
+      { id: 'paper_readme', label: 'README',    status: 'future' },
+    ]
+  },
+];
+
+// ── State ──────────────────────────────────────────────────
+let focusedMarkerIdx  = 2;           // which top marker has focus
+let expandedMarkerIdx = null;        // which marker is expanded (null = none)
+let focusedSubIdx     = null;        // which sub-dot is focused inside capsule
+let deepExpandedSubIdx = null;       // which sub-dot is deep-expanded
+let focusedMicroIdx   = null;        // which micro-dot is focused
+
+// ── Rendering helpers ──────────────────────────────────────
+
+function renderStrip() {
+  const strip = document.getElementById('topStrip');
+  strip.innerHTML = '';
+
+  const hasExpansion = expandedMarkerIdx !== null;
+
+  PIPELINE.forEach((stage, i) => {
+    // Connector before each marker (except first)
+    if (i > 0) {
+      const conn = document.createElement('div');
+      conn.className = 'connector';
+      if (PIPELINE[i - 1].status === 'done') conn.classList.add('done');
+      if (hasExpansion && i !== expandedMarkerIdx && i !== expandedMarkerIdx + 1) {
+        conn.classList.add('squeeze');
+      }
+      strip.appendChild(conn);
+    }
+
+    // Marker
+    const m = document.createElement('div');
+    m.className = 'marker';
+    m.setAttribute('tabindex', '0');
+    m.setAttribute('role', 'button');
+    m.setAttribute('aria-label', stage.label);
+    m.dataset.idx = i;
+
+    const isExpanded = expandedMarkerIdx === i;
+
+    if (isExpanded) {
+      m.classList.add('expanded');
+    } else {
+      m.classList.add('collapsed');
+      if (hasExpansion) m.classList.add('squeezed');
+    }
+    m.classList.add(stage.status);
+    if (i === focusedMarkerIdx && expandedMarkerIdx === null) {
+      m.classList.add('active');
+    }
+
+    // Ring + diamond (always present)
+    const ring = document.createElement('div');
+    ring.className = 'marker-ring';
+    const dia = document.createElement('div');
+    dia.className = 'diamond';
+    ring.appendChild(dia);
+    m.appendChild(ring);
+
+    // Sub-dots container (only when expanded and subs exist)
+    if (isExpanded && stage.subs) {
+      const dotsWrap = document.createElement('div');
+      dotsWrap.className = 'sub-dots';
+
+      stage.subs.forEach((sub, si) => {
+        const isDeepExp = deepExpandedSubIdx === si;
+
+        const dot = document.createElement('div');
+        dot.className = 'sub-dot ' + sub.status;
+        dot.setAttribute('tabindex', '0');
+        dot.setAttribute('role', 'button');
+        dot.setAttribute('aria-label', sub.label);
+        dot.dataset.subIdx = si;
+
+        if (si === focusedSubIdx) dot.classList.add('active');
+        if (isDeepExp && sub.deep) dot.classList.add('deep-expanded');
+
+        // Micro-dots for deep expansion
+        if (isDeepExp && sub.deep) {
+          const microLabel = document.createElement('span');
+          microLabel.className = 'micro-label';
+          microLabel.textContent = sub.label;
+          dot.appendChild(microLabel);
+
+          const microWrap = document.createElement('div');
+          microWrap.className = 'micro-dots';
+          sub.deep.forEach((md, mi) => {
+            const micro = document.createElement('div');
+            micro.className = 'micro-dot ' + md.status;
+            micro.setAttribute('tabindex', '0');
+            micro.setAttribute('role', 'button');
+            micro.setAttribute('aria-label', md.label);
+            micro.dataset.microIdx = mi;
+            if (mi === focusedMicroIdx) micro.classList.add('active');
+            micro.addEventListener('click', (e) => {
+              e.stopPropagation();
+              focusedMicroIdx = mi;
+              renderStrip();
+              renderContent();
+            });
+            microWrap.appendChild(micro);
+          });
+          dot.appendChild(microWrap);
+        } else {
+          // Tooltip
+          const tip = document.createElement('span');
+          tip.className = 'sub-dot-tip';
+          tip.textContent = sub.label;
+          dot.appendChild(tip);
+        }
+
+        dot.addEventListener('click', (e) => {
+          e.stopPropagation();
+          handleSubDotClick(si);
+        });
+
+        dotsWrap.appendChild(dot);
+      });
+
+      m.appendChild(dotsWrap);
+    }
+
+    // Badge
+    if (!isExpanded) {
+      const badge = document.createElement('span');
+      badge.className = 'marker-badge';
+      badge.textContent = stage.badge;
+      m.appendChild(badge);
+    }
+
+    // Label
+    const lbl = document.createElement('span');
+    lbl.className = 'marker-label';
+    lbl.textContent = stage.label;
+    m.appendChild(lbl);
+
+    // Click handler
+    m.addEventListener('click', () => handleMarkerClick(i));
+
+    strip.appendChild(m);
+  });
+
+  // Focus the correct element after render
+  requestAnimationFrame(() => setDomFocus());
+}
+
+function handleMarkerClick(idx) {
+  if (expandedMarkerIdx === idx) {
+    // Collapse
+    expandedMarkerIdx = null;
+    focusedSubIdx = null;
+    deepExpandedSubIdx = null;
+    focusedMicroIdx = null;
+    focusedMarkerIdx = idx;
+  } else if (expandedMarkerIdx !== null) {
+    // Switch expansion
+    expandedMarkerIdx = idx;
+    focusedSubIdx = findActiveSubIdx(idx);
+    deepExpandedSubIdx = null;
+    focusedMicroIdx = null;
+  } else {
+    // Expand
+    focusedMarkerIdx = idx;
+    expandedMarkerIdx = idx;
+    focusedSubIdx = findActiveSubIdx(idx);
+    deepExpandedSubIdx = null;
+    focusedMicroIdx = null;
+  }
+  renderStrip();
+  renderContent();
+}
+
+function handleSubDotClick(si) {
+  const stage = PIPELINE[expandedMarkerIdx];
+  const sub = stage.subs[si];
+
+  if (deepExpandedSubIdx === si) {
+    // Collapse deep
+    deepExpandedSubIdx = null;
+    focusedMicroIdx = null;
+    focusedSubIdx = si;
+  } else if (sub.deep) {
+    // Deep expand
+    focusedSubIdx = si;
+    deepExpandedSubIdx = si;
+    focusedMicroIdx = findActiveMicroIdx(sub);
+  } else {
+    focusedSubIdx = si;
+    deepExpandedSubIdx = null;
+    focusedMicroIdx = null;
+  }
+  renderStrip();
+  renderContent();
+}
+
+function findActiveSubIdx(stageIdx) {
+  const subs = PIPELINE[stageIdx].subs;
+  if (!subs) return null;
+  const active = subs.findIndex(s => s.status === 'active');
+  return active >= 0 ? active : 0;
+}
+
+function findActiveMicroIdx(sub) {
+  if (!sub.deep) return null;
+  const active = sub.deep.findIndex(d => d.status === 'active');
+  return active >= 0 ? active : 0;
+}
+
+function setDomFocus() {
+  if (focusedMicroIdx !== null) {
+    const el = document.querySelector(`.micro-dot[data-micro-idx="${focusedMicroIdx}"]`);
+    if (el) el.focus();
+  } else if (focusedSubIdx !== null && expandedMarkerIdx !== null) {
+    const el = document.querySelector(`.sub-dot[data-sub-idx="${focusedSubIdx}"]`);
+    if (el) el.focus();
+  } else {
+    const el = document.querySelector(`.marker[data-idx="${focusedMarkerIdx}"]`);
+    if (el) el.focus();
+  }
+}
+
+// ── Content rendering ──────────────────────────────────────
+
+function renderContent() {
+  const area = document.getElementById('contentArea');
+
+  let stage, sub, micro;
+  let crumbs = '';
+  let detail = null;
+
+  if (expandedMarkerIdx !== null) {
+    stage = PIPELINE[expandedMarkerIdx];
+    crumbs = stage.label;
+
+    if (focusedSubIdx !== null && stage.subs) {
+      sub = stage.subs[focusedSubIdx];
+      crumbs += ' <span>\u25B8</span> ' + sub.label;
+
+      if (deepExpandedSubIdx === focusedSubIdx && sub.deep && focusedMicroIdx !== null) {
+        micro = sub.deep[focusedMicroIdx];
+        crumbs += ' <span>\u25B8</span> ' + micro.label;
+        detail = buildMicroDetail(stage, sub, micro);
+      } else if (sub) {
+        detail = buildSubDetail(stage, sub);
+      }
+    } else {
+      detail = stage.detail;
+    }
+  } else {
+    stage = PIPELINE[focusedMarkerIdx];
+    crumbs = stage.label;
+    detail = stage.detail;
+  }
+
+  if (!detail) {
+    area.innerHTML = '';
+    return;
+  }
+
+  const statusCls = detail.statusLabel === 'done' ? 'done'
+                   : detail.statusLabel === 'running' ? 'running' : 'pending';
+
+  let fieldsHtml = '';
+  if (detail.fields) {
+    fieldsHtml = '<dl class="detail-grid">';
+    for (const [k, v] of Object.entries(detail.fields)) {
+      fieldsHtml += `<dt>${k}</dt><dd>${v}</dd>`;
+    }
+    fieldsHtml += '</dl>';
+  }
+
+  let logsHtml = '';
+  if (detail.logs && detail.logs.length) {
+    logsHtml = '<div class="log-lines">';
+    for (const l of detail.logs) {
+      const lvlCls = l.lvl === 'info' ? 'info' : l.lvl === 'warn' ? 'warn' : 'ok';
+      logsHtml += `<div><span class="log-ts">${l.ts}</span> <span class="log-lvl ${lvlCls}">${l.lvl.toUpperCase().padEnd(4)}</span> ${l.msg}</div>`;
+    }
+    logsHtml += '</div>';
+  }
+
+  const pct = Math.round((detail.progress || 0) * 100);
+
+  area.innerHTML = `
+    <div class="content-card" key="${crumbs}">
+      <h2>${detail.title} <span class="status-pill ${statusCls}">${detail.statusLabel}</span></h2>
+      <div class="breadcrumb">${crumbs}</div>
+      ${fieldsHtml}
+      <div class="progress-bar-wrap"><div class="progress-bar-fill" style="width:${pct}%"></div></div>
+      ${logsHtml}
+    </div>
+  `;
+}
+
+function buildSubDetail(stage, sub) {
+  const statusMap = { done: 'done', active: 'running', future: 'pending' };
+  const descMap = {
+    gen_strat:      { t: 'Strategy Generation',      f: { 'Approach': 'Compositional adapter pattern', 'Candidates': '4 strategies evaluated', 'Duration': '6m 17s' }, p: 1.0 },
+    gen_plan:       { t: 'Plan Generation',           f: { 'Sections': '6 planned', 'Figures': '3 figures', 'Duration': '6m 18s' }, p: 1.0 },
+    gen_paper:      { t: 'Paper Text Generation',     f: { 'Tokens': '4,200 output tokens', 'Sections written': '6 of 6', 'Duration': '5m 28s' }, p: 1.0 },
+    gen_artifacts:  { t: 'Artifact Generation',       f: { 'Demo': 'demo.py (complete)', 'Fig 1': 'Generating...', 'Fig 2': 'Pending', 'Elapsed': '2m 44s' }, p: 0.4 },
+    review:         { t: 'Paper Review',              f: { 'Status': 'Waiting for artifacts', 'Criteria': 'Novelty, correctness, clarity' }, p: 0 },
+    revise:         { t: 'Revision Pass',             f: { 'Status': 'Waiting for review', 'Max revisions': '2' }, p: 0 },
+    gen_hypo:       { t: 'Hypothesis Generation',     f: { 'Generated': '42 raw hypotheses', 'Duration': '5m 01s' }, p: 1.0 },
+    review_hypo:    { t: 'Hypothesis Review',         f: { 'Reviewed': '42 hypotheses', 'Mean score': '6.8', 'Duration': '8m 22s' }, p: 1.0 },
+    refine_hypo:    { t: 'Hypothesis Refinement',     f: { 'Refined': '12 hypotheses', 'Best score': '8.4', 'Duration': '5m 24s' }, p: 1.0 },
+    paper_full:     { t: 'Full Paper Assembly',       f: { 'Status': 'Pending' }, p: 0 },
+    paper_repo:     { t: 'Repository Generation',     f: { 'Status': 'Pending' }, p: 0 },
+    paper_viz:      { t: 'Visualization Generation',  f: { 'Status': 'Pending' }, p: 0 },
+    paper_readme:   { t: 'README Generation',         f: { 'Status': 'Pending' }, p: 0 },
+  };
+
+  const desc = descMap[sub.id] || { t: sub.label, f: {}, p: 0 };
+  const logs = sub.status === 'active' ? [
+    { ts: '10:24:30', lvl: 'info', msg: `Starting ${sub.label.toLowerCase()}...` },
+    { ts: '10:25:12', lvl: 'warn', msg: 'In progress...' },
+  ] : sub.status === 'done' ? [
+    { ts: '--:--:--', lvl: 'ok', msg: `${sub.label} completed successfully` },
+  ] : [];
+
+  return {
+    title: desc.t,
+    statusLabel: statusMap[sub.status],
+    fields: desc.f,
+    progress: desc.p,
+    logs: logs,
+  };
+}
+
+function buildMicroDetail(stage, sub, micro) {
+  const statusMap = { done: 'done', active: 'running', future: 'pending' };
+  const descMap = {
+    art_demo: { t: 'Demo Script',        f: { 'File': 'demo.py', 'Size': '142 lines', 'Status': 'Complete', 'Test': 'Passed' }, p: 1.0 },
+    art_viz1: { t: 'Figure 1 — Architecture Diagram', f: { 'Type': 'SVG diagram', 'Status': 'Rendering...', 'Elapsed': '1m 20s' }, p: 0.6 },
+    art_viz2: { t: 'Figure 2 — Results Plot',         f: { 'Type': 'Matplotlib PNG', 'Status': 'Pending' }, p: 0 },
+  };
+
+  const desc = descMap[micro.id] || { t: micro.label, f: {}, p: 0 };
+  const logs = micro.status === 'active' ? [
+    { ts: '10:26:50', lvl: 'info', msg: 'Generating SVG architecture diagram...' },
+    { ts: '10:27:14', lvl: 'warn', msg: 'Rendering nodes and edges (12 components)...' },
+  ] : micro.status === 'done' ? [
+    { ts: '--:--:--', lvl: 'ok', msg: `${micro.label} generated successfully` },
+  ] : [];
+
+  return {
+    title: desc.t,
+    statusLabel: statusMap[micro.status],
+    fields: desc.f,
+    progress: desc.p,
+    logs: logs,
+  };
+}
+
+// ── Keyboard navigation ────────────────────────────────────
+
+document.addEventListener('keydown', (e) => {
+  const key = e.key;
+
+  // Level 3: micro-dots focused
+  if (focusedMicroIdx !== null && deepExpandedSubIdx !== null && expandedMarkerIdx !== null) {
+    const sub = PIPELINE[expandedMarkerIdx].subs[deepExpandedSubIdx];
+    if (!sub || !sub.deep) return;
+
+    if (key === 'ArrowRight') {
+      e.preventDefault();
+      focusedMicroIdx = Math.min(focusedMicroIdx + 1, sub.deep.length - 1);
+      renderStrip(); renderContent();
+      return;
+    }
+    if (key === 'ArrowLeft') {
+      e.preventDefault();
+      focusedMicroIdx = Math.max(focusedMicroIdx - 1, 0);
+      renderStrip(); renderContent();
+      return;
+    }
+    if (key === 'Escape' || key === 'ArrowUp') {
+      e.preventDefault();
+      focusedMicroIdx = null;
+      deepExpandedSubIdx = null;
+      renderStrip(); renderContent();
+      return;
+    }
+    return;
+  }
+
+  // Level 2: sub-dots focused
+  if (focusedSubIdx !== null && expandedMarkerIdx !== null) {
+    const stage = PIPELINE[expandedMarkerIdx];
+    if (!stage.subs) return;
+
+    if (key === 'ArrowRight') {
+      e.preventDefault();
+      deepExpandedSubIdx = null;
+      focusedMicroIdx = null;
+      focusedSubIdx = Math.min(focusedSubIdx + 1, stage.subs.length - 1);
+      renderStrip(); renderContent();
+      return;
+    }
+    if (key === 'ArrowLeft') {
+      e.preventDefault();
+      deepExpandedSubIdx = null;
+      focusedMicroIdx = null;
+      focusedSubIdx = Math.max(focusedSubIdx - 1, 0);
+      renderStrip(); renderContent();
+      return;
+    }
+    if (key === 'Enter' || key === 'ArrowDown') {
+      e.preventDefault();
+      const sub = stage.subs[focusedSubIdx];
+      if (sub.deep) {
+        deepExpandedSubIdx = focusedSubIdx;
+        focusedMicroIdx = findActiveMicroIdx(sub);
+        renderStrip(); renderContent();
+      }
+      return;
+    }
+    if (key === 'Escape' || key === 'ArrowUp') {
+      e.preventDefault();
+      expandedMarkerIdx = null;
+      focusedSubIdx = null;
+      renderStrip(); renderContent();
+      return;
+    }
+    return;
+  }
+
+  // Level 1: markers focused
+  if (key === 'ArrowRight') {
+    e.preventDefault();
+    focusedMarkerIdx = Math.min(focusedMarkerIdx + 1, PIPELINE.length - 1);
+    renderStrip(); renderContent();
+    return;
+  }
+  if (key === 'ArrowLeft') {
+    e.preventDefault();
+    focusedMarkerIdx = Math.max(focusedMarkerIdx - 1, 0);
+    renderStrip(); renderContent();
+    return;
+  }
+  if (key === 'Enter' || key === 'ArrowDown') {
+    e.preventDefault();
+    const stage = PIPELINE[focusedMarkerIdx];
+    if (stage.subs) {
+      expandedMarkerIdx = focusedMarkerIdx;
+      focusedSubIdx = findActiveSubIdx(focusedMarkerIdx);
+      deepExpandedSubIdx = null;
+      focusedMicroIdx = null;
+    }
+    renderStrip(); renderContent();
+    return;
+  }
+  if (key === 'Escape' || key === 'ArrowUp') {
+    e.preventDefault();
+    if (expandedMarkerIdx !== null) {
+      expandedMarkerIdx = null;
+      focusedSubIdx = null;
+      deepExpandedSubIdx = null;
+      focusedMicroIdx = null;
+      renderStrip(); renderContent();
+    }
+    return;
+  }
+});
+
+// ── Initial render ─────────────────────────────────────────
+renderStrip();
+renderContent();
+
+// Expand Invention by default to showcase the feature
+setTimeout(() => {
+  handleMarkerClick(2);
+}, 600);
+</script>
+</body>
+</html>

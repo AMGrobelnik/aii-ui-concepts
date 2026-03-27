@@ -1,0 +1,919 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Floating Progress Ring</title>
+<style>
+  :root {
+    --bg: #0e1117;
+    --surface: #161b22;
+    --border: #21262d;
+    --text: #e6edf3;
+    --text-dim: #8b949e;
+    --text-muted: #484f58;
+    --ring-size: 120px;
+    --ring-stroke: 8;
+    --seed-color: #3fb950;
+    --hypo-color: #a371f7;
+    --invention-color: #58a6ff;
+    --paper-color: #8b949e;
+    --glow-spread: 24px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', 'JetBrains Mono', monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    overflow-x: hidden;
+  }
+
+  /* ── Floating Ring Container ── */
+  .ring-stage {
+    position: relative;
+    width: var(--ring-size);
+    height: var(--ring-size);
+    margin-top: 48px;
+    margin-bottom: 28px;
+    z-index: 10;
+  }
+
+  .ring-glow {
+    position: absolute;
+    inset: calc(var(--glow-spread) * -1);
+    border-radius: 50%;
+    background: radial-gradient(circle, var(--ring-active-color, var(--invention-color)) 0%, transparent 70%);
+    opacity: 0.18;
+    filter: blur(14px);
+    transition: background 0.6s ease, opacity 0.6s ease;
+    pointer-events: none;
+  }
+
+  .ring-glow.pulse {
+    animation: glowPulse 2.8s ease-in-out infinite;
+  }
+
+  @keyframes glowPulse {
+    0%, 100% { opacity: 0.18; transform: scale(1); }
+    50%      { opacity: 0.28; transform: scale(1.08); }
+  }
+
+  .ring-svg {
+    width: 100%;
+    height: 100%;
+    transform: rotate(-90deg);
+    position: relative;
+    z-index: 2;
+  }
+
+  .ring-track {
+    fill: none;
+    stroke: var(--border);
+    stroke-width: var(--ring-stroke);
+  }
+
+  .ring-fill {
+    fill: none;
+    stroke: var(--ring-active-color, var(--invention-color));
+    stroke-width: var(--ring-stroke);
+    stroke-linecap: round;
+    stroke-dasharray: 339.292;
+    stroke-dashoffset: 339.292;
+    transition: stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1),
+                stroke 0.5s ease;
+    filter: drop-shadow(0 0 4px var(--ring-active-color, var(--invention-color)));
+  }
+
+  .ring-label {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    z-index: 3;
+    pointer-events: none;
+  }
+
+  .ring-label-name {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    color: var(--text);
+    transition: color 0.4s ease;
+    line-height: 1.2;
+  }
+
+  .ring-label-stat {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--ring-active-color, var(--invention-color));
+    transition: color 0.5s ease;
+    margin-top: 2px;
+    line-height: 1.1;
+  }
+
+  .ring-label.transitioning .ring-label-name,
+  .ring-label.transitioning .ring-label-stat {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+
+  .ring-label .ring-label-name,
+  .ring-label .ring-label-stat {
+    transition: opacity 0.25s ease, transform 0.25s ease, color 0.4s ease;
+  }
+
+  /* ── Dot Navigation Rows ── */
+  .dot-nav {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 32px;
+  }
+
+  .dot-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    position: relative;
+  }
+
+  .dot-row-label {
+    position: absolute;
+    right: calc(100% + 14px);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    opacity: 0.6;
+  }
+
+  /* ── Module Markers (Row 1 — Diamond in Ring) ── */
+  .module-marker {
+    width: 28px;
+    height: 28px;
+    position: relative;
+    cursor: pointer;
+    transition: transform 0.2s ease;
+  }
+
+  .module-marker:hover { transform: scale(1.15); }
+
+  .module-marker svg {
+    width: 100%;
+    height: 100%;
+  }
+
+  .module-ring-outer {
+    fill: none;
+    stroke: var(--border);
+    stroke-width: 2;
+    transition: stroke 0.3s ease;
+  }
+
+  .module-diamond {
+    transition: fill 0.3s ease, opacity 0.3s ease;
+  }
+
+  .module-marker.done .module-ring-outer { stroke: var(--module-color); }
+  .module-marker.done .module-diamond { fill: var(--module-color); opacity: 1; }
+
+  .module-marker.active .module-ring-outer {
+    stroke: var(--module-color);
+    filter: drop-shadow(0 0 3px var(--module-color));
+  }
+  .module-marker.active .module-diamond { fill: var(--module-color); opacity: 1; }
+
+  .module-marker.pending .module-diamond { fill: var(--text-muted); opacity: 0.35; }
+
+  .module-marker-label {
+    position: absolute;
+    bottom: -16px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    transition: color 0.3s ease;
+  }
+
+  .module-marker.active .module-marker-label,
+  .module-marker.done .module-marker-label {
+    color: var(--text-dim);
+  }
+
+  /* ── Sub-Module Dots (Row 2) ── */
+  .sub-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: 1.5px solid var(--border);
+    background: transparent;
+    transition: all 0.3s ease;
+    cursor: default;
+    position: relative;
+  }
+
+  .sub-dot.done {
+    background: var(--ring-active-color, var(--invention-color));
+    border-color: var(--ring-active-color, var(--invention-color));
+  }
+
+  .sub-dot.active {
+    background: transparent;
+    border-color: var(--ring-active-color, var(--invention-color));
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring-active-color, var(--invention-color)) 25%, transparent);
+  }
+
+  .sub-dot.active::after {
+    content: '';
+    position: absolute;
+    inset: 2px;
+    border-radius: 50%;
+    background: var(--ring-active-color, var(--invention-color));
+  }
+
+  .sub-dot.pending {
+    border-color: var(--text-muted);
+    opacity: 0.4;
+  }
+
+  /* ── Detail Dots (Row 3) ── */
+  .detail-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    border: 1.5px solid var(--border);
+    background: transparent;
+    transition: all 0.3s ease;
+    cursor: default;
+  }
+
+  .detail-dot.done {
+    background: var(--ring-active-color, var(--invention-color));
+    border-color: var(--ring-active-color, var(--invention-color));
+    opacity: 0.8;
+  }
+
+  .detail-dot.active {
+    border-color: var(--ring-active-color, var(--invention-color));
+    box-shadow: 0 0 0 2.5px color-mix(in srgb, var(--ring-active-color, var(--invention-color)) 22%, transparent);
+    position: relative;
+  }
+
+  .detail-dot.active::after {
+    content: '';
+    position: absolute;
+    inset: 1px;
+    border-radius: 50%;
+    background: var(--ring-active-color, var(--invention-color));
+  }
+
+  .detail-dot.pending {
+    border-color: var(--text-muted);
+    opacity: 0.3;
+  }
+
+  /* ── Connector Lines Between Rows ── */
+  .connector-zone {
+    height: 8px;
+    display: flex;
+    justify-content: center;
+    position: relative;
+  }
+
+  .connector-line {
+    width: 1px;
+    height: 100%;
+    background: var(--border);
+    opacity: 0.5;
+  }
+
+  /* ── Content Area ── */
+  .content-area {
+    width: 100%;
+    max-width: 680px;
+    padding: 0 24px 64px;
+  }
+
+  .content-header {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 16px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .content-module-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--ring-active-color, var(--invention-color));
+    transition: color 0.4s ease;
+  }
+
+  .content-step-name {
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+
+  .content-block {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 18px 20px;
+    margin-bottom: 14px;
+    transition: opacity 0.4s ease, transform 0.4s ease;
+  }
+
+  .content-block.entering {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+
+  .content-block-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+
+  .content-block-body {
+    font-size: 13px;
+    line-height: 1.65;
+    color: var(--text-dim);
+  }
+
+  .content-block-body strong {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  .content-block-body code {
+    font-size: 12px;
+    background: color-mix(in srgb, var(--ring-active-color, var(--invention-color)) 8%, var(--bg));
+    padding: 2px 6px;
+    border-radius: 4px;
+    color: var(--ring-active-color, var(--invention-color));
+    transition: background 0.4s ease, color 0.4s ease;
+  }
+
+  .metric-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-top: 10px;
+  }
+
+  .metric-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+    text-align: center;
+  }
+
+  .metric-value {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--ring-active-color, var(--invention-color));
+    transition: color 0.4s ease;
+  }
+
+  .metric-label {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+
+  .log-line {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 6px 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
+    font-size: 12px;
+  }
+
+  .log-line:last-child { border-bottom: none; }
+
+  .log-time {
+    color: var(--text-muted);
+    flex-shrink: 0;
+    width: 52px;
+    font-size: 11px;
+  }
+
+  .log-msg { color: var(--text-dim); }
+  .log-msg .hl {
+    color: var(--ring-active-color, var(--invention-color));
+    font-weight: 600;
+    transition: color 0.4s ease;
+  }
+
+  /* ── Keyboard Hint ── */
+  .key-hint {
+    position: fixed;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 14px;
+    font-size: 10px;
+    color: var(--text-muted);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 16px;
+    z-index: 100;
+  }
+
+  .key-hint kbd {
+    display: inline-block;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 6px;
+    font-family: inherit;
+    font-size: 10px;
+    color: var(--text-dim);
+    margin: 0 2px;
+  }
+
+  /* ── Transitions for content swap ── */
+  .content-area.fading-out { opacity: 0; transform: translateY(6px); }
+  .content-area {
+    transition: opacity 0.25s ease, transform 0.25s ease;
+  }
+</style>
+</head>
+<body>
+
+<!-- ── Hero Ring ── -->
+<div class="ring-stage" id="ringStage">
+  <div class="ring-glow pulse" id="ringGlow"></div>
+  <svg class="ring-svg" viewBox="0 0 120 120">
+    <circle class="ring-track" cx="60" cy="60" r="54" />
+    <circle class="ring-fill" id="ringFill" cx="60" cy="60" r="54" />
+  </svg>
+  <div class="ring-label" id="ringLabel">
+    <span class="ring-label-name" id="ringName">Invention</span>
+    <span class="ring-label-stat" id="ringStat">3/5</span>
+  </div>
+</div>
+
+<!-- ── Dot Navigation ── -->
+<div class="dot-nav" id="dotNav">
+
+  <!-- Row 1: Module markers -->
+  <div class="dot-row" id="moduleRow">
+    <span class="dot-row-label">Module</span>
+  </div>
+
+  <div class="connector-zone"><div class="connector-line"></div></div>
+
+  <!-- Row 2: Sub-module dots -->
+  <div class="dot-row" id="subRow">
+    <span class="dot-row-label">Step</span>
+  </div>
+
+  <div class="connector-zone"><div class="connector-line"></div></div>
+
+  <!-- Row 3: Detail dots -->
+  <div class="dot-row" id="detailRow">
+    <span class="dot-row-label">Detail</span>
+  </div>
+</div>
+
+<!-- ── Content ── -->
+<div class="content-area" id="contentArea"></div>
+
+<!-- ── Keyboard Hint ── -->
+<div class="key-hint">
+  <span><kbd>&larr;</kbd> <kbd>&rarr;</kbd> Switch module</span>
+  <span><kbd>1</kbd>-<kbd>4</kbd> Jump to module</span>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ── Module Data ──
+  const MODULES = [
+    {
+      id: "seed",
+      name: "Seed",
+      short: "S",
+      color: "#3fb950",
+      percent: 100,
+      stat: "\u2713",
+      subSteps: [
+        { state: "done" }, { state: "done" }, { state: "done" }
+      ],
+      detailDots: [
+        { state: "done" }, { state: "done" }, { state: "done" },
+        { state: "done" }
+      ],
+      content: {
+        moduleName: "Seed",
+        stepName: "Knowledge Graph Seeding",
+        blocks: [
+          {
+            title: "Status",
+            body: "Seed generation <strong>complete</strong>. All domain knowledge extracted and structured into the invention knowledge graph. <code>12 concept nodes</code> created with cross-references."
+          },
+          {
+            title: "Metrics",
+            metrics: [
+              { value: "12", label: "Concepts" },
+              { value: "38", label: "Relations" },
+              { value: "1.2s", label: "Duration" }
+            ]
+          },
+          {
+            title: "Activity Log",
+            logs: [
+              { time: "14:01", msg: "Parsed <span class='hl'>3 source papers</span> for domain extraction" },
+              { time: "14:02", msg: "Built concept graph with <span class='hl'>12 nodes</span>" },
+              { time: "14:02", msg: "Cross-referenced <span class='hl'>38 relations</span> across domain" },
+              { time: "14:03", msg: "Seed phase <span class='hl'>complete</span> \u2014 all constraints satisfied" }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      id: "hypo",
+      name: "Hypothesis",
+      short: "H",
+      color: "#a371f7",
+      percent: 100,
+      stat: "8.4",
+      subSteps: [
+        { state: "done" }, { state: "done" }, { state: "done" },
+        { state: "done" }, { state: "done" }
+      ],
+      detailDots: [
+        { state: "done" }, { state: "done" }, { state: "done" },
+        { state: "done" }, { state: "done" }, { state: "done" }
+      ],
+      content: {
+        moduleName: "Hypothesis",
+        stepName: "Hypothesis Loop \u2014 Review Complete",
+        blocks: [
+          {
+            title: "Leading Hypothesis",
+            body: "<strong>Adaptive Latent-Space Regularization</strong> for improving generalization in few-shot molecular property prediction. Novelty score: <code>8.4 / 10</code>. The approach combines contrastive pre-training with a novel information-bottleneck formulation."
+          },
+          {
+            title: "Review Scores",
+            metrics: [
+              { value: "8.4", label: "Novelty" },
+              { value: "7.9", label: "Feasibility" },
+              { value: "8.1", label: "Impact" }
+            ]
+          },
+          {
+            title: "Iteration History",
+            logs: [
+              { time: "14:04", msg: "Generated <span class='hl'>6 candidate hypotheses</span> from seed graph" },
+              { time: "14:06", msg: "Round 1 review: top score <span class='hl'>7.2</span>" },
+              { time: "14:09", msg: "Round 2 refinement: score improved to <span class='hl'>8.0</span>" },
+              { time: "14:11", msg: "Round 3 final: converged at <span class='hl'>8.4</span>" },
+              { time: "14:12", msg: "Hypothesis locked \u2014 proceeding to invention" }
+            ]
+          },
+          {
+            title: "Key Insight",
+            body: "The information bottleneck formulation naturally balances <strong>compression</strong> vs <strong>prediction</strong>, yielding representations that transfer across molecular scaffolds. Prior work either over-compresses or fails to regularize latent space geometry."
+          }
+        ]
+      }
+    },
+    {
+      id: "invention",
+      name: "Invention",
+      short: "I",
+      color: "#58a6ff",
+      percent: 65,
+      stat: "3/5",
+      subSteps: [
+        { state: "done" }, { state: "done" }, { state: "active" },
+        { state: "pending" }, { state: "pending" }, { state: "pending" }
+      ],
+      detailDots: [
+        { state: "done" }, { state: "done" }, { state: "done" },
+        { state: "active" }, { state: "pending" }
+      ],
+      content: {
+        moduleName: "Invention",
+        stepName: "Step 3 / 5 \u2014 Generating Plan",
+        blocks: [
+          {
+            title: "Current Step",
+            body: "Generating the <strong>experimental plan</strong> for the adaptive latent-space regularization method. Defining architecture, training protocol, and evaluation benchmarks. Currently structuring <code>Section 3: Methodology</code>."
+          },
+          {
+            title: "Progress",
+            metrics: [
+              { value: "3", label: "Steps Done" },
+              { value: "5", label: "Total" },
+              { value: "65%", label: "Complete" }
+            ]
+          },
+          {
+            title: "Pipeline Log",
+            logs: [
+              { time: "14:13", msg: "Started <span class='hl'>gen_strategy</span> \u2014 defined approach skeleton" },
+              { time: "14:15", msg: "Completed <span class='hl'>gen_paper_text</span> \u2014 Sections 1-2 drafted" },
+              { time: "14:17", msg: "Running <span class='hl'>gen_plan</span> \u2014 methodology in progress..." },
+              { time: "14:18", msg: "Architecture: <span class='hl'>GNN encoder + IB regularizer</span>" },
+              { time: "14:18", msg: "Evaluation: <span class='hl'>MoleculeNet, PCBA, Tox21</span>" }
+            ]
+          },
+          {
+            title: "Plan Outline (Draft)",
+            body: "<strong>1.</strong> Pre-train GNN encoder on unlabeled molecular graphs<br><strong>2.</strong> Apply information bottleneck to latent representations<br><strong>3.</strong> Fine-tune on few-shot downstream tasks (8/16/32 examples)<br><strong>4.</strong> Compare against <code>ProtoNet</code>, <code>MAML</code>, <code>PAR</code> baselines<br><strong>5.</strong> Ablation on bottleneck \u03b2 parameter"
+          }
+        ]
+      }
+    },
+    {
+      id: "paper",
+      name: "Paper",
+      short: "P",
+      color: "#8b949e",
+      percent: 0,
+      stat: "\u25CB",
+      subSteps: [
+        { state: "pending" }, { state: "pending" }, { state: "pending" },
+        { state: "pending" }
+      ],
+      detailDots: [
+        { state: "pending" }, { state: "pending" }, { state: "pending" }
+      ],
+      content: {
+        moduleName: "Paper",
+        stepName: "Awaiting Invention Completion",
+        blocks: [
+          {
+            title: "Status",
+            body: "Paper generation is <strong>queued</strong>. Waiting for the invention loop to complete all 5 steps before proceeding to full paper assembly, visualization generation, and repository packaging."
+          },
+          {
+            title: "Planned Steps",
+            metrics: [
+              { value: "0", label: "Done" },
+              { value: "4", label: "Total" },
+              { value: "\u2014", label: "ETA" }
+            ]
+          },
+          {
+            title: "Upcoming Tasks",
+            logs: [
+              { time: "\u2014", msg: "<span class='hl'>gen_artifact_demos</span> \u2014 generate code demonstrations" },
+              { time: "\u2014", msg: "<span class='hl'>gen_viz</span> \u2014 create figures and plots" },
+              { time: "\u2014", msg: "<span class='hl'>gen_full_paper</span> \u2014 compile LaTeX manuscript" },
+              { time: "\u2014", msg: "<span class='hl'>package_repo</span> \u2014 build reproducibility archive" }
+            ]
+          }
+        ]
+      }
+    }
+  ];
+
+  // ── State ──
+  let activeModuleIdx = 2; // Start at "Invention"
+  const CIRCUMFERENCE = 2 * Math.PI * 54; // ~339.292
+
+  // ── DOM Refs ──
+  const ringGlow     = document.getElementById("ringGlow");
+  const ringFill     = document.getElementById("ringFill");
+  const ringLabel    = document.getElementById("ringLabel");
+  const ringName     = document.getElementById("ringName");
+  const ringStat     = document.getElementById("ringStat");
+  const moduleRow    = document.getElementById("moduleRow");
+  const subRow       = document.getElementById("subRow");
+  const detailRow    = document.getElementById("detailRow");
+  const contentArea  = document.getElementById("contentArea");
+
+  // ── Build Module Markers (Row 1) ──
+  function buildModuleMarkers() {
+    MODULES.forEach((mod, i) => {
+      const marker = document.createElement("div");
+      marker.className = "module-marker";
+      marker.style.setProperty("--module-color", mod.color);
+      marker.dataset.idx = i;
+      marker.addEventListener("click", () => switchModule(i));
+
+      marker.innerHTML = `
+        <svg viewBox="0 0 28 28">
+          <circle class="module-ring-outer" cx="14" cy="14" r="12" />
+          <polygon class="module-diamond" points="14,5 20,14 14,23 8,14"
+            fill="${mod.color}" opacity="0.4" />
+        </svg>
+        <span class="module-marker-label">${mod.short}</span>
+      `;
+      moduleRow.appendChild(marker);
+    });
+  }
+
+  // ── Update Module Marker States ──
+  function updateMarkerStates() {
+    const markers = moduleRow.querySelectorAll(".module-marker");
+    markers.forEach((m, i) => {
+      m.classList.remove("done", "active", "pending");
+      if (i === activeModuleIdx) {
+        m.classList.add("active");
+      } else if (MODULES[i].percent === 100) {
+        m.classList.add("done");
+      } else {
+        m.classList.add("pending");
+      }
+    });
+  }
+
+  // ── Build Sub-Module Dots (Row 2) ──
+  function buildSubDots(mod) {
+    // Keep the label
+    subRow.innerHTML = '<span class="dot-row-label">Step</span>';
+    mod.subSteps.forEach(step => {
+      const dot = document.createElement("div");
+      dot.className = `sub-dot ${step.state}`;
+      subRow.appendChild(dot);
+    });
+  }
+
+  // ── Build Detail Dots (Row 3) ──
+  function buildDetailDots(mod) {
+    detailRow.innerHTML = '<span class="dot-row-label">Detail</span>';
+    mod.detailDots.forEach(d => {
+      const dot = document.createElement("div");
+      dot.className = `detail-dot ${d.state}`;
+      detailRow.appendChild(dot);
+    });
+  }
+
+  // ── Update Ring ──
+  function updateRing(mod, animate) {
+    const offset = CIRCUMFERENCE - (CIRCUMFERENCE * mod.percent / 100);
+
+    // Update CSS custom property for color inheritance
+    document.documentElement.style.setProperty("--ring-active-color", mod.color);
+
+    // Glow
+    ringGlow.style.background =
+      `radial-gradient(circle, ${mod.color} 0%, transparent 70%)`;
+
+    if (mod.percent === 0) {
+      ringGlow.classList.remove("pulse");
+      ringGlow.style.opacity = "0.06";
+    } else if (mod.percent === 100) {
+      ringGlow.classList.remove("pulse");
+      ringGlow.style.opacity = "0.22";
+    } else {
+      ringGlow.classList.add("pulse");
+      ringGlow.style.opacity = "";
+    }
+
+    // Ring fill
+    ringFill.style.stroke = mod.color;
+    ringFill.style.filter = `drop-shadow(0 0 4px ${mod.color})`;
+
+    if (animate) {
+      // Briefly go to 0, then animate to target
+      ringFill.style.transition = "none";
+      ringFill.style.strokeDashoffset = CIRCUMFERENCE;
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          ringFill.style.transition =
+            "stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1), stroke 0.5s ease";
+          ringFill.style.strokeDashoffset = offset;
+        });
+      });
+    } else {
+      ringFill.style.strokeDashoffset = offset;
+    }
+
+    // Label — fade out, swap, fade in
+    ringLabel.classList.add("transitioning");
+    setTimeout(() => {
+      ringName.textContent = mod.name;
+      ringStat.textContent = mod.stat;
+      ringStat.style.color = mod.color;
+      ringLabel.classList.remove("transitioning");
+    }, 200);
+  }
+
+  // ── Build Content ──
+  function buildContent(mod) {
+    const c = mod.content;
+    let html = `
+      <div class="content-header">
+        <span class="content-module-name">${c.moduleName}</span>
+        <span class="content-step-name">${c.stepName}</span>
+      </div>
+    `;
+
+    c.blocks.forEach((block, bi) => {
+      html += `<div class="content-block entering" style="transition-delay: ${bi * 0.07}s">`;
+      html += `<div class="content-block-title">${block.title}</div>`;
+
+      if (block.body) {
+        html += `<div class="content-block-body">${block.body}</div>`;
+      }
+
+      if (block.metrics) {
+        html += `<div class="metric-grid">`;
+        block.metrics.forEach(m => {
+          html += `
+            <div class="metric-card">
+              <div class="metric-value">${m.value}</div>
+              <div class="metric-label">${m.label}</div>
+            </div>`;
+        });
+        html += `</div>`;
+      }
+
+      if (block.logs) {
+        block.logs.forEach(l => {
+          html += `
+            <div class="log-line">
+              <span class="log-time">${l.time}</span>
+              <span class="log-msg">${l.msg}</span>
+            </div>`;
+        });
+      }
+
+      html += `</div>`;
+    });
+
+    contentArea.innerHTML = html;
+
+    // Trigger enter animation
+    requestAnimationFrame(() => {
+      contentArea.querySelectorAll(".content-block.entering").forEach(el => {
+        el.classList.remove("entering");
+      });
+    });
+  }
+
+  // ── Switch Module ──
+  function switchModule(idx, animate = true) {
+    if (idx < 0) idx = MODULES.length - 1;
+    if (idx >= MODULES.length) idx = 0;
+    if (idx === activeModuleIdx && animate) return;
+
+    activeModuleIdx = idx;
+    const mod = MODULES[idx];
+
+    // Fade out content
+    contentArea.classList.add("fading-out");
+
+    setTimeout(() => {
+      updateRing(mod, animate);
+      updateMarkerStates();
+      buildSubDots(mod);
+      buildDetailDots(mod);
+      buildContent(mod);
+
+      // Fade in content
+      requestAnimationFrame(() => {
+        contentArea.classList.remove("fading-out");
+      });
+    }, animate ? 200 : 0);
+  }
+
+  // ── Keyboard Navigation ──
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowLeft") {
+      switchModule(activeModuleIdx - 1);
+    } else if (e.key === "ArrowRight") {
+      switchModule(activeModuleIdx + 1);
+    } else if (e.key >= "1" && e.key <= "4") {
+      switchModule(parseInt(e.key) - 1);
+    }
+  });
+
+  // ── Initialize ──
+  buildModuleMarkers();
+  switchModule(2, false);
+
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AII Pipeline Monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* ───────────────────────────────────────────
+     RESET & VARIABLES
+     ─────────────────────────────────────────── */
+  *, *::before, *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  :root {
+    --bg: #1a1d23;
+    --surface: #22262e;
+    --surface-raised: #272b34;
+    --border: #2e3440;
+    --border-light: #363c4a;
+    --text: #e5e9f0;
+    --text-dim: #8b929e;
+    --text-muted: #5c6370;
+    --blue: #5e81ac;
+    --blue-bright: #81a1c1;
+    --blue-glow: rgba(94, 129, 172, 0.35);
+    --blue-glow-strong: rgba(94, 129, 172, 0.55);
+    --green: #a3be8c;
+    --green-dim: rgba(163, 190, 140, 0.15);
+    --amber: #ebcb8b;
+    --amber-dim: rgba(235, 203, 139, 0.15);
+    --red: #bf616a;
+    --red-dim: rgba(191, 97, 106, 0.15);
+    --purple: #b48ead;
+    --purple-dim: rgba(180, 142, 173, 0.15);
+    --cyan: #88c0d0;
+    --cyan-dim: rgba(136, 192, 208, 0.15);
+    --sidebar-w: 220px;
+    --radius: 10px;
+    --radius-sm: 6px;
+  }
+
+  html {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    display: flex;
+    min-height: 100vh;
+    overflow: hidden;
+  }
+
+  /* ───────────────────────────────────────────
+     SCROLLBAR STYLING
+     ─────────────────────────────────────────── */
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--border-light);
+  }
+
+  /* ───────────────────────────────────────────
+     SIDEBAR
+     ─────────────────────────────────────────── */
+  .sidebar {
+    width: var(--sidebar-w);
+    min-width: var(--sidebar-w);
+    height: 100vh;
+    position: sticky;
+    top: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 22px 16px 24px 16px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+    z-index: 5;
+  }
+
+  .sidebar-header {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    padding: 0 4px 14px 4px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 18px;
+  }
+
+  /* ───────────────────────────────────────────
+     PROGRESS RING (100px, centered)
+     ─────────────────────────────────────────── */
+  .ring-wrap {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 24px;
+  }
+
+  .ring-container {
+    position: relative;
+    width: 100px;
+    height: 100px;
+  }
+
+  .ring-svg {
+    width: 100%;
+    height: 100%;
+    transform: rotate(-90deg);
+  }
+
+  .ring-bg {
+    fill: none;
+    stroke: var(--border);
+    stroke-width: 6;
+  }
+
+  .ring-fg {
+    fill: none;
+    stroke: url(#ringGrad);
+    stroke-width: 6;
+    stroke-linecap: round;
+    stroke-dasharray: 264;
+    stroke-dashoffset: 92.4;
+    transition: stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .ring-glow {
+    fill: none;
+    stroke: url(#ringGrad);
+    stroke-width: 12;
+    stroke-linecap: round;
+    stroke-dasharray: 264;
+    stroke-dashoffset: 92.4;
+    opacity: 0.2;
+    filter: blur(6px);
+  }
+
+  .ring-endpoint {
+    r: 5;
+    fill: var(--cyan);
+    filter: drop-shadow(0 0 5px var(--cyan));
+  }
+
+  @keyframes ep-pulse {
+    0%, 100% { opacity: 0.65; r: 4; }
+    50% { opacity: 1; r: 5.5; }
+  }
+
+  .ring-endpoint {
+    animation: ep-pulse 2.2s ease-in-out infinite;
+  }
+
+  .ring-label {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+  }
+
+  .ring-pct {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    line-height: 1;
+  }
+
+  .ring-sub {
+    font-size: 9px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-top: 3px;
+  }
+
+  /* ───────────────────────────────────────────
+     MODULE CARD
+     ─────────────────────────────────────────── */
+  .mod-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 14px 12px 14px;
+    margin-bottom: 5px;
+    cursor: pointer;
+    border-left: 3px solid var(--text-muted);
+    transition: all 0.2s ease;
+    position: relative;
+  }
+
+  .mod-card:hover {
+    border-color: var(--border-light);
+    background: var(--surface-raised);
+  }
+
+  .mod-card.active {
+    border-left-color: var(--blue) !important;
+    background: var(--surface-raised);
+    animation: card-glow 2.5s ease-in-out infinite;
+  }
+
+  @keyframes card-glow {
+    0%, 100% {
+      box-shadow:
+        0 0 8px var(--blue-glow),
+        inset 0 0 4px rgba(94, 129, 172, 0.06);
+    }
+    50% {
+      box-shadow:
+        0 0 20px var(--blue-glow),
+        0 0 40px rgba(94, 129, 172, 0.1),
+        inset 0 0 10px rgba(94, 129, 172, 0.1);
+    }
+  }
+
+  .mod-card[data-color="green"] { border-left-color: var(--green); }
+  .mod-card[data-color="blue"]  { border-left-color: var(--blue); }
+  .mod-card[data-color="amber"] { border-left-color: var(--amber); }
+  .mod-card[data-color="purple"]{ border-left-color: var(--purple); }
+
+  .mod-card[data-color="green"]:hover  { border-left-color: var(--green); }
+  .mod-card[data-color="blue"]:hover   { border-left-color: var(--blue); }
+  .mod-card[data-color="amber"]:hover  { border-left-color: var(--amber); }
+  .mod-card[data-color="purple"]:hover { border-left-color: var(--purple); }
+
+  .mod-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 7px;
+  }
+
+  .mod-name {
+    font-weight: 600;
+    font-size: 12.5px;
+    letter-spacing: 0.2px;
+  }
+
+  /* ── Badges ── */
+  .badge {
+    font-size: 9px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+  }
+
+  .badge-done    { background: var(--green-dim); color: var(--green); }
+  .badge-running { background: var(--cyan-dim);  color: var(--cyan); }
+  .badge-pending { background: rgba(92, 99, 112, 0.18); color: var(--text-muted); }
+  .badge-error   { background: var(--red-dim);   color: var(--red); }
+
+  .mod-metric {
+    font-size: 10.5px;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+  }
+
+  .mod-metric b {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  .mod-bar-wrap {
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .mod-bar {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* ───────────────────────────────────────────
+     SUB-MODULE ROWS
+     ─────────────────────────────────────────── */
+  .sub-list {
+    padding: 7px 0 12px 0;
+  }
+
+  .sub-row {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 6px 11px 6px 16px;
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    transition: background 0.15s ease;
+    position: relative;
+  }
+
+  .sub-row:hover {
+    background: rgba(94, 129, 172, 0.07);
+  }
+
+  .sub-row.selected {
+    background: rgba(94, 129, 172, 0.13);
+  }
+
+  .sub-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    transition: all 0.2s ease;
+  }
+
+  .sub-dot.done    { background: var(--green); }
+  .sub-dot.running { background: var(--cyan); animation: dot-pulse 1.8s ease-in-out infinite; }
+  .sub-dot.pending { background: var(--text-muted); opacity: 0.4; }
+  .sub-dot.error   { background: var(--red); }
+
+  @keyframes dot-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(136, 192, 208, 0.55); }
+    50%      { box-shadow: 0 0 0 5px rgba(136, 192, 208, 0); }
+  }
+
+  .sub-name {
+    font-size: 11px;
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--text-dim);
+    transition: color 0.15s;
+  }
+
+  .sub-row.selected .sub-name,
+  .sub-row:hover .sub-name {
+    color: var(--text);
+  }
+
+  .sub-metric {
+    font-size: 10px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ───────────────────────────────────────────
+     PARTICLE CANVAS (fixed over sidebar)
+     ─────────────────────────────────────────── */
+  #particleCanvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: var(--sidebar-w);
+    height: 100vh;
+    pointer-events: none;
+    z-index: 12;
+  }
+
+  /* ───────────────────────────────────────────
+     MAIN CONTENT AREA
+     ─────────────────────────────────────────── */
+  .main {
+    flex: 1;
+    padding: 40px 52px;
+    overflow-y: auto;
+    height: 100vh;
+  }
+
+  .main-header {
+    margin-bottom: 32px;
+  }
+
+  .main-title {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 6px;
+  }
+
+  .main-title h1 {
+    font-size: 21px;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+  }
+
+  .main-subtitle {
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+
+  .main-breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .main-breadcrumb span {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .main-breadcrumb .bc-sep {
+    font-size: 10px;
+    opacity: 0.4;
+  }
+
+  .main-breadcrumb .bc-active {
+    color: var(--text-dim);
+  }
+
+  /* ── "What happened" section ── */
+  .what-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 22px;
+    margin-bottom: 28px;
+  }
+
+  .what-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.9px;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+    font-weight: 600;
+  }
+
+  .what-text {
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--text-dim);
+  }
+
+  /* ── Stat Cards (3-column grid) ── */
+  .stat-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 18px;
+    margin-bottom: 28px;
+  }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px 20px;
+    transition: border-color 0.2s;
+  }
+
+  .stat-card:hover {
+    border-color: var(--border-light);
+  }
+
+  .stat-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.9px;
+    color: var(--text-muted);
+    font-weight: 600;
+    margin-bottom: 10px;
+  }
+
+  .stat-val {
+    font-size: 24px;
+    font-weight: 700;
+    margin-bottom: 5px;
+    letter-spacing: -0.5px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .stat-sub {
+    font-size: 10.5px;
+    color: var(--text-dim);
+    margin-bottom: 12px;
+  }
+
+  .stat-bar-wrap {
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .stat-bar {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* ── Item list (artifacts) ── */
+  .items-section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 22px;
+  }
+
+  .items-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.9px;
+    color: var(--text-muted);
+    font-weight: 600;
+    margin-bottom: 14px;
+  }
+
+  .item-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .item-row:last-child {
+    border-bottom: none;
+  }
+
+  .item-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+
+  .item-icon.icon-green  { background: var(--green-dim); }
+  .item-icon.icon-blue   { background: var(--cyan-dim); }
+  .item-icon.icon-amber  { background: var(--amber-dim); }
+  .item-icon.icon-purple { background: var(--purple-dim); }
+  .item-icon.icon-red    { background: var(--red-dim); }
+
+  .item-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .item-name {
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 2px;
+  }
+
+  .item-desc {
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+
+  .item-badge {
+    font-size: 9px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+
+  /* ── Empty state ── */
+  .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 60vh;
+    color: var(--text-muted);
+  }
+
+  .empty-state svg {
+    width: 52px;
+    height: 52px;
+    margin-bottom: 18px;
+    opacity: 0.3;
+  }
+
+  .empty-state p {
+    font-size: 13px;
+  }
+
+  .empty-state .empty-hint {
+    font-size: 11px;
+    margin-top: 6px;
+    opacity: 0.6;
+  }
+
+  /* ── Keyboard hints (fixed bottom-right) ── */
+  .kbd-hint {
+    position: fixed;
+    bottom: 16px;
+    right: 24px;
+    display: flex;
+    gap: 12px;
+    font-size: 10px;
+    color: var(--text-muted);
+    opacity: 0.45;
+    transition: opacity 0.3s;
+  }
+
+  .kbd-hint:hover {
+    opacity: 0.75;
+  }
+
+  kbd {
+    display: inline-block;
+    padding: 2px 6px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 10px;
+    background: var(--surface);
+    line-height: 1.3;
+  }
+
+  /* ── Transition animation for detail view ── */
+  .detail-enter {
+    animation: detailFadeIn 0.25s ease-out;
+  }
+
+  @keyframes detailFadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+</style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════
+     SIDEBAR
+     ════════════════════════════════════════════ -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-header">Pipeline Status</div>
+
+  <!-- Progress Ring -->
+  <div class="ring-wrap">
+    <div class="ring-container">
+      <svg class="ring-svg" viewBox="0 0 100 100">
+        <defs>
+          <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="var(--blue)"/>
+            <stop offset="50%" stop-color="var(--blue-bright)"/>
+            <stop offset="100%" stop-color="var(--cyan)"/>
+          </linearGradient>
+        </defs>
+        <circle class="ring-bg" cx="50" cy="50" r="42"/>
+        <circle class="ring-glow" cx="50" cy="50" r="42"/>
+        <circle class="ring-fg" cx="50" cy="50" r="42"/>
+        <circle class="ring-endpoint" cx="50" cy="50"/>
+      </svg>
+      <div class="ring-label">
+        <span class="ring-pct">65%</span>
+        <span class="ring-sub">Overall</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Module Cards + Sub-modules (populated by JS) -->
+  <div id="modList"></div>
+</aside>
+
+<!-- Particle Canvas (overlays sidebar area) -->
+<canvas id="particleCanvas"></canvas>
+
+<!-- ════════════════════════════════════════════
+     MAIN CONTENT
+     ════════════════════════════════════════════ -->
+<main class="main" id="mainContent">
+  <div class="empty-state" id="emptyState">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3
+               3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25
+               2.25 0 013 15V5.25m18 0A2.25 2.25 0 0018.75 3H5.25A2.25 2.25 0
+               003 5.25m18 0V12a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013
+               12V5.25"/>
+    </svg>
+    <p>Select a sub-module to view details</p>
+    <p class="empty-hint">Use arrow keys or click the sidebar</p>
+  </div>
+  <div id="detailView" style="display:none"></div>
+</main>
+
+<!-- Keyboard Hints -->
+<div class="kbd-hint">
+  <span><kbd>&uarr;</kbd><kbd>&darr;</kbd> sub-modules</span>
+  <span><kbd>&larr;</kbd><kbd>&rarr;</kbd> modules</span>
+</div>
+
+
+<script>
+/* ═══════════════════════════════════════════════
+   MOCK DATA — 4 Modules, 21 Sub-modules
+   ═══════════════════════════════════════════════ */
+const MODULES = [
+  { name: "Seed", color: "green", status: "done", metric: "4/4 steps",
+    progress: 100, barColor: "var(--green)",
+    subs: [
+      { name: "Load Domain KG", status: "done", metric: "1.2s",
+        duration: "1.2s", durationPct: 8, cost: "$0.02", costPct: 3,
+        messages: "4 msgs", msgBreakdown: "2 sys / 2 asst",
+        summary: "I loaded the invention knowledge graph from the cached JSONL store. " +
+                 "847 nodes and 2,104 edges were indexed across 6 domain verticals. " +
+                 "No schema mismatches detected, so I skipped the migration path entirely." },
+      { name: "Extract Themes", status: "done", metric: "3.4s",
+        duration: "3.4s", durationPct: 22, cost: "$0.08", costPct: 12,
+        messages: "12 msgs", msgBreakdown: "4 sys / 6 asst / 2 tool",
+        summary: "I clustered the KG nodes into 14 thematic groups using spectral embedding. " +
+                 "The top three themes were sensor-fusion architectures, lightweight on-device " +
+                 "inference, and cross-modal retrieval. Two outlier nodes were absorbed into " +
+                 "the nearest cluster by cosine similarity." },
+      { name: "Generate Seeds", status: "done", metric: "6.1s",
+        duration: "6.1s", durationPct: 40, cost: "$0.31", costPct: 48,
+        messages: "28 msgs", msgBreakdown: "6 sys / 18 asst / 4 tool",
+        summary: "I generated 12 seed hypotheses by crossing high-potential theme pairs. " +
+                 "Each seed was grounded against at least two KG edges to ensure factual " +
+                 "anchoring. I pruned 3 seeds that were too similar to existing literature entries." },
+      { name: "Validate Seeds", status: "done", metric: "4.8s",
+        duration: "4.8s", durationPct: 31, cost: "$0.24", costPct: 37,
+        messages: "18 msgs", msgBreakdown: "4 sys / 10 asst / 4 tool",
+        summary: "I ran novelty and feasibility checks on all 12 seeds. 9 passed both " +
+                 "thresholds. The 3 rejected seeds overlapped with patents filed in 2024. " +
+                 "Final seed pool has good diversity across all theme clusters." }
+    ] },
+  { name: "Hypothesis", color: "blue", status: "running", metric: "Score 6.2 \u2192 8.4",
+    progress: 83, barColor: "var(--blue)",
+    subs: [
+      { name: "Draft Hypotheses", status: "done", metric: "12.3s",
+        duration: "12.3s", durationPct: 28, cost: "$0.87", costPct: 32,
+        messages: "42 msgs", msgBreakdown: "8 sys / 28 asst / 6 tool",
+        summary: "I expanded the 9 seeds into full hypothesis documents, each with a " +
+                 "problem statement, proposed mechanism, and expected outcome. The drafts " +
+                 "average 340 words. I flagged two hypotheses that need stronger grounding " +
+                 "in the next review pass." },
+      { name: "Literature Check", status: "done", metric: "8.7s",
+        duration: "8.7s", durationPct: 20, cost: "$0.42", costPct: 16,
+        messages: "24 msgs", msgBreakdown: "6 sys / 14 asst / 4 tool",
+        summary: "I cross-referenced all 9 hypotheses against the Semantic Scholar corpus. " +
+                 "Three hypotheses had partial overlap with 2024 publications; I annotated " +
+                 "them with differentiation notes so the review step can assess whether the " +
+                 "novelty gap is sufficient." },
+      { name: "Review Hypo (R1)", status: "done", metric: "6.2 avg",
+        duration: "14.1s", durationPct: 32, cost: "$0.64", costPct: 24,
+        messages: "36 msgs", msgBreakdown: "6 sys / 24 asst / 6 tool",
+        summary: "I scored each hypothesis on novelty, feasibility, and impact. Round 1 " +
+                 "average was 6.2 out of 10. The weakest dimension was feasibility \u2014 " +
+                 "four hypotheses assumed hardware capabilities that don't exist yet. I " +
+                 "wrote revision directives for all sub-7.0 entries." },
+      { name: "Revise Hypotheses", status: "done", metric: "9 revised",
+        duration: "11.8s", durationPct: 27, cost: "$0.53", costPct: 20,
+        messages: "32 msgs", msgBreakdown: "6 sys / 20 asst / 6 tool",
+        summary: "I rewrote the mechanism sections of 6 hypotheses to address feasibility " +
+                 "gaps identified in Review R1. I also tightened the scope of 2 hypotheses " +
+                 "that were too broad. All 9 hypotheses now have concrete, testable predictions." },
+      { name: "Review Hypo (R2)", status: "running", metric: "8.4 avg",
+        duration: "9.2s", durationPct: 21, cost: "$0.38", costPct: 14,
+        messages: "22 msgs", msgBreakdown: "4 sys / 14 asst / 4 tool",
+        summary: "I am re-scoring the revised hypotheses. So far 7 of 9 are complete, " +
+                 "averaging 8.4. The revisions closed the feasibility gap effectively. " +
+                 "Two hypotheses jumped from 5.8 to 8.9 after mechanism rewrites. " +
+                 "Waiting on the final two evaluations." },
+      { name: "Select Finalists", status: "pending", metric: "\u2014",
+        duration: "\u2014", durationPct: 0, cost: "\u2014", costPct: 0,
+        messages: "\u2014", msgBreakdown: "\u2014",
+        summary: "Waiting for Review R2 to complete before selecting the top hypotheses " +
+                 "for the invention loop. I will rank by composite score and pick the top " +
+                 "3 for parallel invention tracks." }
+    ] },
+  { name: "Invention", color: "amber", status: "pending", metric: "3/5 artifacts",
+    progress: 0, barColor: "var(--amber)",
+    subs: [
+      { name: "Select Strategy", status: "pending", metric: "\u2014",
+        duration: "\u2014", durationPct: 0, cost: "\u2014", costPct: 0,
+        messages: "\u2014", msgBreakdown: "\u2014",
+        summary: "I will choose an invention strategy (compositional, analogical, or " +
+                 "constraint-relaxation) based on the finalist hypothesis profiles. The " +
+                 "choice depends on whether the hypotheses are incremental or paradigm-shifting." },
+      { name: "Generate Plan", status: "pending", metric: "\u2014",
+        duration: "\u2014", durationPct: 0, cost: "\u2014", costPct: 0,
+        messages: "\u2014", msgBreakdown: "\u2014",
+        summary: "I will produce a structured invention plan with milestones, required " +
+                 "artifacts, and validation criteria. The plan breaks the work into 4-6 " +
+                 "concrete deliverables with dependency ordering." },
+      { name: "Draft Paper Text", status: "pending", metric: "\u2014",
+        duration: "\u2014", durationPct: 0, cost: "\u2014", costPct: 0,
+        messages: "\u2014", msgBreakdown: "\u2014",
+        summary: "I will write the core paper sections: abstract, introduction, method, " +
+                 "and expected results. Each section will be grounded in the invention plan " +
+                 "and reference the generated artifacts." },
+      { name: "Generate Artifacts", status: "pending", metric: "\u2014",
+        duration: "\u2014", durationPct: 0, cost: "\u2014", costPct: 0,
+        messages: "\u2014", msgBreakdown: "\u2014",
+        items: [
+          { icon: "\u{1F4CA}", name: "performance_comparison.py", desc: "Bar chart showing benchmark results", badge: "pending", iconColor: "blue" },
+          { icon: "\u{1F9E9}", name: "architecture_diagram.svg", desc: "System architecture overview", badge: "pending", iconColor: "purple" },
+          { icon: "\u{1F4C8}", name: "ablation_study.py", desc: "Component ablation analysis", badge: "pending", iconColor: "green" },
+          { icon: "\u{1F5C2}", name: "dataset_stats.json", desc: "Dataset statistics summary", badge: "pending", iconColor: "amber" },
+          { icon: "\u{1F527}", name: "config_template.yaml", desc: "Reproducibility configuration", badge: "pending", iconColor: "red" }
+        ],
+        summary: "I will generate code artifacts, visualizations, and configuration files " +
+                 "required to support the paper claims. Each artifact will be independently " +
+                 "runnable and well-documented." },
+      { name: "Review Paper", status: "pending", metric: "\u2014",
+        duration: "\u2014", durationPct: 0, cost: "\u2014", costPct: 0,
+        messages: "\u2014", msgBreakdown: "\u2014",
+        summary: "I will run a self-review pass checking logical consistency, citation " +
+                 "coverage, and claim-evidence alignment. Each section gets a pass/fail " +
+                 "with specific revision notes." },
+      { name: "Revise Paper", status: "pending", metric: "\u2014",
+        duration: "\u2014", durationPct: 0, cost: "\u2014", costPct: 0,
+        messages: "\u2014", msgBreakdown: "\u2014",
+        summary: "I will apply review feedback, strengthen weak arguments, and polish " +
+                 "the writing for final submission. This includes tightening the abstract " +
+                 "and ensuring all figures are referenced in text." }
+    ] },
+  { name: "Paper", color: "purple", status: "pending", metric: "5 steps",
+    progress: 0, barColor: "var(--purple)",
+    subs: [
+      { name: "Compile LaTeX", status: "pending", metric: "\u2014",
+        duration: "\u2014", durationPct: 0, cost: "\u2014", costPct: 0,
+        messages: "\u2014", msgBreakdown: "\u2014",
+        summary: "I will compile the full LaTeX document, resolving references, citations, " +
+                 "and figure placements. The template targets a two-column ACM-style layout." },
+      { name: "Generate Figures", status: "pending", metric: "\u2014",
+        duration: "\u2014", durationPct: 0, cost: "\u2014", costPct: 0,
+        messages: "\u2014", msgBreakdown: "\u2014",
+        summary: "I will render all matplotlib and SVG figures at publication resolution (300 DPI), " +
+                 "ensuring consistent styling, colorblind-safe palettes, and proper axis labels." },
+      { name: "Build Repo", status: "pending", metric: "\u2014",
+        duration: "\u2014", durationPct: 0, cost: "\u2014", costPct: 0,
+        messages: "\u2014", msgBreakdown: "\u2014",
+        summary: "I will structure the companion code repository with README, pyproject.toml, " +
+                 "and reproduction scripts. All paths will be relative and platform-independent." },
+      { name: "Final QA", status: "pending", metric: "\u2014",
+        duration: "\u2014", durationPct: 0, cost: "\u2014", costPct: 0,
+        messages: "\u2014", msgBreakdown: "\u2014",
+        summary: "I will run automated checks: LaTeX warnings, broken references, code lint, " +
+                 "and figure resolution validation. Any issues get logged as actionable items." },
+      { name: "Package Output", status: "pending", metric: "\u2014",
+        duration: "\u2014", durationPct: 0, cost: "\u2014", costPct: 0,
+        messages: "\u2014", msgBreakdown: "\u2014",
+        summary: "I will bundle the PDF, supplementary materials, and code repo into the " +
+                 "final deliverable archive. The package includes a manifest listing every " +
+                 "file with its SHA-256 hash." }
+    ] }
+];
+
+
+/* ═══════════════════════════════════════════════
+   APPLICATION STATE
+   ═══════════════════════════════════════════════ */
+const activeModIdx = 1;    // Hypothesis module is currently running
+const activeSubIdx = 4;    // Review Hypo (R2) is the active sub-module
+let selectedModIdx = null;
+let selectedSubIdx = null;
+
+
+/* ═══════════════════════════════════════════════
+   BUILD SIDEBAR — Module Cards + Sub-rows
+   ═══════════════════════════════════════════════ */
+function buildSidebar() {
+  const wrap = document.getElementById('modList');
+  wrap.innerHTML = '';
+
+  MODULES.forEach((mod, mi) => {
+    /* ── Module Card ── */
+    const card = document.createElement('div');
+    card.className = 'mod-card' + (mi === activeModIdx ? ' active' : '');
+    card.dataset.color = mod.color;
+    card.dataset.mi = mi;
+
+    card.innerHTML = `
+      <div class="mod-head">
+        <span class="mod-name">${mod.name}</span>
+        <span class="badge badge-${mod.status}">${mod.status}</span>
+      </div>
+      <div class="mod-metric">${mod.metric}</div>
+      <div class="mod-bar-wrap">
+        <div class="mod-bar" style="width:${mod.progress}%;background:${mod.barColor}"></div>
+      </div>
+    `;
+
+    card.addEventListener('click', () => {
+      selectedModIdx = mi;
+      selectedSubIdx = 0;
+      renderDetail();
+      highlightSidebar();
+    });
+
+    wrap.appendChild(card);
+
+    /* ── Sub-module rows ── */
+    const subList = document.createElement('div');
+    subList.className = 'sub-list';
+
+    mod.subs.forEach((sub, si) => {
+      const row = document.createElement('div');
+      row.className = 'sub-row';
+      if (selectedModIdx === mi && selectedSubIdx === si) {
+        row.classList.add('selected');
+      }
+      row.dataset.mi = mi;
+      row.dataset.si = si;
+
+      row.innerHTML = `
+        <span class="sub-dot ${sub.status}"></span>
+        <span class="sub-name">${sub.name}</span>
+        <span class="sub-metric">${sub.metric}</span>
+      `;
+
+      row.addEventListener('click', (e) => {
+        e.stopPropagation();
+        selectedModIdx = mi;
+        selectedSubIdx = si;
+        renderDetail();
+        highlightSidebar();
+      });
+
+      subList.appendChild(row);
+    });
+
+    wrap.appendChild(subList);
+  });
+}
+
+
+/* ═══════════════════════════════════════════════
+   HIGHLIGHT SIDEBAR — Update selected row
+   ═══════════════════════════════════════════════ */
+function highlightSidebar() {
+  document.querySelectorAll('.sub-row').forEach(row => {
+    const mi = parseInt(row.dataset.mi, 10);
+    const si = parseInt(row.dataset.si, 10);
+    row.classList.toggle(
+      'selected',
+      mi === selectedModIdx && si === selectedSubIdx
+    );
+  });
+}
+
+
+/* ═══════════════════════════════════════════════
+   RENDER DETAIL — Main content panel
+   ═══════════════════════════════════════════════ */
+function renderDetail() {
+  const empty = document.getElementById('emptyState');
+  const detail = document.getElementById('detailView');
+
+  if (selectedModIdx === null) {
+    empty.style.display = '';
+    detail.style.display = 'none';
+    return;
+  }
+
+  empty.style.display = 'none';
+  detail.style.display = '';
+
+  const mod = MODULES[selectedModIdx];
+  const sub = mod.subs[selectedSubIdx];
+  const statusBadge = `badge-${sub.status}`;
+
+  /* ── Artifacts section (only if items exist) ── */
+  let itemsHtml = '';
+  if (sub.items && sub.items.length > 0) {
+    const rows = sub.items.map(it => `
+      <div class="item-row">
+        <div class="item-icon icon-${it.iconColor || 'blue'}">${it.icon}</div>
+        <div class="item-info">
+          <div class="item-name">${it.name}</div>
+          <div class="item-desc">${it.desc}</div>
+        </div>
+        <span class="item-badge badge-${it.badge}">${it.badge}</span>
+      </div>
+    `).join('');
+
+    itemsHtml = `
+      <div class="items-section">
+        <div class="items-label">Artifacts</div>
+        ${rows}
+      </div>
+    `;
+  }
+
+  /* ── Assemble detail view ── */
+  detail.innerHTML = `
+    <div class="detail-enter">
+      <div class="main-header">
+        <div class="main-title">
+          <h1>${sub.name}</h1>
+          <span class="badge ${statusBadge}">${sub.status}</span>
+        </div>
+        <div class="main-subtitle">
+          ${mod.name} &bull; Step ${selectedSubIdx + 1} of ${mod.subs.length}
+        </div>
+        <div class="main-breadcrumb">
+          <span>${mod.name}</span>
+          <span class="bc-sep">/</span>
+          <span class="bc-active">${sub.name}</span>
+        </div>
+      </div>
+
+      <div class="what-section">
+        <div class="what-label">What happened</div>
+        <div class="what-text">${sub.summary}</div>
+      </div>
+
+      <div class="stat-row">
+        <div class="stat-card">
+          <div class="stat-label">Duration</div>
+          <div class="stat-val">${sub.duration}</div>
+          <div class="stat-sub">${sub.durationPct}% of module time</div>
+          <div class="stat-bar-wrap">
+            <div class="stat-bar" style="width:${sub.durationPct}%;background:var(--cyan)"></div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Cost</div>
+          <div class="stat-val">${sub.cost}</div>
+          <div class="stat-sub">${sub.costPct}% of module cost</div>
+          <div class="stat-bar-wrap">
+            <div class="stat-bar" style="width:${sub.costPct}%;background:var(--amber)"></div>
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Messages</div>
+          <div class="stat-val">${sub.messages}</div>
+          <div class="stat-sub">${sub.msgBreakdown}</div>
+          <div class="stat-bar-wrap">
+            <div class="stat-bar" style="width:${Math.min(100, sub.durationPct * 2.5)}%;background:var(--purple)"></div>
+          </div>
+        </div>
+      </div>
+
+      ${itemsHtml}
+    </div>
+  `;
+}
+
+
+/* ═══════════════════════════════════════════════
+   KEYBOARD NAVIGATION
+   ═══════════════════════════════════════════════ */
+document.addEventListener('keydown', (e) => {
+  /* If nothing selected, select first item on any arrow press */
+  if (selectedModIdx === null) {
+    if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) {
+      e.preventDefault();
+      selectedModIdx = 0;
+      selectedSubIdx = 0;
+      renderDetail();
+      highlightSidebar();
+    }
+    return;
+  }
+
+  const mod = MODULES[selectedModIdx];
+
+  switch (e.key) {
+    case 'ArrowDown':
+      e.preventDefault();
+      if (selectedSubIdx < mod.subs.length - 1) {
+        selectedSubIdx++;
+      }
+      break;
+
+    case 'ArrowUp':
+      e.preventDefault();
+      if (selectedSubIdx > 0) {
+        selectedSubIdx--;
+      }
+      break;
+
+    case 'ArrowRight':
+      e.preventDefault();
+      if (selectedModIdx < MODULES.length - 1) {
+        selectedModIdx++;
+        selectedSubIdx = 0;
+      }
+      break;
+
+    case 'ArrowLeft':
+      e.preventDefault();
+      if (selectedModIdx > 0) {
+        selectedModIdx--;
+        selectedSubIdx = 0;
+      }
+      break;
+
+    default:
+      return;
+  }
+
+  renderDetail();
+  highlightSidebar();
+  scrollSubIntoView();
+});
+
+function scrollSubIntoView() {
+  const selector = `.sub-row[data-mi="${selectedModIdx}"][data-si="${selectedSubIdx}"]`;
+  const row = document.querySelector(selector);
+  if (row) {
+    row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+}
+
+
+/* ═══════════════════════════════════════════════
+   RING ENDPOINT — Position at 65% around arc
+   ═══════════════════════════════════════════════ */
+function positionEndpoint() {
+  const pct = 0.65;
+  const angle = (2 * Math.PI * pct) - (Math.PI / 2);
+  const cx = 50 + 42 * Math.cos(angle);
+  const cy = 50 + 42 * Math.sin(angle);
+  const ep = document.querySelector('.ring-endpoint');
+  if (ep) {
+    ep.setAttribute('cx', cx);
+    ep.setAttribute('cy', cy);
+  }
+}
+
+
+/* ═══════════════════════════════════════════════
+   PARTICLE FLOW ANIMATION
+   Animated dots flow from active module card
+   down to the active (running) sub-module dot.
+   ═══════════════════════════════════════════════ */
+const particles = [];
+const PARTICLE_POOL_SIZE = 22;
+const PARTICLE_BASE_SPEED = 1.1;
+
+function initParticles() {
+  const canvas = document.getElementById('particleCanvas');
+  const ctx = canvas.getContext('2d');
+
+  /* Size the canvas to match the sidebar */
+  function resizeCanvas() {
+    canvas.width = 220;
+    canvas.height = window.innerHeight;
+  }
+  resizeCanvas();
+  window.addEventListener('resize', resizeCanvas);
+
+  /* ── Helper: get bounding rect of active module card ── */
+  function getActiveCardRect() {
+    const card = document.querySelector('.mod-card.active');
+    return card ? card.getBoundingClientRect() : null;
+  }
+
+  /* ── Helper: get bounding rect of the running sub-dot ── */
+  function getActiveSubDotRect() {
+    const rows = document.querySelectorAll(
+      `.sub-row[data-mi="${activeModIdx}"]`
+    );
+    for (const row of rows) {
+      const dot = row.querySelector('.sub-dot.running');
+      if (dot) return dot.getBoundingClientRect();
+    }
+    return null;
+  }
+
+  /* ── Spawn a new particle ── */
+  function spawnParticle() {
+    const cardRect = getActiveCardRect();
+    const dotRect = getActiveSubDotRect();
+    if (!cardRect || !dotRect) return;
+
+    const startX = cardRect.left + cardRect.width / 2
+                 + (Math.random() - 0.5) * 24;
+    const startY = cardRect.bottom - 4;
+    const endX = dotRect.left + dotRect.width / 2;
+    const endY = dotRect.top + dotRect.height / 2;
+
+    particles.push({
+      x: startX,
+      y: startY,
+      targetX: endX,
+      targetY: endY,
+      progress: 0,
+      speed: PARTICLE_BASE_SPEED + Math.random() * 0.7,
+      size: 1.8 + Math.random() * 1.4,
+      opacity: 0.45 + Math.random() * 0.4
+    });
+  }
+
+  /* ── Animation loop ── */
+  function animate() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    /* Spawn new particles at a controlled rate */
+    if (particles.length < PARTICLE_POOL_SIZE && Math.random() < 0.14) {
+      spawnParticle();
+    }
+
+    /* Update & draw each particle */
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.progress += p.speed / 100;
+
+      /* Remove completed particles */
+      if (p.progress >= 1) {
+        particles.splice(i, 1);
+        continue;
+      }
+
+      /* Cubic bezier path from card bottom to sub-dot */
+      const cp1x = p.x;
+      const cp1y = p.y + (p.targetY - p.y) * 0.3;
+      const cp2x = p.targetX;
+      const cp2y = p.y + (p.targetY - p.y) * 0.7;
+
+      const t = p.progress;
+      const u = 1 - t;
+      const cx = u*u*u*p.x + 3*u*u*t*cp1x + 3*u*t*t*cp2x + t*t*t*p.targetX;
+      const cy = u*u*u*p.y + 3*u*u*t*cp1y + 3*u*t*t*cp2y + t*t*t*p.targetY;
+
+      /* Fade in at start, fade out at end */
+      let alpha = p.opacity;
+      if (t < 0.12) alpha *= t / 0.12;
+      if (t > 0.88) alpha *= (1 - t) / 0.12;
+
+      /* Core particle */
+      ctx.beginPath();
+      ctx.arc(cx, cy, p.size, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(94, 129, 172, ${alpha})`;
+      ctx.fill();
+
+      /* Soft glow halo */
+      ctx.beginPath();
+      ctx.arc(cx, cy, p.size * 2.8, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(136, 192, 208, ${alpha * 0.12})`;
+      ctx.fill();
+
+      /* Tiny bright center */
+      ctx.beginPath();
+      ctx.arc(cx, cy, p.size * 0.4, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(224, 236, 244, ${alpha * 0.6})`;
+      ctx.fill();
+    }
+
+    requestAnimationFrame(animate);
+  }
+
+  animate();
+}
+
+
+/* ═══════════════════════════════════════════════
+   INITIALIZATION
+   ═══════════════════════════════════════════════ */
+positionEndpoint();
+buildSidebar();
+initParticles();
+</script>
+</body>
+</html>

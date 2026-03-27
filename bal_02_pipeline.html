@@ -1,0 +1,1061 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor - Pipeline View</title>
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0c0e14;
+    --surface: rgba(255,255,255,0.04);
+    --surface-hover: rgba(255,255,255,0.07);
+    --border: rgba(255,255,255,0.08);
+    --text: #e2e4ea;
+    --text-dim: #6b7084;
+    --text-muted: #454860;
+    --green: #34d399;
+    --green-glow: rgba(52,211,153,0.25);
+    --purple: #a78bfa;
+    --purple-glow: rgba(167,139,250,0.25);
+    --blue: #60a5fa;
+    --blue-glow: rgba(96,165,250,0.3);
+    --amber: #fbbf24;
+    --red: #f87171;
+    --glass: rgba(15,17,25,0.7);
+    --glass-border: rgba(255,255,255,0.06);
+    --radius: 12px;
+    --radius-sm: 8px;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    line-height: 1.5;
+  }
+
+  /* ── Header ── */
+  .header {
+    display: flex;
+    align-items: center;
+    padding: 12px 28px;
+    border-bottom: 1px solid var(--border);
+    gap: 14px;
+    flex-shrink: 0;
+  }
+  .header-logo {
+    width: 28px; height: 28px;
+    background: linear-gradient(135deg, var(--blue), var(--purple));
+    border-radius: 7px;
+    display: grid; place-items: center;
+    font-weight: 700; font-size: 14px; color: #fff;
+  }
+  .header-title { font-size: 15px; font-weight: 600; letter-spacing: -0.3px; }
+  .header-sep { color: var(--text-muted); font-size: 13px; }
+  .header-run { color: var(--text-dim); font-size: 13px; }
+  .header-spacer { flex: 1; }
+  .header-status {
+    font-size: 12px; padding: 4px 10px;
+    border-radius: 20px;
+    background: rgba(96,165,250,0.12);
+    color: var(--blue);
+    font-weight: 500;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .header-status .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--blue);
+    animation: pulse-dot 1.8s ease-in-out infinite;
+  }
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  /* ── Pipeline strip ── */
+  .pipeline-strip {
+    padding: 24px 28px 20px;
+    flex-shrink: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .pipeline-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+  }
+
+  /* Nodes */
+  .p-node {
+    width: 210px;
+    padding: 18px 20px 16px;
+    border-radius: var(--radius);
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(16px);
+    cursor: pointer;
+    transition: transform 0.2s, border-color 0.25s, box-shadow 0.3s;
+    position: relative;
+    flex-shrink: 0;
+    user-select: none;
+  }
+  .p-node:hover { transform: translateY(-2px); }
+  .p-node.selected { border-color: rgba(255,255,255,0.15); }
+  .p-node.selected::after {
+    content: '';
+    position: absolute; bottom: -9px; left: 50%; transform: translateX(-50%);
+    width: 0; height: 0;
+    border-left: 7px solid transparent;
+    border-right: 7px solid transparent;
+    border-top: 7px solid rgba(255,255,255,0.15);
+  }
+
+  /* Node states */
+  .p-node[data-state="done"] { box-shadow: 0 0 24px var(--green-glow), 0 0 2px rgba(52,211,153,0.3); }
+  .p-node[data-state="done"].selected { box-shadow: 0 0 32px var(--green-glow), 0 0 4px rgba(52,211,153,0.4); }
+  .p-node[data-state="done-purple"] { box-shadow: 0 0 24px var(--purple-glow), 0 0 2px rgba(167,139,250,0.3); }
+  .p-node[data-state="done-purple"].selected { box-shadow: 0 0 32px var(--purple-glow), 0 0 4px rgba(167,139,250,0.4); }
+  .p-node[data-state="active"] {
+    box-shadow: 0 0 24px var(--blue-glow), 0 0 2px rgba(96,165,250,0.3);
+    animation: node-pulse 2.5s ease-in-out infinite;
+  }
+  .p-node[data-state="active"].selected { animation: node-pulse-sel 2.5s ease-in-out infinite; }
+  @keyframes node-pulse {
+    0%, 100% { box-shadow: 0 0 24px var(--blue-glow), 0 0 2px rgba(96,165,250,0.3); }
+    50% { box-shadow: 0 0 36px rgba(96,165,250,0.4), 0 0 4px rgba(96,165,250,0.5); }
+  }
+  @keyframes node-pulse-sel {
+    0%, 100% { box-shadow: 0 0 32px var(--blue-glow), 0 0 4px rgba(96,165,250,0.4); }
+    50% { box-shadow: 0 0 44px rgba(96,165,250,0.5), 0 0 6px rgba(96,165,250,0.6); }
+  }
+  .p-node[data-state="pending"] { opacity: 0.45; }
+
+  .node-top { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .node-icon {
+    width: 26px; height: 26px; border-radius: 7px;
+    display: grid; place-items: center; font-size: 13px; font-weight: 600;
+    flex-shrink: 0;
+  }
+  .node-icon.done { background: rgba(52,211,153,0.15); color: var(--green); }
+  .node-icon.done-purple { background: rgba(167,139,250,0.15); color: var(--purple); }
+  .node-icon.active { background: rgba(96,165,250,0.15); color: var(--blue); }
+  .node-icon.pending { background: rgba(255,255,255,0.06); color: var(--text-muted); }
+
+  .node-name { font-size: 15px; font-weight: 600; letter-spacing: -0.2px; }
+  .node-metric { font-size: 26px; font-weight: 700; letter-spacing: -0.5px; margin-bottom: 4px; }
+  .node-metric.c-green { color: var(--green); }
+  .node-metric.c-purple { color: var(--purple); }
+  .node-metric.c-blue { color: var(--blue); }
+  .node-metric.c-dim { color: var(--text-muted); font-size: 18px; font-weight: 500; }
+  .node-desc { font-size: 12px; color: var(--text-dim); }
+
+  /* Connector lines */
+  .p-connector {
+    width: 60px; height: 4px;
+    border-radius: 2px;
+    flex-shrink: 0;
+    position: relative;
+    overflow: hidden;
+  }
+  .p-connector.done {
+    background: linear-gradient(90deg, var(--green), var(--purple));
+    opacity: 0.5;
+  }
+  .p-connector.active {
+    background: rgba(255,255,255,0.08);
+  }
+  .p-connector.active::after {
+    content: '';
+    position: absolute; inset: 0;
+    background: repeating-linear-gradient(90deg, var(--blue) 0px, var(--blue) 8px, transparent 8px, transparent 16px);
+    background-size: 32px 4px;
+    animation: flow 1s linear infinite;
+  }
+  .p-connector.pending {
+    background: transparent;
+    border-top: 2px dashed rgba(255,255,255,0.08);
+    height: 0;
+    margin-top: 2px;
+  }
+  @keyframes flow { to { background-position: 32px 0; } }
+
+  /* ── Detail area ── */
+  .detail-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px 28px;
+    position: relative;
+  }
+
+  .detail-panel {
+    display: none;
+    animation: fade-in 0.3s ease;
+  }
+  .detail-panel.active { display: block; }
+  @keyframes fade-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Detail headers */
+  .detail-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 20px;
+  }
+  .detail-title { font-size: 18px; font-weight: 600; letter-spacing: -0.3px; }
+  .detail-badge {
+    font-size: 11px; padding: 3px 10px; border-radius: 20px;
+    font-weight: 500;
+  }
+  .detail-badge.green { background: rgba(52,211,153,0.12); color: var(--green); }
+  .detail-badge.blue { background: rgba(96,165,250,0.12); color: var(--blue); }
+  .detail-badge.purple { background: rgba(167,139,250,0.12); color: var(--purple); }
+
+  /* Iteration tabs */
+  .iter-tabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 20px;
+  }
+  .iter-tab {
+    padding: 6px 14px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-dim);
+    transition: all 0.2s;
+    user-select: none;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .iter-tab:hover { background: var(--surface-hover); }
+  .iter-tab.active { background: rgba(96,165,250,0.1); border-color: rgba(96,165,250,0.25); color: var(--blue); }
+  .iter-tab.done { color: var(--green); }
+  .iter-tab .t-icon { font-size: 11px; }
+
+  /* Sub-module grid */
+  .sub-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-bottom: 20px;
+  }
+  .sub-card {
+    padding: 14px 16px;
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: all 0.2s;
+    user-select: none;
+  }
+  .sub-card:hover { background: var(--surface-hover); }
+  .sub-card.selected { border-color: rgba(96,165,250,0.3); background: rgba(96,165,250,0.06); }
+  .sub-card.s-done .sub-status { color: var(--green); }
+  .sub-card.s-active .sub-status { color: var(--blue); }
+  .sub-card.s-pending .sub-status { color: var(--text-muted); }
+  .sub-card.s-pending { opacity: 0.5; }
+
+  .sub-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  .sub-name { font-size: 13px; font-weight: 600; }
+  .sub-status { font-size: 11px; font-weight: 500; }
+  .sub-detail { font-size: 12px; color: var(--text-dim); }
+
+  /* Expanded sub-module */
+  .sub-expanded {
+    border-radius: var(--radius);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 18px 20px;
+  }
+  .sub-expanded-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .sub-expanded-title { font-size: 15px; font-weight: 600; }
+  .sub-expanded-progress { font-size: 13px; color: var(--blue); font-weight: 500; }
+
+  /* Artifact rows */
+  .artifact-list { display: flex; flex-direction: column; gap: 6px; }
+  .artifact-row {
+    display: flex;
+    align-items: center;
+    padding: 10px 14px;
+    border-radius: var(--radius-sm);
+    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(255,255,255,0.04);
+    gap: 14px;
+    font-size: 13px;
+  }
+  .artifact-row:hover { background: rgba(255,255,255,0.035); }
+  .a-status {
+    width: 20px; height: 20px; border-radius: 50%;
+    display: grid; place-items: center; font-size: 10px; flex-shrink: 0;
+  }
+  .a-status.done { background: rgba(52,211,153,0.15); color: var(--green); }
+  .a-status.active { background: rgba(96,165,250,0.15); color: var(--blue); }
+  .a-status.pending { background: rgba(255,255,255,0.06); color: var(--text-muted); }
+  .a-name { flex: 1; font-weight: 500; }
+  .a-type { color: var(--text-dim); font-size: 12px; width: 80px; }
+  .a-metric { font-weight: 600; width: 60px; text-align: right; }
+  .a-metric.c-green { color: var(--green); }
+  .a-metric.c-blue { color: var(--blue); }
+  .a-time { color: var(--text-dim); font-size: 12px; width: 60px; text-align: right; }
+  .a-cost { color: var(--text-dim); font-size: 12px; width: 56px; text-align: right; }
+
+  /* ── Seed detail ── */
+  .seed-flow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    padding: 28px 0;
+  }
+  .seed-stage {
+    text-align: center;
+    padding: 20px 28px;
+    border-radius: var(--radius);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    min-width: 140px;
+  }
+  .seed-stage .ss-num { font-size: 30px; font-weight: 700; color: var(--green); margin-bottom: 2px; }
+  .seed-stage .ss-label { font-size: 12px; color: var(--text-dim); }
+  .seed-arrow {
+    padding: 0 12px;
+    color: var(--text-muted);
+    font-size: 18px;
+  }
+  .seed-topics {
+    margin-top: 24px;
+  }
+  .seed-topics-title { font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--text-dim); }
+  .seed-topic-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 14px;
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    margin-bottom: 6px;
+    font-size: 13px;
+  }
+  .st-idx {
+    width: 24px; height: 24px; border-radius: 6px;
+    background: rgba(52,211,153,0.1); color: var(--green);
+    display: grid; place-items: center; font-size: 11px; font-weight: 600; flex-shrink: 0;
+  }
+  .st-name { flex: 1; font-weight: 500; }
+  .st-gaps { color: var(--text-dim); font-size: 12px; }
+
+  /* ── Hypothesis detail ── */
+  .hypo-iters { display: flex; flex-direction: column; gap: 12px; margin-bottom: 24px; }
+  .hypo-iter-row {
+    display: flex; align-items: center; gap: 16px;
+    padding: 14px 18px;
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    border: 1px solid var(--border);
+  }
+  .hi-label { font-size: 13px; font-weight: 600; width: 80px; flex-shrink: 0; }
+  .hi-steps { display: flex; align-items: center; gap: 8px; flex: 1; }
+  .hi-step {
+    font-size: 12px; color: var(--text-dim);
+    display: flex; align-items: center; gap: 4px;
+  }
+  .hi-step-arrow { color: var(--text-muted); }
+  .hi-bar-wrap { flex: 1; max-width: 200px; }
+  .hi-bar-track { height: 8px; border-radius: 4px; background: rgba(255,255,255,0.06); overflow: hidden; }
+  .hi-bar-fill { height: 100%; border-radius: 4px; transition: width 0.6s ease; }
+  .hi-score {
+    font-size: 20px; font-weight: 700; min-width: 56px; text-align: right;
+  }
+  .hi-score.s1 { color: var(--amber); }
+  .hi-score.s2 { color: var(--purple); }
+  .hi-score.s3 { color: var(--green); }
+
+  .hypo-final {
+    padding: 18px 20px;
+    border-radius: var(--radius);
+    background: var(--surface);
+    border: 1px solid rgba(167,139,250,0.15);
+  }
+  .hypo-final-label { font-size: 11px; color: var(--purple); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+  .hypo-final-title { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+  .hypo-final-abstract { font-size: 13px; color: var(--text-dim); line-height: 1.6; }
+
+  /* ── Paper detail ── */
+  .paper-pending {
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; padding: 60px 0;
+    color: var(--text-muted);
+  }
+  .paper-pending-icon { font-size: 36px; margin-bottom: 12px; opacity: 0.4; }
+  .paper-pending-text { font-size: 15px; }
+  .paper-pending-sub { font-size: 13px; margin-top: 6px; color: var(--text-muted); }
+
+  /* ── Bottom bar ── */
+  .bottom-bar {
+    display: flex;
+    align-items: center;
+    padding: 0 28px;
+    height: 40px;
+    border-top: 1px solid var(--border);
+    background: rgba(12,14,20,0.95);
+    flex-shrink: 0;
+    gap: 24px;
+    font-size: 12px;
+    color: var(--text-dim);
+    backdrop-filter: blur(8px);
+  }
+  .bb-item { display: flex; align-items: center; gap: 6px; }
+  .bb-label { color: var(--text-muted); }
+  .bb-value { color: var(--text); font-weight: 500; }
+  .bb-spacer { flex: 1; }
+  .bb-progress { display: flex; align-items: center; gap: 8px; }
+  .bb-progress-bar {
+    width: 120px; height: 4px; border-radius: 2px;
+    background: rgba(255,255,255,0.06); overflow: hidden;
+  }
+  .bb-progress-fill {
+    height: 100%; border-radius: 2px;
+    background: linear-gradient(90deg, var(--blue), var(--purple));
+    transition: width 0.5s ease;
+  }
+  .bb-progress-pct { font-weight: 600; color: var(--blue); }
+
+  /* ── Scrollbar ── */
+  .detail-area::-webkit-scrollbar { width: 6px; }
+  .detail-area::-webkit-scrollbar-track { background: transparent; }
+  .detail-area::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+
+  /* ── Spinner for active items ── */
+  .spin {
+    display: inline-block;
+    width: 12px; height: 12px;
+    border: 2px solid rgba(96,165,250,0.3);
+    border-top-color: var(--blue);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    flex-shrink: 0;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Progress indicator for artifact building ── */
+  .progress-mini {
+    width: 100%; height: 3px; border-radius: 2px;
+    background: rgba(255,255,255,0.06);
+    overflow: hidden; margin-top: 8px;
+  }
+  .progress-mini-fill {
+    height: 100%; border-radius: 2px;
+    background: linear-gradient(90deg, var(--blue), var(--purple));
+    animation: progress-shimmer 2s ease-in-out infinite;
+  }
+  @keyframes progress-shimmer {
+    0% { opacity: 0.6; }
+    50% { opacity: 1; }
+    100% { opacity: 0.6; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<div class="header">
+  <div class="header-logo">Ai</div>
+  <div class="header-title">AI Inventor</div>
+  <div class="header-sep">/</div>
+  <div class="header-run">Run #147 &mdash; Adaptive Cross-Modal Feature Alignment</div>
+  <div class="header-spacer"></div>
+  <div class="header-status"><div class="dot"></div> Running</div>
+</div>
+
+<!-- ── Pipeline strip ── -->
+<div class="pipeline-strip">
+  <div class="pipeline-row">
+    <!-- Node 0: Seed -->
+    <div class="p-node selected" data-state="done" data-panel="seed" onclick="selectNode(this, 'seed')">
+      <div class="node-top">
+        <div class="node-icon done">&#10003;</div>
+        <div class="node-name">Seed Hypo</div>
+      </div>
+      <div class="node-metric c-green">12 gaps</div>
+      <div class="node-desc">847 papers mined, 5 seed topics</div>
+    </div>
+
+    <div class="p-connector done"></div>
+
+    <!-- Node 1: Hypothesis -->
+    <div class="p-node" data-state="done-purple" data-panel="hypo" onclick="selectNode(this, 'hypo')">
+      <div class="node-top">
+        <div class="node-icon done-purple">&#10003;</div>
+        <div class="node-name">Hypothesis</div>
+      </div>
+      <div class="node-metric c-purple">8.4/10</div>
+      <div class="node-desc">3 iterations, score converged</div>
+    </div>
+
+    <div class="p-connector active"></div>
+
+    <!-- Node 2: Invention -->
+    <div class="p-node" data-state="active" data-panel="invention" onclick="selectNode(this, 'invention')">
+      <div class="node-top">
+        <div class="node-icon active">&#9654;</div>
+        <div class="node-name">Invention</div>
+      </div>
+      <div class="node-metric c-blue">3/5</div>
+      <div class="node-desc">Iteration 2 &mdash; generating artifacts</div>
+    </div>
+
+    <div class="p-connector pending"></div>
+
+    <!-- Node 3: Paper -->
+    <div class="p-node" data-state="pending" data-panel="paper" onclick="selectNode(this, 'paper')">
+      <div class="node-top">
+        <div class="node-icon pending">&#9675;</div>
+        <div class="node-name">Paper Repo</div>
+      </div>
+      <div class="node-metric c-dim">Waiting...</div>
+      <div class="node-desc">Repo, demos, full paper</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Detail area ── -->
+<div class="detail-area">
+
+  <!-- ── Seed detail ── -->
+  <div class="detail-panel" id="panel-seed">
+    <div class="detail-header">
+      <div class="detail-title">Seed Hypothesis</div>
+      <div class="detail-badge green">Complete</div>
+    </div>
+
+    <div class="seed-flow">
+      <div class="seed-stage">
+        <div class="ss-num">847</div>
+        <div class="ss-label">Papers Mined</div>
+      </div>
+      <div class="seed-arrow">&#10140;</div>
+      <div class="seed-stage">
+        <div class="ss-num">2,341</div>
+        <div class="ss-label">KG Triples</div>
+      </div>
+      <div class="seed-arrow">&#10140;</div>
+      <div class="seed-stage">
+        <div class="ss-num">12</div>
+        <div class="ss-label">Gaps Found</div>
+      </div>
+      <div class="seed-arrow">&#10140;</div>
+      <div class="seed-stage">
+        <div class="ss-num">5</div>
+        <div class="ss-label">Seed Topics</div>
+      </div>
+    </div>
+
+    <div class="seed-topics">
+      <div class="seed-topics-title">Generated Seed Topics</div>
+      <div class="seed-topic-row">
+        <div class="st-idx">1</div>
+        <div class="st-name">Adaptive Cross-Modal Feature Alignment via Gated Attention</div>
+        <div class="st-gaps">4 gaps</div>
+      </div>
+      <div class="seed-topic-row">
+        <div class="st-idx">2</div>
+        <div class="st-name">Hierarchical Contrastive Pretraining for Low-Resource NER</div>
+        <div class="st-gaps">3 gaps</div>
+      </div>
+      <div class="seed-topic-row">
+        <div class="st-idx">3</div>
+        <div class="st-name">Sparse Mixture-of-Experts for Efficient Long-Context Reasoning</div>
+        <div class="st-gaps">2 gaps</div>
+      </div>
+      <div class="seed-topic-row">
+        <div class="st-idx">4</div>
+        <div class="st-name">Differentiable Architecture Search with Progressive Pruning</div>
+        <div class="st-gaps">2 gaps</div>
+      </div>
+      <div class="seed-topic-row">
+        <div class="st-idx">5</div>
+        <div class="st-name">Self-Supervised Graph Alignment for Biomedical Ontologies</div>
+        <div class="st-gaps">1 gap</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Hypothesis detail ── -->
+  <div class="detail-panel" id="panel-hypo">
+    <div class="detail-header">
+      <div class="detail-title">Hypothesis Loop</div>
+      <div class="detail-badge purple">3 Iterations</div>
+    </div>
+
+    <div class="hypo-iters">
+      <div class="hypo-iter-row">
+        <div class="hi-label">Iteration 1</div>
+        <div class="hi-steps">
+          <div class="hi-step">gen_hypo</div>
+          <div class="hi-step-arrow">&#10140;</div>
+          <div class="hi-step">review_hypo</div>
+        </div>
+        <div class="hi-bar-wrap">
+          <div class="hi-bar-track">
+            <div class="hi-bar-fill" style="width: 62%; background: var(--amber);"></div>
+          </div>
+        </div>
+        <div class="hi-score s1">6.2</div>
+      </div>
+
+      <div class="hypo-iter-row">
+        <div class="hi-label">Iteration 2</div>
+        <div class="hi-steps">
+          <div class="hi-step">gen_hypo</div>
+          <div class="hi-step-arrow">&#10140;</div>
+          <div class="hi-step">review_hypo</div>
+        </div>
+        <div class="hi-bar-wrap">
+          <div class="hi-bar-track">
+            <div class="hi-bar-fill" style="width: 78%; background: var(--purple);"></div>
+          </div>
+        </div>
+        <div class="hi-score s2">7.8</div>
+      </div>
+
+      <div class="hypo-iter-row">
+        <div class="hi-label">Iteration 3</div>
+        <div class="hi-steps">
+          <div class="hi-step">gen_hypo</div>
+          <div class="hi-step-arrow">&#10140;</div>
+          <div class="hi-step">review_hypo</div>
+        </div>
+        <div class="hi-bar-wrap">
+          <div class="hi-bar-track">
+            <div class="hi-bar-fill" style="width: 84%; background: var(--green);"></div>
+          </div>
+        </div>
+        <div class="hi-score s3">8.4</div>
+      </div>
+    </div>
+
+    <div class="hypo-final">
+      <div class="hypo-final-label">Final Hypothesis</div>
+      <div class="hypo-final-title">Adaptive Cross-Modal Feature Alignment via Gated Attention for Vision-Language Tasks</div>
+      <div class="hypo-final-abstract">
+        We propose a gated cross-attention mechanism that dynamically aligns visual and textual feature spaces
+        through learned modality-specific gates. Unlike static fusion approaches, our method adaptively weights
+        feature channels based on task-specific relevance signals, enabling selective information flow between
+        modalities. We hypothesize this yields 3-5% accuracy gains on VQA benchmarks while reducing
+        computational overhead by 40% compared to full cross-attention baselines.
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Invention detail ── -->
+  <div class="detail-panel active" id="panel-invention">
+    <div class="detail-header">
+      <div class="detail-title">Invention Loop</div>
+      <div class="detail-badge blue">Iteration 2</div>
+    </div>
+
+    <div class="iter-tabs" id="inv-iter-tabs">
+      <div class="iter-tab done" data-iter="1" onclick="selectInvIter(1)">
+        <span class="t-icon" style="color: var(--green);">&#10003;</span> Iter 1
+      </div>
+      <div class="iter-tab active" data-iter="2" onclick="selectInvIter(2)">
+        <span class="t-icon" style="color: var(--blue);">&#9654;</span> Iter 2
+      </div>
+      <div class="iter-tab" data-iter="3" onclick="selectInvIter(3)">
+        <span class="t-icon" style="color: var(--text-muted);">&#9675;</span> Iter 3
+      </div>
+    </div>
+
+    <!-- Iteration content containers -->
+    <div id="inv-iter-content">
+      <!-- Iter 1 (done) -->
+      <div class="inv-iter-panel" data-iter="1" style="display: none;">
+        <div class="sub-grid">
+          <div class="sub-card s-done">
+            <div class="sub-top"><div class="sub-name">Strategy</div><div class="sub-status">&#10003; Done</div></div>
+            <div class="sub-detail">Contrastive + ablation study</div>
+          </div>
+          <div class="sub-card s-done">
+            <div class="sub-top"><div class="sub-name">Plan</div><div class="sub-status">&#10003; Done</div></div>
+            <div class="sub-detail">5 artifacts planned</div>
+          </div>
+          <div class="sub-card s-done">
+            <div class="sub-top"><div class="sub-name">Artifacts</div><div class="sub-status">&#10003; Done</div></div>
+            <div class="sub-detail">5/5 generated</div>
+          </div>
+          <div class="sub-card s-done">
+            <div class="sub-top"><div class="sub-name">Paper Draft</div><div class="sub-status">&#10003; Done</div></div>
+            <div class="sub-detail">2,847 words</div>
+          </div>
+          <div class="sub-card s-done">
+            <div class="sub-top"><div class="sub-name">Review</div><div class="sub-status">&#10003; Done</div></div>
+            <div class="sub-detail">Score: 6.8/10</div>
+          </div>
+          <div class="sub-card s-done">
+            <div class="sub-top"><div class="sub-name">Update Hypo</div><div class="sub-status">&#10003; Done</div></div>
+            <div class="sub-detail">3 refinements applied</div>
+          </div>
+        </div>
+        <div style="padding: 12px 16px; border-radius: var(--radius-sm); background: var(--surface); border: 1px solid var(--border); font-size: 13px; color: var(--text-dim);">
+          Iteration 1 complete. Review flagged weak ablation setup and insufficient baselines. Refinements passed to iteration 2.
+        </div>
+      </div>
+
+      <!-- Iter 2 (active) -->
+      <div class="inv-iter-panel" data-iter="2">
+        <div class="sub-grid" id="sub-grid-iter2">
+          <div class="sub-card s-done" data-sub="strategy" onclick="selectSub(this, 'strategy')">
+            <div class="sub-top"><div class="sub-name">Strategy</div><div class="sub-status">&#10003; Done</div></div>
+            <div class="sub-detail">Contrastive + ablation</div>
+          </div>
+          <div class="sub-card s-done" data-sub="plan" onclick="selectSub(this, 'plan')">
+            <div class="sub-top"><div class="sub-name">Plan</div><div class="sub-status">&#10003; Done</div></div>
+            <div class="sub-detail">5 artifacts planned</div>
+          </div>
+          <div class="sub-card s-active selected" data-sub="artifacts" onclick="selectSub(this, 'artifacts')">
+            <div class="sub-top"><div class="sub-name">Artifacts</div><div class="sub-status" style="display: flex; align-items: center; gap: 6px;"><span class="spin"></span> 3/5</div></div>
+            <div class="sub-detail">Generating artifact 4...</div>
+            <div class="progress-mini"><div class="progress-mini-fill" style="width: 60%;"></div></div>
+          </div>
+          <div class="sub-card s-pending" data-sub="paper-draft" onclick="selectSub(this, 'paper-draft')">
+            <div class="sub-top"><div class="sub-name">Paper Draft</div><div class="sub-status">&#9675; Pending</div></div>
+            <div class="sub-detail">gen_paper_text</div>
+          </div>
+          <div class="sub-card s-pending" data-sub="review" onclick="selectSub(this, 'review')">
+            <div class="sub-top"><div class="sub-name">Review</div><div class="sub-status">&#9675; Pending</div></div>
+            <div class="sub-detail">review_paper</div>
+          </div>
+          <div class="sub-card s-pending" data-sub="update" onclick="selectSub(this, 'update')">
+            <div class="sub-top"><div class="sub-name">Update Hypo</div><div class="sub-status">&#9675; Pending</div></div>
+            <div class="sub-detail">upd_hypo</div>
+          </div>
+        </div>
+
+        <!-- Expanded sub-module panels -->
+        <div class="sub-expanded-container">
+          <div class="sub-expanded-panel" id="sub-strategy" style="display: none;">
+            <div class="sub-expanded">
+              <div class="sub-expanded-header">
+                <div class="sub-expanded-title">Strategy &mdash; gen_strat</div>
+                <div style="font-size: 12px; color: var(--green);">&#10003; Complete &bull; 42s &bull; $0.18</div>
+              </div>
+              <div style="font-size: 13px; color: var(--text-dim); line-height: 1.7;">
+                <strong style="color: var(--text);">Approach:</strong> Contrastive learning with gated attention ablation study<br>
+                <strong style="color: var(--text);">Baselines:</strong> ViLBERT, LXMERT, full cross-attention (3 baselines added per review)<br>
+                <strong style="color: var(--text);">Metrics:</strong> VQA accuracy, GQA score, retrieval R@1, inference FLOPs
+              </div>
+            </div>
+          </div>
+
+          <div class="sub-expanded-panel" id="sub-plan" style="display: none;">
+            <div class="sub-expanded">
+              <div class="sub-expanded-header">
+                <div class="sub-expanded-title">Plan &mdash; gen_plan</div>
+                <div style="font-size: 12px; color: var(--green);">&#10003; Complete &bull; 38s &bull; $0.14</div>
+              </div>
+              <div class="artifact-list">
+                <div class="artifact-row"><div class="a-status done">&#10003;</div><div class="a-name">gated_attention_module.py</div><div class="a-type">Code</div><div class="a-metric">Planned</div></div>
+                <div class="artifact-row"><div class="a-status done">&#10003;</div><div class="a-name">vqa_benchmark_results.json</div><div class="a-type">Data</div><div class="a-metric">Planned</div></div>
+                <div class="artifact-row"><div class="a-status done">&#10003;</div><div class="a-name">ablation_heatmap.py</div><div class="a-type">Code</div><div class="a-metric">Planned</div></div>
+                <div class="artifact-row"><div class="a-status done">&#10003;</div><div class="a-name">cross_modal_alignment_vis.py</div><div class="a-type">Code</div><div class="a-metric">Planned</div></div>
+                <div class="artifact-row"><div class="a-status done">&#10003;</div><div class="a-name">efficiency_comparison.json</div><div class="a-type">Data</div><div class="a-metric">Planned</div></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="sub-expanded-panel" id="sub-artifacts">
+            <div class="sub-expanded">
+              <div class="sub-expanded-header">
+                <div class="sub-expanded-title">Artifacts &mdash; gen_art</div>
+                <div class="sub-expanded-progress" style="display: flex; align-items: center; gap: 6px;"><span class="spin"></span> 3 / 5 artifacts</div>
+              </div>
+              <div class="artifact-list">
+                <div class="artifact-row">
+                  <div class="a-status done">&#10003;</div>
+                  <div class="a-name">gated_attention_module.py</div>
+                  <div class="a-type">Code</div>
+                  <div class="a-metric c-green">246 loc</div>
+                  <div class="a-time">1m 12s</div>
+                  <div class="a-cost">$0.42</div>
+                </div>
+                <div class="artifact-row">
+                  <div class="a-status done">&#10003;</div>
+                  <div class="a-name">vqa_benchmark_results.json</div>
+                  <div class="a-type">Data</div>
+                  <div class="a-metric c-green">4 models</div>
+                  <div class="a-time">0m 48s</div>
+                  <div class="a-cost">$0.31</div>
+                </div>
+                <div class="artifact-row">
+                  <div class="a-status done">&#10003;</div>
+                  <div class="a-name">ablation_heatmap.py</div>
+                  <div class="a-type">Code</div>
+                  <div class="a-metric c-green">183 loc</div>
+                  <div class="a-time">1m 03s</div>
+                  <div class="a-cost">$0.38</div>
+                </div>
+                <div class="artifact-row" style="background: rgba(96,165,250,0.04); border-color: rgba(96,165,250,0.12);">
+                  <div class="a-status active"><span class="spin" style="width: 10px; height: 10px; border-width: 1.5px;"></span></div>
+                  <div class="a-name" style="color: var(--blue);">cross_modal_alignment_vis.py</div>
+                  <div class="a-type">Code</div>
+                  <div class="a-metric c-blue">...</div>
+                  <div class="a-time" style="color: var(--blue);">0m 34s</div>
+                  <div class="a-cost">&mdash;</div>
+                </div>
+                <div class="artifact-row" style="opacity: 0.4;">
+                  <div class="a-status pending">&#9675;</div>
+                  <div class="a-name">efficiency_comparison.json</div>
+                  <div class="a-type">Data</div>
+                  <div class="a-metric">&mdash;</div>
+                  <div class="a-time">&mdash;</div>
+                  <div class="a-cost">&mdash;</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="sub-expanded-panel" id="sub-paper-draft" style="display: none;">
+            <div class="sub-expanded">
+              <div class="sub-expanded-header">
+                <div class="sub-expanded-title">Paper Draft &mdash; gen_paper_text</div>
+                <div style="font-size: 12px; color: var(--text-muted);">Pending</div>
+              </div>
+              <div style="font-size: 13px; color: var(--text-muted); padding: 16px 0; text-align: center;">
+                Waiting for artifact generation to complete.
+              </div>
+            </div>
+          </div>
+
+          <div class="sub-expanded-panel" id="sub-review" style="display: none;">
+            <div class="sub-expanded">
+              <div class="sub-expanded-header">
+                <div class="sub-expanded-title">Review &mdash; review_paper</div>
+                <div style="font-size: 12px; color: var(--text-muted);">Pending</div>
+              </div>
+              <div style="font-size: 13px; color: var(--text-muted); padding: 16px 0; text-align: center;">
+                Waiting for paper draft.
+              </div>
+            </div>
+          </div>
+
+          <div class="sub-expanded-panel" id="sub-update" style="display: none;">
+            <div class="sub-expanded">
+              <div class="sub-expanded-header">
+                <div class="sub-expanded-title">Update Hypo &mdash; upd_hypo</div>
+                <div style="font-size: 12px; color: var(--text-muted);">Pending</div>
+              </div>
+              <div style="font-size: 13px; color: var(--text-muted); padding: 16px 0; text-align: center;">
+                Waiting for review feedback.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Iter 3 (pending) -->
+      <div class="inv-iter-panel" data-iter="3" style="display: none;">
+        <div class="sub-grid">
+          <div class="sub-card s-pending">
+            <div class="sub-top"><div class="sub-name">Strategy</div><div class="sub-status">&#9675; Pending</div></div>
+            <div class="sub-detail">gen_strat</div>
+          </div>
+          <div class="sub-card s-pending">
+            <div class="sub-top"><div class="sub-name">Plan</div><div class="sub-status">&#9675; Pending</div></div>
+            <div class="sub-detail">gen_plan</div>
+          </div>
+          <div class="sub-card s-pending">
+            <div class="sub-top"><div class="sub-name">Artifacts</div><div class="sub-status">&#9675; Pending</div></div>
+            <div class="sub-detail">gen_art</div>
+          </div>
+          <div class="sub-card s-pending">
+            <div class="sub-top"><div class="sub-name">Paper Draft</div><div class="sub-status">&#9675; Pending</div></div>
+            <div class="sub-detail">gen_paper_text</div>
+          </div>
+          <div class="sub-card s-pending">
+            <div class="sub-top"><div class="sub-name">Review</div><div class="sub-status">&#9675; Pending</div></div>
+            <div class="sub-detail">review_paper</div>
+          </div>
+          <div class="sub-card s-pending">
+            <div class="sub-top"><div class="sub-name">Update Hypo</div><div class="sub-status">&#9675; Pending</div></div>
+            <div class="sub-detail">upd_hypo</div>
+          </div>
+        </div>
+        <div style="padding: 16px; text-align: center; font-size: 13px; color: var(--text-muted);">
+          Iteration 3 will begin after iteration 2 completes.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Paper detail ── -->
+  <div class="detail-panel" id="panel-paper">
+    <div class="detail-header">
+      <div class="detail-title">Paper Repo</div>
+      <div class="detail-badge" style="background: rgba(255,255,255,0.06); color: var(--text-muted);">Pending</div>
+    </div>
+
+    <div class="paper-pending">
+      <div class="paper-pending-icon">&#9645;</div>
+      <div class="paper-pending-text">Waiting for Invention Loop to complete</div>
+      <div class="paper-pending-sub">gen_repo &rarr; artifact_demos &rarr; gen_viz &rarr; gen_full_paper &rarr; deploy</div>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; opacity: 0.35;">
+      <div class="sub-card s-pending">
+        <div class="sub-top"><div class="sub-name">Gen Repo</div><div class="sub-status">&#9675;</div></div>
+        <div class="sub-detail">gen_repo</div>
+      </div>
+      <div class="sub-card s-pending">
+        <div class="sub-top"><div class="sub-name">Artifact Demos</div><div class="sub-status">&#9675;</div></div>
+        <div class="sub-detail">gen_artifact_demos</div>
+      </div>
+      <div class="sub-card s-pending">
+        <div class="sub-top"><div class="sub-name">Visualizations</div><div class="sub-status">&#9675;</div></div>
+        <div class="sub-detail">gen_viz</div>
+      </div>
+      <div class="sub-card s-pending">
+        <div class="sub-top"><div class="sub-name">Full Paper</div><div class="sub-status">&#9675;</div></div>
+        <div class="sub-detail">gen_full_paper</div>
+      </div>
+      <div class="sub-card s-pending">
+        <div class="sub-top"><div class="sub-name">Deploy Demos</div><div class="sub-status">&#9675;</div></div>
+        <div class="sub-detail">deploy_gh_demos</div>
+      </div>
+      <div class="sub-card s-pending">
+        <div class="sub-top"><div class="sub-name">Deploy Paper</div><div class="sub-status">&#9675;</div></div>
+        <div class="sub-detail">deploy_gh_paper</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Bottom bar ── -->
+<div class="bottom-bar">
+  <div class="bb-item">
+    <span class="bb-label">Runtime</span>
+    <span class="bb-value" id="bb-runtime">14m 37s</span>
+  </div>
+  <div class="bb-item">
+    <span class="bb-label">Cost</span>
+    <span class="bb-value">$4.82</span>
+  </div>
+  <div class="bb-item">
+    <span class="bb-label">Tokens</span>
+    <span class="bb-value">1.2M in / 89K out</span>
+  </div>
+  <div class="bb-item">
+    <span class="bb-label">Step</span>
+    <span class="bb-value">Invention &bull; Iter 2 &bull; gen_art (4/5)</span>
+  </div>
+  <div class="bb-spacer"></div>
+  <div class="bb-progress">
+    <div class="bb-progress-bar">
+      <div class="bb-progress-fill" style="width: 48%;"></div>
+    </div>
+    <span class="bb-progress-pct">48%</span>
+  </div>
+</div>
+
+<script>
+/* ── State ── */
+let currentPanel = 'invention';
+let currentInvIter = 2;
+let currentSub = 'artifacts';
+
+/* ── Node selection ── */
+function selectNode(el, panelId) {
+  // Update node selection
+  document.querySelectorAll('.p-node').forEach(n => n.classList.remove('selected'));
+  el.classList.add('selected');
+
+  // Animate panel transition
+  const oldPanel = document.querySelector('.detail-panel.active');
+  const newPanel = document.getElementById('panel-' + panelId);
+
+  if (oldPanel === newPanel) return;
+
+  if (oldPanel) {
+    oldPanel.style.opacity = '0';
+    oldPanel.style.transform = 'translateY(6px)';
+    setTimeout(() => {
+      oldPanel.classList.remove('active');
+      oldPanel.style.opacity = '';
+      oldPanel.style.transform = '';
+      newPanel.classList.add('active');
+      newPanel.style.animation = 'none';
+      newPanel.offsetHeight; // reflow
+      newPanel.style.animation = '';
+    }, 150);
+  } else {
+    newPanel.classList.add('active');
+  }
+
+  currentPanel = panelId;
+}
+
+/* ── Invention iteration tabs ── */
+function selectInvIter(iter) {
+  currentInvIter = iter;
+
+  // Update tab styling
+  document.querySelectorAll('#inv-iter-tabs .iter-tab').forEach(t => {
+    const tIter = parseInt(t.dataset.iter);
+    t.classList.remove('active');
+    if (tIter === iter) t.classList.add('active');
+  });
+
+  // Show/hide iteration panels
+  document.querySelectorAll('.inv-iter-panel').forEach(p => {
+    const pIter = parseInt(p.dataset.iter);
+    p.style.display = pIter === iter ? '' : 'none';
+  });
+}
+
+/* ── Sub-module selection (invention iter 2) ── */
+function selectSub(el, subId) {
+  // Update card selection
+  document.querySelectorAll('#sub-grid-iter2 .sub-card').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+
+  // Show/hide expanded panels
+  document.querySelectorAll('.sub-expanded-panel').forEach(p => {
+    p.style.display = p.id === 'sub-' + subId ? '' : 'none';
+  });
+
+  currentSub = subId;
+}
+
+/* ── Runtime timer ── */
+let runtimeSeconds = 14 * 60 + 37;
+function updateRuntime() {
+  runtimeSeconds++;
+  const m = Math.floor(runtimeSeconds / 60);
+  const s = runtimeSeconds % 60;
+  document.getElementById('bb-runtime').textContent = m + 'm ' + String(s).padStart(2, '0') + 's';
+}
+setInterval(updateRuntime, 1000);
+
+/* ── Start on active node ── */
+document.addEventListener('DOMContentLoaded', () => {
+  // Select invention node by default
+  const invNode = document.querySelector('.p-node[data-panel="invention"]');
+  selectNode(invNode, 'invention');
+});
+</script>
+</body>
+</html>

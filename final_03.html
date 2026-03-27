@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Connected Node Cards</title>
+<style>
+  *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+  :root{
+    --bg:#0b0e17;
+    --surface:rgba(255,255,255,.04);
+    --glass:rgba(255,255,255,.06);
+    --glass-border:rgba(255,255,255,.1);
+    --text:#e2e8f0;
+    --text-dim:#7a8ba7;
+    --green:#34d399;--green-dim:rgba(52,211,153,.15);
+    --purple:#a78bfa;--purple-dim:rgba(167,139,250,.15);
+    --blue:#60a5fa;--blue-dim:rgba(96,165,250,.15);
+    --orange:#fb923c;--orange-dim:rgba(251,146,60,.15);
+    --card-w:160px;--card-h:70px;
+    --strip-h:110px;
+    --glow-spread:18px;
+  }
+  html{background:var(--bg);color:var(--text);font-family:'Inter','Segoe UI',system-ui,sans-serif;overflow:hidden;height:100%}
+  body{height:100%;display:flex;flex-direction:column;user-select:none}
+
+  /* ── Top strip ── */
+  .strip{
+    position:relative;
+    height:var(--strip-h);
+    display:flex;align-items:center;justify-content:center;
+    gap:0;
+    padding:16px 40px 10px;
+    background:linear-gradient(180deg,rgba(15,19,32,.95) 0%,rgba(11,14,23,.85) 100%);
+    border-bottom:1px solid rgba(255,255,255,.06);
+    z-index:10;
+    flex-shrink:0;
+  }
+
+  /* ── Connection SVG canvas ── */
+  .connections-svg{
+    position:absolute;
+    top:0;left:0;width:100%;height:100%;
+    pointer-events:none;
+    z-index:1;
+  }
+
+  /* ── Node card ── */
+  .node-cards{
+    display:flex;align-items:center;
+    gap:72px;
+    position:relative;z-index:2;
+  }
+  .node-card{
+    width:var(--card-w);height:var(--card-h);
+    background:var(--glass);
+    backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+    border:1px solid var(--glass-border);
+    border-radius:12px;
+    padding:8px 12px;
+    cursor:pointer;
+    position:relative;
+    transition:transform .25s,box-shadow .35s,border-color .35s;
+    display:flex;flex-direction:column;justify-content:space-between;
+    overflow:visible;
+  }
+  .node-card::before{
+    content:'';position:absolute;top:0;left:12px;right:12px;height:2.5px;
+    border-radius:0 0 4px 4px;
+    transition:opacity .3s;
+  }
+  .node-card[data-color="green"]::before{background:var(--green)}
+  .node-card[data-color="purple"]::before{background:var(--purple)}
+  .node-card[data-color="blue"]::before{background:var(--blue)}
+  .node-card[data-color="orange"]::before{background:var(--orange)}
+
+  .node-card:hover{transform:translateY(-2px)}
+
+  /* Selected glow */
+  .node-card.selected{
+    border-color:rgba(255,255,255,.22);
+    transform:translateY(-3px);
+  }
+  .node-card.selected[data-color="green"]{box-shadow:0 0 var(--glow-spread) rgba(52,211,153,.3),0 4px 20px rgba(0,0,0,.4)}
+  .node-card.selected[data-color="purple"]{box-shadow:0 0 var(--glow-spread) rgba(167,139,250,.3),0 4px 20px rgba(0,0,0,.4)}
+  .node-card.selected[data-color="blue"]{box-shadow:0 0 var(--glow-spread) rgba(96,165,250,.3),0 4px 20px rgba(0,0,0,.4)}
+  .node-card.selected[data-color="orange"]{box-shadow:0 0 var(--glow-spread) rgba(251,146,60,.3),0 4px 20px rgba(0,0,0,.4)}
+
+  /* Active pulse */
+  .node-card.active{animation:pulse-card 2.4s ease-in-out infinite}
+  @keyframes pulse-card{
+    0%,100%{box-shadow:0 0 8px rgba(167,139,250,.15)}
+    50%{box-shadow:0 0 22px rgba(167,139,250,.35)}
+  }
+  .node-card.selected.active{animation:none}
+
+  .card-top{display:flex;align-items:center;justify-content:space-between}
+  .card-name{font-size:11px;font-weight:600;letter-spacing:.3px;color:var(--text-dim);text-transform:uppercase}
+  .card-badge{
+    width:16px;height:16px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    font-size:9px;line-height:1;
+  }
+  .badge-done{background:var(--green-dim);color:var(--green)}
+  .badge-active{background:var(--purple-dim);color:var(--purple)}
+  .badge-pending{background:rgba(255,255,255,.06);color:var(--text-dim)}
+
+  .card-metric{font-size:20px;font-weight:700;letter-spacing:-.5px;line-height:1}
+  .node-card[data-color="green"] .card-metric{color:var(--green)}
+  .node-card[data-color="purple"] .card-metric{color:var(--purple)}
+  .node-card[data-color="blue"] .card-metric{color:var(--blue)}
+  .node-card[data-color="orange"] .card-metric{color:var(--orange)}
+
+  /* ── SVG connection lines ── */
+  .conn-line{stroke:rgba(255,255,255,.12);stroke-width:1.5;fill:none}
+  .conn-line.complete{stroke:rgba(52,211,153,.35);stroke-width:1.5}
+  .conn-line.active-conn{stroke:rgba(167,139,250,.4);stroke-width:1.5}
+  .conn-line.pending{stroke:rgba(255,255,255,.08);stroke-width:1.5;stroke-dasharray:5 4}
+
+  /* Flowing dots */
+  .flow-dot{r:2.5;fill:rgba(255,255,255,.6)}
+  .flow-dot.complete{fill:var(--green);filter:drop-shadow(0 0 3px rgba(52,211,153,.5))}
+  .flow-dot.active-conn{fill:var(--purple);filter:drop-shadow(0 0 4px rgba(167,139,250,.6));r:3}
+  .flow-dot.pending{fill:rgba(255,255,255,.15)}
+
+  /* Glow line overlay for complete connections */
+  .conn-glow{stroke:rgba(52,211,153,.12);stroke-width:6;fill:none;filter:blur(3px)}
+
+  /* ── Content area ── */
+  .content{
+    flex:1;
+    overflow-y:auto;
+    padding:28px 40px 40px;
+    scrollbar-width:thin;
+    scrollbar-color:rgba(255,255,255,.1) transparent;
+  }
+  .content::-webkit-scrollbar{width:6px}
+  .content::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:3px}
+
+  .content-panel{display:none;animation:fadeIn .3s ease}
+  .content-panel.visible{display:block}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+  .panel-header{margin-bottom:24px}
+  .panel-title{font-size:22px;font-weight:700;letter-spacing:-.3px;margin-bottom:6px}
+  .panel-summary{font-size:14px;color:var(--text-dim);line-height:1.6;max-width:680px}
+
+  .panel-title.c-green{color:var(--green)}
+  .panel-title.c-purple{color:var(--purple)}
+  .panel-title.c-blue{color:var(--blue)}
+  .panel-title.c-orange{color:var(--orange)}
+
+  /* Sub-stages */
+  .substages{display:flex;flex-direction:column;gap:10px;margin-bottom:28px}
+  .substage{
+    background:var(--glass);
+    border:1px solid var(--glass-border);
+    border-radius:10px;
+    overflow:hidden;
+    transition:border-color .2s;
+  }
+  .substage:hover{border-color:rgba(255,255,255,.16)}
+  .substage-header{
+    padding:12px 16px;
+    display:flex;align-items:center;justify-content:space-between;
+    cursor:pointer;
+  }
+  .substage-left{display:flex;align-items:center;gap:10px}
+  .substage-icon{
+    width:28px;height:28px;border-radius:7px;
+    display:flex;align-items:center;justify-content:center;
+    font-size:13px;
+    flex-shrink:0;
+  }
+  .substage-icon.done{background:var(--green-dim);color:var(--green)}
+  .substage-icon.running{background:var(--purple-dim);color:var(--purple)}
+  .substage-icon.waiting{background:rgba(255,255,255,.05);color:var(--text-dim)}
+  .substage-name{font-size:13px;font-weight:600}
+  .substage-meta{font-size:11px;color:var(--text-dim)}
+  .substage-chevron{
+    font-size:11px;color:var(--text-dim);
+    transition:transform .2s;
+  }
+  .substage.open .substage-chevron{transform:rotate(90deg)}
+  .substage-body{
+    max-height:0;overflow:hidden;
+    transition:max-height .3s ease,padding .3s ease;
+  }
+  .substage.open .substage-body{max-height:400px;padding:0 16px 14px}
+  .substage-detail{font-size:12px;color:var(--text-dim);line-height:1.65}
+  .substage-detail p{margin-bottom:6px}
+
+  /* Artifact cards */
+  .artifacts{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
+  .artifact{
+    background:var(--glass);
+    border:1px solid var(--glass-border);
+    border-radius:10px;
+    padding:14px 16px;
+    transition:border-color .2s,transform .2s;
+  }
+  .artifact:hover{border-color:rgba(255,255,255,.16);transform:translateY(-1px)}
+  .artifact-label{font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text-dim);margin-bottom:6px}
+  .artifact-value{font-size:14px;font-weight:600;line-height:1.4}
+  .artifact-sub{font-size:11px;color:var(--text-dim);margin-top:4px}
+
+  /* Keyboard hint */
+  .kb-hint{
+    position:fixed;bottom:16px;right:20px;
+    display:flex;gap:6px;align-items:center;
+    font-size:11px;color:var(--text-dim);
+    z-index:20;opacity:.5;
+  }
+  .kb-key{
+    display:inline-flex;align-items:center;justify-content:center;
+    min-width:22px;height:20px;padding:0 5px;
+    border:1px solid rgba(255,255,255,.12);border-radius:4px;
+    font-size:10px;color:var(--text-dim);
+    background:rgba(255,255,255,.03);
+  }
+</style>
+</head>
+<body>
+
+<!-- ══════════ TOP STRIP ══════════ -->
+<div class="strip" id="strip">
+  <svg class="connections-svg" id="connSvg"></svg>
+  <div class="node-cards" id="nodeCards">
+
+    <div class="node-card selected" data-color="green" data-index="0">
+      <div class="card-top">
+        <span class="card-name">Research</span>
+        <span class="card-badge badge-done">&#10003;</span>
+      </div>
+      <div class="card-metric">12 gaps</div>
+    </div>
+
+    <div class="node-card active" data-color="purple" data-index="1">
+      <div class="card-top">
+        <span class="card-name">Invention</span>
+        <span class="card-badge badge-active">&#9654;</span>
+      </div>
+      <div class="card-metric">8.4</div>
+    </div>
+
+    <div class="node-card" data-color="blue" data-index="2">
+      <div class="card-top">
+        <span class="card-name">Paper</span>
+        <span class="card-badge badge-pending">&#9675;</span>
+      </div>
+      <div class="card-metric">3 / 5</div>
+    </div>
+
+    <div class="node-card" data-color="orange" data-index="3">
+      <div class="card-top">
+        <span class="card-name">Repository</span>
+        <span class="card-badge badge-pending">&#9675;</span>
+      </div>
+      <div class="card-metric">&mdash;</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══════════ CONTENT AREA ══════════ -->
+<div class="content" id="contentArea">
+
+  <!-- ── Panel 0: Research ── -->
+  <div class="content-panel visible" data-panel="0">
+    <div class="panel-header">
+      <div class="panel-title c-green">Research Analysis</div>
+      <div class="panel-summary">Surveyed 48 papers across 3 sub-fields. Identified 12 open research gaps with high novelty potential. Knowledge graph seeded with 196 concept nodes and 340 relational edges.</div>
+    </div>
+    <div class="substages">
+      <div class="substage open">
+        <div class="substage-header" onclick="toggleSubstage(this)">
+          <div class="substage-left">
+            <div class="substage-icon done">&#10003;</div>
+            <div>
+              <div class="substage-name">Literature Survey</div>
+              <div class="substage-meta">48 papers &middot; 12 min</div>
+            </div>
+          </div>
+          <span class="substage-chevron">&#9654;</span>
+        </div>
+        <div class="substage-body">
+          <div class="substage-detail">
+            <p>Queried Semantic Scholar and ArXiv for recent work in neural architecture search, compositional generalization, and program synthesis.</p>
+            <p>Filtered from 312 candidates down to 48 high-relevance papers using citation-graph proximity and abstract similarity scoring.</p>
+          </div>
+        </div>
+      </div>
+      <div class="substage">
+        <div class="substage-header" onclick="toggleSubstage(this)">
+          <div class="substage-left">
+            <div class="substage-icon done">&#10003;</div>
+            <div>
+              <div class="substage-name">Gap Extraction</div>
+              <div class="substage-meta">12 gaps &middot; 4 min</div>
+            </div>
+          </div>
+          <span class="substage-chevron">&#9654;</span>
+        </div>
+        <div class="substage-body">
+          <div class="substage-detail">
+            <p>Cross-referenced conclusion sections and "future work" mentions. Clustered overlapping suggestions into 12 distinct research gaps.</p>
+            <p>Each gap scored on novelty (0-10), feasibility (0-10), and estimated impact.</p>
+          </div>
+        </div>
+      </div>
+      <div class="substage">
+        <div class="substage-header" onclick="toggleSubstage(this)">
+          <div class="substage-left">
+            <div class="substage-icon done">&#10003;</div>
+            <div>
+              <div class="substage-name">Knowledge Graph</div>
+              <div class="substage-meta">196 nodes &middot; 340 edges</div>
+            </div>
+          </div>
+          <span class="substage-chevron">&#9654;</span>
+        </div>
+        <div class="substage-body">
+          <div class="substage-detail">
+            <p>Built concept graph linking methods, datasets, metrics, and findings. Used for downstream hypothesis generation and novelty checking.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="artifacts">
+      <div class="artifact"><div class="artifact-label">Top Gap</div><div class="artifact-value">Compositional NAS for low-data regimes</div><div class="artifact-sub">Novelty: 9.1 &middot; Feasibility: 7.8</div></div>
+      <div class="artifact"><div class="artifact-label">Papers Cited</div><div class="artifact-value">48</div><div class="artifact-sub">Avg year: 2025.2</div></div>
+      <div class="artifact"><div class="artifact-label">Graph Density</div><div class="artifact-value">0.018</div><div class="artifact-sub">Sparse &mdash; good coverage</div></div>
+    </div>
+  </div>
+
+  <!-- ── Panel 1: Invention ── -->
+  <div class="content-panel" data-panel="1">
+    <div class="panel-header">
+      <div class="panel-title c-purple">Invention Loop</div>
+      <div class="panel-summary">Generating and refining hypotheses for the top-ranked research gap. Current best hypothesis scored 8.4/10 on the review rubric. Iteration 3 of 5.</div>
+    </div>
+    <div class="substages">
+      <div class="substage open">
+        <div class="substage-header" onclick="toggleSubstage(this)">
+          <div class="substage-left">
+            <div class="substage-icon done">&#10003;</div>
+            <div>
+              <div class="substage-name">Hypothesis Generation</div>
+              <div class="substage-meta">6 candidates &middot; 3 min</div>
+            </div>
+          </div>
+          <span class="substage-chevron">&#9654;</span>
+        </div>
+        <div class="substage-body">
+          <div class="substage-detail">
+            <p>Generated 6 candidate hypotheses from the top research gap. Each proposes a concrete mechanism and testable prediction.</p>
+            <p>Diversity enforced via temperature sampling and knowledge-graph-guided prompting.</p>
+          </div>
+        </div>
+      </div>
+      <div class="substage">
+        <div class="substage-header" onclick="toggleSubstage(this)">
+          <div class="substage-left">
+            <div class="substage-icon running">&#9654;</div>
+            <div>
+              <div class="substage-name">Review &amp; Refine</div>
+              <div class="substage-meta">Iter 3/5 &middot; running</div>
+            </div>
+          </div>
+          <span class="substage-chevron">&#9654;</span>
+        </div>
+        <div class="substage-body">
+          <div class="substage-detail">
+            <p>Simulated peer review: checking novelty against the knowledge graph, verifying logical consistency, and scoring on 6 dimensions.</p>
+            <p>Best score so far: 8.4 (up from 6.9 in iteration 1). Targeting 9.0 threshold.</p>
+          </div>
+        </div>
+      </div>
+      <div class="substage">
+        <div class="substage-header" onclick="toggleSubstage(this)">
+          <div class="substage-left">
+            <div class="substage-icon waiting">&#9675;</div>
+            <div>
+              <div class="substage-name">Plan Generation</div>
+              <div class="substage-meta">pending</div>
+            </div>
+          </div>
+          <span class="substage-chevron">&#9654;</span>
+        </div>
+        <div class="substage-body">
+          <div class="substage-detail">
+            <p>Once the hypothesis passes review, an experimental plan will be generated covering methodology, baselines, and evaluation protocol.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="artifacts">
+      <div class="artifact"><div class="artifact-label">Lead Hypothesis</div><div class="artifact-value">Modular sub-network composition via differentiable routing</div><div class="artifact-sub">Score: 8.4 / 10</div></div>
+      <div class="artifact"><div class="artifact-label">Iteration</div><div class="artifact-value">3 / 5</div><div class="artifact-sub">Target threshold: 9.0</div></div>
+      <div class="artifact"><div class="artifact-label">Novelty Check</div><div class="artifact-value">Passed</div><div class="artifact-sub">No KG overlap found</div></div>
+    </div>
+  </div>
+
+  <!-- ── Panel 2: Paper ── -->
+  <div class="content-panel" data-panel="2">
+    <div class="panel-header">
+      <div class="panel-title c-blue">Paper Drafting</div>
+      <div class="panel-summary">Structured paper generation in progress. 3 of 5 sections complete. Abstract and introduction finalized; methods section under generation.</div>
+    </div>
+    <div class="substages">
+      <div class="substage open">
+        <div class="substage-header" onclick="toggleSubstage(this)">
+          <div class="substage-left">
+            <div class="substage-icon done">&#10003;</div>
+            <div>
+              <div class="substage-name">Abstract &amp; Introduction</div>
+              <div class="substage-meta">complete &middot; 1.2k words</div>
+            </div>
+          </div>
+          <span class="substage-chevron">&#9654;</span>
+        </div>
+        <div class="substage-body">
+          <div class="substage-detail">
+            <p>Abstract (220 words) summarizes the contribution and key results. Introduction frames the problem, reviews related approaches, and states the thesis.</p>
+          </div>
+        </div>
+      </div>
+      <div class="substage">
+        <div class="substage-header" onclick="toggleSubstage(this)">
+          <div class="substage-left">
+            <div class="substage-icon done">&#10003;</div>
+            <div>
+              <div class="substage-name">Related Work</div>
+              <div class="substage-meta">complete &middot; 1.8k words</div>
+            </div>
+          </div>
+          <span class="substage-chevron">&#9654;</span>
+        </div>
+        <div class="substage-body">
+          <div class="substage-detail">
+            <p>Covers 3 sub-sections: neural architecture search, compositional methods, and low-data learning. 34 references integrated.</p>
+          </div>
+        </div>
+      </div>
+      <div class="substage">
+        <div class="substage-header" onclick="toggleSubstage(this)">
+          <div class="substage-left">
+            <div class="substage-icon waiting">&#9675;</div>
+            <div>
+              <div class="substage-name">Methods</div>
+              <div class="substage-meta">pending</div>
+            </div>
+          </div>
+          <span class="substage-chevron">&#9654;</span>
+        </div>
+        <div class="substage-body">
+          <div class="substage-detail">
+            <p>Will detail the proposed architecture, training procedure, and theoretical justification. Expected ~2k words with 3 figures.</p>
+          </div>
+        </div>
+      </div>
+      <div class="substage">
+        <div class="substage-header" onclick="toggleSubstage(this)">
+          <div class="substage-left">
+            <div class="substage-icon waiting">&#9675;</div>
+            <div>
+              <div class="substage-name">Experiments &amp; Conclusion</div>
+              <div class="substage-meta">pending</div>
+            </div>
+          </div>
+          <span class="substage-chevron">&#9654;</span>
+        </div>
+        <div class="substage-body">
+          <div class="substage-detail">
+            <p>Ablation studies, baseline comparisons, and discussion. Conclusion summarizing contributions and future directions.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="artifacts">
+      <div class="artifact"><div class="artifact-label">Sections Done</div><div class="artifact-value">3 / 5</div><div class="artifact-sub">Abstract, Intro, Related Work</div></div>
+      <div class="artifact"><div class="artifact-label">Word Count</div><div class="artifact-value">3,040</div><div class="artifact-sub">Target: ~7,500</div></div>
+      <div class="artifact"><div class="artifact-label">References</div><div class="artifact-value">34</div><div class="artifact-sub">Auto-linked from KG</div></div>
+    </div>
+  </div>
+
+  <!-- ── Panel 3: Repository ── -->
+  <div class="content-panel" data-panel="3">
+    <div class="panel-header">
+      <div class="panel-title c-orange">Repository Generation</div>
+      <div class="panel-summary">Waiting for paper draft to complete. Will generate LaTeX source, visualization code, reproducibility artifacts, and a GitHub-ready repository structure.</div>
+    </div>
+    <div class="substages">
+      <div class="substage open">
+        <div class="substage-header" onclick="toggleSubstage(this)">
+          <div class="substage-left">
+            <div class="substage-icon waiting">&#9675;</div>
+            <div>
+              <div class="substage-name">LaTeX Compilation</div>
+              <div class="substage-meta">pending</div>
+            </div>
+          </div>
+          <span class="substage-chevron">&#9654;</span>
+        </div>
+        <div class="substage-body">
+          <div class="substage-detail">
+            <p>Converts the structured paper into a full LaTeX document with proper formatting, figures, and bibliography.</p>
+          </div>
+        </div>
+      </div>
+      <div class="substage">
+        <div class="substage-header" onclick="toggleSubstage(this)">
+          <div class="substage-left">
+            <div class="substage-icon waiting">&#9675;</div>
+            <div>
+              <div class="substage-name">Visualizations</div>
+              <div class="substage-meta">pending</div>
+            </div>
+          </div>
+          <span class="substage-chevron">&#9654;</span>
+        </div>
+        <div class="substage-body">
+          <div class="substage-detail">
+            <p>Architecture diagrams, result tables, and comparison plots. Generated as both PDF vector graphics and interactive HTML demos.</p>
+          </div>
+        </div>
+      </div>
+      <div class="substage">
+        <div class="substage-header" onclick="toggleSubstage(this)">
+          <div class="substage-left">
+            <div class="substage-icon waiting">&#9675;</div>
+            <div>
+              <div class="substage-name">Repo Scaffold</div>
+              <div class="substage-meta">pending</div>
+            </div>
+          </div>
+          <span class="substage-chevron">&#9654;</span>
+        </div>
+        <div class="substage-body">
+          <div class="substage-detail">
+            <p>GitHub-ready repository with README, pyproject.toml, source code stubs, and CI configuration.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="artifacts">
+      <div class="artifact"><div class="artifact-label">Status</div><div class="artifact-value">Waiting</div><div class="artifact-sub">Depends on Paper stage</div></div>
+      <div class="artifact"><div class="artifact-label">Est. Artifacts</div><div class="artifact-value">8 files</div><div class="artifact-sub">LaTeX, figs, code, config</div></div>
+      <div class="artifact"><div class="artifact-label">Demo</div><div class="artifact-value">&mdash;</div><div class="artifact-sub">Interactive HTML planned</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Keyboard hint -->
+<div class="kb-hint">
+  <span class="kb-key">&larr;</span>
+  <span class="kb-key">&rarr;</span>
+  <span>navigate</span>
+</div>
+
+<script>
+(function(){
+  /* ── State ── */
+  let selected = 0;
+  const cards = document.querySelectorAll('.node-card');
+  const panels = document.querySelectorAll('.content-panel');
+  const svg = document.getElementById('connSvg');
+  const strip = document.getElementById('strip');
+  const nodeCardsEl = document.getElementById('nodeCards');
+
+  /* Connection status: complete, active-conn, pending */
+  const connStatus = ['complete', 'active-conn', 'pending'];
+
+  /* ── SVG namespace ── */
+  const NS = 'http://www.w3.org/2000/svg';
+
+  /* ── Connection elements storage ── */
+  let connections = [];
+
+  /* ── Build connections ── */
+  function buildConnections() {
+    svg.innerHTML = '';
+    connections = [];
+
+    for (let i = 0; i < cards.length - 1; i++) {
+      const status = connStatus[i] || 'pending';
+
+      /* Glow layer for complete connections */
+      if (status === 'complete') {
+        const glow = document.createElementNS(NS, 'path');
+        glow.setAttribute('class', 'conn-glow');
+        svg.appendChild(glow);
+        connections.push({ line: null, glow: glow, dots: [], status: status, index: i });
+      }
+
+      /* Main line */
+      const line = document.createElementNS(NS, 'path');
+      line.setAttribute('class', 'conn-line ' + status);
+      svg.appendChild(line);
+
+      /* Flowing dots */
+      const dotCount = status === 'active-conn' ? 4 : status === 'complete' ? 3 : 1;
+      const dots = [];
+      for (let d = 0; d < dotCount; d++) {
+        const circle = document.createElementNS(NS, 'circle');
+        circle.setAttribute('class', 'flow-dot ' + status);
+        svg.appendChild(circle);
+        dots.push(circle);
+      }
+
+      const connObj = connections.find(c => c.index === i);
+      if (connObj) {
+        connObj.line = line;
+        connObj.dots = dots;
+      } else {
+        connections.push({ line: line, glow: null, dots: dots, status: status, index: i });
+      }
+    }
+  }
+
+  /* ── Position connections ── */
+  function positionConnections() {
+    const stripRect = strip.getBoundingClientRect();
+
+    for (const conn of connections) {
+      if (conn.line === null && conn.glow === null) continue;
+
+      const cardA = cards[conn.index];
+      const cardB = cards[conn.index + 1];
+      const rectA = cardA.getBoundingClientRect();
+      const rectB = cardB.getBoundingClientRect();
+
+      const x1 = rectA.right - stripRect.left;
+      const y1 = rectA.top + rectA.height / 2 - stripRect.top;
+      const x2 = rectB.left - stripRect.left;
+      const y2 = rectB.top + rectB.height / 2 - stripRect.top;
+
+      const midX = (x1 + x2) / 2;
+      const d = `M${x1},${y1} C${midX},${y1} ${midX},${y2} ${x2},${y2}`;
+
+      if (conn.line) conn.line.setAttribute('d', d);
+      if (conn.glow) conn.glow.setAttribute('d', d);
+
+      /* Store path data for dot animation */
+      conn.pathData = { x1, y1, x2, y2, midX };
+    }
+  }
+
+  /* ── Animate flowing dots ── */
+  let animFrame;
+  const startTime = performance.now();
+
+  function animateDots(now) {
+    const elapsed = (now - startTime) / 1000;
+
+    for (const conn of connections) {
+      if (!conn.dots.length || !conn.pathData) continue;
+
+      const { x1, y1, x2, y2, midX } = conn.pathData;
+      const speed = conn.status === 'active-conn' ? 1.2 : conn.status === 'complete' ? 0.5 : 0.25;
+
+      for (let d = 0; d < conn.dots.length; d++) {
+        const offset = d / conn.dots.length;
+        let t = ((elapsed * speed + offset) % 1);
+
+        /* Cubic bezier interpolation */
+        const mt = 1 - t;
+        const px = mt*mt*mt*x1 + 3*mt*mt*t*midX + 3*mt*t*t*midX + t*t*t*x2;
+        const py = mt*mt*mt*y1 + 3*mt*mt*t*y1 + 3*mt*t*t*y2 + t*t*t*y2;
+
+        conn.dots[d].setAttribute('cx', px);
+        conn.dots[d].setAttribute('cy', py);
+
+        /* Fade near endpoints */
+        const edgeFade = Math.min(t * 5, (1 - t) * 5, 1);
+        conn.dots[d].setAttribute('opacity', edgeFade);
+      }
+    }
+
+    animFrame = requestAnimationFrame(animateDots);
+  }
+
+  /* ── Selection logic ── */
+  function select(index) {
+    if (index < 0 || index >= cards.length) return;
+    selected = index;
+
+    cards.forEach((c, i) => {
+      c.classList.toggle('selected', i === index);
+    });
+    panels.forEach((p, i) => {
+      p.classList.toggle('visible', i === index);
+    });
+  }
+
+  /* ── Keyboard navigation ── */
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'ArrowLeft') { e.preventDefault(); select(selected - 1); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); select(selected + 1); }
+  });
+
+  /* ── Click navigation ── */
+  cards.forEach((card, i) => {
+    card.addEventListener('click', function() { select(i); });
+  });
+
+  /* ── Substage toggle ── */
+  window.toggleSubstage = function(header) {
+    header.parentElement.classList.toggle('open');
+  };
+
+  /* ── Resize handling ── */
+  function layout() {
+    /* Set SVG size to match strip */
+    const rect = strip.getBoundingClientRect();
+    svg.setAttribute('width', rect.width);
+    svg.setAttribute('height', rect.height);
+    svg.style.width = rect.width + 'px';
+    svg.style.height = rect.height + 'px';
+    positionConnections();
+  }
+
+  /* ── Init ── */
+  buildConnections();
+  layout();
+  animateDots(performance.now());
+
+  window.addEventListener('resize', layout);
+
+  /* Recompute after fonts load */
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(layout);
+  }
+})();
+</script>
+</body>
+</html>

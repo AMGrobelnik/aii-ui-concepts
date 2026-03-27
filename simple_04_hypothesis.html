@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor - Hypothesis Deep Dive</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+  :root{
+    --bg:#0b0e17;
+    --surface:rgba(255,255,255,.04);
+    --surface-hover:rgba(255,255,255,.07);
+    --glass:rgba(255,255,255,.06);
+    --glass-border:rgba(255,255,255,.10);
+    --text:#e2e8f0;
+    --text-dim:#8892a4;
+    --text-muted:#525c6e;
+    --accent:#6c63ff;
+    --accent-glow:rgba(108,99,255,.35);
+    --blue:#38bdf8;
+    --green:#34d399;
+    --yellow:#fbbf24;
+    --orange:#fb923c;
+    --red:#f87171;
+    --card-radius:16px;
+    --pill-radius:20px;
+  }
+
+  html{font-size:16px}
+  body{
+    font-family:'Inter','Segoe UI',system-ui,-apple-system,sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    min-height:100vh;
+    overflow-x:hidden;
+    line-height:1.6;
+  }
+
+  /* ---------- Ambient background ---------- */
+  body::before{
+    content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+    background:
+      radial-gradient(ellipse 900px 600px at 25% 20%, rgba(108,99,255,.10) 0%, transparent 70%),
+      radial-gradient(ellipse 700px 500px at 75% 70%, rgba(56,189,248,.08) 0%, transparent 70%),
+      radial-gradient(ellipse 500px 400px at 50% 50%, rgba(52,211,153,.05) 0%, transparent 70%);
+  }
+
+  .page{position:relative;z-index:1;max-width:1280px;margin:0 auto;padding:32px 40px 80px}
+
+  /* ---------- Header ---------- */
+  .stage-header{
+    display:flex;align-items:center;gap:16px;
+    margin-bottom:48px;
+    opacity:0;transform:translateY(-12px);
+    animation:fadeDown .5s ease forwards;
+  }
+  .back-btn{
+    display:flex;align-items:center;justify-content:center;
+    width:40px;height:40px;border-radius:12px;
+    background:var(--glass);border:1px solid var(--glass-border);
+    color:var(--text-dim);cursor:pointer;transition:all .25s;
+    flex-shrink:0;
+  }
+  .back-btn:hover{background:var(--surface-hover);color:var(--text);border-color:rgba(255,255,255,.18)}
+  .back-btn svg{width:20px;height:20px}
+  .stage-header h1{font-size:1.5rem;font-weight:700;letter-spacing:-.02em}
+  .stage-header h1 span{color:var(--accent);font-weight:400;margin-left:6px;font-size:.85em}
+  .stage-header .breadcrumb{
+    margin-left:auto;font-size:.8rem;color:var(--text-muted);
+    display:flex;align-items:center;gap:6px;
+  }
+  .breadcrumb a{color:var(--text-dim);text-decoration:none;transition:color .2s}
+  .breadcrumb a:hover{color:var(--accent)}
+  .breadcrumb .sep{opacity:.4}
+
+  /* ---------- Timeline container ---------- */
+  .timeline-section{
+    position:relative;
+    margin-bottom:56px;
+    opacity:0;animation:fadeUp .6s .15s ease forwards;
+  }
+
+  .timeline-track{
+    display:flex;align-items:stretch;gap:0;
+    position:relative;
+    padding:0 12px;
+  }
+
+  /* Glowing connector line */
+  .connector{
+    position:absolute;
+    top:50%;left:60px;right:60px;
+    height:3px;
+    transform:translateY(-50%);
+    z-index:0;
+    border-radius:2px;
+    background:linear-gradient(90deg,
+      var(--yellow) 0%,
+      var(--blue) 50%,
+      var(--green) 100%
+    );
+    opacity:.25;
+  }
+  .connector::after{
+    content:'';position:absolute;inset:-3px 0;
+    border-radius:4px;
+    background:linear-gradient(90deg,
+      rgba(251,191,36,.20) 0%,
+      rgba(56,189,248,.20) 50%,
+      rgba(52,211,153,.20) 100%
+    );
+    filter:blur(6px);
+  }
+  /* Animated pulse along line */
+  .connector-pulse{
+    position:absolute;
+    top:50%;left:60px;right:60px;
+    height:3px;transform:translateY(-50%);
+    z-index:1;overflow:hidden;
+    border-radius:2px;
+  }
+  .connector-pulse::after{
+    content:'';position:absolute;
+    top:-1px;width:120px;height:5px;
+    border-radius:3px;
+    background:linear-gradient(90deg,transparent,rgba(255,255,255,.45),transparent);
+    animation:pulseLine 3s ease-in-out infinite;
+  }
+
+  @keyframes pulseLine{
+    0%{left:-120px}
+    100%{left:calc(100% + 120px)}
+  }
+
+  .timeline-card-wrapper{
+    flex:1;position:relative;z-index:2;
+    padding:0 12px;
+    display:flex;
+  }
+
+  /* ---------- Iteration Card ---------- */
+  .iter-card{
+    flex:1;
+    background:var(--glass);
+    border:1px solid var(--glass-border);
+    border-radius:var(--card-radius);
+    padding:28px 24px 24px;
+    backdrop-filter:blur(16px);
+    -webkit-backdrop-filter:blur(16px);
+    display:flex;flex-direction:column;
+    transition:transform .3s ease, box-shadow .3s ease, border-color .3s ease;
+    position:relative;
+    overflow:hidden;
+    opacity:0;
+    transform:translateY(24px) scale(.97);
+  }
+  .iter-card.visible{opacity:1;transform:translateY(0) scale(1)}
+  .iter-card:hover{
+    transform:translateY(-4px) scale(1.01);
+    box-shadow:0 12px 40px rgba(0,0,0,.35);
+    border-color:rgba(255,255,255,.15);
+  }
+
+  /* Card polish levels */
+  .iter-card[data-iter="1"]{transition-delay:.2s}
+  .iter-card[data-iter="2"]{transition-delay:.4s}
+  .iter-card[data-iter="3"]{transition-delay:.6s}
+
+  .iter-card[data-iter="3"]{
+    border-color:rgba(52,211,153,.25);
+  }
+  .iter-card[data-iter="3"]::before{
+    content:'';position:absolute;inset:-1px;
+    border-radius:var(--card-radius);
+    background:linear-gradient(135deg,rgba(52,211,153,.12),transparent 60%);
+    z-index:-1;pointer-events:none;
+  }
+  .iter-card[data-iter="3"]::after{
+    content:'';position:absolute;inset:0;
+    border-radius:var(--card-radius);
+    box-shadow:0 0 30px rgba(52,211,153,.08),inset 0 0 30px rgba(52,211,153,.03);
+    pointer-events:none;
+  }
+
+  /* Iteration label */
+  .iter-label{
+    display:inline-flex;align-items:center;gap:6px;
+    font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;
+    color:var(--text-muted);margin-bottom:14px;
+  }
+  .iter-label .dot{
+    width:8px;height:8px;border-radius:50%;
+    display:inline-block;
+  }
+  .iter-card[data-iter="1"] .iter-label .dot{background:var(--yellow)}
+  .iter-card[data-iter="2"] .iter-label .dot{background:var(--blue)}
+  .iter-card[data-iter="3"] .iter-label .dot{background:var(--green)}
+
+  .iter-card h3{
+    font-size:.95rem;font-weight:600;line-height:1.4;
+    margin-bottom:10px;letter-spacing:-.01em;
+  }
+  .iter-card .abstract-snippet{
+    font-size:.78rem;color:var(--text-dim);line-height:1.55;
+    margin-bottom:auto;
+    padding-bottom:18px;
+  }
+
+  /* Gauge + review row */
+  .card-metrics{
+    display:flex;align-items:center;justify-content:space-between;
+    gap:12px;
+    padding-top:16px;
+    border-top:1px solid rgba(255,255,255,.06);
+  }
+
+  /* Circular gauge */
+  .gauge{
+    position:relative;width:56px;height:56px;flex-shrink:0;
+  }
+  .gauge svg{width:56px;height:56px;transform:rotate(-90deg)}
+  .gauge-bg{fill:none;stroke:rgba(255,255,255,.06);stroke-width:4}
+  .gauge-fill{
+    fill:none;stroke-width:4;
+    stroke-linecap:round;
+    transition:stroke-dashoffset 1.2s ease .6s;
+  }
+  .gauge-value{
+    position:absolute;inset:0;
+    display:flex;align-items:center;justify-content:center;
+    font-size:.75rem;font-weight:700;
+  }
+  .gauge-value small{font-size:.55rem;font-weight:400;color:var(--text-muted);margin-left:1px}
+
+  .iter-card[data-iter="1"] .gauge-fill{stroke:var(--yellow)}
+  .iter-card[data-iter="1"] .gauge-value{color:var(--yellow)}
+  .iter-card[data-iter="2"] .gauge-fill{stroke:var(--blue)}
+  .iter-card[data-iter="2"] .gauge-value{color:var(--blue)}
+  .iter-card[data-iter="3"] .gauge-fill{stroke:var(--green)}
+  .iter-card[data-iter="3"] .gauge-value{color:var(--green)}
+
+  /* Review badge */
+  .review-badge{
+    font-size:.72rem;
+    padding:5px 12px;
+    border-radius:var(--pill-radius);
+    font-weight:500;
+    white-space:nowrap;
+  }
+  .review-badge.issues{
+    background:rgba(251,191,36,.10);color:var(--yellow);
+    border:1px solid rgba(251,191,36,.15);
+  }
+  .review-badge.mixed{
+    background:rgba(56,189,248,.10);color:var(--blue);
+    border:1px solid rgba(56,189,248,.15);
+  }
+  .review-badge.ready{
+    background:rgba(52,211,153,.10);color:var(--green);
+    border:1px solid rgba(52,211,153,.15);
+  }
+
+  /* Diff indicator */
+  .diff-indicator{
+    display:flex;align-items:center;gap:6px;
+    font-size:.68rem;color:var(--text-muted);
+    margin-top:10px;
+  }
+  .diff-indicator svg{width:14px;height:14px;color:var(--blue);flex-shrink:0}
+  .diff-indicator span{opacity:.75}
+
+  /* ---------- Expanded Final Section ---------- */
+  .final-section{
+    background:var(--glass);
+    border:1px solid var(--glass-border);
+    border-radius:var(--card-radius);
+    padding:36px 40px 40px;
+    backdrop-filter:blur(16px);
+    -webkit-backdrop-filter:blur(16px);
+    position:relative;
+    overflow:hidden;
+    opacity:0;animation:fadeUp .6s .55s ease forwards;
+  }
+  .final-section::before{
+    content:'';position:absolute;top:0;left:0;right:0;height:3px;
+    background:linear-gradient(90deg,var(--accent),var(--green));
+    border-radius:3px 3px 0 0;
+  }
+
+  .final-badge{
+    display:inline-flex;align-items:center;gap:6px;
+    font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.08em;
+    color:var(--green);margin-bottom:16px;
+    padding:4px 12px;border-radius:var(--pill-radius);
+    background:rgba(52,211,153,.08);
+    border:1px solid rgba(52,211,153,.12);
+  }
+  .final-badge .pulse-dot{
+    width:7px;height:7px;border-radius:50%;background:var(--green);
+    animation:pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.85)}}
+
+  .final-section h2{
+    font-size:1.25rem;font-weight:700;letter-spacing:-.02em;
+    margin-bottom:16px;line-height:1.35;
+  }
+
+  .final-abstract{
+    font-size:.88rem;color:var(--text-dim);line-height:1.7;
+    margin-bottom:28px;
+    max-width:860px;
+  }
+
+  /* Key terms pills */
+  .terms-row{
+    display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+    margin-bottom:24px;
+  }
+  .terms-label{
+    font-size:.72rem;font-weight:600;text-transform:uppercase;
+    letter-spacing:.06em;color:var(--text-muted);margin-right:4px;
+  }
+  .term-pill{
+    font-size:.75rem;
+    padding:5px 14px;
+    border-radius:var(--pill-radius);
+    background:rgba(108,99,255,.10);
+    border:1px solid rgba(108,99,255,.18);
+    color:rgba(180,175,255,.9);
+    font-weight:500;
+    transition:all .2s;
+  }
+  .term-pill:hover{
+    background:rgba(108,99,255,.18);
+    border-color:rgba(108,99,255,.30);
+    color:#fff;
+  }
+
+  /* Significance */
+  .significance{
+    padding:16px 20px;
+    background:rgba(108,99,255,.05);
+    border-left:3px solid var(--accent);
+    border-radius:0 12px 12px 0;
+    margin-bottom:32px;
+  }
+  .significance .sig-label{
+    font-size:.7rem;font-weight:600;text-transform:uppercase;
+    letter-spacing:.06em;color:var(--accent);margin-bottom:6px;
+  }
+  .significance p{
+    font-size:.84rem;color:var(--text-dim);line-height:1.6;
+  }
+
+  /* CTA Button */
+  .cta-row{display:flex;justify-content:flex-end;margin-top:8px}
+  .cta-btn{
+    display:inline-flex;align-items:center;gap:10px;
+    padding:13px 28px;
+    background:linear-gradient(135deg,var(--accent),#8b5cf6);
+    color:#fff;font-size:.88rem;font-weight:600;
+    border:none;border-radius:12px;cursor:pointer;
+    transition:all .3s;
+    box-shadow:0 4px 20px rgba(108,99,255,.25);
+    letter-spacing:-.01em;
+  }
+  .cta-btn:hover{
+    transform:translateY(-2px);
+    box-shadow:0 8px 30px rgba(108,99,255,.35);
+  }
+  .cta-btn:active{transform:translateY(0)}
+  .cta-btn svg{width:18px;height:18px;transition:transform .2s}
+  .cta-btn:hover svg{transform:translateX(3px)}
+
+  /* ---------- Animations ---------- */
+  @keyframes fadeDown{to{opacity:1;transform:translateY(0)}}
+  @keyframes fadeUp{to{opacity:1;transform:translateY(0)}}
+
+  /* ---------- Responsive ---------- */
+  @media(max-width:960px){
+    .page{padding:24px 20px 60px}
+    .timeline-track{flex-direction:column;gap:20px}
+    .connector,.connector-pulse{display:none}
+    .timeline-card-wrapper{padding:0}
+    .final-section{padding:28px 24px 32px}
+  }
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <!-- Header -->
+  <header class="stage-header">
+    <button class="back-btn" aria-label="Go back">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"/><path d="M12 19l-7-7 7-7"/></svg>
+    </button>
+    <h1>Hypothesis Refinement <span>3 iterations</span></h1>
+    <nav class="breadcrumb">
+      <a href="#">Run #47</a>
+      <span class="sep">/</span>
+      <a href="#">Journey</a>
+      <span class="sep">/</span>
+      <span style="color:var(--text-dim)">Hypothesis</span>
+    </nav>
+  </header>
+
+  <!-- Timeline -->
+  <section class="timeline-section">
+    <div class="timeline-track">
+      <div class="connector"></div>
+      <div class="connector-pulse"></div>
+
+      <!-- Iteration 1 -->
+      <div class="timeline-card-wrapper">
+        <div class="iter-card" data-iter="1">
+          <div class="iter-label"><span class="dot"></span> Iteration 1 &mdash; Initial</div>
+          <h3>Cross-lingual Transfer via Synthetic Code-Switching</h3>
+          <p class="abstract-snippet">
+            We propose training multilingual models on synthetically generated code-switched text, alternating tokens between high-resource and low-resource languages to improve cross-lingual alignment without parallel corpora.
+          </p>
+          <div class="card-metrics">
+            <div class="gauge" data-score="6.2" data-max="10">
+              <svg viewBox="0 0 56 56">
+                <circle class="gauge-bg" cx="28" cy="28" r="24"/>
+                <circle class="gauge-fill" cx="28" cy="28" r="24"/>
+              </svg>
+              <div class="gauge-value">6.2<small>/10</small></div>
+            </div>
+            <span class="review-badge issues">3 major issues found</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Iteration 2 -->
+      <div class="timeline-card-wrapper">
+        <div class="iter-card" data-iter="2">
+          <div class="iter-label"><span class="dot"></span> Iteration 2 &mdash; Refined</div>
+          <h3>Cross-lingual Contrastive Pre-training with Synthetic Code-Switching</h3>
+          <p class="abstract-snippet">
+            Building on code-switched augmentation, we introduce a contrastive pre-training objective that explicitly aligns representations of parallel semantic content across language boundaries, improving zero-shot transfer stability.
+          </p>
+          <div class="card-metrics">
+            <div class="gauge" data-score="7.8" data-max="10">
+              <svg viewBox="0 0 56 56">
+                <circle class="gauge-bg" cx="28" cy="28" r="24"/>
+                <circle class="gauge-fill" cx="28" cy="28" r="24"/>
+              </svg>
+              <div class="gauge-value">7.8<small>/10</small></div>
+            </div>
+            <span class="review-badge mixed">1 major, 2 minor issues</span>
+          </div>
+          <div class="diff-indicator">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>
+            <span>Added contrastive objective + stability analysis</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Iteration 3 -->
+      <div class="timeline-card-wrapper">
+        <div class="iter-card" data-iter="3">
+          <div class="iter-label"><span class="dot"></span> Iteration 3 &mdash; Final</div>
+          <h3>Cross-lingual Contrastive Pre-training with Synthetic Code-Switching for Low-Resource Transfer</h3>
+          <p class="abstract-snippet">
+            We present a complete framework combining synthetic code-switched generation with contrastive alignment objectives, specifically targeting low-resource languages where parallel data is scarce, validated across 12 typologically diverse language pairs.
+          </p>
+          <div class="card-metrics">
+            <div class="gauge" data-score="8.4" data-max="10">
+              <svg viewBox="0 0 56 56">
+                <circle class="gauge-bg" cx="28" cy="28" r="24"/>
+                <circle class="gauge-fill" cx="28" cy="28" r="24"/>
+              </svg>
+              <div class="gauge-value">8.4<small>/10</small></div>
+            </div>
+            <span class="review-badge ready">Ready for research</span>
+          </div>
+          <div class="diff-indicator">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>
+            <span>Scoped to low-resource + 12-language validation</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Final Expanded -->
+  <section class="final-section">
+    <div class="final-badge"><span class="pulse-dot"></span> Final Hypothesis</div>
+    <h2>Cross-lingual Contrastive Pre-training with Synthetic Code-Switching for Low-Resource Transfer</h2>
+    <p class="final-abstract">
+      We propose a novel pre-training framework that combines synthetically generated code-switched text with a
+      contrastive alignment objective to improve cross-lingual transfer to low-resource languages. Unlike existing
+      approaches that rely on parallel corpora or machine translation, our method generates training signal by
+      algorithmically interleaving tokens from high-resource and target languages at linguistically motivated
+      boundaries. A contrastive loss then aligns the resulting representations across language pairs, enabling
+      strong zero-shot performance on downstream tasks including NER, sentiment analysis, and question answering
+      across 12 typologically diverse language pairs.
+    </p>
+
+    <div class="terms-row">
+      <span class="terms-label">Key terms</span>
+      <span class="term-pill">Code-Switching Augmentation</span>
+      <span class="term-pill">Contrastive Alignment</span>
+      <span class="term-pill">Low-Resource NLP</span>
+    </div>
+
+    <div class="significance">
+      <div class="sig-label">Significance</div>
+      <p>
+        This approach eliminates the dependency on parallel corpora for cross-lingual transfer, opening a practical
+        path to high-quality NLP for the hundreds of languages that lack sufficient translation data. The contrastive
+        framing also provides a principled mechanism for analyzing representation alignment quality.
+      </p>
+    </div>
+
+    <div class="cta-row">
+      <button class="cta-btn">
+        Continue to Invention
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
+      </button>
+    </div>
+  </section>
+
+</div>
+
+<script>
+(function(){
+  // Animate gauge circles
+  function initGauges(){
+    document.querySelectorAll('.gauge').forEach(function(g){
+      var score=parseFloat(g.dataset.score);
+      var max=parseFloat(g.dataset.max);
+      var fill=g.querySelector('.gauge-fill');
+      var r=24;
+      var circ=2*Math.PI*r;
+      fill.style.strokeDasharray=circ;
+      fill.style.strokeDashoffset=circ;
+      // trigger reflow
+      void fill.getBoundingClientRect();
+      var pct=score/max;
+      fill.style.strokeDashoffset=circ*(1-pct);
+    });
+  }
+
+  // Stagger card entrance using IntersectionObserver
+  function initCards(){
+    var cards=document.querySelectorAll('.iter-card');
+    if(!('IntersectionObserver' in window)){
+      cards.forEach(function(c){c.classList.add('visible')});
+      initGauges();
+      return;
+    }
+    var observer=new IntersectionObserver(function(entries){
+      entries.forEach(function(e){
+        if(e.isIntersecting){
+          var iter=parseInt(e.target.dataset.iter);
+          setTimeout(function(){
+            e.target.classList.add('visible');
+          },(iter-1)*150);
+          observer.unobserve(e.target);
+        }
+      });
+    },{threshold:0.15});
+    cards.forEach(function(c){observer.observe(c)});
+    // Gauges animate via CSS transition, just set values after cards appear
+    setTimeout(initGauges,200);
+  }
+
+  // Run on DOM ready
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded',initCards);
+  }else{
+    initCards();
+  }
+})();
+</script>
+
+</body>
+</html>

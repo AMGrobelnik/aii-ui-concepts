@@ -1,0 +1,856 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Floating Nodes</title>
+<style>
+  *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap');
+
+  :root {
+    --bg: #0a0a10;
+    --surface: #111118;
+    --surface-2: #16161f;
+    --border: rgba(255,255,255,0.06);
+    --text: #e2e2e8;
+    --text-dim: #6a6a78;
+    --green: #34d399;
+    --green-glow: rgba(52,211,153,0.3);
+    --purple: #a78bfa;
+    --purple-glow: rgba(167,139,250,0.3);
+    --blue: #60a5fa;
+    --blue-glow: rgba(96,165,250,0.4);
+    --gray: #4a4a5a;
+    --gray-glow: rgba(74,74,90,0.2);
+  }
+
+  html, body {
+    height: 100%;
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    overflow: hidden;
+    user-select: none;
+  }
+
+  /* ── Top strip ── */
+  .top-strip {
+    position: relative;
+    height: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(180deg, rgba(15,15,25,0.9) 0%, var(--bg) 100%);
+    border-bottom: 1px solid var(--border);
+    overflow: visible;
+  }
+
+  .nodes-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 100px;
+    height: 100%;
+    padding-top: 6px;
+  }
+
+  /* SVG connectors layer */
+  .connectors-svg {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    overflow: visible;
+  }
+
+  .connector-line {
+    fill: none;
+    stroke: rgba(255,255,255,0.07);
+    stroke-width: 1.2;
+    transition: stroke 0.4s;
+  }
+  .connector-line.active {
+    stroke: rgba(255,255,255,0.14);
+  }
+
+  /* Node wrapper */
+  .node-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    position: relative;
+    z-index: 2;
+  }
+
+  .node-bubble {
+    position: relative;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255,255,255,0.1);
+    transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+    will-change: transform;
+  }
+
+  .node-bubble::before {
+    content: '';
+    position: absolute;
+    inset: -3px;
+    border-radius: 50%;
+    opacity: 0;
+    transition: opacity 0.4s ease;
+    pointer-events: none;
+  }
+
+  /* Glow halo for active */
+  .node-wrap.active .node-bubble::before {
+    opacity: 1;
+  }
+
+  /* Per-node colors */
+  .node-seed .node-bubble {
+    background: rgba(52,211,153,0.12);
+    color: var(--green);
+    box-shadow: 0 0 12px rgba(52,211,153,0.1);
+  }
+  .node-seed .node-bubble::before {
+    background: radial-gradient(circle, var(--green-glow) 0%, transparent 70%);
+  }
+  .node-seed.active .node-bubble {
+    border-color: rgba(52,211,153,0.3);
+    box-shadow: 0 0 24px rgba(52,211,153,0.25);
+  }
+
+  .node-hypo .node-bubble {
+    background: rgba(167,139,250,0.12);
+    color: var(--purple);
+    box-shadow: 0 0 12px rgba(167,139,250,0.1);
+  }
+  .node-hypo .node-bubble::before {
+    background: radial-gradient(circle, var(--purple-glow) 0%, transparent 70%);
+  }
+  .node-hypo.active .node-bubble {
+    border-color: rgba(167,139,250,0.3);
+    box-shadow: 0 0 24px rgba(167,139,250,0.25);
+  }
+
+  .node-inv .node-bubble {
+    background: rgba(96,165,250,0.14);
+    color: var(--blue);
+    box-shadow: 0 0 14px rgba(96,165,250,0.15);
+  }
+  .node-inv .node-bubble::before {
+    background: radial-gradient(circle, var(--blue-glow) 0%, transparent 70%);
+  }
+  .node-inv.active .node-bubble {
+    border-color: rgba(96,165,250,0.35);
+    box-shadow: 0 0 30px rgba(96,165,250,0.35), 0 0 60px rgba(96,165,250,0.12);
+  }
+
+  .node-paper .node-bubble {
+    background: rgba(74,74,90,0.12);
+    color: var(--gray);
+    box-shadow: 0 0 8px rgba(74,74,90,0.08);
+    opacity: 0.55;
+  }
+  .node-paper .node-bubble::before {
+    background: radial-gradient(circle, var(--gray-glow) 0%, transparent 70%);
+  }
+  .node-paper.active .node-bubble {
+    opacity: 0.85;
+    border-color: rgba(74,74,90,0.3);
+    box-shadow: 0 0 18px rgba(74,74,90,0.2);
+  }
+
+  .node-label {
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    transition: color 0.3s;
+  }
+  .node-wrap.active .node-label {
+    color: var(--text);
+  }
+
+  /* Particle canvas behind nodes */
+  .particle-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  /* ── Content area ── */
+  .content-area {
+    height: calc(100% - 120px);
+    overflow-y: auto;
+    padding: 32px 48px 48px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.08) transparent;
+  }
+  .content-area::-webkit-scrollbar { width: 5px; }
+  .content-area::-webkit-scrollbar-track { background: transparent; }
+  .content-area::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 4px; }
+
+  .panel {
+    display: none;
+    max-width: 780px;
+    margin: 0 auto;
+    animation: panelIn 0.35s ease-out;
+  }
+  .panel.visible { display: block; }
+
+  @keyframes panelIn {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .panel-header {
+    margin-bottom: 28px;
+  }
+  .panel-header h2 {
+    font-size: 20px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+  .panel-header p {
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.5;
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+    margin-bottom: 12px;
+    transition: border-color 0.2s, background 0.2s;
+  }
+  .card:hover {
+    border-color: rgba(255,255,255,0.1);
+    background: var(--surface-2);
+  }
+
+  .card-title {
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: 6px;
+  }
+  .card-body {
+    font-size: 12px;
+    color: var(--text-dim);
+    line-height: 1.6;
+  }
+
+  .stat-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 14px;
+  }
+  .stat-box {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    text-align: center;
+  }
+  .stat-val {
+    font-size: 22px;
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+  .stat-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+  }
+
+  .badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 4px;
+    margin-right: 6px;
+    margin-bottom: 4px;
+  }
+  .badge-green  { background: rgba(52,211,153,0.12); color: var(--green); }
+  .badge-purple { background: rgba(167,139,250,0.12); color: var(--purple); }
+  .badge-blue   { background: rgba(96,165,250,0.12); color: var(--blue); }
+  .badge-gray   { background: rgba(255,255,255,0.06); color: var(--text-dim); }
+
+  .progress-bar {
+    height: 3px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 2px;
+    margin-top: 10px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.6s ease;
+  }
+
+  /* Navigation hint */
+  .nav-hint {
+    position: fixed;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 11px;
+    color: var(--text-dim);
+    opacity: 0.5;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    pointer-events: none;
+  }
+  .nav-hint kbd {
+    display: inline-block;
+    padding: 2px 7px;
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 10px;
+    background: rgba(255,255,255,0.03);
+  }
+</style>
+</head>
+<body>
+
+<!-- ── Top Strip ── -->
+<div class="top-strip">
+  <div class="nodes-container" id="nodesContainer">
+    <svg class="connectors-svg" id="connectorsSvg">
+      <path class="connector-line" id="conn01"/>
+      <path class="connector-line" id="conn12"/>
+      <path class="connector-line" id="conn23"/>
+    </svg>
+    <canvas class="particle-canvas" id="particleCanvas"></canvas>
+
+    <div class="node-wrap node-seed active" data-idx="0">
+      <div class="node-bubble">&#10003;</div>
+      <span class="node-label">Seed</span>
+    </div>
+    <div class="node-wrap node-hypo" data-idx="1">
+      <div class="node-bubble">8.4</div>
+      <span class="node-label">Hypothesis</span>
+    </div>
+    <div class="node-wrap node-inv" data-idx="2">
+      <div class="node-bubble">3/5</div>
+      <span class="node-label">Invention</span>
+    </div>
+    <div class="node-wrap node-paper" data-idx="3">
+      <div class="node-bubble">&mdash;</div>
+      <span class="node-label">Paper</span>
+    </div>
+  </div>
+</div>
+
+<!-- ── Content ── -->
+<div class="content-area">
+
+  <!-- Panel 0: Seed -->
+  <div class="panel visible" data-panel="0">
+    <div class="panel-header">
+      <h2 style="color:var(--green)">Seed Knowledge</h2>
+      <p>Source papers and domain knowledge feeding the hypothesis generator.</p>
+    </div>
+    <div class="stat-row">
+      <div class="stat-box">
+        <div class="stat-val" style="color:var(--green)">24</div>
+        <div class="stat-label">Papers Ingested</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-val" style="color:var(--green)">156</div>
+        <div class="stat-label">Key Concepts</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-val" style="color:var(--green)">3</div>
+        <div class="stat-label">Domains</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Knowledge Graph</div>
+      <div class="card-body">
+        <span class="badge badge-green">NLP</span>
+        <span class="badge badge-green">Reinforcement Learning</span>
+        <span class="badge badge-green">Causal Inference</span>
+        <br><br>
+        156 concept nodes connected by 412 edges. Graph density 0.034.
+        Strongest cluster: transformer-based causal reasoning (38 nodes).
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Recent Additions</div>
+      <div class="card-body">
+        "Causal Abstraction for Chain-of-Thought Reasoning" (Chen et al., 2025)
+        added 12 new concept nodes and 34 edges to the knowledge graph.
+        Cross-domain bridge score: 0.78.
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Gap Analysis</div>
+      <div class="card-body">
+        Identified 3 under-explored intersections: causal RL + language grounding,
+        world-model distillation + planning, and emergent tool use in multi-agent settings.
+        Priority score distribution: high (1), medium (2).
+      </div>
+    </div>
+  </div>
+
+  <!-- Panel 1: Hypothesis -->
+  <div class="panel" data-panel="1">
+    <div class="panel-header">
+      <h2 style="color:var(--purple)">Hypothesis Review</h2>
+      <p>Generated hypotheses scored by novelty, feasibility, and impact.</p>
+    </div>
+    <div class="stat-row">
+      <div class="stat-box">
+        <div class="stat-val" style="color:var(--purple)">8.4</div>
+        <div class="stat-label">Top Score</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-val" style="color:var(--purple)">12</div>
+        <div class="stat-label">Candidates</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-val" style="color:var(--purple)">3</div>
+        <div class="stat-label">Promoted</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">
+        <span class="badge badge-purple">8.4</span>
+        Causal Transformer Grounding
+      </div>
+      <div class="card-body">
+        A transformer architecture that learns causal structure from language
+        descriptions and transfers it to RL environments without explicit
+        reward shaping. Novelty: 9.1 | Feasibility: 7.8 | Impact: 8.2
+        <div class="progress-bar"><div class="progress-fill" style="width:84%;background:var(--purple)"></div></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">
+        <span class="badge badge-purple">7.9</span>
+        Emergent Tool Abstractions
+      </div>
+      <div class="card-body">
+        Multi-agent systems that discover reusable tool-like subroutines
+        through competitive and cooperative pressure, without tool-use
+        pre-training. Novelty: 8.5 | Feasibility: 7.2 | Impact: 8.0
+        <div class="progress-bar"><div class="progress-fill" style="width:79%;background:var(--purple)"></div></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">
+        <span class="badge badge-purple">7.6</span>
+        World-Model Distillation
+      </div>
+      <div class="card-body">
+        Compressing large environment simulators into compact neural world
+        models that preserve causal fidelity for downstream planning tasks.
+        Novelty: 7.2 | Feasibility: 8.1 | Impact: 7.5
+        <div class="progress-bar"><div class="progress-fill" style="width:76%;background:var(--purple)"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Panel 2: Invention -->
+  <div class="panel" data-panel="2">
+    <div class="panel-header">
+      <h2 style="color:var(--blue)">Invention Loop</h2>
+      <p>Iterating on experimental plans, methods, and paper drafts. Currently on iteration 3 of 5.</p>
+    </div>
+    <div class="stat-row">
+      <div class="stat-box">
+        <div class="stat-val" style="color:var(--blue)">3/5</div>
+        <div class="stat-label">Iteration</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-val" style="color:var(--blue)">2</div>
+        <div class="stat-label">Plans Generated</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-val" style="color:var(--blue)">1</div>
+        <div class="stat-label">Draft Ready</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Current Plan: Causal Transformer Grounding</div>
+      <div class="card-body">
+        <span class="badge badge-blue">Architecture</span>
+        <span class="badge badge-blue">Training</span>
+        <span class="badge badge-gray">Ablation</span>
+        <span class="badge badge-gray">Baselines</span>
+        <br><br>
+        Architecture defined with dual-stream causal attention. Training loop
+        spec'd for 3 environments (GridWorld, MiniHack, BabyAI). Ablation
+        matrix and baseline selection pending next iteration.
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Review Feedback (iter 2)</div>
+      <div class="card-body">
+        "Causal attention mechanism is well-motivated but needs a clearer
+        distinction from prior causal masking approaches. Suggest adding
+        an information-theoretic justification for the dual-stream design."
+        <br><br>
+        Status: Addressed in iter 3 draft. Awaiting re-review.
+        <div class="progress-bar"><div class="progress-fill" style="width:60%;background:var(--blue)"></div></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Text Generation</div>
+      <div class="card-body">
+        Abstract: complete | Introduction: complete | Method: in progress (60%) |
+        Experiments: outline only | Conclusion: not started.
+        Estimated token count: ~4,200 / 8,000 target.
+      </div>
+    </div>
+  </div>
+
+  <!-- Panel 3: Paper -->
+  <div class="panel" data-panel="3">
+    <div class="panel-header">
+      <h2 style="color:var(--gray)">Paper Repository</h2>
+      <p>Final paper assembly, visualizations, and artifact generation. Awaiting invention loop completion.</p>
+    </div>
+    <div class="stat-row">
+      <div class="stat-box">
+        <div class="stat-val" style="color:var(--gray)">&mdash;</div>
+        <div class="stat-label">Status</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-val" style="color:var(--gray)">0</div>
+        <div class="stat-label">Figures</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-val" style="color:var(--gray)">0</div>
+        <div class="stat-label">Artifacts</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title" style="color:var(--text-dim)">Waiting for Invention Loop</div>
+      <div class="card-body">
+        Paper generation will begin once the invention loop completes at least
+        4 iterations with a passing review score. Current progress: 3/5 iterations,
+        no passing review yet.
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title" style="color:var(--text-dim)">Planned Outputs</div>
+      <div class="card-body">
+        <span class="badge badge-gray">Full Paper PDF</span>
+        <span class="badge badge-gray">Figure Set</span>
+        <span class="badge badge-gray">Demo Notebook</span>
+        <span class="badge badge-gray">Code Repo</span>
+        <br><br>
+        Visualization pipeline configured for matplotlib + tikz export.
+        Repository scaffolding ready (pyproject.toml, src/ layout, tests/).
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Nav hint -->
+<div class="nav-hint">
+  <kbd>&larr;</kbd> <kbd>&rarr;</kbd> navigate modules
+</div>
+
+<script>
+(function() {
+  "use strict";
+
+  /* ── State ── */
+  let activeIdx = 0;
+  const nodeWraps = Array.from(document.querySelectorAll('.node-wrap'));
+  const panels = Array.from(document.querySelectorAll('.panel'));
+  const container = document.getElementById('nodesContainer');
+  const svg = document.getElementById('connectorsSvg');
+  const canvas = document.getElementById('particleCanvas');
+  const ctx = canvas.getContext('2d');
+
+  /* Node float configs: amplitude, speed, phase offset */
+  const floatConfigs = [
+    { amp: 5,  speed: 0.8,  phase: 0     },   /* Seed: gentle */
+    { amp: 6,  speed: 0.9,  phase: 1.2   },   /* Hypo: offset */
+    { amp: 8,  speed: 1.0,  phase: 2.5   },   /* Invention: most movement */
+    { amp: 2,  speed: 0.5,  phase: 3.8   },   /* Paper: barely floats */
+  ];
+
+  /* Colors per node for particles */
+  const nodeColors = [
+    [52, 211, 153],   /* green */
+    [167, 139, 250],  /* purple */
+    [96, 165, 250],   /* blue */
+    [74, 74, 90],     /* gray */
+  ];
+
+  /* ── Particles ── */
+  const particles = [];
+  const MAX_PARTICLES = 60;
+
+  function spawnParticle(fromIdx, toIdx) {
+    if (particles.length >= MAX_PARTICLES) return;
+    const col = nodeColors[fromIdx];
+    particles.push({
+      fromIdx, toIdx,
+      t: 0,
+      speed: 0.003 + Math.random() * 0.005,
+      size: 1 + Math.random() * 1.5,
+      color: col,
+      alpha: 0.3 + Math.random() * 0.4,
+      offset: (Math.random() - 0.5) * 14,
+    });
+  }
+
+  /* Ambient particles around active node */
+  const ambientParticles = [];
+  const MAX_AMBIENT = 24;
+
+  function initAmbientParticles() {
+    ambientParticles.length = 0;
+    for (let i = 0; i < MAX_AMBIENT; i++) {
+      ambientParticles.push(createAmbientParticle());
+    }
+  }
+
+  function createAmbientParticle() {
+    const angle = Math.random() * Math.PI * 2;
+    const dist = 20 + Math.random() * 28;
+    return {
+      angle,
+      dist,
+      size: 0.8 + Math.random() * 1.2,
+      speed: 0.004 + Math.random() * 0.008,
+      drift: (Math.random() - 0.5) * 0.3,
+      alpha: 0.15 + Math.random() * 0.35,
+      alphaDir: Math.random() > 0.5 ? 1 : -1,
+    };
+  }
+
+  /* ── Get node center positions ── */
+  function getNodeCenters() {
+    const stripRect = container.getBoundingClientRect();
+    return nodeWraps.map(wrap => {
+      const bubble = wrap.querySelector('.node-bubble');
+      const r = bubble.getBoundingClientRect();
+      return {
+        x: r.left + r.width / 2 - stripRect.left,
+        y: r.top + r.height / 2 - stripRect.top,
+      };
+    });
+  }
+
+  /* ── Float animation offsets ── */
+  const floatOffsets = [0, 0, 0, 0];
+
+  function updateFloat(time) {
+    floatConfigs.forEach((cfg, i) => {
+      const isActive = i === activeIdx;
+      const ampMul = isActive ? 1.4 : 1.0;
+      const spdMul = isActive ? 1.15 : 1.0;
+      floatOffsets[i] = Math.sin(time * 0.001 * cfg.speed * spdMul + cfg.phase) * cfg.amp * ampMul;
+    });
+  }
+
+  function applyFloat() {
+    nodeWraps.forEach((wrap, i) => {
+      const bubble = wrap.querySelector('.node-bubble');
+      /* Horizontal wobble (very subtle) */
+      const hWobble = Math.sin(performance.now() * 0.0005 + floatConfigs[i].phase * 2) * 1.5;
+      bubble.style.transform = `translateY(${floatOffsets[i]}px) translateX(${hWobble}px)`;
+    });
+  }
+
+  /* ── SVG connectors ── */
+  function updateConnectors() {
+    const centers = getNodeCenters();
+    for (let i = 0; i < 3; i++) {
+      const a = centers[i];
+      const b = centers[i + 1];
+      const midX = (a.x + b.x) / 2;
+      /* Curve control influenced by float offsets */
+      const cpY = Math.min(a.y, b.y) - 12 + (floatOffsets[i] + floatOffsets[i + 1]) * 0.3;
+      const d = `M ${a.x} ${a.y} Q ${midX} ${cpY} ${b.x} ${b.y}`;
+      const line = document.getElementById(`conn${i}${i+1}`);
+      line.setAttribute('d', d);
+      /* Highlight connector near active node */
+      const isNearActive = (i === activeIdx || i + 1 === activeIdx);
+      line.classList.toggle('active', isNearActive);
+    }
+  }
+
+  /* ── Resize canvas ── */
+  function resizeCanvas() {
+    const rect = container.getBoundingClientRect();
+    canvas.width = rect.width;
+    canvas.height = rect.height;
+  }
+
+  /* ── Draw particles ── */
+  function drawParticles() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const centers = getNodeCenters();
+
+    /* Drifting connector particles */
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.t += p.speed;
+      if (p.t >= 1) { particles.splice(i, 1); continue; }
+
+      const a = centers[p.fromIdx];
+      const b = centers[p.toIdx];
+      if (!a || !b) { particles.splice(i, 1); continue; }
+
+      /* Quadratic bezier position */
+      const midX = (a.x + b.x) / 2;
+      const cpY = Math.min(a.y, b.y) - 12 + (floatOffsets[p.fromIdx] + floatOffsets[p.toIdx]) * 0.3;
+      const t = p.t;
+      const omt = 1 - t;
+      const px = omt * omt * a.x + 2 * omt * t * midX + t * t * b.x;
+      const py = omt * omt * a.y + 2 * omt * t * cpY + t * t * b.y + p.offset;
+
+      /* Fade at edges */
+      const edgeFade = Math.min(t * 4, (1 - t) * 4, 1);
+      const alpha = p.alpha * edgeFade;
+
+      ctx.beginPath();
+      ctx.arc(px, py, p.size, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${p.color[0]},${p.color[1]},${p.color[2]},${alpha})`;
+      ctx.fill();
+    }
+
+    /* Ambient particles around active node */
+    const ac = centers[activeIdx];
+    if (ac) {
+      const col = nodeColors[activeIdx];
+      ambientParticles.forEach(ap => {
+        ap.angle += ap.speed;
+        ap.dist += ap.drift * 0.1;
+        ap.alpha += ap.alphaDir * 0.004;
+        if (ap.alpha > 0.5) ap.alphaDir = -1;
+        if (ap.alpha < 0.1) ap.alphaDir = 1;
+
+        /* Keep dist in range */
+        if (ap.dist > 48) ap.drift = -Math.abs(ap.drift);
+        if (ap.dist < 18) ap.drift = Math.abs(ap.drift);
+
+        const px = ac.x + Math.cos(ap.angle) * ap.dist;
+        const py = ac.y + Math.sin(ap.angle) * ap.dist + floatOffsets[activeIdx];
+
+        ctx.beginPath();
+        ctx.arc(px, py, ap.size, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${ap.alpha})`;
+        ctx.fill();
+      });
+    }
+  }
+
+  /* ── Spawn connector particles periodically ── */
+  let spawnTimer = 0;
+  function maybeSpawnParticles(dt) {
+    spawnTimer += dt;
+    if (spawnTimer > 180) {
+      spawnTimer = 0;
+      /* Spawn between connected nodes, more around active */
+      for (let i = 0; i < 3; i++) {
+        const nearActive = (i === activeIdx || i + 1 === activeIdx);
+        if (nearActive || Math.random() < 0.3) {
+          spawnParticle(i, i + 1);
+        }
+      }
+    }
+  }
+
+  /* ── Navigation ── */
+  function setActive(idx) {
+    if (idx < 0 || idx >= nodeWraps.length) return;
+    activeIdx = idx;
+    nodeWraps.forEach((w, i) => w.classList.toggle('active', i === idx));
+    panels.forEach((p, i) => p.classList.toggle('visible', i === idx));
+    initAmbientParticles();
+    /* Scroll content to top */
+    document.querySelector('.content-area').scrollTop = 0;
+  }
+
+  /* Click nodes */
+  nodeWraps.forEach(wrap => {
+    wrap.addEventListener('click', () => {
+      setActive(parseInt(wrap.dataset.idx));
+    });
+  });
+
+  /* Arrow keys */
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      setActive(activeIdx + 1);
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActive(activeIdx - 1);
+    }
+  });
+
+  /* ── Main loop ── */
+  let lastTime = performance.now();
+
+  function loop(time) {
+    const dt = time - lastTime;
+    lastTime = time;
+
+    updateFloat(time);
+    applyFloat();
+    updateConnectors();
+    maybeSpawnParticles(dt);
+    drawParticles();
+
+    requestAnimationFrame(loop);
+  }
+
+  /* ── Init ── */
+  window.addEventListener('resize', () => {
+    resizeCanvas();
+  });
+
+  resizeCanvas();
+  initAmbientParticles();
+  requestAnimationFrame(loop);
+
+  /* Pre-seed some particles so it doesn't start empty */
+  for (let i = 0; i < 3; i++) {
+    for (let j = 0; j < 4; j++) {
+      const p = { fromIdx: i, toIdx: i + 1, t: Math.random(), speed: 0.003 + Math.random() * 0.005,
+        size: 1 + Math.random() * 1.5, color: nodeColors[i], alpha: 0.3 + Math.random() * 0.4,
+        offset: (Math.random() - 0.5) * 14 };
+      particles.push(p);
+    }
+  }
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Arc Milestone Navigator</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #08080e; --bg-card: #0e0e1a; --border: #1a1a2e; --border-active: #2a2a4e;
+    --text: #e0e0ec; --text-dim: #6a6a80; --text-muted: #3e3e54;
+    --green: #3ddc84; --green-glow: rgba(61,220,132,0.35);
+    --purple: #b07aff; --purple-glow: rgba(176,122,255,0.35);
+    --blue: #4da6ff; --blue-glow: rgba(77,166,255,0.35);
+    --orange: #ff9f43; --orange-glow: rgba(255,159,67,0.35);
+    --t-fast: 0.2s ease; --t-med: 0.35s cubic-bezier(0.4,0,0.2,1);
+    --t-slow: 0.5s cubic-bezier(0.4,0,0.2,1);
+  }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    min-height: 100vh; overflow-x: hidden; -webkit-font-smoothing: antialiased;
+  }
+
+  /* === ROW 1: Semi-circle arc with diamond-in-ring milestones === */
+  .arc-section {
+    position: relative; width: 100%; height: 220px;
+    background: linear-gradient(180deg, #0c0c16 0%, var(--bg) 100%);
+    display: flex; align-items: flex-end; justify-content: center;
+    overflow: hidden; user-select: none;
+  }
+  .arc-section::after {
+    content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05) 20%, rgba(255,255,255,0.05) 80%, transparent);
+  }
+  .arc-ambient {
+    position: absolute; top: -60%; left: 50%; width: 800px; height: 500px;
+    transform: translateX(-50%); border-radius: 50%;
+    background: radial-gradient(ellipse, rgba(80,120,255,0.04) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .arc-container { position: relative; width: 780px; height: 200px; }
+  .arc-svg {
+    position: absolute; bottom: 10px; left: 0; width: 100%; height: 190px;
+    pointer-events: none;
+  }
+  .arc-progress-label {
+    position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
+    text-align: center; z-index: 3;
+  }
+  .arc-progress-label .pct {
+    font-size: 28px; font-weight: 700;
+    background: linear-gradient(135deg, var(--green), var(--blue), var(--purple));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  }
+  .arc-progress-label .lbl {
+    font-size: 9px; font-weight: 500; letter-spacing: 2px;
+    text-transform: uppercase; color: var(--text-dim); margin-top: 2px;
+  }
+  .shimmer {
+    position: absolute; top: 0; left: -200%; width: 200%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.008), transparent);
+    animation: shimmer 8s ease-in-out infinite; pointer-events: none;
+  }
+  @keyframes shimmer { to { transform: translateX(100%); } }
+
+  /* Diamond-in-ring milestone markers */
+  .milestone {
+    position: absolute; display: flex; flex-direction: column; align-items: center;
+    gap: 6px; cursor: pointer; z-index: 5; transition: transform var(--t-med);
+  }
+  .milestone:hover { transform: scale(1.08); }
+  .milestone.selected { transform: scale(1.12); }
+  .marker { position: relative; width: 44px; height: 44px; }
+  .marker-ring {
+    position: absolute; inset: 0; border-radius: 50%;
+    border: 2px solid var(--text-muted);
+    transition: border-color var(--t-med), box-shadow var(--t-med);
+  }
+  .marker-diamond {
+    position: absolute; top: 50%; left: 50%; width: 16px; height: 16px;
+    transform: translate(-50%,-50%) rotate(45deg); border-radius: 2px;
+    background: var(--text-muted); transition: background var(--t-med), box-shadow var(--t-med);
+  }
+  .marker-progress { position: absolute; inset: 0; border-radius: 50%; }
+  .marker-progress svg { width: 44px; height: 44px; transform: rotate(-90deg); }
+  .marker-progress circle { fill: none; stroke-width: 2; stroke-linecap: round; transition: stroke-dashoffset 0.8s ease; }
+  .marker-progress .track { stroke: transparent; }
+  .marker-progress .fill { stroke: var(--text-muted); }
+  .milestone-label {
+    font-size: 10px; font-weight: 600; letter-spacing: 1.2px;
+    text-transform: uppercase; color: var(--text-dim); transition: color var(--t-med);
+    white-space: nowrap;
+  }
+  /* Per-module color vars */
+  .milestone[data-module="seed"]       { --mc: var(--green);  --mg: var(--green-glow); }
+  .milestone[data-module="hypothesis"] { --mc: var(--purple); --mg: var(--purple-glow); }
+  .milestone[data-module="invention"]  { --mc: var(--blue);   --mg: var(--blue-glow); }
+  .milestone[data-module="paper"]      { --mc: var(--orange); --mg: var(--orange-glow); }
+  /* States */
+  .milestone.completed .marker-ring   { border-color: var(--mc); box-shadow: 0 0 8px var(--mg); }
+  .milestone.completed .marker-diamond { background: var(--mc); box-shadow: 0 0 10px var(--mg); }
+  .milestone.completed .fill           { stroke: var(--mc); }
+  .milestone.completed .milestone-label { color: var(--mc); opacity: 0.8; }
+  .milestone.active .marker-ring   { border-color: var(--mc); animation: ringPulse 2.5s ease-in-out infinite; }
+  .milestone.active .marker-diamond { background: var(--mc); animation: diamondPulse 2.5s ease-in-out infinite; }
+  .milestone.active .fill           { stroke: var(--mc); }
+  .milestone.active .milestone-label { color: var(--mc); }
+  .milestone.selected .marker-ring {
+    border-color: var(--mc); border-width: 2.5px;
+    box-shadow: 0 0 18px var(--mg), inset 0 0 6px var(--mg);
+  }
+  .milestone.selected .marker-diamond { background: var(--mc); box-shadow: 0 0 20px var(--mg); }
+  .milestone.selected .milestone-label { color: var(--mc); }
+  .milestone.pending .marker-diamond { opacity: 0.5; }
+  @keyframes ringPulse {
+    0%,100% { box-shadow: 0 0 8px var(--mg); }
+    50%     { box-shadow: 0 0 20px var(--mg); }
+  }
+  @keyframes diamondPulse {
+    0%,100% { box-shadow: 0 0 8px var(--mg); transform: translate(-50%,-50%) rotate(45deg) scale(1); }
+    50%     { box-shadow: 0 0 18px var(--mg); transform: translate(-50%,-50%) rotate(45deg) scale(1.1); }
+  }
+
+  /* === ROW 2: Sub-module dots (slides in) === */
+  .sub-row-container, .detail-row-container {
+    overflow: hidden; max-height: 0; opacity: 0;
+    transition: max-height var(--t-slow), opacity var(--t-med), background var(--t-med);
+    background: var(--bg); border-bottom: 1px solid transparent;
+  }
+  .sub-row-container.open { max-height: 120px; opacity: 1; background: rgba(14,14,26,0.6); border-bottom-color: var(--border); }
+  .detail-row-container.open { max-height: 100px; opacity: 1; background: rgba(10,10,18,0.8); border-bottom-color: var(--border); }
+  .sub-row, .detail-row {
+    display: flex; align-items: center; justify-content: center; position: relative;
+  }
+  .sub-row { gap: 14px; padding: 20px 40px; }
+  .detail-row { gap: 10px; padding: 16px 40px; }
+  .sub-row::before, .detail-row::before {
+    content: ''; position: absolute; top: 0; left: 50%; width: 1px;
+    background: var(--border-active); transform: translateX(-50%);
+  }
+  .sub-row::before { height: 10px; }
+  .detail-row::before { height: 8px; }
+  .sub-dot-wrap {
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    cursor: pointer; transition: transform var(--t-fast); z-index: 1;
+  }
+  .sub-dot-wrap:hover { transform: translateY(-2px); }
+  .sub-dot {
+    width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--text-muted);
+    background: transparent; transition: all var(--t-med);
+  }
+  .sub-dot.filled { border-color: var(--rc); background: var(--rc); box-shadow: 0 0 6px var(--rg); }
+  .sub-dot.active-pulse { border-color: var(--rc); background: var(--rc); animation: subPulse 2s ease-in-out infinite; }
+  .sub-dot.selected-dot { border-color: var(--rc); background: var(--rc); box-shadow: 0 0 14px var(--rg); transform: scale(1.3); }
+  .sub-dot-label {
+    font-size: 9px; font-weight: 500; color: var(--text-muted);
+    letter-spacing: 0.5px; white-space: nowrap; transition: color var(--t-med);
+  }
+  .sub-dot-wrap:hover .sub-dot-label { color: var(--text-dim); }
+  .sub-row .sub-line {
+    position: absolute; top: 27px; left: 80px; right: 80px; height: 1px;
+    background: var(--border); z-index: 0; pointer-events: none;
+  }
+  @keyframes subPulse {
+    0%,100% { box-shadow: 0 0 4px var(--rg); }
+    50%     { box-shadow: 0 0 14px var(--rg); }
+  }
+
+  /* === ROW 3: Detail dots === */
+  .detail-dot {
+    width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted);
+    opacity: 0.4; cursor: pointer; transition: all var(--t-med);
+  }
+  .detail-dot.filled { background: var(--rc); opacity: 1; box-shadow: 0 0 4px var(--rg); }
+  .detail-dot.active-pulse { background: var(--rc); opacity: 1; animation: detPulse 2s ease-in-out infinite; }
+  .detail-dot.selected-detail { background: var(--rc); opacity: 1; box-shadow: 0 0 10px var(--rg); transform: scale(1.5); }
+  .detail-dot:hover { opacity: 0.9; transform: scale(1.3); }
+  @keyframes detPulse {
+    0%,100% { box-shadow: 0 0 2px var(--rg); opacity: 0.8; }
+    50%     { box-shadow: 0 0 10px var(--rg); opacity: 1; }
+  }
+
+  /* Row color vars per module */
+  [data-module="seed"]       { --rc: var(--green);  --rg: var(--green-glow); }
+  [data-module="hypothesis"] { --rc: var(--purple); --rg: var(--purple-glow); }
+  [data-module="invention"]  { --rc: var(--blue);   --rg: var(--blue-glow); }
+  [data-module="paper"]      { --rc: var(--orange); --rg: var(--orange-glow); }
+
+  /* === CONTENT AREA === */
+  .content-area { padding: 32px 40px; max-width: 900px; margin: 0 auto; min-height: 400px; }
+  .content-card {
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 28px; opacity: 0; transform: translateY(12px); animation: cardIn 0.4s ease forwards;
+    position: relative; overflow: hidden;
+  }
+  .content-card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, transparent, var(--card-accent, var(--blue)), transparent);
+    opacity: 0.6;
+  }
+  @keyframes cardIn { to { opacity: 1; transform: translateY(0); } }
+  .card-header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+  .card-icon {
+    width: 36px; height: 36px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0;
+  }
+  .card-header h2 { font-size: 16px; font-weight: 600; }
+  .card-header .card-sub { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+  .card-body { font-size: 13px; line-height: 1.7; color: var(--text-dim); }
+  .stat-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; margin-top: 16px; }
+  .stat-item {
+    background: rgba(255,255,255,0.02); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px; text-align: center;
+  }
+  .stat-item .sv { font-size: 22px; font-weight: 700; color: var(--text); }
+  .stat-item .sl { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); margin-top: 4px; }
+  .pbar-track { width: 100%; height: 4px; background: var(--border); border-radius: 2px; margin-top: 12px; overflow: hidden; }
+  .pbar-fill { height: 100%; border-radius: 2px; transition: width 0.8s ease; }
+  .log-lines { margin-top: 12px; font-family: 'SF Mono','Fira Code',monospace; font-size: 11px; line-height: 1.8; color: var(--text-dim); }
+  .log-line { padding: 3px 8px; border-radius: 4px; transition: background var(--t-fast); }
+  .log-line:hover { background: rgba(255,255,255,0.02); }
+  .log-line .ts { color: var(--text-muted); margin-right: 8px; }
+  .s-ok { color: var(--green); } .s-warn { color: var(--orange); } .s-info { color: var(--blue); }
+
+  /* === BREADCRUMB === */
+  .breadcrumb {
+    display: flex; align-items: center; gap: 6px; padding: 12px 40px;
+    font-size: 11px; color: var(--text-muted); max-width: 900px; margin: 0 auto;
+  }
+  .breadcrumb .crumb { color: var(--text-dim); cursor: pointer; transition: color var(--t-fast); }
+  .breadcrumb .crumb:hover { color: var(--text); }
+  .breadcrumb .crumb.current { color: var(--text); font-weight: 500; }
+  .breadcrumb .sep { opacity: 0.3; }
+
+  /* === KEYBOARD HINT === */
+  .kbd-hint {
+    position: fixed; bottom: 20px; right: 24px; display: flex; align-items: center; gap: 12px;
+    background: rgba(14,14,26,0.85); backdrop-filter: blur(8px);
+    border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px;
+    font-size: 10px; color: var(--text-muted); z-index: 100; user-select: none;
+  }
+  .kbd-hint kbd {
+    display: inline-block; background: rgba(255,255,255,0.06); border: 1px solid var(--border);
+    border-radius: 4px; padding: 2px 6px; font-family: inherit; font-size: 10px;
+    color: var(--text-dim); min-width: 20px; text-align: center;
+  }
+  .kbd-hint .ks { color: var(--text-muted); opacity: 0.4; }
+</style>
+</head>
+<body>
+
+<!-- ROW 1: Semi-circle arc with milestones -->
+<div class="arc-section" id="arcSection">
+  <div class="shimmer"></div>
+  <div class="arc-ambient"></div>
+  <div class="arc-progress-label">
+    <div class="pct" id="arcPct">65%</div>
+    <div class="lbl">Overall Progress</div>
+  </div>
+  <div class="arc-container" id="arcContainer">
+    <svg class="arc-svg" id="arcSvg" viewBox="0 0 780 190" preserveAspectRatio="xMidYMax meet">
+      <defs>
+        <linearGradient id="arcGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="#3ddc84" stop-opacity="0.8"/>
+          <stop offset="35%" stop-color="#b07aff" stop-opacity="0.8"/>
+          <stop offset="65%" stop-color="#4da6ff" stop-opacity="0.8"/>
+          <stop offset="100%" stop-color="#ff9f43" stop-opacity="0.5"/>
+        </linearGradient>
+        <linearGradient id="arcGlow" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="#3ddc84" stop-opacity="0.2"/>
+          <stop offset="35%" stop-color="#b07aff" stop-opacity="0.2"/>
+          <stop offset="65%" stop-color="#4da6ff" stop-opacity="0.2"/>
+          <stop offset="100%" stop-color="#ff9f43" stop-opacity="0.1"/>
+        </linearGradient>
+        <filter id="arcBlur"><feGaussianBlur in="SourceGraphic" stdDeviation="4"/></filter>
+      </defs>
+      <path id="arcTrack" fill="none" stroke="rgba(255,255,255,0.04)" stroke-width="2.5" stroke-linecap="round"/>
+      <path id="arcGlowPath" fill="none" stroke="url(#arcGlow)" stroke-width="8" stroke-linecap="round" filter="url(#arcBlur)"/>
+      <path id="arcFill" fill="none" stroke="url(#arcGrad)" stroke-width="2.5" stroke-linecap="round"/>
+    </svg>
+    <!-- 4 diamond-in-ring milestones positioned by JS -->
+    <div class="milestone completed" data-module="seed" data-index="0" id="ms-0">
+      <div class="marker"><div class="marker-ring"></div><div class="marker-diamond"></div>
+        <div class="marker-progress"><svg viewBox="0 0 44 44"><circle class="track" cx="22" cy="22" r="19"/><circle class="fill" cx="22" cy="22" r="19" stroke-dasharray="119.38" stroke-dashoffset="0"/></svg></div>
+      </div><span class="milestone-label">Seed</span>
+    </div>
+    <div class="milestone active selected" data-module="hypothesis" data-index="1" id="ms-1">
+      <div class="marker"><div class="marker-ring"></div><div class="marker-diamond"></div>
+        <div class="marker-progress"><svg viewBox="0 0 44 44"><circle class="track" cx="22" cy="22" r="19"/><circle class="fill" cx="22" cy="22" r="19" stroke-dasharray="119.38" stroke-dashoffset="35.81"/></svg></div>
+      </div><span class="milestone-label">Hypothesis</span>
+    </div>
+    <div class="milestone pending" data-module="invention" data-index="2" id="ms-2">
+      <div class="marker"><div class="marker-ring"></div><div class="marker-diamond"></div>
+        <div class="marker-progress"><svg viewBox="0 0 44 44"><circle class="track" cx="22" cy="22" r="19"/><circle class="fill" cx="22" cy="22" r="19" stroke-dasharray="119.38" stroke-dashoffset="119.38"/></svg></div>
+      </div><span class="milestone-label">Invention</span>
+    </div>
+    <div class="milestone pending" data-module="paper" data-index="3" id="ms-3">
+      <div class="marker"><div class="marker-ring"></div><div class="marker-diamond"></div>
+        <div class="marker-progress"><svg viewBox="0 0 44 44"><circle class="track" cx="22" cy="22" r="19"/><circle class="fill" cx="22" cy="22" r="19" stroke-dasharray="119.38" stroke-dashoffset="119.38"/></svg></div>
+      </div><span class="milestone-label">Paper</span>
+    </div>
+  </div>
+</div>
+
+<!-- ROW 2: Sub-module dots -->
+<div class="sub-row-container" id="subRowC" data-module="hypothesis">
+  <div class="sub-row" id="subRow"><div class="sub-line"></div></div>
+</div>
+
+<!-- ROW 3: Detail dots -->
+<div class="detail-row-container" id="detRowC" data-module="hypothesis">
+  <div class="detail-row" id="detRow"></div>
+</div>
+
+<!-- Breadcrumb -->
+<div class="breadcrumb" id="bc"></div>
+
+<!-- Content -->
+<div class="content-area" id="contentArea"></div>
+
+<!-- Keyboard hint -->
+<div class="kbd-hint">
+  <span><kbd>&larr;</kbd><kbd>&rarr;</kbd> Navigate</span><span class="ks">|</span>
+  <span><kbd>&darr;</kbd> Drill</span><span class="ks">|</span>
+  <span><kbd>&uarr;</kbd> Back</span><span class="ks">|</span>
+  <span><kbd>Enter</kbd> Select</span>
+</div>
+
+<script>
+/* ============================================================
+   DATA MODEL
+   ============================================================ */
+const COLORS = {
+  seed:       { c: '#3ddc84', g: 'rgba(61,220,132,0.35)' },
+  hypothesis: { c: '#b07aff', g: 'rgba(176,122,255,0.35)' },
+  invention:  { c: '#4da6ff', g: 'rgba(77,166,255,0.35)' },
+  paper:      { c: '#ff9f43', g: 'rgba(255,159,67,0.35)' },
+};
+
+function mkSub(label, status, details, content) { return { label, status, details, content }; }
+function mkDet(label, status) { return { label, status }; }
+function mkContent(title, sub, icon, body, stats, progress, logs) {
+  return { title, sub, icon, body, stats: stats || [], progress, logs: logs || [] };
+}
+
+const DATA = {
+  seed: { label: 'Seed', progress: 1.0, status: 'completed', subs: [
+    mkSub('KG Build', 'completed',
+      [mkDet('Parse corpus','completed'), mkDet('Extract entities','completed'), mkDet('Build edges','completed'), mkDet('Validate graph','completed')],
+      mkContent('Knowledge Graph Construction', 'Entity extraction and relationship mapping', '&#x1f9e9;',
+        'The knowledge graph has been fully constructed from the input corpus. 2,847 entities extracted across 14 domains with 9,312 relationship edges.',
+        [{v:'2,847',l:'Entities'},{v:'9,312',l:'Edges'},{v:'14',l:'Domains'}], 100,
+        [{t:'12:04:02',m:'Corpus parsed successfully',s:'ok'},{t:'12:04:18',m:'Entity extraction complete',s:'ok'},{t:'12:04:31',m:'Graph validated, 0 orphan nodes',s:'ok'}])),
+    mkSub('Seed Hypo', 'completed',
+      [mkDet('Sample triples','completed'), mkDet('Generate seeds','completed'), mkDet('Rank seeds','completed')],
+      mkContent('Seed Hypothesis Generation', 'Initial hypothesis candidates from KG triples', '&#x1f331;',
+        'Seeded 48 initial hypotheses from knowledge graph triple sampling. Top 12 selected by novelty-feasibility ranking.',
+        [{v:'48',l:'Generated'},{v:'12',l:'Selected'},{v:'0.82',l:'Avg Score'}], 100,
+        [{t:'12:05:10',m:'48 seed hypotheses generated',s:'ok'},{t:'12:05:44',m:'Ranking complete: top 12 selected',s:'ok'}])),
+  ]},
+  hypothesis: { label: 'Hypothesis', progress: 0.7, status: 'active', subs: [
+    mkSub('Gen Hypo', 'completed',
+      [mkDet('Expand seeds','completed'), mkDet('Cross-pollinate','completed'), mkDet('Deduplicate','completed'), mkDet('Format output','completed')],
+      mkContent('Hypothesis Generation', 'Expanding seed hypotheses into full proposals', '&#x1f4a1;',
+        'Expanded 12 seed hypotheses into 36 full hypothesis proposals through cross-pollination and domain bridging.',
+        [{v:'36',l:'Proposals'},{v:'3.0x',l:'Expansion'},{v:'4',l:'Iterations'}], 100,
+        [{t:'12:08:20',m:'Hypothesis expansion started',s:'info'},{t:'12:10:02',m:'36 proposals generated',s:'ok'},{t:'12:10:15',m:'Deduplication removed 3 near-duplicates',s:'warn'}])),
+    mkSub('Review Hypo', 'active',
+      [mkDet('Novelty check','completed'), mkDet('Feasibility','completed'), mkDet('Impact score','active'), mkDet('Final rank','pending'), mkDet('Select top-k','pending')],
+      mkContent('Hypothesis Review', 'Multi-criteria evaluation of hypothesis proposals', '&#x1f50d;',
+        'Reviewing 36 hypothesis proposals across novelty, feasibility, and potential impact dimensions. Currently scoring impact.',
+        [{v:'36',l:'Under Review'},{v:'2/4',l:'Criteria Done'},{v:'~8min',l:'Est. Remaining'}], 55,
+        [{t:'12:12:00',m:'Novelty check passed for 34/36',s:'ok'},{t:'12:14:22',m:'Feasibility analysis complete',s:'ok'},{t:'12:15:40',m:'Impact scoring in progress...',s:'info'}])),
+    mkSub('Iterate', 'pending',
+      [mkDet('Refine top-k','pending'), mkDet('Re-evaluate','pending'), mkDet('Finalize','pending')],
+      mkContent('Hypothesis Iteration', 'Refinement loop for selected hypotheses', '&#x1f504;',
+        'Awaiting completion of hypothesis review before iterating on selected top-k candidates.',
+        [{v:'--',l:'Iterations'},{v:'--',l:'Refined'},{v:'--',l:'Converged'}], 0, [])),
+  ]},
+  invention: { label: 'Invention', progress: 0.0, status: 'pending', subs: [
+    mkSub('Gen Strategy', 'pending', [mkDet('Approach design','pending'), mkDet('Resource alloc','pending')],
+      mkContent('Strategy Generation','Pending','&#x1f3af;','Waiting for hypothesis loop to complete.',[],0,[])),
+    mkSub('Gen Plan', 'pending', [mkDet('Task breakdown','pending'), mkDet('Dependencies','pending'), mkDet('Schedule','pending')],
+      mkContent('Plan Generation','Pending','&#x1f4cb;','Waiting for strategy generation.',[],0,[])),
+    mkSub('Gen Paper', 'pending', [mkDet('Draft text','pending'), mkDet('Insert refs','pending')],
+      mkContent('Paper Text Generation','Pending','&#x270f;','Waiting for plan finalization.',[],0,[])),
+    mkSub('Review', 'pending', [mkDet('Quality check','pending'), mkDet('Iterate','pending')],
+      mkContent('Invention Review','Pending','&#x2705;','Waiting for paper text.',[],0,[])),
+  ]},
+  paper: { label: 'Paper', progress: 0.0, status: 'pending', subs: [
+    mkSub('Artifacts', 'pending', [mkDet('Code demos','pending'), mkDet('Notebooks','pending')],
+      mkContent('Artifact Generation','Pending','&#x1f4e6;','Waiting for invention loop.',[],0,[])),
+    mkSub('Viz', 'pending', [mkDet('Figures','pending'), mkDet('Diagrams','pending')],
+      mkContent('Visualization Generation','Pending','&#x1f4ca;','Waiting for artifacts.',[],0,[])),
+    mkSub('Full Paper', 'pending', [mkDet('Assemble','pending'), mkDet('Format LaTeX','pending'), mkDet('Final review','pending')],
+      mkContent('Full Paper Assembly','Pending','&#x1f4dc;','Waiting for all components.',[],0,[])),
+  ]},
+};
+
+const MKEYS = ['seed', 'hypothesis', 'invention', 'paper'];
+
+/* ============================================================
+   STATE
+   ============================================================ */
+const S = { row: 0, mi: 1, si: 0, di: 0 };  // row level, module/sub/detail index
+
+/* ============================================================
+   ARC GEOMETRY
+   ============================================================ */
+function getArcPoint(t, cx, rx, ry, by) {
+  const a = Math.PI * (1 - t);
+  return { x: cx + rx * Math.cos(a), y: by - ry * Math.sin(a) };
+}
+
+function initArc() {
+  const W = 780, H = 190, PX = 40, PY = 15;
+  const cx = W / 2, rx = (W - PX * 2) / 2, ry = H - PY - 20, by = H - PY;
+  const d = `M ${PX} ${by} A ${rx} ${ry} 0 0 1 ${W - PX} ${by}`;
+
+  document.getElementById('arcTrack').setAttribute('d', d);
+  const trackEl = document.getElementById('arcTrack');
+  const len = trackEl.getTotalLength();
+
+  ['arcFill', 'arcGlowPath'].forEach(id => {
+    const el = document.getElementById(id);
+    el.setAttribute('d', d);
+    el.style.strokeDasharray = len;
+    el.style.strokeDashoffset = len * 0.35; // 65% progress
+  });
+
+  // Position milestones at t = 0.13, 0.38, 0.62, 0.87
+  [0.13, 0.38, 0.62, 0.87].forEach((t, i) => {
+    const pt = getArcPoint(t, cx, rx, ry, by);
+    const ms = document.getElementById(`ms-${i}`);
+    ms.style.left = `${pt.x - 22}px`;
+    ms.style.top = `${pt.y - 22}px`;
+  });
+}
+
+/* ============================================================
+   RENDERING
+   ============================================================ */
+const mod = () => DATA[MKEYS[S.mi]];
+const sub = () => mod().subs[S.si] || null;
+const det = () => { const s = sub(); return s ? (s.details[S.di] || null) : null; };
+
+function renderMilestones() {
+  document.querySelectorAll('.milestone').forEach((ms, i) => {
+    ms.classList.toggle('selected', i === S.mi && S.row === 0);
+  });
+}
+
+function renderSubRow() {
+  const m = mod(), key = MKEYS[S.mi];
+  const c = document.getElementById('subRowC');
+  const row = document.getElementById('subRow');
+  c.setAttribute('data-module', key);
+
+  let h = '<div class="sub-line"></div>';
+  m.subs.forEach((s, i) => {
+    const cls = ['sub-dot'];
+    if (s.status === 'completed') cls.push('filled');
+    else if (s.status === 'active') cls.push('active-pulse');
+    if (S.row >= 1 && i === S.si) cls.push('selected-dot');
+    h += `<div class="sub-dot-wrap" data-si="${i}"><div class="${cls.join(' ')}"></div><span class="sub-dot-label">${s.label}</span></div>`;
+  });
+  row.innerHTML = h;
+  c.classList.add('open');
+  row.querySelectorAll('.sub-dot-wrap').forEach(el => {
+    el.addEventListener('click', () => { S.si = +el.dataset.si; S.row = 1; S.di = 0; renderAll(); });
+  });
+}
+
+function renderDetailRow() {
+  const s = sub(), key = MKEYS[S.mi];
+  const c = document.getElementById('detRowC');
+  const row = document.getElementById('detRow');
+  c.setAttribute('data-module', key);
+  if (S.row < 2 || !s || !s.details.length) { c.classList.remove('open'); return; }
+
+  let h = '';
+  s.details.forEach((d, i) => {
+    const cls = ['detail-dot'];
+    if (d.status === 'completed') cls.push('filled');
+    else if (d.status === 'active') cls.push('active-pulse');
+    if (i === S.di) cls.push('selected-detail');
+    h += `<div class="${cls.join(' ')}" data-di="${i}" title="${d.label}"></div>`;
+  });
+  row.innerHTML = h;
+  c.classList.add('open');
+  row.querySelectorAll('.detail-dot').forEach(el => {
+    el.addEventListener('click', () => { S.di = +el.dataset.di; renderAll(); });
+  });
+}
+
+function renderBreadcrumb() {
+  const bc = document.getElementById('bc');
+  const m = mod(), parts = [];
+  parts.push(`<span class="crumb ${S.row===0?'current':''}" data-g="0">${m.label}</span>`);
+  if (S.row >= 1) { const s = sub(); parts.push('<span class="sep">/</span>'); parts.push(`<span class="crumb ${S.row===1?'current':''}" data-g="1">${s.label}</span>`); }
+  if (S.row >= 2) { const d = det(); if (d) { parts.push('<span class="sep">/</span>'); parts.push(`<span class="crumb current" data-g="2">${d.label}</span>`); } }
+  bc.innerHTML = parts.join('');
+  bc.querySelectorAll('.crumb').forEach(el => {
+    el.addEventListener('click', () => { S.row = +el.dataset.g; renderAll(); });
+  });
+}
+
+function renderContent() {
+  const area = document.getElementById('contentArea');
+  const s = sub();
+  if (!s || !s.content) { area.innerHTML = ''; return; }
+  const ct = s.content, key = MKEYS[S.mi], col = COLORS[key];
+
+  let stats = ct.stats.length ? '<div class="stat-grid">' + ct.stats.map(s => `<div class="stat-item"><div class="sv">${s.v}</div><div class="sl">${s.l}</div></div>`).join('') + '</div>' : '';
+  let pbar = ct.progress !== undefined ? `<div class="pbar-track"><div class="pbar-fill" style="width:${ct.progress}%;background:${col.c};"></div></div>` : '';
+  let logs = ct.logs.length ? '<div class="log-lines">' + ct.logs.map(l => `<div class="log-line"><span class="ts">${l.t}</span><span class="s-${l.s}">${l.m}</span></div>`).join('') + '</div>' : '';
+
+  let detNote = '';
+  if (S.row === 2) {
+    const d = det();
+    if (d) {
+      const sl = d.status === 'completed' ? 'Completed' : d.status === 'active' ? 'In Progress' : 'Pending';
+      const sc = d.status === 'completed' ? 'var(--green)' : d.status === 'active' ? col.c : 'var(--text-muted)';
+      detNote = `<div style="margin-bottom:16px;padding:10px 14px;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:8px;font-size:12px;"><span style="color:var(--text-dim);">Detail step:</span><strong style="color:${sc};margin-left:6px;">${d.label}</strong><span style="color:var(--text-muted);margin-left:10px;">${sl}</span></div>`;
+    }
+  }
+
+  area.innerHTML = `<div class="content-card" style="--card-accent:${col.c};">
+    <div class="card-header">
+      <div class="card-icon" style="background:${col.c}20;color:${col.c};">${ct.icon}</div>
+      <div><h2>${ct.title}</h2><div class="card-sub">${ct.sub}</div></div>
+    </div>
+    <div class="card-body">${detNote}<p>${ct.body}</p>${stats}${pbar}${logs}</div>
+  </div>`;
+}
+
+function renderAll() { renderMilestones(); renderSubRow(); renderDetailRow(); renderBreadcrumb(); renderContent(); }
+
+/* ============================================================
+   NAVIGATION — Arrow keys
+   ============================================================ */
+function nav(dir) {
+  const m = mod();
+  switch (dir) {
+    case 'left':
+      if (S.row === 0) { S.mi = Math.max(0, S.mi - 1); S.si = 0; S.di = 0; }
+      else if (S.row === 1) { S.si = Math.max(0, S.si - 1); S.di = 0; }
+      else { S.di = Math.max(0, S.di - 1); }
+      break;
+    case 'right':
+      if (S.row === 0) { S.mi = Math.min(3, S.mi + 1); S.si = 0; S.di = 0; }
+      else if (S.row === 1) { S.si = Math.min(m.subs.length - 1, S.si + 1); S.di = 0; }
+      else { const s = sub(); if (s) S.di = Math.min(s.details.length - 1, S.di + 1); }
+      break;
+    case 'down':
+      if (S.row === 0) { S.row = 1; S.di = 0; }
+      else if (S.row === 1) { const s = sub(); if (s && s.details.length) { S.row = 2; S.di = 0; } }
+      break;
+    case 'up':
+      if (S.row === 2) S.row = 1;
+      else if (S.row === 1) S.row = 0;
+      break;
+  }
+  renderAll();
+}
+
+document.addEventListener('keydown', e => {
+  const map = { ArrowLeft: 'left', ArrowRight: 'right', ArrowDown: 'down', ArrowUp: 'up', Enter: 'down' };
+  if (map[e.key]) { e.preventDefault(); nav(map[e.key]); }
+});
+
+/* Milestone click handlers */
+document.querySelectorAll('.milestone').forEach(ms => {
+  ms.addEventListener('click', () => { S.mi = +ms.dataset.index; S.row = 0; S.si = 0; S.di = 0; renderAll(); });
+});
+
+/* ============================================================
+   INIT
+   ============================================================ */
+window.addEventListener('DOMContentLoaded', () => { initArc(); renderAll(); });
+window.addEventListener('resize', initArc);
+</script>
+</body>
+</html>

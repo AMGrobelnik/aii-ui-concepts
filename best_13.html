@@ -1,0 +1,1608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Pipeline View (Sparklines)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #1a1d23;
+    --surface: #22262e;
+    --surface-hover: #2a2f38;
+    --border: #2e3440;
+    --text: #e2e4e9;
+    --text-muted: #8b919a;
+    --green: #22c55e;
+    --purple: #a78bfa;
+    --blue: #3b82f6;
+    --orange: #f59e0b;
+    --red: #ef4444;
+    --sidebar-bg: #1e2128;
+    --sidebar-w: 260px;
+  }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+  }
+
+  /* ─── SIDEBAR ─────────────────────────────────────── */
+  .sidebar {
+    width: var(--sidebar-w);
+    min-width: var(--sidebar-w);
+    background: var(--sidebar-bg);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    position: relative;
+    z-index: 2;
+  }
+
+  .sidebar-scroll {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 20px 14px 24px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  .sidebar-scroll::-webkit-scrollbar { width: 5px; }
+  .sidebar-scroll::-webkit-scrollbar-track { background: transparent; }
+  .sidebar-scroll::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* ─── PROGRESS RING ───────────────────────────────── */
+  .ring-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 22px;
+  }
+
+  .ring-container {
+    position: relative;
+    width: 110px;
+    height: 110px;
+  }
+
+  .ring-container svg { width: 110px; height: 110px; transform: rotate(-90deg); }
+
+  .ring-bg {
+    fill: none;
+    stroke: var(--border);
+    stroke-width: 7;
+  }
+
+  .ring-fill {
+    fill: none;
+    stroke-width: 7;
+    stroke-linecap: round;
+    stroke-dasharray: 295;
+    stroke-dashoffset: 103.25;
+    filter: drop-shadow(0 0 4px rgba(59,130,246,0.35));
+  }
+
+  .ring-endpoint {
+    position: absolute;
+    width: 9px;
+    height: 9px;
+    background: var(--blue);
+    border-radius: 50%;
+    box-shadow: 0 0 8px var(--blue), 0 0 16px rgba(59,130,246,0.4);
+    animation: endpointPulse 2.5s ease-in-out infinite;
+  }
+
+  @keyframes endpointPulse {
+    0%, 100% { box-shadow: 0 0 6px var(--blue), 0 0 12px rgba(59,130,246,0.3); }
+    50% { box-shadow: 0 0 10px var(--blue), 0 0 20px rgba(59,130,246,0.5); }
+  }
+
+  .ring-text {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+  }
+
+  .ring-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 8px;
+    letter-spacing: 0.3px;
+  }
+
+  /* ─── MINI RINGS ───────────────────────────────────── */
+  .mini-ring-row {
+    display: flex;
+    justify-content: center;
+    gap: 18px;
+    margin-bottom: 20px;
+  }
+
+  .mini-ring {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .mini-ring svg { width: 36px; height: 36px; transform: rotate(-90deg); }
+  .mini-ring-bg { fill: none; stroke: var(--border); stroke-width: 3; }
+  .mini-ring-fill { fill: none; stroke-width: 3; stroke-linecap: round; }
+
+  .mini-ring-label {
+    font-size: 9px;
+    color: var(--text-muted);
+    max-width: 48px;
+    text-align: center;
+    line-height: 1.1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* ─── MODULE CARD ─────────────────────────────────── */
+  .module-group { margin-bottom: 6px; }
+
+  .module-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 11px 8px;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s, box-shadow 0.3s;
+    position: relative;
+    overflow: hidden;
+  }
+  .module-card::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    border-radius: 8px 0 0 8px;
+  }
+
+  .module-card:hover { background: var(--surface-hover); }
+
+  .module-card.selected {
+    background: var(--surface-hover);
+    border-color: color-mix(in srgb, var(--module-color) 40%, var(--border));
+  }
+
+  .module-card[data-color="green"]  { --module-color: var(--green); }
+  .module-card[data-color="purple"] { --module-color: var(--purple); }
+  .module-card[data-color="blue"]   { --module-color: var(--blue); }
+  .module-card[data-color="orange"] { --module-color: var(--orange); }
+
+  .module-card::before { background: var(--module-color); }
+
+  .module-card.active-module {
+    border-color: rgba(59,130,246,0.45);
+    animation: cardGlow 2.5s ease-in-out infinite;
+  }
+
+  @keyframes cardGlow {
+    0%, 100% { box-shadow: 0 0 10px rgba(59,130,246,0.2); }
+    50% { box-shadow: 0 0 16px rgba(59,130,246,0.38); }
+  }
+
+  .mc-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+  }
+
+  .mc-name {
+    font-size: 12.5px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding-left: 6px;
+  }
+
+  .mc-badge {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+  .mc-badge.done  { background: rgba(34,197,94,0.15); color: var(--green); }
+  .mc-badge.run   { background: rgba(59,130,246,0.15); color: var(--blue); }
+  .mc-badge.pend  { background: rgba(139,145,154,0.12); color: var(--text-muted); }
+
+  /* ─── SPARKLINE ROW ────────────────────────────────── */
+  .mc-spark-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-left: 6px;
+    margin-bottom: 5px;
+    gap: 8px;
+  }
+
+  .mc-metric {
+    font-size: 15px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .mc-sparkline {
+    width: 60px;
+    height: 16px;
+    flex-shrink: 0;
+  }
+
+  .mc-bar {
+    height: 3px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .mc-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.6s ease;
+  }
+
+  /* ─── SUB-MODULE ROWS ─────────────────────────────── */
+  .sub-list {
+    padding: 4px 0 4px 4px;
+  }
+
+  .sub-row {
+    display: flex;
+    align-items: center;
+    height: 24px;
+    padding: 0 6px 0 8px;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background 0.15s;
+    position: relative;
+  }
+  .sub-row:hover { background: rgba(255,255,255,0.04); }
+  .sub-row.selected { background: rgba(255,255,255,0.07); }
+
+  .sub-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    margin-right: 8px;
+    transition: background 0.2s, box-shadow 0.3s;
+  }
+
+  .sub-row.done .sub-dot    { background: var(--green); }
+  .sub-row.active .sub-dot  { background: var(--blue); box-shadow: 0 0 6px var(--blue), 0 0 12px rgba(59,130,246,0.35); animation: dotPulse 2s ease-in-out infinite; }
+  .sub-row.pending .sub-dot { background: var(--text-muted); opacity: 0.35; }
+
+  @keyframes dotPulse {
+    0%, 100% { box-shadow: 0 0 5px var(--blue), 0 0 10px rgba(59,130,246,0.3); }
+    50% { box-shadow: 0 0 8px var(--blue), 0 0 16px rgba(59,130,246,0.5); }
+  }
+
+  .sub-name {
+    font-size: 11px;
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .sub-row.done .sub-name    { color: var(--text); }
+  .sub-row.active .sub-name  { color: #d0d4dc; }
+  .sub-row.pending .sub-name { color: var(--text-muted); opacity: 0.6; }
+
+  .sub-metric {
+    font-size: 10.5px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+    margin-left: 6px;
+    font-variant-numeric: tabular-nums;
+  }
+  .sub-row.pending .sub-metric { opacity: 0.4; }
+
+  /* ─── COLORED TREE LINES ───────────────────────────── */
+  .tree-line {
+    position: absolute;
+    left: 0;
+    width: 3px;
+    pointer-events: none;
+    z-index: 0;
+    border-radius: 1px;
+    overflow: hidden;
+  }
+  .tree-line-inner {
+    width: 100%;
+    height: 0;
+    border-radius: 1px;
+  }
+  .tree-line-inner.grown {
+    transition: height 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* ─── TREE PARTICLES ───────────────────────────────── */
+  .tree-particle-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  /* ─── PARTICLE CANVAS (SIDEBAR BG) ─────────────────── */
+  #bgParticleCanvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ─── MAIN FLOW PARTICLE CANVAS ────────────────────── */
+  #particleCanvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 10;
+  }
+
+  /* ─── MAIN CONTENT ────────────────────────────────── */
+  .main {
+    flex: 1;
+    overflow-y: auto;
+    padding: 32px 40px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+  .main::-webkit-scrollbar { width: 6px; }
+  .main::-webkit-scrollbar-track { background: transparent; }
+  .main::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .content-fade {
+    animation: fadeIn 0.2s ease;
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ─── DASHBOARD ───────────────────────────────────── */
+  .dash-title {
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+
+  .dash-subtitle {
+    font-size: 14px;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+  }
+
+  .dash-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 5px;
+    margin-bottom: 28px;
+  }
+  .dash-status.done { background: rgba(34,197,94,0.12); color: var(--green); }
+  .dash-status.run  { background: rgba(59,130,246,0.12); color: var(--blue); }
+  .dash-status.pend { background: rgba(139,145,154,0.1); color: var(--text-muted); }
+
+  .dash-status.run .shimmer-text {
+    background: linear-gradient(90deg, var(--blue) 0%, #93c5fd 50%, var(--blue) 100%);
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: shimmer 2.5s linear infinite;
+  }
+
+  @keyframes shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  /* ─── SUMMARY SECTION ─────────────────────────────── */
+  .section-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-muted);
+    margin-bottom: 10px;
+  }
+
+  .summary-text {
+    font-size: 14px;
+    line-height: 1.7;
+    color: #c5c9d2;
+    margin-bottom: 32px;
+    max-width: 720px;
+  }
+
+  /* ─── STAT CARDS ──────────────────────────────────── */
+  .stat-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    margin-bottom: 32px;
+  }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 18px;
+  }
+
+  .stat-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+  }
+
+  .stat-value {
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 10px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .stat-bar-track {
+    height: 6px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .stat-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.5s ease;
+  }
+
+  .stat-bar-label {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-top: 5px;
+  }
+
+  /* stacked bar for messages */
+  .stacked-bar {
+    display: flex;
+    height: 6px;
+    border-radius: 3px;
+    overflow: hidden;
+    gap: 1px;
+  }
+  .stacked-bar > div { height: 100%; }
+
+  .stacked-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 6px;
+  }
+  .stacked-legend span {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+  .stacked-legend span::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+
+  /* ─── ITEM LIST ───────────────────────────────────── */
+  .item-list { margin-bottom: 24px; }
+
+  .item-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 6px;
+    overflow: hidden;
+    transition: border-color 0.2s;
+  }
+  .item-card:hover { border-color: #3a3f4a; }
+
+  .item-header {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    cursor: pointer;
+    gap: 10px;
+  }
+
+  .item-icon {
+    font-size: 13px;
+    flex-shrink: 0;
+    width: 20px;
+    text-align: center;
+  }
+  .item-icon.done   { color: var(--green); }
+  .item-icon.run    { color: var(--blue); }
+  .item-icon.pend   { color: var(--text-muted); opacity: 0.4; }
+
+  .item-title {
+    font-size: 13px;
+    font-weight: 600;
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .item-meta {
+    font-size: 11.5px;
+    color: var(--text-muted);
+    display: flex;
+    gap: 14px;
+    flex-shrink: 0;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .item-chevron {
+    color: var(--text-muted);
+    font-size: 11px;
+    transition: transform 0.25s;
+    flex-shrink: 0;
+  }
+  .item-card.expanded .item-chevron { transform: rotate(90deg); }
+
+  .item-detail {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease, padding 0.3s ease;
+  }
+  .item-card.expanded .item-detail {
+    max-height: 200px;
+    padding: 0 16px 14px 46px;
+  }
+
+  .item-detail p {
+    font-size: 12.5px;
+    line-height: 1.6;
+    color: #a0a5ae;
+  }
+
+  /* ─── OVERVIEW STATE ──────────────────────────────── */
+  .overview-title {
+    font-size: 24px;
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+
+  .overview-sub {
+    font-size: 15px;
+    color: var(--text-muted);
+    margin-bottom: 24px;
+  }
+
+  .overview-text {
+    font-size: 14px;
+    line-height: 1.75;
+    color: #b0b5be;
+    max-width: 660px;
+  }
+
+  /* ─── KEYBOARD HINT ───────────────────────────────── */
+  .kbd-hint {
+    position: fixed;
+    bottom: 12px;
+    right: 16px;
+    display: flex;
+    gap: 12px;
+    font-size: 10.5px;
+    color: var(--text-muted);
+    opacity: 0.5;
+    z-index: 20;
+  }
+  .kbd-hint kbd {
+    display: inline-block;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-family: inherit;
+    font-size: 10px;
+    margin: 0 2px;
+  }
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside class="sidebar" id="sidebar">
+  <canvas id="bgParticleCanvas"></canvas>
+  <canvas id="particleCanvas"></canvas>
+  <div class="sidebar-scroll" id="sidebarScroll">
+
+    <!-- Progress Ring -->
+    <div class="ring-wrap">
+      <div class="ring-container">
+        <svg viewBox="0 0 110 110">
+          <defs>
+            <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stop-color="#22c55e"/>
+              <stop offset="45%" stop-color="#a78bfa"/>
+              <stop offset="100%" stop-color="#3b82f6"/>
+            </linearGradient>
+          </defs>
+          <circle class="ring-bg" cx="55" cy="55" r="47"/>
+          <circle class="ring-fill" cx="55" cy="55" r="47" stroke="url(#ringGrad)"/>
+        </svg>
+        <div class="ring-endpoint" id="ringEndpoint"></div>
+        <div class="ring-text">65%</div>
+      </div>
+      <div class="ring-label">Pipeline Progress</div>
+    </div>
+
+    <!-- Mini Rings -->
+    <div class="mini-ring-row" id="miniRings"></div>
+
+    <!-- Module Groups built by JS -->
+    <div id="moduleContainer"></div>
+  </div>
+</aside>
+
+<!-- MAIN CONTENT -->
+<div class="main" id="mainContent"></div>
+
+<!-- KEYBOARD HINTS -->
+<div class="kbd-hint">
+  <span><kbd>&uarr;</kbd><kbd>&darr;</kbd> navigate</span>
+  <span><kbd>&larr;</kbd><kbd>&rarr;</kbd> modules</span>
+</div>
+
+<script>
+// ===================================================================
+//  DATA
+// ===================================================================
+const DATA = [
+  {
+    id: 'seed',
+    name: 'Seed Hypothesis',
+    color: 'green',
+    status: 'done',
+    metric: '12 gaps',
+    progress: 100,
+    sparkData: [2,5,8,12,18,24,30,38,45,55,62,70,78,85,92,97,100,100,100,100],
+    subs: [
+      { id:'mine',   name:'Mine Papers',  status:'done', metric:'847',   detail: { summary:"I ingested 847 papers from the Semantic Scholar corpus matching the research domain. I filtered by citation count (>10), recency (2022-2025), and relevance score. The corpus spans 14 sub-fields including cross-lingual transfer, code-switching models, and multilingual alignment. I extracted key claims, methodologies, and results from each paper to build the knowledge graph.", duration:'4m 12s', cost:'$1.24', messages:'312', durPct:10, costPct:10, msgBreakdown:[45,28,18,1,8] } },
+      { id:'kg',     name:'Build KG',     status:'done', metric:'2,341', detail: { summary:"I constructed a knowledge graph with 2,341 nodes and 8,492 edges from the mined papers. Nodes represent claims, methods, datasets, and results. Edges encode relationships like 'supports', 'contradicts', 'extends', and 'uses-dataset'. I ran community detection to find 23 research clusters and identified bridge nodes connecting disparate sub-fields.", duration:'6m 48s', cost:'$2.01', messages:'487', durPct:16, costPct:16, msgBreakdown:[40,35,16,1,8] } },
+      { id:'gaps',   name:'Find Gaps',    status:'done', metric:'12',    detail: { summary:"I analyzed the knowledge graph to identify 12 significant research gaps. I looked for clusters with high internal density but weak external connections, contradictory claims without resolution, and promising methods not yet applied to obvious domains. The top gap scored 8.7/10 on combined metrics.", duration:'3m 15s', cost:'$0.98', messages:'201', durPct:8, costPct:8, msgBreakdown:[50,25,15,2,8] } },
+      { id:'seeds',  name:'Select Seeds',  status:'done', metric:'5',     detail: { summary:"I selected the top 5 research gaps as seed hypotheses based on a weighted score combining novelty (40%), feasibility (35%), and impact (25%). The selected seeds span three research areas. Each seed includes a preliminary hypothesis statement, 3-5 supporting references, and an estimated difficulty rating.", duration:'1m 52s', cost:'$0.41', messages:'94', durPct:4, costPct:3, msgBreakdown:[55,20,15,2,8] } }
+    ]
+  },
+  {
+    id: 'hypo',
+    name: 'Hypothesis Loop',
+    color: 'purple',
+    status: 'done',
+    metric: '8.4 / 10',
+    progress: 100,
+    sparkData: [5,8,6,10,14,12,18,22,20,28,35,40,50,58,65,72,80,88,95,100],
+    subs: [
+      { id:'gen1',  name:'Gen Hypo 1',  status:'done', metric:'6.2',      detail: { summary:"I formulated the initial hypothesis: 'Contrastive alignment with synthetic code-switching augmentation improves cross-lingual transfer accuracy by 15-25% on low-resource language pairs.' Initial scoring: novelty 7/10, clarity 5/10, feasibility 6/10.", duration:'2m 34s', cost:'$0.72', messages:'168', durPct:6, costPct:6, msgBreakdown:[48,30,14,1,7] } },
+      { id:'rev1',  name:'Review 1',    status:'done', metric:'3 major',  detail: { summary:"I conducted an adversarial review of the initial hypothesis. I identified 3 major issues: (1) the claimed improvement range is overly optimistic, (2) the methodology lacks a clear ablation plan, and (3) the evaluation framework doesn't account for typological distance.", duration:'2m 11s', cost:'$0.68', messages:'145', durPct:5, costPct:5, msgBreakdown:[52,22,17,2,7] } },
+      { id:'gen2',  name:'Gen Hypo 2',  status:'done', metric:'7.8',      detail: { summary:"I refined the hypothesis to address all 3 major review issues. The improvement claim is now 10-18%, with a detailed ablation plan and evaluation grouped by typological distance. Revised scoring: novelty 8/10, clarity 7/10, feasibility 8/10.", duration:'3m 02s', cost:'$0.81', messages:'178', durPct:7, costPct:6, msgBreakdown:[46,32,14,1,7] } },
+      { id:'rev2',  name:'Review 2',    status:'done', metric:'1 major',  detail: { summary:"I reviewed the refined hypothesis. One major issue remains: the convergence properties of the contrastive objective under synthetic code-switching are not formally justified. Minor issues: 2 remaining, both about presentation clarity.", duration:'2m 28s', cost:'$0.76', messages:'152', durPct:6, costPct:6, msgBreakdown:[50,24,16,2,8] } },
+      { id:'gen3',  name:'Gen Hypo 3',  status:'done', metric:'8.4',      detail: { summary:"I produced the final hypothesis revision, addressing the convergence concern with a formal analysis based on contraction mapping theory. Final scoring: novelty 8/10, clarity 9/10, feasibility 8/10, overall 8.4/10.", duration:'3m 41s', cost:'$0.94', messages:'195', durPct:9, costPct:8, msgBreakdown:[44,34,14,1,7] } },
+      { id:'rev3',  name:'Review 3',    status:'done', metric:'0 major',  detail: { summary:"Final adversarial review. Score 8.4/10 with confidence 4/5. No major issues. 2 minor suggestions: discussing computational cost and adding 2 additional baseline comparisons. The hypothesis is ready for the research phase.", duration:'2m 34s', cost:'$0.87', messages:'156', durPct:6, costPct:7, msgBreakdown:[53,22,16,1,8] } }
+    ]
+  },
+  {
+    id: 'inv',
+    name: 'Invention Loop',
+    color: 'blue',
+    status: 'active',
+    metric: '3 / 5',
+    progress: 60,
+    sparkData: [0,2,5,8,12,16,20,25,30,34,38,42,46,50,53,56,58,59,60],
+    sparkLive: true,
+    subs: [
+      { id:'strat',    name:'Strategy',      status:'done',   metric:'Selected', detail: { summary:"I analyzed the reviewer feedback and generated 3 strategic directions, selecting the strongest: contrastive alignment with synthetic code-switching augmentation. The strategy prioritizes empirical validation first, formal analysis second.", duration:'1m 45s', cost:'$0.52', messages:'124', durPct:4, costPct:4, msgBreakdown:[50,25,18,0,7] } },
+      { id:'plan',     name:'Plan',          status:'done',   metric:'5 planned',detail: { summary:"I created a detailed execution plan for 5 research artifacts. The artifacts are ordered by dependency. Total estimated cost: $6.20, total estimated time: 18 minutes.", duration:'2m 12s', cost:'$0.61', messages:'138', durPct:5, costPct:5, msgBreakdown:[48,28,16,1,7] } },
+      { id:'artifacts',name:'Artifacts',     status:'active', metric:'3/5',     detail: { summary:"I generated 5 research artifacts to provide evidence for the hypothesis. Three are complete (baseline experiment, multilingual dataset, convergence proof). I'm currently running an ablation study. Once complete, I'll run a cross-lingual evaluation benchmark.", duration:'12m 08s', cost:'$5.41', messages:'847', durPct:29, costPct:43, msgBreakdown:[45,30,15,2,8],
+        items: [
+          { title:'Contrastive Baseline', status:'done', metricText:'acc: 0.847 (+17.5%)', time:'4m 32s', cost:'$2.14', detail:'Trained contrastive alignment model on English-centric parallel corpus (2.1M pairs). Evaluated on XNLI dev set across 12 languages. Mean accuracy 0.847, representing a 17.5% relative improvement over XLM-R base (0.721). Largest gains on distant language pairs: English-Tamil (+22.3%), English-Yoruba (+19.8%).' },
+          { title:'Multilingual Pairs', status:'done', metricText:'2,400 ex, 12 langs', time:'3m 15s', cost:'$1.02', detail:'Generated 2,400 evaluation examples (200 per language) using synthetic code-switching at 5 ratios. Languages: English, French, German, Spanish, Chinese, Japanese, Hindi, Bengali, Tamil, Swahili, Yoruba, Arabic. Quality verified by cross-referencing with existing multilingual NLI benchmarks.' },
+          { title:'Convergence Proof', status:'done', metricText:'verified, 3 lemmas', time:'2m 41s', cost:'$0.89', detail:'Formalized convergence proof in Lean 4. Three lemmas verified by the Lean 4 type checker. Proof available in artifacts/convergence_proof.lean.' },
+          { title:'Ablation Study', status:'active', metricText:'running...', time:'1m 20s', cost:'$1.36', detail:'Running 3 ablation configurations. Configuration A complete: accuracy 0.791 (+9.7% over baseline), confirming contrastive alignment contributes the majority of the improvement.' },
+          { title:'Cross-lingual Eval', status:'pending', metricText:'pending', time:'---', cost:'---', detail:'Will evaluate the full model on the XTREME benchmark across all 40 languages. Expected duration: 3-4 minutes.' }
+        ]
+      } },
+      { id:'paper',    name:'Paper Draft',   status:'pending', metric:'---' },
+      { id:'review_p', name:'Review',        status:'pending', metric:'---' },
+      { id:'update_h', name:'Update Hypo',   status:'pending', metric:'---' }
+    ]
+  },
+  {
+    id: 'paper_repo',
+    name: 'Paper & Repo',
+    color: 'orange',
+    status: 'pending',
+    metric: '---',
+    progress: 0,
+    sparkData: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+    subs: [
+      { id:'repo',   name:'Gen Repo',      status:'pending', metric:'---' },
+      { id:'demos',  name:'Demos + Viz',    status:'pending', metric:'---' },
+      { id:'full',   name:'Full Paper',     status:'pending', metric:'---' },
+      { id:'deploy_s',name:'Deploy Source', status:'pending', metric:'---' },
+      { id:'deploy_p',name:'Deploy Paper',  status:'pending', metric:'---' }
+    ]
+  }
+];
+
+// ===================================================================
+//  STATE
+// ===================================================================
+let selectedModuleIdx = 2;
+let selectedSubIdx = 2;
+let viewMode = 'sub';
+
+// ===================================================================
+//  SPARKLINE RENDERER
+// ===================================================================
+function drawSparkline(canvas, data, color, isLive) {
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width;
+  const H = canvas.height;
+  const dpr = window.devicePixelRatio || 1;
+
+  canvas.width = 60 * dpr;
+  canvas.height = 16 * dpr;
+  canvas.style.width = '60px';
+  canvas.style.height = '16px';
+  ctx.scale(dpr, dpr);
+
+  const w = 60;
+  const h = 16;
+  ctx.clearRect(0, 0, w, h);
+
+  if (!data || data.length < 2) return;
+
+  const max = Math.max(...data, 1);
+  const pts = data.map((v, i) => ({
+    x: (i / (data.length - 1)) * w,
+    y: h - 2 - ((v / max) * (h - 4))
+  }));
+
+  // Fill gradient under line
+  const grad = ctx.createLinearGradient(0, 0, 0, h);
+  const rgb = colorToRGB(color);
+  grad.addColorStop(0, `rgba(${rgb}, 0.25)`);
+  grad.addColorStop(1, `rgba(${rgb}, 0.02)`);
+
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, h);
+  for (let i = 0; i < pts.length; i++) {
+    if (i === 0) {
+      ctx.lineTo(pts[i].x, pts[i].y);
+    } else {
+      const cpx = (pts[i - 1].x + pts[i].x) / 2;
+      ctx.bezierCurveTo(cpx, pts[i - 1].y, cpx, pts[i].y, pts[i].x, pts[i].y);
+    }
+  }
+  ctx.lineTo(pts[pts.length - 1].x, h);
+  ctx.closePath();
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Line stroke
+  ctx.beginPath();
+  for (let i = 0; i < pts.length; i++) {
+    if (i === 0) {
+      ctx.moveTo(pts[i].x, pts[i].y);
+    } else {
+      const cpx = (pts[i - 1].x + pts[i].x) / 2;
+      ctx.bezierCurveTo(cpx, pts[i - 1].y, cpx, pts[i].y, pts[i].x, pts[i].y);
+    }
+  }
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Live dot at end if active
+  if (isLive) {
+    const last = pts[pts.length - 1];
+    ctx.beginPath();
+    ctx.arc(last.x, last.y, 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(last.x, last.y, 4.5, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(${rgb}, 0.25)`;
+    ctx.fill();
+  }
+}
+
+function colorToRGB(cssColor) {
+  const map = {
+    '#22c55e': '34,197,94',
+    '#a78bfa': '167,139,250',
+    '#3b82f6': '59,130,246',
+    '#f59e0b': '245,158,11'
+  };
+  return map[cssColor] || '59,130,246';
+}
+
+const COLOR_HEX = {
+  green: '#22c55e',
+  purple: '#a78bfa',
+  blue: '#3b82f6',
+  orange: '#f59e0b'
+};
+
+// Live sparkline animation state
+let liveSparkTick = 0;
+
+function animateLiveSparklines() {
+  liveSparkTick++;
+  DATA.forEach((mod, mi) => {
+    if (!mod.sparkLive) return;
+    // Add a new data point every 40 frames (~0.67s at 60fps)
+    if (liveSparkTick % 40 === 0) {
+      const last = mod.sparkData[mod.sparkData.length - 1];
+      const jitter = (Math.random() - 0.3) * 3;
+      const next = Math.min(100, Math.max(0, last + jitter));
+      mod.sparkData.push(next);
+      if (mod.sparkData.length > 30) mod.sparkData.shift();
+    }
+    // Redraw
+    const canvas = document.querySelector(`.module-group[data-module-idx="${mi}"] .mc-sparkline canvas`);
+    if (canvas) {
+      drawSparkline(canvas, mod.sparkData, COLOR_HEX[mod.color], true);
+    }
+  });
+  requestAnimationFrame(animateLiveSparklines);
+}
+
+// ===================================================================
+//  MINI RINGS
+// ===================================================================
+function buildMiniRings() {
+  const container = document.getElementById('miniRings');
+  container.innerHTML = '';
+  DATA.forEach(mod => {
+    const circ = 2 * Math.PI * 14;
+    const offset = circ - (mod.progress / 100) * circ;
+    const color = COLOR_HEX[mod.color];
+    const el = document.createElement('div');
+    el.className = 'mini-ring';
+    el.innerHTML = `
+      <svg viewBox="0 0 36 36">
+        <circle class="mini-ring-bg" cx="18" cy="18" r="14"/>
+        <circle class="mini-ring-fill" cx="18" cy="18" r="14"
+          stroke="${color}" fill="none"
+          stroke-dasharray="${circ}"
+          stroke-dashoffset="${offset}"
+          stroke-linecap="round"/>
+      </svg>
+      <span class="mini-ring-label">${mod.name.split(' ')[0]}</span>
+    `;
+    container.appendChild(el);
+  });
+}
+
+// ===================================================================
+//  BUILD SIDEBAR
+// ===================================================================
+function buildSidebar() {
+  const container = document.getElementById('moduleContainer');
+  container.innerHTML = '';
+
+  DATA.forEach((mod, mi) => {
+    const group = document.createElement('div');
+    group.className = 'module-group';
+    group.dataset.moduleIdx = mi;
+    group.style.position = 'relative';
+
+    // -- Module Card
+    const card = document.createElement('div');
+    card.className = 'module-card' +
+      (mod.status === 'active' ? ' active-module' : '') +
+      (viewMode === 'module' && selectedModuleIdx === mi ? ' selected' : '');
+    card.dataset.color = mod.color;
+    card.dataset.mi = mi;
+
+    const badgeClass = mod.status === 'done' ? 'done' : mod.status === 'active' ? 'run' : 'pend';
+    const badgeIcon  = mod.status === 'done' ? '&#10003;' : mod.status === 'active' ? '&#9654;' : '&#9675;';
+    const barColor = `var(--${mod.color})`;
+
+    card.innerHTML = `
+      <div class="mc-header">
+        <span class="mc-name">${mod.name}</span>
+        <span class="mc-badge ${badgeClass}">${badgeIcon}</span>
+      </div>
+      <div class="mc-spark-row">
+        <span class="mc-metric">${mod.metric}</span>
+        <div class="mc-sparkline"><canvas></canvas></div>
+      </div>
+      <div class="mc-bar">
+        <div class="mc-bar-fill" style="width:${mod.progress}%;background:${barColor}"></div>
+      </div>
+    `;
+    card.addEventListener('click', () => {
+      selectedModuleIdx = mi;
+      viewMode = 'module';
+      selectedSubIdx = -1;
+      refresh();
+    });
+    group.appendChild(card);
+
+    // Draw sparkline onto this card's canvas
+    requestAnimationFrame(() => {
+      const sparkCanvas = card.querySelector('.mc-sparkline canvas');
+      if (sparkCanvas) {
+        drawSparkline(sparkCanvas, mod.sparkData, COLOR_HEX[mod.color], !!mod.sparkLive);
+      }
+    });
+
+    // -- Sub rows
+    const subList = document.createElement('div');
+    subList.className = 'sub-list';
+
+    mod.subs.forEach((sub, si) => {
+      const row = document.createElement('div');
+      row.className = 'sub-row ' + sub.status +
+        (viewMode === 'sub' && selectedModuleIdx === mi && selectedSubIdx === si ? ' selected' : '');
+      row.dataset.mi = mi;
+      row.dataset.si = si;
+
+      row.innerHTML = `
+        <div class="sub-dot"></div>
+        <span class="sub-name">${sub.name}</span>
+        <span class="sub-metric">${sub.metric}</span>
+      `;
+      row.addEventListener('click', () => {
+        selectedModuleIdx = mi;
+        selectedSubIdx = si;
+        viewMode = 'sub';
+        refresh();
+      });
+      subList.appendChild(row);
+    });
+    group.appendChild(subList);
+    container.appendChild(group);
+  });
+
+  // After DOM settles, draw tree lines + tree particles
+  requestAnimationFrame(() => {
+    drawTreeLines();
+    setupTreeParticles();
+  });
+}
+
+// ===================================================================
+//  COLORED TREE LINES (between groups)
+// ===================================================================
+function drawTreeLines() {
+  // Remove old tree lines
+  document.querySelectorAll('.tree-line').forEach(el => el.remove());
+
+  const groups = document.querySelectorAll('.module-group');
+  const scrollEl = document.getElementById('sidebarScroll');
+  const scrollRect = scrollEl.getBoundingClientRect();
+
+  for (let i = 0; i < groups.length - 1; i++) {
+    const currentCard = groups[i].querySelector('.module-card');
+    const nextCard = groups[i + 1].querySelector('.module-card');
+    if (!currentCard || !nextCard) continue;
+
+    const currentRect = currentCard.getBoundingClientRect();
+    const nextRect = nextCard.getBoundingClientRect();
+
+    const top = currentRect.bottom - scrollRect.top + scrollEl.scrollTop;
+    const bottom = nextRect.top - scrollRect.top + scrollEl.scrollTop;
+    const height = bottom - top;
+
+    if (height <= 0) continue;
+
+    const mod = DATA[i];
+    const color = COLOR_HEX[mod.color];
+
+    const line = document.createElement('div');
+    line.className = 'tree-line';
+    line.style.top = top + 'px';
+    line.style.left = '23px';
+    line.style.height = height + 'px';
+    line.style.opacity = '0.4';
+
+    const inner = document.createElement('div');
+    inner.className = 'tree-line-inner';
+    inner.style.background = color;
+    inner.style.height = '0%';
+    line.appendChild(inner);
+
+    scrollEl.appendChild(line);
+
+    // Grow animation
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        inner.classList.add('grown');
+        inner.style.height = '100%';
+      });
+    });
+  }
+}
+
+// ===================================================================
+//  TREE PARTICLES (flowing along tree lines)
+// ===================================================================
+let treeParticles = [];
+let treeParticleCanvas = null;
+let treeParticleCtx = null;
+let treeAnimFrame = null;
+
+function setupTreeParticles() {
+  // Remove old canvas
+  const old = document.querySelector('.tree-particle-canvas');
+  if (old) old.remove();
+
+  const scrollEl = document.getElementById('sidebarScroll');
+  const canvas = document.createElement('canvas');
+  canvas.className = 'tree-particle-canvas';
+  // Position within sidebar scroll
+  canvas.style.position = 'absolute';
+  canvas.style.top = '0';
+  canvas.style.left = '0';
+  canvas.style.pointerEvents = 'none';
+  canvas.style.zIndex = '1';
+
+  const sidebar = document.getElementById('sidebar');
+  sidebar.appendChild(canvas);
+
+  treeParticleCanvas = canvas;
+  treeParticleCtx = canvas.getContext('2d');
+  treeParticles = [];
+
+  resizeTreeCanvas();
+}
+
+function resizeTreeCanvas() {
+  if (!treeParticleCanvas) return;
+  const sidebar = document.getElementById('sidebar');
+  treeParticleCanvas.width = sidebar.offsetWidth;
+  treeParticleCanvas.height = sidebar.offsetHeight;
+}
+
+function getTreeLineEndpoints() {
+  const lines = document.querySelectorAll('.tree-line');
+  const sidebar = document.getElementById('sidebar');
+  const sidebarRect = sidebar.getBoundingClientRect();
+  const scrollEl = document.getElementById('sidebarScroll');
+  const scrollTop = scrollEl.scrollTop;
+
+  const endpoints = [];
+  lines.forEach((line, i) => {
+    const rect = line.getBoundingClientRect();
+    const x = rect.left - sidebarRect.left + rect.width / 2;
+    const startY = rect.top - sidebarRect.top;
+    const endY = rect.bottom - sidebarRect.top;
+    const color = COLOR_HEX[DATA[i]?.color] || '#3b82f6';
+    endpoints.push({ x, startY, endY, color });
+  });
+  return endpoints;
+}
+
+let lastTreeSpawn = 0;
+const TREE_SPAWN_INTERVAL = 800;
+
+function animateTreeParticles(timestamp) {
+  if (!treeParticleCtx || !treeParticleCanvas) {
+    treeAnimFrame = requestAnimationFrame(animateTreeParticles);
+    return;
+  }
+
+  treeParticleCtx.clearRect(0, 0, treeParticleCanvas.width, treeParticleCanvas.height);
+
+  const endpoints = getTreeLineEndpoints();
+
+  // Spawn on each line
+  if (endpoints.length > 0 && timestamp - lastTreeSpawn > TREE_SPAWN_INTERVAL) {
+    endpoints.forEach(ep => {
+      if (treeParticles.length < 12) {
+        treeParticles.push({
+          x: ep.x,
+          startY: ep.startY,
+          endY: ep.endY,
+          color: ep.color,
+          progress: 0,
+          speed: 0.006 + Math.random() * 0.004,
+          size: 1.2 + Math.random() * 1.0,
+          opacity: 0.5 + Math.random() * 0.4,
+          wobbleX: (Math.random() - 0.5) * 2
+        });
+      }
+    });
+    lastTreeSpawn = timestamp;
+  }
+
+  treeParticles = treeParticles.filter(p => {
+    p.progress += p.speed;
+    if (p.progress >= 1) return false;
+
+    const t = p.progress;
+    const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+    const cy = p.startY + (p.endY - p.startY) * ease;
+    const cx = p.x + Math.sin(t * Math.PI * 3) * p.wobbleX;
+
+    const fade = t < 0.1 ? t / 0.1 : t > 0.85 ? (1 - t) / 0.15 : 1;
+    const rgb = colorToRGB(p.color);
+
+    // Glow
+    const grad = treeParticleCtx.createRadialGradient(cx, cy, 0, cx, cy, p.size * 4);
+    grad.addColorStop(0, `rgba(${rgb}, ${p.opacity * 0.3 * fade})`);
+    grad.addColorStop(1, `rgba(${rgb}, 0)`);
+    treeParticleCtx.fillStyle = grad;
+    treeParticleCtx.beginPath();
+    treeParticleCtx.arc(cx, cy, p.size * 4, 0, Math.PI * 2);
+    treeParticleCtx.fill();
+
+    // Core
+    treeParticleCtx.fillStyle = `rgba(${rgb}, ${p.opacity * fade})`;
+    treeParticleCtx.beginPath();
+    treeParticleCtx.arc(cx, cy, p.size, 0, Math.PI * 2);
+    treeParticleCtx.fill();
+
+    return true;
+  });
+
+  treeAnimFrame = requestAnimationFrame(animateTreeParticles);
+}
+
+// ===================================================================
+//  RENDER MAIN CONTENT
+// ===================================================================
+function renderContent() {
+  const main = document.getElementById('mainContent');
+  const mod = DATA[selectedModuleIdx];
+
+  if (viewMode === 'module' || selectedSubIdx < 0) {
+    main.innerHTML = renderModuleOverview(mod);
+  } else {
+    const sub = mod.subs[selectedSubIdx];
+    main.innerHTML = renderSubDashboard(mod, sub);
+  }
+}
+
+function renderModuleOverview(mod) {
+  const statusBadge = mod.status === 'done' ? 'done' : mod.status === 'active' ? 'run' : 'pend';
+  const statusLabel = mod.status === 'done' ? '&#10003; Complete' : mod.status === 'active' ? '&#9654; In Progress' : '&#9675; Pending';
+
+  const activeSub = mod.subs.find(s => s.status === 'active');
+  const doneSubs = mod.subs.filter(s => s.status === 'done').length;
+
+  const overviewTexts = {
+    'seed': `The seed hypothesis phase is complete. I mined 847 papers from the target research domain, constructed a knowledge graph with 2,341 nodes capturing claims, methods, and results, and identified 12 significant research gaps. From these, I selected the 5 most promising gaps as seed hypotheses based on novelty, feasibility, and potential impact scores. The strongest seed scored 8.7/10 on combined metrics and was advanced to the hypothesis refinement loop.`,
+    'hypo': `The hypothesis refinement loop is complete after 3 iterations. The initial hypothesis scored 6.2/10 with 3 major issues identified in review. Through iterative refinement, I addressed concerns about optimistic performance claims, missing ablation plans, and convergence guarantees. The final hypothesis achieved 8.4/10 with 0 major issues and high confidence (4/5). It is now being validated in the invention loop.`,
+    'inv': `The invention loop is in its second iteration, currently generating research artifacts. ${doneSubs} of ${mod.subs.length} steps are complete. ${activeSub ? 'Currently running: ' + activeSub.name + ' (' + activeSub.metric + ').' : ''} The strategy phase selected contrastive alignment as the primary approach. The planning phase defined 5 artifacts for empirical validation. Three artifacts are complete, one is running, and one is pending.`,
+    'paper_repo': `The paper and repository generation phase has not started yet. Once the invention loop completes with a passing review, this phase will generate the research repository, create interactive demos and visualizations, compile the full paper, and deploy both the source code and the formatted paper. Estimated duration: 8-12 minutes.`
+  };
+
+  return `<div class="content-fade">
+    <div class="overview-title">${mod.name}</div>
+    <div class="overview-sub">${mod.status === 'active' ? 'Iteration 2 of 3' : mod.status === 'done' ? 'All iterations complete' : 'Waiting to start'}</div>
+    <div class="dash-status ${statusBadge}">${mod.status === 'active' ? '<span class="shimmer-text">' + statusLabel + '</span>' : statusLabel}</div>
+    <div style="margin-top:8px">
+      <div class="section-label">Summary</div>
+      <div class="overview-text">${overviewTexts[mod.id]}</div>
+    </div>
+  </div>`;
+}
+
+function renderSubDashboard(mod, sub) {
+  if (!sub.detail) {
+    return `<div class="content-fade">
+      <div class="dash-title">${sub.name}</div>
+      <div class="dash-subtitle">${mod.name}</div>
+      <div class="dash-status pend">&#9675; Pending</div>
+      <div style="margin-top:8px">
+        <div class="section-label">Status</div>
+        <div class="summary-text">This step has not started yet. It will begin once the preceding steps are complete.</div>
+      </div>
+    </div>`;
+  }
+
+  const d = sub.detail;
+  const statusBadge = sub.status === 'done' ? 'done' : sub.status === 'active' ? 'run' : 'pend';
+  const statusLabel = sub.status === 'done' ? '&#10003; Complete' : sub.status === 'active' ? '&#9654; Running' : '&#9675; Pending';
+
+  const totalDur = '42m 10s';
+  const totalCost = '$12.47';
+
+  const bd = d.msgBreakdown || [45,30,15,2,8];
+  const bdColors = ['var(--blue)','var(--purple)','var(--green)','var(--red)','#555'];
+  const bdLabels = ['Agent','Tools','Status','Errors','Other'];
+
+  let itemsHtml = '';
+  if (d.items) {
+    itemsHtml = `
+      <div class="section-label" style="margin-top:4px">Artifacts</div>
+      <div class="item-list">
+        ${d.items.map((it, idx) => {
+          const ic = it.status === 'done' ? 'done' : it.status === 'active' ? 'run' : 'pend';
+          const icon = it.status === 'done' ? '&#10003;' : it.status === 'active' ? '&#9654;' : '&#9675;';
+          return `<div class="item-card" data-item="${idx}">
+            <div class="item-header">
+              <span class="item-icon ${ic}">${icon}</span>
+              <span class="item-title">${it.title}</span>
+              <span class="item-meta">
+                <span>${it.metricText}</span>
+                <span>${it.time}</span>
+                <span>${it.cost}</span>
+              </span>
+              <span class="item-chevron">&#9656;</span>
+            </div>
+            <div class="item-detail"><p>${it.detail}</p></div>
+          </div>`;
+        }).join('')}
+      </div>`;
+  }
+
+  return `<div class="content-fade">
+    <div class="dash-title">${sub.name}</div>
+    <div class="dash-subtitle">${mod.name}${mod.id === 'inv' ? ' --- Iteration 2' : mod.id === 'hypo' ? ' --- Iteration ' + (Math.floor(DATA[1].subs.indexOf(sub)/2)+1) : ''}</div>
+    <div class="dash-status ${statusBadge}">${sub.status === 'active' ? '<span class="shimmer-text">' + statusLabel + '</span>' : statusLabel}</div>
+
+    <div style="margin-top:20px">
+      <div class="section-label">What happened</div>
+      <div class="summary-text">${d.summary}</div>
+    </div>
+
+    <div class="section-label">Key Statistics</div>
+    <div class="stat-row">
+      <div class="stat-card">
+        <div class="stat-label">Duration</div>
+        <div class="stat-value">${d.duration}</div>
+        <div class="stat-bar-track">
+          <div class="stat-bar-fill" style="width:${d.durPct}%;background:var(--blue)"></div>
+        </div>
+        <div class="stat-bar-label"><span>of ${totalDur} total</span><span>${d.durPct}%</span></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Cost</div>
+        <div class="stat-value">${d.cost}</div>
+        <div class="stat-bar-track">
+          <div class="stat-bar-fill" style="width:${d.costPct}%;background:var(--${mod.color})"></div>
+        </div>
+        <div class="stat-bar-label"><span>of ${totalCost} total</span><span>${d.costPct}%</span></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Messages</div>
+        <div class="stat-value">${d.messages}</div>
+        <div class="stacked-bar">
+          ${bd.map((v,i) => `<div style="width:${v}%;background:${bdColors[i]}"></div>`).join('')}
+        </div>
+        <div class="stacked-legend">
+          ${bd.map((v,i) => `<span style="--dot:${bdColors[i]}">${bdLabels[i]} ${v}%</span>`).join('')}
+        </div>
+      </div>
+    </div>
+
+    ${itemsHtml}
+  </div>`;
+}
+
+// ===================================================================
+//  ITEM EXPAND/COLLAPSE
+// ===================================================================
+document.getElementById('mainContent').addEventListener('click', (e) => {
+  const header = e.target.closest('.item-header');
+  if (!header) return;
+  const card = header.closest('.item-card');
+  card.classList.toggle('expanded');
+});
+
+// ===================================================================
+//  REFRESH
+// ===================================================================
+function refresh() {
+  buildSidebar();
+  renderContent();
+  positionRingEndpoint();
+}
+
+// ===================================================================
+//  RING ENDPOINT POSITION (65% along the arc)
+// ===================================================================
+function positionRingEndpoint() {
+  const pct = 0.65;
+  const angle = -90 + pct * 360;
+  const rad = angle * Math.PI / 180;
+  const cx = 55 + 47 * Math.cos(rad);
+  const cy = 55 + 47 * Math.sin(rad);
+  const ep = document.getElementById('ringEndpoint');
+  ep.style.left = (cx - 4.5) + 'px';
+  ep.style.top  = (cy - 4.5) + 'px';
+}
+
+// inject legend dot color rule
+const legendStyle = document.createElement('style');
+legendStyle.textContent = `.stacked-legend span::before { background: var(--dot); }`;
+document.head.appendChild(legendStyle);
+
+// ===================================================================
+//  BACKGROUND PARTICLES (sidebar ambient)
+// ===================================================================
+const bgCanvas = document.getElementById('bgParticleCanvas');
+const bgCtx = bgCanvas.getContext('2d');
+let bgParticles = [];
+
+function resizeBgCanvas() {
+  const sidebar = document.getElementById('sidebar');
+  bgCanvas.width = sidebar.offsetWidth;
+  bgCanvas.height = sidebar.offsetHeight;
+}
+
+function initBgParticles() {
+  bgParticles = [];
+  for (let i = 0; i < 30; i++) {
+    bgParticles.push({
+      x: Math.random() * bgCanvas.width,
+      y: Math.random() * bgCanvas.height,
+      vx: (Math.random() - 0.5) * 0.15,
+      vy: (Math.random() - 0.5) * 0.15,
+      size: 0.6 + Math.random() * 1.0,
+      opacity: 0.08 + Math.random() * 0.12,
+      pulse: Math.random() * Math.PI * 2,
+      pulseSpeed: 0.005 + Math.random() * 0.01
+    });
+  }
+}
+
+function animateBgParticles() {
+  bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
+
+  bgParticles.forEach(p => {
+    p.x += p.vx;
+    p.y += p.vy;
+    p.pulse += p.pulseSpeed;
+
+    // Wrap
+    if (p.x < -5) p.x = bgCanvas.width + 5;
+    if (p.x > bgCanvas.width + 5) p.x = -5;
+    if (p.y < -5) p.y = bgCanvas.height + 5;
+    if (p.y > bgCanvas.height + 5) p.y = -5;
+
+    const alpha = p.opacity * (0.6 + 0.4 * Math.sin(p.pulse));
+
+    bgCtx.beginPath();
+    bgCtx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    bgCtx.fillStyle = `rgba(147, 197, 253, ${alpha})`;
+    bgCtx.fill();
+  });
+
+  // Draw faint connection lines between close particles
+  for (let i = 0; i < bgParticles.length; i++) {
+    for (let j = i + 1; j < bgParticles.length; j++) {
+      const a = bgParticles[i];
+      const b = bgParticles[j];
+      const dx = a.x - b.x;
+      const dy = a.y - b.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 60) {
+        const lineAlpha = (1 - dist / 60) * 0.06;
+        bgCtx.beginPath();
+        bgCtx.moveTo(a.x, a.y);
+        bgCtx.lineTo(b.x, b.y);
+        bgCtx.strokeStyle = `rgba(147, 197, 253, ${lineAlpha})`;
+        bgCtx.lineWidth = 0.5;
+        bgCtx.stroke();
+      }
+    }
+  }
+
+  requestAnimationFrame(animateBgParticles);
+}
+
+// ===================================================================
+//  MAIN FLOW PARTICLES (card to active sub)
+// ===================================================================
+const flowCanvas = document.getElementById('particleCanvas');
+const flowCtx = flowCanvas.getContext('2d');
+let flowParticles = [];
+
+function resizeFlowCanvas() {
+  const sidebar = document.getElementById('sidebar');
+  flowCanvas.width = sidebar.offsetWidth;
+  flowCanvas.height = sidebar.offsetHeight;
+}
+
+function getFlowEndpoints() {
+  const activeModuleIdx = DATA.findIndex(m => m.status === 'active');
+  if (activeModuleIdx < 0) return null;
+
+  const mod = DATA[activeModuleIdx];
+  const activeSubIdx = mod.subs.findIndex(s => s.status === 'active');
+  if (activeSubIdx < 0) return null;
+
+  const group = document.querySelector(`.module-group[data-module-idx="${activeModuleIdx}"]`);
+  if (!group) return null;
+
+  const card = group.querySelector('.module-card');
+  const subRows = group.querySelectorAll('.sub-row');
+  const targetRow = subRows[activeSubIdx];
+
+  if (!card || !targetRow) return null;
+
+  const sidebarBCR = document.getElementById('sidebar').getBoundingClientRect();
+  const cardRect = card.getBoundingClientRect();
+  const dot = targetRow.querySelector('.sub-dot');
+  const dotRect = dot.getBoundingClientRect();
+
+  return {
+    startX: cardRect.left - sidebarBCR.left + 16,
+    startY: cardRect.bottom - sidebarBCR.top,
+    endX:   dotRect.left - sidebarBCR.left + 4,
+    endY:   dotRect.top - sidebarBCR.top + 4
+  };
+}
+
+let lastFlowSpawn = 0;
+const FLOW_SPAWN_INTERVAL = 600;
+
+function animateFlowParticles(timestamp) {
+  flowCtx.clearRect(0, 0, flowCanvas.width, flowCanvas.height);
+
+  const endpoints = getFlowEndpoints();
+
+  if (endpoints && flowParticles.length < 4 && timestamp - lastFlowSpawn > FLOW_SPAWN_INTERVAL) {
+    flowParticles.push({
+      startX: endpoints.startX,
+      startY: endpoints.startY,
+      endX: endpoints.endX,
+      endY: endpoints.endY,
+      progress: 0,
+      speed: 0.008 + Math.random() * 0.004,
+      size: 1.5 + Math.random() * 1.5,
+      opacity: 0.6 + Math.random() * 0.4,
+      wobble: (Math.random() - 0.5) * 3
+    });
+    lastFlowSpawn = timestamp;
+  }
+
+  flowParticles = flowParticles.filter(p => {
+    p.progress += p.speed;
+    if (p.progress >= 1) return false;
+
+    const t = p.progress;
+    const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+    const cx = p.startX + (p.endX - p.startX) * t + Math.sin(t * Math.PI * 2) * p.wobble;
+    const cy = p.startY + (p.endY - p.startY) * ease;
+
+    const fade = t < 0.1 ? t / 0.1 : t > 0.85 ? (1 - t) / 0.15 : 1;
+
+    // Glow
+    const grad = flowCtx.createRadialGradient(cx, cy, 0, cx, cy, p.size * 5);
+    grad.addColorStop(0, `rgba(59, 130, 246, ${p.opacity * 0.35 * fade})`);
+    grad.addColorStop(1, 'rgba(59, 130, 246, 0)');
+    flowCtx.fillStyle = grad;
+    flowCtx.beginPath();
+    flowCtx.arc(cx, cy, p.size * 5, 0, Math.PI * 2);
+    flowCtx.fill();
+
+    // Core
+    flowCtx.fillStyle = `rgba(147, 197, 253, ${p.opacity * fade})`;
+    flowCtx.beginPath();
+    flowCtx.arc(cx, cy, p.size, 0, Math.PI * 2);
+    flowCtx.fill();
+
+    return true;
+  });
+
+  requestAnimationFrame(animateFlowParticles);
+}
+
+// ===================================================================
+//  KEYBOARD NAVIGATION
+// ===================================================================
+document.addEventListener('keydown', (e) => {
+  const mod = DATA[selectedModuleIdx];
+
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    if (viewMode === 'module') {
+      viewMode = 'sub';
+      selectedSubIdx = 0;
+    } else {
+      if (selectedSubIdx < mod.subs.length - 1) {
+        selectedSubIdx++;
+      }
+    }
+    refresh();
+  }
+
+  if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (viewMode === 'sub') {
+      if (selectedSubIdx > 0) {
+        selectedSubIdx--;
+      } else {
+        viewMode = 'module';
+        selectedSubIdx = -1;
+      }
+    }
+    refresh();
+  }
+
+  if (e.key === 'ArrowRight') {
+    e.preventDefault();
+    if (selectedModuleIdx < DATA.length - 1) {
+      selectedModuleIdx++;
+      viewMode = 'module';
+      selectedSubIdx = -1;
+      refresh();
+    }
+  }
+
+  if (e.key === 'ArrowLeft') {
+    e.preventDefault();
+    if (selectedModuleIdx > 0) {
+      selectedModuleIdx--;
+      viewMode = 'module';
+      selectedSubIdx = -1;
+      refresh();
+    }
+  }
+});
+
+// ===================================================================
+//  INIT
+// ===================================================================
+window.addEventListener('resize', () => {
+  resizeBgCanvas();
+  resizeFlowCanvas();
+  resizeTreeCanvas();
+});
+
+resizeBgCanvas();
+resizeFlowCanvas();
+initBgParticles();
+buildMiniRings();
+refresh();
+
+requestAnimationFrame(animateBgParticles);
+requestAnimationFrame(animateFlowParticles);
+requestAnimationFrame(animateTreeParticles);
+requestAnimationFrame(animateLiveSparklines);
+</script>
+</body>
+</html>

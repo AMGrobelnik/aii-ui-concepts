@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Pipeline Progress</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: #0c0e13;
+    color: #d0d4dc;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+  }
+
+  /* ── Left bar column ── */
+  .bar-column {
+    width: 60px;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px 0;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 10;
+  }
+
+  .bar-track {
+    width: 40px;
+    flex: 1;
+    background: #1a1d26;
+    border-radius: 8px;
+    position: relative;
+    overflow: hidden;
+    cursor: pointer;
+  }
+
+  /* Section hit areas (bottom-to-top: seed, hypo, inv, paper) */
+  .bar-section {
+    position: absolute;
+    left: 0;
+    width: 100%;
+    cursor: pointer;
+    transition: filter 0.25s;
+  }
+  .bar-section:hover { filter: brightness(1.15); }
+  .bar-section.selected { filter: brightness(1.25); }
+
+  /* Filled portion */
+  .bar-fill {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    border-radius: 0 0 8px 8px;
+    transition: height 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Seed: bottom 15% — green */
+  .fill-seed {
+    height: 15%;
+    background: linear-gradient(to top, #22c55e, #16a34a);
+    border-radius: 0 0 8px 8px;
+  }
+
+  /* Hypo: 15%-35% — purple */
+  .fill-hypo {
+    height: 20%;
+    bottom: 15%;
+    background: linear-gradient(to top, #8b5cf6, #7c3aed);
+  }
+
+  /* Invention: 35%-65%, filled to ~58% of its section */
+  .fill-inv {
+    bottom: 35%;
+    background: linear-gradient(to top, #3b82f6, #2563eb);
+  }
+
+  /* Animated leading edge on active fill */
+  .fill-inv::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 8px;
+    background: linear-gradient(to top, #3b82f6, #60a5fa);
+    animation: pulse-edge 2s ease-in-out infinite;
+    border-radius: 2px 2px 0 0;
+  }
+
+  @keyframes pulse-edge {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 1; }
+  }
+
+  /* Section labels */
+  .bar-label {
+    position: absolute;
+    left: 48px;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: #555c6b;
+    white-space: nowrap;
+    pointer-events: none;
+    transform: translateY(50%);
+    transition: color 0.25s;
+  }
+  .bar-label.active { color: #8fa0bc; }
+
+  /* Playhead dot */
+  .playhead {
+    position: absolute;
+    left: 50%;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #fff;
+    transform: translate(-50%, 50%);
+    box-shadow: 0 0 12px 4px rgba(59, 130, 246, 0.6),
+                0 0 24px 8px rgba(59, 130, 246, 0.25);
+    z-index: 5;
+    transition: bottom 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+    pointer-events: none;
+    animation: playhead-glow 2.5s ease-in-out infinite;
+  }
+
+  @keyframes playhead-glow {
+    0%, 100% { box-shadow: 0 0 12px 4px rgba(59,130,246,0.6), 0 0 24px 8px rgba(59,130,246,0.25); }
+    50% { box-shadow: 0 0 16px 6px rgba(59,130,246,0.8), 0 0 32px 12px rgba(59,130,246,0.35); }
+  }
+
+  /* Tooltip */
+  .bar-tooltip {
+    position: absolute;
+    left: 54px;
+    background: #1e2130;
+    color: #c8cdd8;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 6px 12px;
+    border-radius: 6px;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 20;
+    border: 1px solid #2a2e3e;
+  }
+  .bar-tooltip::before {
+    content: '';
+    position: absolute;
+    left: -5px;
+    top: 50%;
+    transform: translateY(-50%);
+    border: 5px solid transparent;
+    border-right-color: #2a2e3e;
+    border-left: none;
+  }
+
+  /* ── Content area ── */
+  .content-area {
+    flex: 1;
+    height: 100vh;
+    overflow-y: auto;
+    display: flex;
+    justify-content: center;
+    padding: 48px 40px 48px 32px;
+  }
+
+  .content-inner {
+    max-width: 650px;
+    width: 100%;
+    position: relative;
+  }
+
+  /* Content panels */
+  .panel {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 0.35s ease, transform 0.35s ease;
+    pointer-events: none;
+  }
+  .panel.visible {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+    position: relative;
+  }
+
+  /* Typography */
+  .panel-title {
+    font-size: 24px;
+    font-weight: 700;
+    color: #eef0f4;
+    margin-bottom: 8px;
+  }
+
+  .panel-badge {
+    display: inline-block;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 10px;
+    margin-bottom: 20px;
+  }
+
+  .panel-status {
+    font-size: 18px;
+    font-weight: 600;
+    color: #b8bfcc;
+    margin-bottom: 16px;
+  }
+
+  .panel-summary {
+    font-size: 14px;
+    line-height: 1.65;
+    color: #8a92a4;
+    margin-bottom: 28px;
+  }
+
+  /* Sub-stages */
+  .substages {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-bottom: 28px;
+  }
+
+  .substage {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s;
+    color: #9ca3b4;
+  }
+  .substage:hover { background: #14161e; }
+  .substage.expanded { background: #13151d; }
+
+  .substage-icon {
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    flex-shrink: 0;
+  }
+
+  .substage-icon.done { color: #22c55e; }
+  .substage-icon.active { color: #3b82f6; }
+  .substage-icon.pending { color: #3a3f50; }
+
+  .substage-label { flex: 1; }
+  .substage.done .substage-label { color: #6b7280; }
+  .substage.active .substage-label { color: #d0d6e2; }
+
+  .substage-detail {
+    font-size: 13px;
+    color: #5f667a;
+    font-weight: 400;
+  }
+
+  /* Expanded substage detail */
+  .substage-expand {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease, padding 0.3s ease;
+    padding: 0 14px 0 48px;
+  }
+  .substage-expand.open {
+    max-height: 300px;
+    padding: 8px 14px 12px 48px;
+  }
+
+  .artifact-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #6b7488;
+    padding: 4px 0;
+  }
+  .artifact-item .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .artifact-item .dot.g { background: #22c55e; }
+  .artifact-item .dot.b { background: #3b82f6; }
+  .artifact-item .dot.gr { background: #333845; }
+
+  .artifact-name { flex: 1; }
+  .artifact-meta { color: #4a5060; font-size: 12px; }
+
+  /* Cost line */
+  .cost-line {
+    font-size: 13px;
+    font-weight: 500;
+    color: #555c6e;
+    letter-spacing: 0.3px;
+  }
+
+  /* Completed panels */
+  .completed-items {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .completed-item {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .completed-icon {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .completed-text {
+    font-size: 14px;
+    line-height: 1.5;
+    color: #7c8496;
+  }
+
+  .completed-text strong {
+    color: #a0a8b8;
+    font-weight: 600;
+  }
+
+  /* Pending panel */
+  .pending-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .pending-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+    color: #4a5060;
+  }
+
+  .pending-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #2a2e3a;
+    flex-shrink: 0;
+  }
+
+  /* Dividers */
+  .divider {
+    height: 1px;
+    background: #1a1d28;
+    margin: 20px 0;
+  }
+
+  /* Scrollbar */
+  .content-area::-webkit-scrollbar { width: 4px; }
+  .content-area::-webkit-scrollbar-track { background: transparent; }
+  .content-area::-webkit-scrollbar-thumb { background: #252830; border-radius: 4px; }
+
+  /* Badge colors per section */
+  .badge-seed { background: rgba(34,197,94,0.12); color: #4ade80; }
+  .badge-hypo { background: rgba(139,92,246,0.12); color: #a78bfa; }
+  .badge-inv  { background: rgba(59,130,246,0.12); color: #60a5fa; }
+  .badge-paper { background: rgba(100,116,139,0.1); color: #64748b; }
+
+  /* Section highlight on bar */
+  .bar-section::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    opacity: 0;
+    transition: opacity 0.25s;
+    pointer-events: none;
+  }
+  .bar-section.selected::after {
+    opacity: 1;
+    background: rgba(255,255,255,0.06);
+  }
+</style>
+</head>
+<body>
+
+<!-- ── Left vertical bar ── -->
+<div class="bar-column">
+  <div class="bar-track" id="barTrack">
+    <!-- Gray background for unfilled portion is the track itself -->
+
+    <!-- Filled sections (absolutely positioned from bottom) -->
+    <div class="bar-fill fill-seed"></div>
+    <div class="bar-fill fill-hypo"></div>
+    <div class="bar-fill fill-inv" id="invFill"></div>
+
+    <!-- Clickable section hit areas -->
+    <div class="bar-section" data-section="paper" style="bottom:65%; height:35%; border-radius:8px 8px 0 0;"></div>
+    <div class="bar-section" data-section="inv"   style="bottom:35%; height:30%;"></div>
+    <div class="bar-section" data-section="hypo"  style="bottom:15%; height:20%;"></div>
+    <div class="bar-section selected" data-section="seed" style="bottom:0; height:15%; border-radius:0 0 8px 8px;"></div>
+
+    <!-- Labels at section boundaries -->
+    <div class="bar-label" style="bottom: 0%;" id="lblSeed">Seed</div>
+    <div class="bar-label" style="bottom: 15%;" id="lblHypo">Hypo</div>
+    <div class="bar-label active" style="bottom: 35%;" id="lblInv">Inv</div>
+    <div class="bar-label" style="bottom: 65%;" id="lblPaper">Paper</div>
+
+    <!-- Playhead dot -->
+    <div class="playhead" id="playhead"></div>
+
+    <!-- Tooltip -->
+    <div class="bar-tooltip" id="barTooltip"></div>
+  </div>
+</div>
+
+<!-- ── Content area ── -->
+<div class="content-area">
+  <div class="content-inner">
+
+    <!-- Seed panel -->
+    <div class="panel" id="panel-seed">
+      <div class="panel-title">Seed Hypotheses</div>
+      <span class="panel-badge badge-seed">Complete</span>
+      <div class="panel-status">8 seed hypotheses generated</div>
+      <div class="panel-summary">
+        Scanned 142 papers from the knowledge graph and generated 8 seed
+        hypotheses across three research fronts: adaptive tokenization,
+        cross-lingual transfer, and efficient fine-tuning. All seeds passed
+        the novelty filter against existing literature.
+      </div>
+      <div class="divider"></div>
+      <div class="completed-items">
+        <div class="completed-item">
+          <div class="completed-icon" style="background:rgba(34,197,94,0.12); color:#4ade80;">&#10003;</div>
+          <div class="completed-text"><strong>Knowledge graph</strong> ingested 142 papers, 3 domains</div>
+        </div>
+        <div class="completed-item">
+          <div class="completed-icon" style="background:rgba(34,197,94,0.12); color:#4ade80;">&#10003;</div>
+          <div class="completed-text"><strong>8 hypotheses</strong> seeded from gap analysis</div>
+        </div>
+        <div class="completed-item">
+          <div class="completed-icon" style="background:rgba(34,197,94,0.12); color:#4ade80;">&#10003;</div>
+          <div class="completed-text"><strong>Novelty check</strong> passed against 12k indexed claims</div>
+        </div>
+      </div>
+      <div class="cost-line">6m &bull; $1.83</div>
+    </div>
+
+    <!-- Hypothesis panel -->
+    <div class="panel" id="panel-hypo">
+      <div class="panel-title">Hypothesis Loop</div>
+      <span class="panel-badge badge-hypo">Complete</span>
+      <div class="panel-status">3 hypotheses refined and ranked</div>
+      <div class="panel-summary">
+        Narrowed 8 seeds to 3 viable hypotheses through iterative review.
+        Top-ranked hypothesis: "Morphology-aware subword regularization
+        improves cross-lingual transfer for agglutinative languages by 12-18%
+        without additional training data." Confidence: 0.84.
+      </div>
+      <div class="divider"></div>
+      <div class="completed-items">
+        <div class="completed-item">
+          <div class="completed-icon" style="background:rgba(139,92,246,0.12); color:#a78bfa;">&#10003;</div>
+          <div class="completed-text"><strong>Review rounds</strong> &mdash; 3 iterations, 8 &rarr; 5 &rarr; 3</div>
+        </div>
+        <div class="completed-item">
+          <div class="completed-icon" style="background:rgba(139,92,246,0.12); color:#a78bfa;">&#10003;</div>
+          <div class="completed-text"><strong>Top hypothesis</strong> scored 0.84 confidence (feasibility + novelty)</div>
+        </div>
+        <div class="completed-item">
+          <div class="completed-icon" style="background:rgba(139,92,246,0.12); color:#a78bfa;">&#10003;</div>
+          <div class="completed-text"><strong>Literature grounding</strong> &mdash; 23 supporting references linked</div>
+        </div>
+      </div>
+      <div class="cost-line">14m &bull; $4.21</div>
+    </div>
+
+    <!-- Invention panel (active / default) -->
+    <div class="panel visible" id="panel-inv">
+      <div class="panel-title">Invention Loop</div>
+      <span class="panel-badge badge-inv">Iteration 2 of 3</span>
+      <div class="panel-status">Generating Artifacts &mdash; 3 of 5 complete</div>
+      <div class="panel-summary">
+        Building computational evidence for the hypothesis. Completed
+        baseline (acc 0.847), multilingual dataset (2,400 examples), and
+        convergence proof. Running ablation study.
+      </div>
+
+      <div class="substages" id="substages">
+        <div class="substage done" data-sub="strategy">
+          <div class="substage-icon done">&#10003;</div>
+          <div class="substage-label">Strategy</div>
+        </div>
+        <div class="substage-expand" id="expand-strategy">
+          <div class="artifact-item"><span class="dot g"></span><span class="artifact-name">Research strategy document</span><span class="artifact-meta">finalized</span></div>
+          <div class="artifact-item"><span class="dot g"></span><span class="artifact-name">Experiment design matrix</span><span class="artifact-meta">4 conditions</span></div>
+        </div>
+
+        <div class="substage done" data-sub="plan">
+          <div class="substage-icon done">&#10003;</div>
+          <div class="substage-label">Plan</div>
+        </div>
+        <div class="substage-expand" id="expand-plan">
+          <div class="artifact-item"><span class="dot g"></span><span class="artifact-name">Execution plan</span><span class="artifact-meta">5 artifacts scoped</span></div>
+          <div class="artifact-item"><span class="dot g"></span><span class="artifact-name">Resource estimate</span><span class="artifact-meta">~$8 compute</span></div>
+        </div>
+
+        <div class="substage active" data-sub="artifacts">
+          <div class="substage-icon active">&#9654;</div>
+          <div class="substage-label">Artifacts</div>
+          <div class="substage-detail">3/5</div>
+        </div>
+        <div class="substage-expand" id="expand-artifacts">
+          <div class="artifact-item"><span class="dot g"></span><span class="artifact-name">Baseline model (acc 0.847)</span><span class="artifact-meta">2m ago</span></div>
+          <div class="artifact-item"><span class="dot g"></span><span class="artifact-name">Multilingual dataset</span><span class="artifact-meta">2,400 examples</span></div>
+          <div class="artifact-item"><span class="dot g"></span><span class="artifact-name">Convergence proof</span><span class="artifact-meta">verified</span></div>
+          <div class="artifact-item"><span class="dot b"></span><span class="artifact-name">Ablation study</span><span class="artifact-meta">running...</span></div>
+          <div class="artifact-item"><span class="dot gr"></span><span class="artifact-name">Scaling analysis</span><span class="artifact-meta">queued</span></div>
+        </div>
+
+        <div class="substage" data-sub="paper-draft">
+          <div class="substage-icon pending">&#9675;</div>
+          <div class="substage-label">Paper Draft</div>
+        </div>
+        <div class="substage-expand" id="expand-paper-draft"></div>
+
+        <div class="substage" data-sub="review">
+          <div class="substage-icon pending">&#9675;</div>
+          <div class="substage-label">Review</div>
+        </div>
+        <div class="substage-expand" id="expand-review"></div>
+
+        <div class="substage" data-sub="update-hypo">
+          <div class="substage-icon pending">&#9675;</div>
+          <div class="substage-label">Update Hypo</div>
+        </div>
+        <div class="substage-expand" id="expand-update-hypo"></div>
+      </div>
+
+      <div class="cost-line">42m &bull; $12.47</div>
+    </div>
+
+    <!-- Paper panel (pending) -->
+    <div class="panel" id="panel-paper">
+      <div class="panel-title">Paper Generation</div>
+      <span class="panel-badge badge-paper">Pending</span>
+      <div class="panel-status">Waiting for Invention Loop</div>
+      <div class="panel-summary">
+        Will compile final artifacts, generate visualizations, and produce
+        the complete research paper with citations once the invention loop
+        completes all iterations.
+      </div>
+      <div class="divider"></div>
+      <div class="pending-list">
+        <div class="pending-item"><span class="pending-dot"></span>Generate artifact demos</div>
+        <div class="pending-item"><span class="pending-dot"></span>Generate visualizations</div>
+        <div class="pending-item"><span class="pending-dot"></span>Compile full paper</div>
+        <div class="pending-item"><span class="pending-dot"></span>Format repository</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+(function() {
+  // ── State ──
+  const sections = ['seed', 'hypo', 'inv', 'paper'];
+  const sectionMeta = {
+    seed:  { label: 'Seed Hypotheses', status: 'Complete' },
+    hypo:  { label: 'Hypothesis Loop', status: 'Complete' },
+    inv:   { label: 'Invention Loop',  status: 'Active — Iteration 2/3' },
+    paper: { label: 'Paper Generation', status: 'Pending' }
+  };
+
+  let currentSection = 'inv';
+  let invFillPct = 17.4; // 58% of the 30% inv section = 17.4% of total bar
+
+  // ── Elements ──
+  const barTrack   = document.getElementById('barTrack');
+  const invFill    = document.getElementById('invFill');
+  const playhead   = document.getElementById('playhead');
+  const tooltip    = document.getElementById('barTooltip');
+  const hitAreas   = barTrack.querySelectorAll('.bar-section');
+
+  // ── Set initial fill ──
+  function updateInvFill() {
+    invFill.style.height = invFillPct + '%';
+    playhead.style.bottom = (35 + invFillPct) + '%';
+  }
+  updateInvFill();
+
+  // ── Section selection ──
+  function selectSection(name) {
+    currentSection = name;
+
+    // Update hit area highlights
+    hitAreas.forEach(el => {
+      el.classList.toggle('selected', el.dataset.section === name);
+    });
+
+    // Update panels
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('visible'));
+    const target = document.getElementById('panel-' + name);
+    if (target) {
+      // Small delay for cross-fade effect
+      requestAnimationFrame(() => target.classList.add('visible'));
+    }
+  }
+
+  // ── Bar click handling ──
+  hitAreas.forEach(area => {
+    area.addEventListener('click', () => selectSection(area.dataset.section));
+  });
+
+  // ── Tooltip on hover ──
+  barTrack.addEventListener('mousemove', function(e) {
+    const rect = barTrack.getBoundingClientRect();
+    const y = e.clientY - rect.top;
+    const pct = 100 - (y / rect.height * 100); // bottom = 0%
+
+    let section, meta;
+    if (pct < 15) { section = 'seed'; }
+    else if (pct < 35) { section = 'hypo'; }
+    else if (pct < 65) { section = 'inv'; }
+    else { section = 'paper'; }
+
+    meta = sectionMeta[section];
+    tooltip.textContent = meta.label + ' — ' + meta.status;
+    tooltip.style.top = y - 16 + 'px';
+    tooltip.style.opacity = '1';
+  });
+
+  barTrack.addEventListener('mouseleave', function() {
+    tooltip.style.opacity = '0';
+  });
+
+  // ── Substage expansion ──
+  document.querySelectorAll('.substage').forEach(sub => {
+    sub.addEventListener('click', function() {
+      const key = this.dataset.sub;
+      const expandEl = document.getElementById('expand-' + key);
+      if (!expandEl || expandEl.children.length === 0) return;
+
+      const isOpen = expandEl.classList.contains('open');
+
+      // Close all
+      document.querySelectorAll('.substage-expand').forEach(el => el.classList.remove('open'));
+      document.querySelectorAll('.substage').forEach(el => el.classList.remove('expanded'));
+
+      // Toggle if it was closed
+      if (!isOpen) {
+        expandEl.classList.add('open');
+        this.classList.add('expanded');
+      }
+    });
+  });
+
+  // ── Slow continuous fill animation ──
+  let fillDirection = 1;
+  function animateFill() {
+    invFillPct += 0.008 * fillDirection;
+
+    // Oscillate gently between ~17% and ~18.5% of total (simulating progress)
+    if (invFillPct > 18.5) fillDirection = -1;
+    if (invFillPct < 17.0) fillDirection = 1;
+
+    updateInvFill();
+    requestAnimationFrame(animateFill);
+  }
+  requestAnimationFrame(animateFill);
+
+  // ── Initialize default view ──
+  selectSection('inv');
+})();
+</script>
+</body>
+</html>

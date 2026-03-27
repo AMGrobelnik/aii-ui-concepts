@@ -1,0 +1,952 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor - Pipeline Flowchart</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0c0e14;--surface:#13161f;--surface2:#1a1e2a;--surface3:#222736;
+  --border:#2a2f40;--text:#e2e6f0;--text-dim:#6b7394;--text-muted:#454b64;
+  --green:#34d399;--green-bg:rgba(52,211,153,.08);--green-border:rgba(52,211,153,.35);
+  --blue:#60a5fa;--blue-bg:rgba(96,165,250,.08);--blue-border:rgba(96,165,250,.35);
+  --gray:#6b7394;--gray-bg:rgba(107,115,148,.06);--gray-border:rgba(107,115,148,.2);
+  --purple:#a78bfa;--amber:#fbbf24;--rose:#fb7185;
+  --glow-blue:0 0 20px rgba(96,165,250,.25);
+  --glow-green:0 0 12px rgba(52,211,153,.15);
+}
+html,body{height:100%;overflow:hidden;font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--text)}
+
+/* ── Top Bar ── */
+.topbar{
+  height:52px;display:flex;align-items:center;justify-content:space-between;
+  padding:0 24px;background:var(--surface);border-bottom:1px solid var(--border);
+  position:relative;z-index:100;
+}
+.topbar-brand{display:flex;align-items:center;gap:12px}
+.topbar-brand svg{width:22px;height:22px}
+.topbar-brand h1{font-size:15px;font-weight:600;letter-spacing:-.3px}
+.topbar-brand h1 span{color:var(--blue);font-weight:700}
+.topbar-run{display:flex;align-items:center;gap:20px;font-size:12px;color:var(--text-dim)}
+.topbar-run .run-name{color:var(--text);font-weight:500;background:var(--surface2);padding:3px 10px;border-radius:4px;border:1px solid var(--border)}
+.topbar-run .metric{display:flex;align-items:center;gap:5px}
+.topbar-run .metric .dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse-dot 2s ease infinite}
+@keyframes pulse-dot{0%,100%{opacity:1}50%{opacity:.4}}
+
+/* ── Breadcrumb ── */
+.breadcrumb-bar{
+  height:36px;display:flex;align-items:center;gap:8px;
+  padding:0 24px;background:var(--surface);border-bottom:1px solid var(--border);
+  font-size:12px;color:var(--text-dim);position:relative;z-index:99;
+}
+.breadcrumb-bar .crumb{cursor:pointer;transition:color .15s}
+.breadcrumb-bar .crumb:hover{color:var(--text)}
+.breadcrumb-bar .crumb.active{color:var(--blue);font-weight:500}
+.breadcrumb-bar .sep{color:var(--text-muted);font-size:10px}
+.breadcrumb-bar .level-hint{margin-left:auto;color:var(--text-muted);font-size:11px}
+
+/* ── Main Canvas ── */
+.canvas-wrap{
+  position:relative;
+  height:calc(100vh - 52px - 36px);
+  overflow:auto;
+  transition:height .3s ease;
+}
+.canvas-wrap.panel-open{height:calc(100vh - 52px - 36px - 200px)}
+#flowchart-canvas{
+  position:relative;
+  min-width:100%;min-height:100%;
+}
+#svg-layer{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:1}
+#node-layer{position:absolute;top:0;left:0;width:100%;height:100%;z-index:2}
+
+/* ── Flowchart Nodes ── */
+.fc-node{
+  position:absolute;
+  border-radius:10px;
+  cursor:pointer;
+  transition:transform .2s ease, opacity .3s ease, box-shadow .2s ease;
+  backdrop-filter:blur(12px);
+  display:flex;flex-direction:column;justify-content:center;align-items:center;
+  text-align:center;
+  user-select:none;
+  opacity:0;
+  transform:translateY(12px);
+}
+.fc-node.visible{opacity:1;transform:translateY(0)}
+.fc-node:hover{transform:translateY(-2px) scale(1.03);z-index:10}
+.fc-node.selected{z-index:20}
+
+/* Module nodes */
+.fc-node.module{
+  width:168px;height:64px;
+  background:var(--surface2);
+  border:1.5px solid var(--border);
+  border-left:3.5px solid var(--gray);
+  box-shadow:0 2px 12px rgba(0,0,0,.25);
+}
+.fc-node.module .node-name{font-size:12.5px;font-weight:600;margin-bottom:2px}
+.fc-node.module .node-meta{font-size:10px;color:var(--text-dim);display:flex;align-items:center;gap:5px}
+.fc-node.module .status-badge{
+  position:absolute;top:-6px;right:-6px;
+  width:20px;height:20px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:10px;font-weight:700;
+  border:2px solid var(--bg);
+}
+
+/* Iteration nodes */
+.fc-node.iteration{
+  width:148px;height:52px;
+  background:var(--surface);
+  border:1.5px solid var(--border);
+  border-left:3px solid var(--gray);
+  box-shadow:0 1px 8px rgba(0,0,0,.2);
+}
+.fc-node.iteration .node-name{font-size:11.5px;font-weight:500;margin-bottom:1px}
+.fc-node.iteration .node-meta{font-size:9.5px;color:var(--text-dim)}
+
+/* Sub-step nodes */
+.fc-node.substep{
+  width:86px;height:42px;
+  background:var(--surface);
+  border:1.5px solid var(--border);
+  border-top:2.5px solid var(--gray);
+  box-shadow:0 1px 6px rgba(0,0,0,.15);
+  border-radius:8px;
+}
+.fc-node.substep .node-name{font-size:10px;font-weight:500}
+.fc-node.substep .node-meta{font-size:8.5px;color:var(--text-dim)}
+
+/* Status variants */
+.fc-node.status-complete{border-left-color:var(--green) !important;border-top-color:var(--green) !important;background:linear-gradient(135deg,var(--green-bg),var(--surface2))}
+.fc-node.status-complete .status-badge{background:var(--green);color:#0c0e14}
+.fc-node.status-complete .node-name{color:var(--text)}
+
+.fc-node.status-active{
+  border-left-color:var(--blue) !important;border-top-color:var(--blue) !important;
+  background:linear-gradient(135deg,var(--blue-bg),var(--surface2));
+  box-shadow:var(--glow-blue);
+  animation:node-glow 2.5s ease infinite;
+}
+.fc-node.status-active .status-badge{background:var(--blue);color:#0c0e14;animation:badge-pulse 2s ease infinite}
+.fc-node.status-active .node-name{color:var(--text)}
+@keyframes node-glow{0%,100%{box-shadow:0 0 15px rgba(96,165,250,.2)}50%{box-shadow:0 0 25px rgba(96,165,250,.35)}}
+@keyframes badge-pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.15)}}
+
+.fc-node.status-pending{border-left-color:var(--gray-border) !important;border-top-color:var(--gray-border) !important;border-style:dashed;border-left-style:dashed;border-top-style:dashed;background:var(--gray-bg)}
+.fc-node.status-pending .status-badge{background:var(--surface2);color:var(--text-muted);border-color:var(--border)}
+.fc-node.status-pending .node-name{color:var(--text-muted)}
+.fc-node.status-pending .node-meta{color:var(--text-muted)}
+
+.fc-node.selected{outline:2px solid var(--blue);outline-offset:2px}
+
+/* ── SVG Arrows ── */
+.arrow-path{fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;transition:opacity .3s ease}
+.arrow-path.active{stroke-dasharray:8 4;animation:flow-dash 1s linear infinite}
+@keyframes flow-dash{to{stroke-dashoffset:-12}}
+.arrow-marker{transition:opacity .3s ease}
+
+/* ── Detail Panel ── */
+.detail-panel{
+  position:fixed;bottom:0;left:0;right:0;
+  height:200px;
+  background:var(--surface);
+  border-top:1px solid var(--border);
+  transform:translateY(100%);
+  transition:transform .3s cubic-bezier(.4,0,.2,1);
+  z-index:200;
+  display:flex;flex-direction:column;
+  overflow:hidden;
+}
+.detail-panel.open{transform:translateY(0)}
+.detail-header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 24px;border-bottom:1px solid var(--border);
+  min-height:44px;
+}
+.detail-header h3{font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px}
+.detail-header .close-btn{
+  width:28px;height:28px;border-radius:6px;border:none;
+  background:var(--surface2);color:var(--text-dim);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  font-size:14px;transition:all .15s;
+}
+.detail-header .close-btn:hover{background:var(--border);color:var(--text)}
+.detail-body{padding:14px 24px;overflow-y:auto;flex:1}
+.detail-body .detail-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
+.detail-body .detail-card{
+  background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px 14px;
+}
+.detail-body .detail-card .card-label{font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.detail-body .detail-card .card-value{font-size:13px;font-weight:500}
+.detail-body .detail-card .card-sub{font-size:10px;color:var(--text-dim);margin-top:2px}
+
+.detail-body .artifact-list{display:flex;flex-direction:column;gap:6px}
+.detail-body .artifact-row{
+  display:flex;align-items:center;gap:10px;
+  padding:6px 10px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;
+  font-size:11px;
+}
+.artifact-row .art-status{width:16px;text-align:center;font-size:12px}
+.artifact-row .art-name{flex:1;font-weight:500}
+.artifact-row .art-metric{color:var(--text-dim);font-size:10px}
+
+.critique-list{display:flex;flex-direction:column;gap:5px}
+.critique-item{font-size:11px;color:var(--text-dim);padding-left:12px;border-left:2px solid var(--border);line-height:1.5}
+</style>
+</head>
+<body>
+
+<!-- Top Bar -->
+<div class="topbar">
+  <div class="topbar-brand">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z" stroke="var(--blue)"/><path d="M2 17l10 5 10-5" stroke="var(--purple)" opacity=".6"/><path d="M2 12l10 5 10-5" stroke="var(--blue)" opacity=".8"/></svg>
+    <h1><span>AI</span> Inventor</h1>
+  </div>
+  <div class="topbar-run">
+    <span class="run-name">quantum-lattice-7f3a</span>
+    <span class="metric"><span class="dot"></span> Running</span>
+    <span class="metric">2h 14m</span>
+    <span class="metric">$18.72</span>
+  </div>
+</div>
+
+<!-- Breadcrumb -->
+<div class="breadcrumb-bar" id="breadcrumb">
+  <span class="crumb active" data-level="0">Pipeline</span>
+  <span class="level-hint" id="level-hint">Click a module to expand</span>
+</div>
+
+<!-- Main Canvas -->
+<div class="canvas-wrap" id="canvas-wrap">
+  <div id="flowchart-canvas">
+    <svg id="svg-layer">
+      <defs>
+        <marker id="arrow-green" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+          <path d="M0,0 L8,3 L0,6" fill="var(--green)" class="arrow-marker"/>
+        </marker>
+        <marker id="arrow-blue" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+          <path d="M0,0 L8,3 L0,6" fill="var(--blue)" class="arrow-marker"/>
+        </marker>
+        <marker id="arrow-gray" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+          <path d="M0,0 L8,3 L0,6" fill="var(--gray)" class="arrow-marker"/>
+        </marker>
+        <marker id="arrow-purple" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+          <path d="M0,0 L8,3 L0,6" fill="var(--purple)" class="arrow-marker"/>
+        </marker>
+      </defs>
+    </svg>
+    <div id="node-layer"></div>
+  </div>
+</div>
+
+<!-- Detail Panel -->
+<div class="detail-panel" id="detail-panel">
+  <div class="detail-header">
+    <h3 id="detail-title">Node Details</h3>
+    <button class="close-btn" id="close-panel">&times;</button>
+  </div>
+  <div class="detail-body" id="detail-body"></div>
+</div>
+
+<script>
+// ── Pipeline Data Model ──
+const STATUS = { COMPLETE: 'complete', ACTIVE: 'active', PENDING: 'pending' };
+const COLORS = { complete: '#34d399', active: '#60a5fa', pending: '#6b7394' };
+const MODULE_COLORS = { seed: '#34d399', hypo: '#a78bfa', invention: '#60a5fa', paper: '#fbbf24' };
+
+const pipelineData = {
+  modules: [
+    {
+      id: 'seed', name: 'Seed Hypo', status: STATUS.COMPLETE, color: MODULE_COLORS.seed,
+      metric: '12 hypotheses', detail: { type: 'summary', items: [
+        { label: 'Hypotheses Generated', value: '12', sub: 'From 3 knowledge graphs' },
+        { label: 'Sources Processed', value: '47 papers', sub: 'arXiv + Semantic Scholar' },
+        { label: 'Duration', value: '8m 32s', sub: 'Completed at 14:08' },
+        { label: 'Cost', value: '$1.24', sub: '~42k input tokens' },
+      ]},
+      iterations: []
+    },
+    {
+      id: 'hypo', name: 'Hypothesis Loop', status: STATUS.COMPLETE, color: MODULE_COLORS.hypo,
+      metric: '3 iterations', detail: null,
+      iterations: [
+        {
+          id: 'hypo-1', name: 'Iter 1', status: STATUS.COMPLETE, metric: 'Score: 6.2/10',
+          detail: { type: 'review', score: '6.2/10', title: 'Quantum lattice defect self-healing via topological phonon modes', abstract: 'We propose a mechanism whereby topological phonon modes in crystalline lattices enable autonomous defect repair...', critiques: [
+            'Mechanism for phonon-defect coupling lacks quantitative treatment',
+            'No comparison with existing defect healing approaches',
+            'Experimental validation pathway unclear',
+          ]},
+          substeps: [
+            { id: 'hypo-1-gen', name: 'Gen Hypo', status: STATUS.COMPLETE, metric: '12 hypos' },
+            { id: 'hypo-1-rev', name: 'Review', status: STATUS.COMPLETE, metric: '6.2/10' },
+          ]
+        },
+        {
+          id: 'hypo-2', name: 'Iter 2', status: STATUS.COMPLETE, metric: 'Score: 7.8/10',
+          detail: { type: 'review', score: '7.8/10', title: 'Topological phonon-mediated lattice self-repair with quantitative coupling model', abstract: 'Building on reviewer feedback, we develop a quantitative framework for phonon-defect coupling strengths...', critiques: [
+            'Coupling model improved but boundary conditions need clarification',
+            'Good comparison added with Wigner crystal repair literature',
+          ]},
+          substeps: [
+            { id: 'hypo-2-gen', name: 'Gen Hypo', status: STATUS.COMPLETE, metric: '8 hypos' },
+            { id: 'hypo-2-rev', name: 'Review', status: STATUS.COMPLETE, metric: '7.8/10' },
+          ]
+        },
+        {
+          id: 'hypo-3', name: 'Iter 3', status: STATUS.COMPLETE, metric: 'Score: 8.5/10',
+          detail: { type: 'review', score: '8.5/10', title: 'Quantitative topological phonon self-repair: theory, simulations, and experimental design', abstract: 'Final iteration incorporates molecular dynamics validation and proposes concrete neutron scattering experiments...', critiques: [
+            'Strong theoretical framework with simulation backing',
+          ]},
+          substeps: [
+            { id: 'hypo-3-gen', name: 'Gen Hypo', status: STATUS.COMPLETE, metric: '5 hypos' },
+            { id: 'hypo-3-rev', name: 'Review', status: STATUS.COMPLETE, metric: '8.5/10' },
+          ]
+        },
+      ]
+    },
+    {
+      id: 'invention', name: 'Invention Loop', status: STATUS.ACTIVE, color: MODULE_COLORS.invention,
+      metric: 'Iter 2 / Step 3', detail: null,
+      iterations: [
+        {
+          id: 'inv-1', name: 'Iter 1', status: STATUS.COMPLETE, metric: '6 artifacts',
+          detail: { type: 'artifacts', items: [
+            { name: 'Strategy doc', status: STATUS.COMPLETE, metric: '2.1k words' },
+            { name: 'Research plan', status: STATUS.COMPLETE, metric: '14 experiments' },
+            { name: 'Algorithm spec', status: STATUS.COMPLETE, metric: '340 lines' },
+            { name: 'Paper draft', status: STATUS.COMPLETE, metric: '4.8k words' },
+            { name: 'Review report', status: STATUS.COMPLETE, metric: 'Score: 7.1' },
+            { name: 'Update notes', status: STATUS.COMPLETE, metric: '12 changes' },
+          ]},
+          substeps: [
+            { id: 'inv-1-s', name: 'Strategy', status: STATUS.COMPLETE, metric: '2.1k w' },
+            { id: 'inv-1-p', name: 'Plan', status: STATUS.COMPLETE, metric: '14 exp' },
+            { id: 'inv-1-a', name: 'Algorithm', status: STATUS.COMPLETE, metric: '340 ln' },
+            { id: 'inv-1-t', name: 'Paper', status: STATUS.COMPLETE, metric: '4.8k w' },
+            { id: 'inv-1-r', name: 'Review', status: STATUS.COMPLETE, metric: '7.1' },
+            { id: 'inv-1-u', name: 'Update', status: STATUS.COMPLETE, metric: '12 chg' },
+          ]
+        },
+        {
+          id: 'inv-2', name: 'Iter 2', status: STATUS.ACTIVE, metric: 'Algorithm...',
+          detail: { type: 'artifacts', items: [
+            { name: 'Strategy doc', status: STATUS.COMPLETE, metric: '2.4k words' },
+            { name: 'Research plan', status: STATUS.COMPLETE, metric: '16 experiments' },
+            { name: 'Algorithm spec', status: STATUS.ACTIVE, metric: 'Generating...' },
+            { name: 'Paper draft', status: STATUS.PENDING, metric: '--' },
+            { name: 'Review report', status: STATUS.PENDING, metric: '--' },
+            { name: 'Update notes', status: STATUS.PENDING, metric: '--' },
+          ]},
+          substeps: [
+            { id: 'inv-2-s', name: 'Strategy', status: STATUS.COMPLETE, metric: '2.4k w' },
+            { id: 'inv-2-p', name: 'Plan', status: STATUS.COMPLETE, metric: '16 exp' },
+            { id: 'inv-2-a', name: 'Algorithm', status: STATUS.ACTIVE, metric: '...' },
+            { id: 'inv-2-t', name: 'Paper', status: STATUS.PENDING, metric: '--' },
+            { id: 'inv-2-r', name: 'Review', status: STATUS.PENDING, metric: '--' },
+            { id: 'inv-2-u', name: 'Update', status: STATUS.PENDING, metric: '--' },
+          ]
+        },
+        {
+          id: 'inv-3', name: 'Iter 3', status: STATUS.PENDING, metric: '--',
+          detail: { type: 'summary', items: [
+            { label: 'Status', value: 'Pending', sub: 'Waiting for Iter 2 completion' },
+          ]},
+          substeps: [
+            { id: 'inv-3-s', name: 'Strategy', status: STATUS.PENDING, metric: '--' },
+            { id: 'inv-3-p', name: 'Plan', status: STATUS.PENDING, metric: '--' },
+            { id: 'inv-3-a', name: 'Algorithm', status: STATUS.PENDING, metric: '--' },
+            { id: 'inv-3-t', name: 'Paper', status: STATUS.PENDING, metric: '--' },
+            { id: 'inv-3-r', name: 'Review', status: STATUS.PENDING, metric: '--' },
+            { id: 'inv-3-u', name: 'Update', status: STATUS.PENDING, metric: '--' },
+          ]
+        },
+      ]
+    },
+    {
+      id: 'paper', name: 'Paper Repo', status: STATUS.PENDING, color: MODULE_COLORS.paper,
+      metric: 'Waiting', detail: { type: 'summary', items: [
+        { label: 'Status', value: 'Pending', sub: 'Blocked on Invention Loop' },
+        { label: 'Expected Steps', value: '4', sub: 'Demos, Viz, Full Paper, Repo' },
+      ]},
+      iterations: []
+    },
+  ]
+};
+
+// ── State ──
+let currentLevel = 0;          // 0=modules, 1=iterations, 2=substeps
+let expandedModule = null;      // module id
+let expandedIteration = null;   // iteration id
+let selectedNode = null;        // any node id
+const nodePositions = {};       // id -> {x, y, w, h}
+const nodeElements = {};        // id -> DOM element
+
+// ── Layout Constants ──
+const LAYOUT = {
+  moduleY: 80, moduleGap: 60, moduleW: 168, moduleH: 64,
+  iterOffsetY: 100, iterGap: 16, iterW: 148, iterH: 52,
+  subOffsetY: 80, subGap: 12, subW: 86, subH: 42,
+  canvasPad: 60,
+};
+
+// ── Helpers ──
+const statusIcon = s => s === STATUS.COMPLETE ? '&#10003;' : s === STATUS.ACTIVE ? '&#9654;' : '&#9675;';
+const statusClass = s => `status-${s}`;
+const arrowColor = s => s === STATUS.COMPLETE ? 'green' : s === STATUS.ACTIVE ? 'blue' : 'gray';
+
+function getModuleStartX(totalModules) {
+  const canvasW = Math.max(window.innerWidth, (LAYOUT.moduleW + LAYOUT.moduleGap) * totalModules + LAYOUT.canvasPad * 2);
+  const totalW = totalModules * LAYOUT.moduleW + (totalModules - 1) * LAYOUT.moduleGap;
+  return (canvasW - totalW) / 2;
+}
+
+// ── Render Functions ──
+function createNodeEl(id, type, name, status, metric, color) {
+  const el = document.createElement('div');
+  el.className = `fc-node ${type} ${statusClass(status)}`;
+  el.dataset.id = id;
+
+  let badge = '';
+  if (type === 'module' || type === 'iteration') {
+    badge = `<span class="status-badge" style="${status !== STATUS.PENDING ? 'background:' + COLORS[status] : ''}">${statusIcon(status)}</span>`;
+  }
+
+  el.innerHTML = `
+    ${badge}
+    <div class="node-name">${name}</div>
+    <div class="node-meta">${metric}</div>
+  `;
+
+  if (color && type === 'module') {
+    el.style.borderLeftColor = color;
+  }
+
+  return el;
+}
+
+function positionNode(el, x, y, w, h) {
+  el.style.left = x + 'px';
+  el.style.top = y + 'px';
+  el.style.width = w + 'px';
+  el.style.height = h + 'px';
+  nodePositions[el.dataset.id] = { x, y, w, h };
+}
+
+function showNode(el, delay) {
+  setTimeout(() => el.classList.add('visible'), delay);
+}
+
+function clearCanvas() {
+  document.getElementById('node-layer').innerHTML = '';
+  document.getElementById('svg-layer').querySelectorAll('.arrow-path').forEach(p => p.remove());
+  Object.keys(nodePositions).forEach(k => delete nodePositions[k]);
+  Object.keys(nodeElements).forEach(k => delete nodeElements[k]);
+}
+
+function drawArrow(fromId, toId, color, isActive, isVertical) {
+  const svg = document.getElementById('svg-layer');
+  const from = nodePositions[fromId];
+  const to = nodePositions[toId];
+  if (!from || !to) return;
+
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+
+  let d;
+  if (isVertical) {
+    const fx = from.x + from.w / 2;
+    const fy = from.y + from.h;
+    const tx = to.x + to.w / 2;
+    const ty = to.y;
+    const cy = fy + (ty - fy) / 2;
+    d = `M${fx},${fy} C${fx},${cy} ${tx},${cy} ${tx},${ty}`;
+  } else {
+    const fx = from.x + from.w;
+    const fy = from.y + from.h / 2;
+    const tx = to.x;
+    const ty = to.y + to.h / 2;
+    const cx = fx + (tx - fx) * 0.5;
+    d = `M${fx},${fy} C${cx},${fy} ${cx},${ty} ${tx},${ty}`;
+  }
+
+  path.setAttribute('d', d);
+  path.setAttribute('stroke', `var(--${color})`);
+  path.setAttribute('marker-end', `url(#arrow-${color})`);
+  path.classList.add('arrow-path');
+  if (isActive) path.classList.add('active');
+
+  svg.appendChild(path);
+}
+
+function resizeCanvas(minW, minH) {
+  const canvas = document.getElementById('flowchart-canvas');
+  canvas.style.width = Math.max(minW, window.innerWidth) + 'px';
+  canvas.style.height = Math.max(minH, 500) + 'px';
+  const svg = document.getElementById('svg-layer');
+  svg.setAttribute('width', canvas.style.width);
+  svg.setAttribute('height', canvas.style.height);
+}
+
+// ── Level 0: Module overview ──
+function renderLevel0() {
+  clearCanvas();
+  currentLevel = 0;
+  expandedModule = null;
+  expandedIteration = null;
+  selectedNode = null;
+  updateBreadcrumb();
+  closePanel();
+
+  const modules = pipelineData.modules;
+  const startX = getModuleStartX(modules.length);
+  const nodeLayer = document.getElementById('node-layer');
+  let maxX = 0;
+
+  modules.forEach((mod, i) => {
+    const x = startX + i * (LAYOUT.moduleW + LAYOUT.moduleGap);
+    const y = LAYOUT.moduleY;
+    const el = createNodeEl(mod.id, 'module', mod.name, mod.status, mod.metric, mod.color);
+    positionNode(el, x, y, LAYOUT.moduleW, LAYOUT.moduleH);
+    nodeLayer.appendChild(el);
+    nodeElements[mod.id] = el;
+    showNode(el, i * 60);
+    maxX = x + LAYOUT.moduleW;
+
+    el.addEventListener('click', () => onModuleClick(mod.id));
+  });
+
+  resizeCanvas(maxX + LAYOUT.canvasPad, LAYOUT.moduleY + LAYOUT.moduleH + 120);
+
+  // Draw horizontal arrows between modules
+  setTimeout(() => {
+    for (let i = 0; i < modules.length - 1; i++) {
+      const fromStatus = modules[i].status;
+      const toStatus = modules[i + 1].status;
+      const color = fromStatus === STATUS.COMPLETE ? 'green' : fromStatus === STATUS.ACTIVE ? 'blue' : 'gray';
+      const active = toStatus === STATUS.ACTIVE;
+      drawArrow(modules[i].id, modules[i + 1].id, color, active, false);
+    }
+  }, 80);
+}
+
+// ── Level 1: Expand a module to show iterations ──
+function renderLevel1(moduleId) {
+  clearCanvas();
+  currentLevel = 1;
+  expandedModule = moduleId;
+  expandedIteration = null;
+  selectedNode = null;
+  updateBreadcrumb();
+  closePanel();
+
+  const modules = pipelineData.modules;
+  const modIdx = modules.findIndex(m => m.id === moduleId);
+  const mod = modules[modIdx];
+  const nodeLayer = document.getElementById('node-layer');
+
+  // Place all module nodes horizontally
+  const startX = getModuleStartX(modules.length);
+  let delay = 0;
+
+  modules.forEach((m, i) => {
+    const x = startX + i * (LAYOUT.moduleW + LAYOUT.moduleGap);
+    const y = LAYOUT.moduleY;
+    const el = createNodeEl(m.id, 'module', m.name, m.status, m.metric, m.color);
+    positionNode(el, x, y, LAYOUT.moduleW, LAYOUT.moduleH);
+    nodeLayer.appendChild(el);
+    nodeElements[m.id] = el;
+    showNode(el, delay);
+    delay += 40;
+
+    el.addEventListener('click', () => {
+      if (m.id === moduleId && m.iterations.length === 0) {
+        selectNode(m);
+      } else if (m.id === moduleId) {
+        renderLevel0();
+      } else if (m.iterations.length > 0) {
+        renderLevel1(m.id);
+      } else {
+        selectNode(m);
+      }
+    });
+  });
+
+  // Place iteration nodes below the expanded module
+  const modX = startX + modIdx * (LAYOUT.moduleW + LAYOUT.moduleGap);
+  const modCenterX = modX + LAYOUT.moduleW / 2;
+  const iters = mod.iterations;
+  let maxY = LAYOUT.moduleY + LAYOUT.moduleH;
+
+  if (iters.length > 0) {
+    const iterStartY = LAYOUT.moduleY + LAYOUT.iterOffsetY;
+
+    iters.forEach((iter, i) => {
+      const ix = modCenterX - LAYOUT.iterW / 2;
+      const iy = iterStartY + i * (LAYOUT.iterH + LAYOUT.iterGap);
+      const el = createNodeEl(iter.id, 'iteration', iter.name, iter.status, iter.metric, mod.color);
+      el.style.borderLeftColor = mod.color;
+      positionNode(el, ix, iy, LAYOUT.iterW, LAYOUT.iterH);
+      nodeLayer.appendChild(el);
+      nodeElements[iter.id] = el;
+      showNode(el, delay);
+      delay += 50;
+
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (iter.substeps && iter.substeps.length > 0) {
+          renderLevel2(moduleId, iter.id);
+        } else {
+          selectNode(iter);
+        }
+      });
+
+      maxY = Math.max(maxY, iy + LAYOUT.iterH);
+    });
+  }
+
+  const totalW = startX + modules.length * (LAYOUT.moduleW + LAYOUT.moduleGap) + LAYOUT.canvasPad;
+  resizeCanvas(totalW, maxY + 120);
+
+  // Draw arrows
+  setTimeout(() => {
+    // Module-to-module horizontal arrows
+    for (let i = 0; i < modules.length - 1; i++) {
+      const fromStatus = modules[i].status;
+      const color = fromStatus === STATUS.COMPLETE ? 'green' : fromStatus === STATUS.ACTIVE ? 'blue' : 'gray';
+      const active = modules[i + 1].status === STATUS.ACTIVE;
+      drawArrow(modules[i].id, modules[i + 1].id, color, active, false);
+    }
+
+    // Module to first iteration (vertical)
+    if (iters.length > 0) {
+      const modColor = mod.status === STATUS.COMPLETE ? 'green' : mod.status === STATUS.ACTIVE ? 'blue' : 'gray';
+      drawArrow(mod.id, iters[0].id, modColor, iters[0].status === STATUS.ACTIVE, true);
+    }
+
+    // Iteration chain (vertical)
+    for (let i = 0; i < iters.length - 1; i++) {
+      const color = iters[i].status === STATUS.COMPLETE ? 'green' : iters[i].status === STATUS.ACTIVE ? 'blue' : 'gray';
+      const active = iters[i + 1].status === STATUS.ACTIVE;
+      drawArrow(iters[i].id, iters[i + 1].id, color, active, true);
+    }
+  }, 100);
+}
+
+// ── Level 2: Expand an iteration to show sub-steps ──
+function renderLevel2(moduleId, iterationId) {
+  clearCanvas();
+  currentLevel = 2;
+  expandedModule = moduleId;
+  expandedIteration = iterationId;
+  selectedNode = null;
+  updateBreadcrumb();
+  closePanel();
+
+  const modules = pipelineData.modules;
+  const modIdx = modules.findIndex(m => m.id === moduleId);
+  const mod = modules[modIdx];
+  const iter = mod.iterations.find(it => it.id === iterationId);
+  const nodeLayer = document.getElementById('node-layer');
+
+  // Place module nodes
+  const startX = getModuleStartX(modules.length);
+  let delay = 0;
+
+  modules.forEach((m, i) => {
+    const x = startX + i * (LAYOUT.moduleW + LAYOUT.moduleGap);
+    const y = LAYOUT.moduleY;
+    const el = createNodeEl(m.id, 'module', m.name, m.status, m.metric, m.color);
+    positionNode(el, x, y, LAYOUT.moduleW, LAYOUT.moduleH);
+    nodeLayer.appendChild(el);
+    nodeElements[m.id] = el;
+    showNode(el, delay);
+    delay += 30;
+
+    el.addEventListener('click', () => {
+      if (m.iterations.length > 0) {
+        renderLevel1(m.id);
+      } else {
+        selectNode(m);
+      }
+    });
+  });
+
+  // Place iteration nodes
+  const modX = startX + modIdx * (LAYOUT.moduleW + LAYOUT.moduleGap);
+  const modCenterX = modX + LAYOUT.moduleW / 2;
+  const iters = mod.iterations;
+  const iterStartY = LAYOUT.moduleY + LAYOUT.iterOffsetY;
+
+  iters.forEach((it, i) => {
+    const ix = modCenterX - LAYOUT.iterW / 2;
+    const iy = iterStartY + i * (LAYOUT.iterH + LAYOUT.iterGap);
+    const el = createNodeEl(it.id, 'iteration', it.name, it.status, it.metric, mod.color);
+    el.style.borderLeftColor = mod.color;
+    positionNode(el, ix, iy, LAYOUT.iterW, LAYOUT.iterH);
+    nodeLayer.appendChild(el);
+    nodeElements[it.id] = el;
+    showNode(el, delay);
+    delay += 30;
+
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (it.id === iterationId) {
+        renderLevel1(moduleId);
+      } else if (it.substeps && it.substeps.length > 0) {
+        renderLevel2(moduleId, it.id);
+      } else {
+        selectNode(it);
+      }
+    });
+  });
+
+  // Place sub-step nodes to the right of the selected iteration
+  const iterIdx = iters.findIndex(it => it.id === iterationId);
+  const iterY = iterStartY + iterIdx * (LAYOUT.iterH + LAYOUT.iterGap);
+  const iterRightX = modCenterX + LAYOUT.iterW / 2;
+  const subs = iter.substeps || [];
+  let maxX = 0;
+  let maxY = 0;
+
+  if (subs.length > 0) {
+    const subStartX = iterRightX + 40;
+    const subStartY = iterY - ((subs.length - 1) * (LAYOUT.subH + LAYOUT.subGap)) / 2 + LAYOUT.iterH / 2 - LAYOUT.subH / 2;
+
+    // Arrange as a horizontal chain flowing right from the iteration
+    const subTotalW = subs.length * LAYOUT.subW + (subs.length - 1) * LAYOUT.subGap;
+    const chainStartX = iterRightX + 40;
+    const chainY = iterY + (LAYOUT.iterH - LAYOUT.subH) / 2;
+
+    subs.forEach((sub, i) => {
+      const sx = chainStartX + i * (LAYOUT.subW + LAYOUT.subGap);
+      const sy = chainY;
+      const el = createNodeEl(sub.id, 'substep', sub.name, sub.status, sub.metric, mod.color);
+      el.style.borderTopColor = mod.color;
+      positionNode(el, sx, sy, LAYOUT.subW, LAYOUT.subH);
+      nodeLayer.appendChild(el);
+      nodeElements[sub.id] = el;
+      showNode(el, delay);
+      delay += 50;
+
+      maxX = Math.max(maxX, sx + LAYOUT.subW);
+      maxY = Math.max(maxY, sy + LAYOUT.subH);
+
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        selectNode(sub);
+      });
+    });
+  }
+
+  // Resize canvas
+  const totalModW = startX + modules.length * (LAYOUT.moduleW + LAYOUT.moduleGap) + LAYOUT.canvasPad;
+  const finalMaxY = Math.max(iterStartY + iters.length * (LAYOUT.iterH + LAYOUT.iterGap), maxY);
+  resizeCanvas(Math.max(totalModW, maxX + LAYOUT.canvasPad), finalMaxY + 120);
+
+  // Draw arrows
+  setTimeout(() => {
+    // Module horizontal arrows
+    for (let i = 0; i < modules.length - 1; i++) {
+      const fromStatus = modules[i].status;
+      const color = fromStatus === STATUS.COMPLETE ? 'green' : fromStatus === STATUS.ACTIVE ? 'blue' : 'gray';
+      drawArrow(modules[i].id, modules[i + 1].id, color, modules[i + 1].status === STATUS.ACTIVE, false);
+    }
+
+    // Module to first iteration
+    if (iters.length > 0) {
+      const modColor = mod.status === STATUS.COMPLETE ? 'green' : mod.status === STATUS.ACTIVE ? 'blue' : 'gray';
+      drawArrow(mod.id, iters[0].id, modColor, iters[0].status === STATUS.ACTIVE, true);
+    }
+
+    // Iteration chain
+    for (let i = 0; i < iters.length - 1; i++) {
+      const color = iters[i].status === STATUS.COMPLETE ? 'green' : iters[i].status === STATUS.ACTIVE ? 'blue' : 'gray';
+      drawArrow(iters[i].id, iters[i + 1].id, color, iters[i + 1].status === STATUS.ACTIVE, true);
+    }
+
+    // Iteration to first substep
+    if (subs.length > 0) {
+      const iterColor = iter.status === STATUS.COMPLETE ? 'green' : iter.status === STATUS.ACTIVE ? 'blue' : 'gray';
+      drawArrow(iterationId, subs[0].id, iterColor, subs[0].status === STATUS.ACTIVE, false);
+    }
+
+    // Substep chain
+    for (let i = 0; i < subs.length - 1; i++) {
+      const color = subs[i].status === STATUS.COMPLETE ? 'green' : subs[i].status === STATUS.ACTIVE ? 'blue' : 'gray';
+      drawArrow(subs[i].id, subs[i + 1].id, color, subs[i + 1].status === STATUS.ACTIVE, false);
+    }
+  }, 120);
+}
+
+// ── Node Click Handlers ──
+function onModuleClick(moduleId) {
+  const mod = pipelineData.modules.find(m => m.id === moduleId);
+  if (mod.iterations.length > 0) {
+    renderLevel1(moduleId);
+  } else {
+    selectNode(mod);
+  }
+}
+
+function selectNode(nodeData) {
+  // Deselect previous
+  document.querySelectorAll('.fc-node.selected').forEach(el => el.classList.remove('selected'));
+
+  selectedNode = nodeData.id;
+  const el = nodeElements[nodeData.id];
+  if (el) el.classList.add('selected');
+
+  showDetailPanel(nodeData);
+}
+
+// ── Breadcrumb ──
+function updateBreadcrumb() {
+  const bc = document.getElementById('breadcrumb');
+  const hint = document.getElementById('level-hint');
+
+  let html = `<span class="crumb ${currentLevel === 0 ? 'active' : ''}" data-level="0" onclick="renderLevel0()">Pipeline</span>`;
+
+  if (currentLevel >= 1 && expandedModule) {
+    const mod = pipelineData.modules.find(m => m.id === expandedModule);
+    html += `<span class="sep">&#8250;</span>`;
+    html += `<span class="crumb ${currentLevel === 1 ? 'active' : ''}" data-level="1" onclick="renderLevel1('${expandedModule}')">${mod.name}</span>`;
+  }
+
+  if (currentLevel >= 2 && expandedIteration) {
+    const mod = pipelineData.modules.find(m => m.id === expandedModule);
+    const iter = mod.iterations.find(it => it.id === expandedIteration);
+    html += `<span class="sep">&#8250;</span>`;
+    html += `<span class="crumb active" data-level="2">${iter.name}</span>`;
+  }
+
+  // Preserve the hint element
+  const hintText = currentLevel === 0 ? 'Click a module to expand'
+    : currentLevel === 1 ? 'Click an iteration to see sub-steps'
+    : 'Click a sub-step for details';
+
+  html += `<span class="level-hint" id="level-hint">${hintText}</span>`;
+
+  bc.innerHTML = html;
+}
+
+// ── Detail Panel ──
+function showDetailPanel(nodeData) {
+  const panel = document.getElementById('detail-panel');
+  const title = document.getElementById('detail-title');
+  const body = document.getElementById('detail-body');
+  const wrap = document.getElementById('canvas-wrap');
+
+  // Find full data
+  let data = nodeData.detail;
+  let nodeName = nodeData.name;
+
+  // Build status badge for title
+  const sIcon = statusIcon(nodeData.status);
+  const sColor = COLORS[nodeData.status];
+  title.innerHTML = `<span style="color:${sColor}">${sIcon}</span> ${nodeName}`;
+
+  if (!data) {
+    body.innerHTML = '<div style="color:var(--text-dim);font-size:12px">No detail data available for this node.</div>';
+    panel.classList.add('open');
+    wrap.classList.add('panel-open');
+    return;
+  }
+
+  let html = '';
+
+  if (data.type === 'summary') {
+    html = '<div class="detail-grid">';
+    data.items.forEach(item => {
+      html += `<div class="detail-card">
+        <div class="card-label">${item.label}</div>
+        <div class="card-value">${item.value}</div>
+        ${item.sub ? `<div class="card-sub">${item.sub}</div>` : ''}
+      </div>`;
+    });
+    html += '</div>';
+  }
+
+  else if (data.type === 'review') {
+    html = '<div style="display:flex;gap:24px;height:100%">';
+    html += '<div style="flex:0 0 200px">';
+    html += `<div class="detail-card" style="margin-bottom:10px">
+      <div class="card-label">Score</div>
+      <div class="card-value" style="font-size:20px;color:var(--green)">${data.score}</div>
+    </div>`;
+    html += `<div class="detail-card">
+      <div class="card-label">Title</div>
+      <div class="card-value" style="font-size:11px;line-height:1.4">${data.title}</div>
+    </div>`;
+    html += '</div>';
+    html += '<div style="flex:1;overflow-y:auto">';
+    html += `<div class="detail-card" style="margin-bottom:10px">
+      <div class="card-label">Abstract</div>
+      <div class="card-value" style="font-size:11px;font-weight:400;line-height:1.5;color:var(--text-dim)">${data.abstract}</div>
+    </div>`;
+    if (data.critiques && data.critiques.length > 0) {
+      html += '<div class="detail-card"><div class="card-label">Critiques</div><div class="critique-list">';
+      data.critiques.forEach(c => {
+        html += `<div class="critique-item">${c}</div>`;
+      });
+      html += '</div></div>';
+    }
+    html += '</div></div>';
+  }
+
+  else if (data.type === 'artifacts') {
+    html = '<div class="artifact-list">';
+    data.items.forEach(item => {
+      const icon = item.status === STATUS.COMPLETE ? '&#10003;' : item.status === STATUS.ACTIVE ? '&#9654;' : '&#9675;';
+      const iconColor = COLORS[item.status];
+      html += `<div class="artifact-row">
+        <span class="art-status" style="color:${iconColor}">${icon}</span>
+        <span class="art-name">${item.name}</span>
+        <span class="art-metric">${item.metric}</span>
+      </div>`;
+    });
+    html += '</div>';
+  }
+
+  body.innerHTML = html;
+  panel.classList.add('open');
+  wrap.classList.add('panel-open');
+}
+
+function closePanel() {
+  document.getElementById('detail-panel').classList.remove('open');
+  document.getElementById('canvas-wrap').classList.remove('panel-open');
+  document.querySelectorAll('.fc-node.selected').forEach(el => el.classList.remove('selected'));
+  selectedNode = null;
+}
+
+document.getElementById('close-panel').addEventListener('click', closePanel);
+
+// ── Keyboard navigation ──
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    if (currentLevel === 2) renderLevel1(expandedModule);
+    else if (currentLevel === 1) renderLevel0();
+    else closePanel();
+  }
+});
+
+// ── Handle resize ──
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    if (currentLevel === 0) renderLevel0();
+    else if (currentLevel === 1) renderLevel1(expandedModule);
+    else if (currentLevel === 2) renderLevel2(expandedModule, expandedIteration);
+  }, 200);
+});
+
+// ── Init ──
+renderLevel0();
+</script>
+</body>
+</html>

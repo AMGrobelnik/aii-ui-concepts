@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: #080a0f;
+    color: #c8cdd5;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    line-height: 1.6;
+    font-size: 16px;
+    overflow-x: hidden;
+  }
+
+  /* -- Pipeline Track -------------------------------------------------- */
+  .pipeline-track {
+    width: 100%;
+    max-width: 700px;
+    height: 100px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 56px;
+    padding: 0 20px;
+    position: relative;
+    user-select: none;
+  }
+
+  .track-line {
+    position: absolute;
+    top: 50%;
+    left: 20px;
+    right: 20px;
+    height: 2px;
+    transform: translateY(-8px);
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  .track-segment {
+    position: absolute;
+    height: 2px;
+    top: 0;
+  }
+  .track-segment.complete { background: #2d6b4f; }
+  .track-segment.active {
+    background: linear-gradient(90deg, #2d6b4f, #3b82f6);
+    overflow: hidden;
+  }
+  .track-segment.active::after {
+    content: '';
+    position: absolute;
+    top: 0; left: -60px;
+    width: 60px; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(96,165,250,0.6), transparent);
+    animation: sweep 1.8s ease-in-out infinite;
+  }
+  @keyframes sweep { 0% { left: -60px; } 100% { left: calc(100% + 60px); } }
+  .track-segment.pending {
+    border-top: 2px dashed #1e2230;
+    background: none;
+    height: 0;
+  }
+
+  .node {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    z-index: 1;
+    cursor: pointer;
+    position: relative;
+  }
+
+  .node-circle {
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 600;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .node:hover .node-circle { transform: scale(1.15); }
+
+  .node-circle.complete {
+    background: #16382a;
+    border: 2px solid #2d6b4f;
+    color: #4ade80;
+  }
+  .node-circle.active {
+    background: #172554;
+    border: 2px solid #3b82f6;
+    color: #60a5fa;
+    box-shadow: 0 0 12px rgba(59,130,246,0.25);
+    animation: pulse-glow 2.4s ease-in-out infinite;
+  }
+  @keyframes pulse-glow {
+    0%, 100% { box-shadow: 0 0 8px rgba(59,130,246,0.2); }
+    50% { box-shadow: 0 0 18px rgba(59,130,246,0.4); }
+  }
+  .node-circle.pending {
+    background: #0d0f16;
+    border: 2px solid #1e2230;
+    color: #3a3f4d;
+  }
+
+  .node-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: #6b7280;
+    transition: color 0.2s ease;
+  }
+  .node:hover .node-label { color: #9ca3af; }
+  .node.selected .node-label { color: #c8cdd5; }
+
+  .node-metric {
+    font-size: 11px;
+    color: #4b5060;
+    font-weight: 400;
+    font-variant-numeric: tabular-nums;
+  }
+  .node-metric.pulsing { animation: metric-pulse 2.4s ease-in-out infinite; }
+  @keyframes metric-pulse {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 1; }
+  }
+
+  /* -- Summary Area ---------------------------------------------------- */
+  .summary-area {
+    width: 100%;
+    max-width: 620px;
+    padding: 0 20px;
+    margin-top: 36px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .summary-heading {
+    text-align: center;
+    margin-bottom: 6px;
+    position: relative;
+    height: 32px;
+    overflow: hidden;
+  }
+  .summary-heading-text {
+    font-size: 20px;
+    font-weight: 600;
+    color: #e2e5eb;
+    transition: opacity 0.25s ease, transform 0.25s ease;
+  }
+
+  .summary-subheading {
+    text-align: center;
+    margin-bottom: 24px;
+    position: relative;
+    min-height: 22px;
+  }
+  .summary-subheading-text {
+    font-size: 14px;
+    color: #6b7280;
+    font-weight: 400;
+    transition: opacity 0.25s ease;
+  }
+
+  .summary-bubble {
+    width: 100%;
+    max-width: 550px;
+    background: #0f1117;
+    border-radius: 16px;
+    padding: 32px;
+    position: relative;
+    min-height: 100px;
+  }
+  .summary-bubble-content {
+    transition: opacity 0.25s ease;
+    font-size: 16px;
+    line-height: 1.7;
+    color: #9ca3af;
+  }
+
+  .summary-bubble-detail {
+    margin-top: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    transition: opacity 0.25s ease;
+  }
+
+  .detail-row {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .detail-icon {
+    flex-shrink: 0;
+    width: 16px;
+    text-align: center;
+    font-size: 13px;
+  }
+  .detail-icon.done { color: #4ade80; }
+  .detail-icon.running { color: #60a5fa; }
+  .detail-icon.wait { color: #3a3f4d; }
+  .detail-name { color: #9ca3af; }
+  .detail-value {
+    color: #5a5f6d;
+    margin-left: auto;
+    font-variant-numeric: tabular-nums;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  /* -- Sub-stage Dots -------------------------------------------------- */
+  .substage-row {
+    display: flex;
+    gap: 18px;
+    margin-top: 24px;
+    justify-content: center;
+    user-select: none;
+  }
+  .substage-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 6px;
+    transition: background 0.15s ease;
+  }
+  .substage-item:hover { background: rgba(255,255,255,0.03); }
+  .substage-item.selected { background: rgba(255,255,255,0.05); }
+
+  .substage-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .substage-dot.done { background: #2d6b4f; }
+  .substage-dot.running {
+    background: #2563eb;
+    animation: dot-pulse 2s ease-in-out infinite;
+  }
+  @keyframes dot-pulse {
+    0%, 100% { opacity: 0.7; }
+    50% { opacity: 1; }
+  }
+  .substage-dot.wait { background: #1a1d27; }
+
+  .substage-label {
+    font-size: 11px;
+    font-weight: 500;
+    color: #4b5060;
+    letter-spacing: 0.02em;
+    transition: color 0.15s ease;
+  }
+  .substage-item:hover .substage-label { color: #6b7280; }
+  .substage-item.selected .substage-label { color: #9ca3af; }
+
+  /* -- Footer ---------------------------------------------------------- */
+  .footer {
+    margin-top: 40px;
+    display: flex;
+    gap: 24px;
+    font-size: 12px;
+    color: #3a3f4d;
+    font-variant-numeric: tabular-nums;
+    padding-bottom: 48px;
+  }
+  .footer span { display: flex; align-items: center; gap: 5px; }
+
+  /* -- Transitions ----------------------------------------------------- */
+  .fade-out { opacity: 0 !important; }
+  .slide-up {
+    transform: translateY(-4px) !important;
+    opacity: 0 !important;
+  }
+</style>
+</head>
+<body>
+
+<!-- Pipeline Track -->
+<div class="pipeline-track" id="track">
+  <div class="track-line" id="trackLine"></div>
+</div>
+
+<!-- Summary Area -->
+<div class="summary-area">
+  <div class="summary-heading">
+    <div class="summary-heading-text" id="headingText"></div>
+  </div>
+  <div class="summary-subheading">
+    <div class="summary-subheading-text" id="subheadingText"></div>
+  </div>
+  <div class="summary-bubble">
+    <div class="summary-bubble-content" id="bubbleContent"></div>
+    <div class="summary-bubble-detail" id="bubbleDetail"></div>
+  </div>
+  <div class="substage-row" id="substageRow"></div>
+</div>
+
+<div class="footer">
+  <span id="footerTime"></span>
+  <span id="footerCost"></span>
+</div>
+
+<script>
+// -- Data -------------------------------------------------------------
+const NODES = [
+  {
+    id: 'seed',
+    label: 'Seed',
+    metric: '12 gaps',
+    status: 'complete',
+    icon: '\u2713',
+    heading: 'Seed Hypothesis',
+    subheading: 'Complete',
+    summary: 'Mined 847 papers from OpenAlex. Built knowledge graph with 2,341 triples. Identified 12 research gaps in computational linguistics. Selected 5 seed topics for hypothesis generation.',
+    detail: null,
+    substages: null,
+    time: '4m 22s',
+    cost: '$1.87'
+  },
+  {
+    id: 'hypothesis',
+    label: 'Hypothesis',
+    metric: '8.4/10',
+    status: 'complete',
+    icon: '\u2713',
+    heading: 'Hypothesis Loop',
+    subheading: 'Complete',
+    summary: 'Developed hypothesis through 3 iterations of generation and adversarial review. Score improved from 6.2 to 8.4/10. Final hypothesis: Cross-lingual Contrastive Pre-training with Synthetic Code-Switching for Low-Resource Transfer.',
+    detail: null,
+    substages: null,
+    time: '11m 15s',
+    cost: '$4.23'
+  },
+  {
+    id: 'invention',
+    label: 'Invention',
+    metric: '3/5',
+    metricPulse: true,
+    status: 'active',
+    icon: '\u25B6',
+    heading: 'Invention Loop',
+    subheading: 'Iteration 2 of 3 \u2014 Generating Artifacts',
+    summary: '3 of 5 research artifacts complete. Baseline experiment achieved 0.847 accuracy (+17.5% over prior work). Multilingual dataset created with 2,400 examples. Formal convergence proof verified. Currently running ablation study.',
+    detail: null,
+    substages: [
+      {
+        id: 'strategy', abbr: 'S', label: 'Strategy', status: 'done',
+        heading: 'Generate Strategy',
+        subheading: 'Complete',
+        summary: 'Analyzed prior iteration feedback and generated 3 strategic directions. Selected contrastive alignment with code-switching augmentation. Added ablation experiments to address reviewer concerns about missing comparisons.',
+        detail: null,
+        time: '1m 42s', cost: '$0.68'
+      },
+      {
+        id: 'plan', abbr: 'P', label: 'Plan', status: 'done',
+        heading: 'Generate Plan',
+        subheading: 'Complete',
+        summary: 'Decomposed strategy into 5 concrete artifacts with dependency ordering. Estimated compute budget at 2.1 GPU-hours. Prioritized baseline replication first to establish comparison point.',
+        detail: null,
+        time: '0m 58s', cost: '$0.41'
+      },
+      {
+        id: 'artifacts', abbr: 'A', label: 'Artifacts', status: 'running',
+        heading: 'Generate Artifacts',
+        subheading: 'Iteration 2',
+        summary: 'Building computational evidence for the hypothesis.',
+        detail: [
+          { name: 'Contrastive Baseline', value: 'acc: 0.847', status: 'done' },
+          { name: 'Multilingual Pairs', value: '2,400 examples', status: 'done' },
+          { name: 'Convergence Proof', value: 'verified', status: 'done' },
+          { name: 'Ablation Study', value: 'running', status: 'running' },
+          { name: 'Cross-lingual Eval', value: 'pending', status: 'wait' }
+        ],
+        time: '12m 08s', cost: '$5.41'
+      },
+      {
+        id: 'paper_text', abbr: 'T', label: 'Text', status: 'wait',
+        heading: 'Generate Paper Text',
+        subheading: 'Pending',
+        summary: 'Will synthesize experimental results and theoretical contributions into a structured paper draft. Sections: introduction, related work, methodology, experiments, discussion, conclusion.',
+        detail: null,
+        time: '\u2014', cost: '\u2014'
+      },
+      {
+        id: 'review', abbr: 'R', label: 'Review', status: 'wait',
+        heading: 'Review Paper',
+        subheading: 'Pending',
+        summary: 'Adversarial review will evaluate clarity, technical correctness, novelty, and significance. Previous iteration scored 6.8/10 with feedback on insufficient ablation coverage.',
+        detail: null,
+        time: '\u2014', cost: '\u2014'
+      },
+      {
+        id: 'update', abbr: 'U', label: 'Update', status: 'wait',
+        heading: 'Update Hypothesis',
+        subheading: 'Pending',
+        summary: 'Will incorporate review feedback to refine the hypothesis and experimental plan for the next iteration, if needed.',
+        detail: null,
+        time: '\u2014', cost: '\u2014'
+      }
+    ],
+    time: '14m 48s',
+    cost: '$6.50'
+  },
+  {
+    id: 'paper',
+    label: 'Paper',
+    metric: '\u2014',
+    status: 'pending',
+    icon: '\u25CB',
+    heading: 'Paper Generation',
+    subheading: 'Pending',
+    summary: 'Will compile the final research paper with figures, references, and supplementary materials. Generates LaTeX source and PDF output ready for submission.',
+    detail: null,
+    substages: null,
+    time: '\u2014',
+    cost: '\u2014'
+  }
+];
+
+// -- State ------------------------------------------------------------
+let selectedNodeIdx = 2; // Invention (active)
+let selectedSubstageIdx = null;
+let transitioning = false;
+
+// -- DOM References ---------------------------------------------------
+const trackEl = document.getElementById('track');
+const trackLineEl = document.getElementById('trackLine');
+const headingEl = document.getElementById('headingText');
+const subheadingEl = document.getElementById('subheadingText');
+const bubbleContentEl = document.getElementById('bubbleContent');
+const bubbleDetailEl = document.getElementById('bubbleDetail');
+const substageRowEl = document.getElementById('substageRow');
+const footerTimeEl = document.getElementById('footerTime');
+const footerCostEl = document.getElementById('footerCost');
+
+// -- Build Track Nodes ------------------------------------------------
+function buildTrack() {
+  NODES.forEach((node, i) => {
+    const el = document.createElement('div');
+    el.className = 'node';
+    el.dataset.index = i;
+
+    const circle = document.createElement('div');
+    circle.className = `node-circle ${node.status}`;
+    circle.textContent = node.icon;
+
+    const label = document.createElement('div');
+    label.className = 'node-label';
+    label.textContent = node.label;
+
+    const metric = document.createElement('div');
+    metric.className = `node-metric${node.metricPulse ? ' pulsing' : ''}`;
+    metric.textContent = node.metric;
+
+    el.appendChild(circle);
+    el.appendChild(label);
+    el.appendChild(metric);
+    el.addEventListener('click', () => selectNode(i));
+    trackEl.appendChild(el);
+  });
+
+  buildTrackLines();
+}
+
+function buildTrackLines() {
+  trackLineEl.innerHTML = '';
+  const nodes = trackEl.querySelectorAll('.node');
+  if (nodes.length < 2) return;
+
+  const trackRect = trackLineEl.getBoundingClientRect();
+
+  for (let i = 0; i < nodes.length - 1; i++) {
+    const circleA = nodes[i].querySelector('.node-circle');
+    const circleB = nodes[i + 1].querySelector('.node-circle');
+    const rA = circleA.getBoundingClientRect();
+    const rB = circleB.getBoundingClientRect();
+
+    const left = rA.right - trackRect.left;
+    const right = rB.left - trackRect.left;
+
+    const seg = document.createElement('div');
+    seg.className = 'track-segment';
+    seg.style.left = left + 'px';
+    seg.style.width = (right - left) + 'px';
+
+    const nA = NODES[i];
+    const nB = NODES[i + 1];
+    if (nA.status === 'complete' && nB.status === 'complete') {
+      seg.classList.add('complete');
+    } else if (nA.status === 'complete' && nB.status === 'active') {
+      seg.classList.add('active');
+    } else {
+      seg.classList.add('pending');
+    }
+
+    trackLineEl.appendChild(seg);
+  }
+}
+
+// -- Build Sub-stage Row ----------------------------------------------
+function buildSubstages(node) {
+  substageRowEl.innerHTML = '';
+  if (!node.substages) return;
+
+  node.substages.forEach((ss, i) => {
+    const item = document.createElement('div');
+    item.className = 'substage-item';
+    item.dataset.index = i;
+
+    const dot = document.createElement('div');
+    dot.className = `substage-dot ${ss.status}`;
+
+    const label = document.createElement('div');
+    label.className = 'substage-label';
+    label.textContent = ss.abbr;
+
+    item.appendChild(dot);
+    item.appendChild(label);
+    item.addEventListener('click', (e) => {
+      e.stopPropagation();
+      selectSubstage(i);
+    });
+    substageRowEl.appendChild(item);
+  });
+}
+
+// -- Render Summary ---------------------------------------------------
+function renderSummary(data, animate) {
+  if (animate && !transitioning) {
+    transitioning = true;
+    headingEl.classList.add('slide-up');
+    subheadingEl.classList.add('fade-out');
+    bubbleContentEl.classList.add('fade-out');
+    bubbleDetailEl.classList.add('fade-out');
+
+    setTimeout(() => {
+      applySummary(data);
+      headingEl.classList.remove('slide-up');
+      subheadingEl.classList.remove('fade-out');
+      bubbleContentEl.classList.remove('fade-out');
+      bubbleDetailEl.classList.remove('fade-out');
+      transitioning = false;
+    }, 180);
+  } else {
+    applySummary(data);
+  }
+}
+
+function applySummary(data) {
+  headingEl.textContent = data.heading;
+  subheadingEl.textContent = data.subheading;
+  bubbleContentEl.textContent = data.summary;
+
+  bubbleDetailEl.innerHTML = '';
+  if (data.detail && data.detail.length) {
+    const metaLine = document.createElement('div');
+    metaLine.style.cssText = 'font-size:13px;color:#4b5060;margin-bottom:12px;font-variant-numeric:tabular-nums;';
+    metaLine.textContent = `${data.detail.filter(d => d.status === 'done').length}/${data.detail.length} complete`;
+    if (data.time && data.time !== '\u2014') metaLine.textContent += ` \u00B7 ${data.time}`;
+    if (data.cost && data.cost !== '\u2014') metaLine.textContent += ` \u00B7 ${data.cost}`;
+    bubbleDetailEl.appendChild(metaLine);
+
+    data.detail.forEach(item => {
+      const row = document.createElement('div');
+      row.className = 'detail-row';
+
+      const icon = document.createElement('span');
+      icon.className = 'detail-icon';
+      if (item.status === 'done') {
+        icon.classList.add('done');
+        icon.textContent = '\u2713';
+      } else if (item.status === 'running') {
+        icon.classList.add('running');
+        icon.textContent = '\u25B6';
+      } else {
+        icon.classList.add('wait');
+        icon.textContent = '\u25CB';
+      }
+
+      const name = document.createElement('span');
+      name.className = 'detail-name';
+      name.textContent = item.name;
+
+      const value = document.createElement('span');
+      value.className = 'detail-value';
+      value.textContent = item.value;
+
+      row.appendChild(icon);
+      row.appendChild(name);
+      row.appendChild(value);
+      bubbleDetailEl.appendChild(row);
+    });
+  }
+
+  footerTimeEl.textContent = data.time && data.time !== '\u2014' ? `\u23F1 ${data.time}` : '';
+  footerCostEl.textContent = data.cost && data.cost !== '\u2014' ? `$ ${data.cost}` : '';
+}
+
+// -- Selection Logic --------------------------------------------------
+function selectNode(idx) {
+  if (transitioning) return;
+  selectedNodeIdx = idx;
+  selectedSubstageIdx = null;
+
+  // Update node selection styling
+  trackEl.querySelectorAll('.node').forEach((n, i) => {
+    n.classList.toggle('selected', i === idx);
+  });
+
+  const node = NODES[idx];
+  buildSubstages(node);
+  highlightSubstage(null);
+  renderSummary(node, true);
+}
+
+function selectSubstage(idx) {
+  if (transitioning) return;
+  const node = NODES[selectedNodeIdx];
+  if (!node.substages) return;
+
+  if (selectedSubstageIdx === idx) {
+    // Deselect: go back to node summary
+    selectedSubstageIdx = null;
+    highlightSubstage(null);
+    renderSummary(node, true);
+    return;
+  }
+
+  selectedSubstageIdx = idx;
+  highlightSubstage(idx);
+  renderSummary(node.substages[idx], true);
+}
+
+function highlightSubstage(idx) {
+  substageRowEl.querySelectorAll('.substage-item').forEach((item, i) => {
+    item.classList.toggle('selected', i === idx);
+  });
+}
+
+// -- Init -------------------------------------------------------------
+function init() {
+  buildTrack();
+  selectNode(selectedNodeIdx);
+}
+
+window.addEventListener('resize', () => {
+  buildTrackLines();
+});
+
+init();
+</script>
+</body>
+</html>

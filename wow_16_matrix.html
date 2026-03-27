@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor - Matrix Data Rain</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #000;
+    overflow: hidden;
+    font-family: 'Courier New', 'Consolas', monospace;
+    color: #00ff41;
+    width: 100vw;
+    height: 100vh;
+  }
+  canvas { display: block; position: absolute; top: 0; left: 0; z-index: 1; }
+
+  /* HUD overlay */
+  .hud { position: absolute; z-index: 10; pointer-events: none; }
+  .hud-top-left {
+    top: 16px; left: 20px;
+    font-size: 13px;
+    letter-spacing: 1.5px;
+    color: #00ff41;
+    text-shadow: 0 0 8px #00ff41, 0 0 20px rgba(0,255,65,0.3);
+    opacity: 0.9;
+  }
+  .hud-top-right {
+    top: 16px; right: 20px;
+    font-size: 13px;
+    letter-spacing: 1px;
+    color: #00ff41;
+    text-shadow: 0 0 8px #00ff41, 0 0 20px rgba(0,255,65,0.3);
+    text-align: right;
+    opacity: 0.9;
+  }
+  .hud-top-right .cost { color: #ffcc00; text-shadow: 0 0 8px #ffcc00; }
+  .hud-top-right .tokens { color: #00ccff; text-shadow: 0 0 8px #00ccff; }
+
+  /* Progress bar */
+  .progress-wrap {
+    bottom: 14px; left: 20px; right: 20px;
+    height: 3px;
+    background: rgba(0,255,65,0.08);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    width: 58%;
+    border-radius: 2px;
+    background: linear-gradient(90deg, #00ff41 0%, #00ccff 60%, rgba(0,100,255,0.3) 100%);
+    box-shadow: 0 0 12px #00ff41, 0 0 30px rgba(0,204,255,0.3);
+    animation: progressPulse 3s ease-in-out infinite;
+  }
+  @keyframes progressPulse {
+    0%, 100% { opacity: 0.8; }
+    50% { opacity: 1; }
+  }
+
+  /* Region labels */
+  .region-label {
+    position: absolute; z-index: 10; pointer-events: none;
+    font-size: 10px; letter-spacing: 3px; text-transform: uppercase;
+    writing-mode: vertical-rl; text-orientation: mixed;
+    opacity: 0.25;
+  }
+  .region-seed { top: 2%; right: 8px; color: #00ff41; }
+  .region-hypo { top: 20%; right: 8px; color: #bb66ff; }
+  .region-inv  { top: 48%; right: 8px; color: #00ccff; }
+  .region-paper { top: 82%; right: 8px; color: #335544; }
+</style>
+</head>
+<body>
+
+<canvas id="rain"></canvas>
+
+<!-- HUD -->
+<div class="hud hud-top-left" id="hudLeft">AI_INVENTOR://ssl-low-resource-v3</div>
+<div class="hud hud-top-right" id="hudRight">
+  <span id="elapsed">T+02:34:17</span> |
+  <span class="cost" id="cost">$12.47</span> |
+  <span class="tokens" id="tokens">847K tokens</span>
+</div>
+<div class="hud progress-wrap"><div class="progress-fill" id="progressFill"></div></div>
+
+<!-- Region labels -->
+<div class="region-label region-seed">SEED</div>
+<div class="region-label region-hypo">HYPOTHESIS</div>
+<div class="region-label region-inv">INVENTION</div>
+<div class="region-label region-paper">PAPER</div>
+
+<script>
+// ============================================================
+//  CONFIG
+// ============================================================
+const CFG = {
+  colWidth: 18,            // px per column
+  fontSize: 15,            // base font size
+  minSpeed: 0.3,
+  maxSpeed: 1.8,
+  trailLength: 28,         // characters visible per trail
+  burstInterval: 3200,     // ms between random bursts
+  morphInterval: 4500,     // ms between center-text morphs
+  fps: 60,
+};
+
+// Research vocabulary pools
+const VOCAB = {
+  hypothesis: [
+    "contrastive","pre-training","cross-lingual","zero-shot","self-supervised",
+    "few-shot","attention","transformer","embedding","fine-tune","distillation",
+    "curriculum","meta-learning","multi-task","alignment","augmentation",
+    "bi-encoder","masked-lm","causal-lm","tokenizer","subword","byte-pair",
+    "knowledge-graph","retrieval","dense-passage","neurosymbolic","scaling-law",
+    "in-context","chain-of-thought","reasoning","compositional","generalization",
+    "disentangled","variational","autoregressive","diffusion","flow-matching",
+  ],
+  scores: [
+    "8.4","0.847","17.5%","92.3%","0.961","6.7","0.033","11.2%","0.884",
+    "95.1%","3.14","0.772","88.6%","0.519","21.7%","0.990","7.1","14.3%",
+    "0.653","99.2%","4.28","0.811","76.4%","0.927","31.0%",
+  ],
+  pipeline: [
+    "hypothesis","artifact","experiment","dataset","proof","validation",
+    "iteration","pipeline","workflow","checkpoint","review","seed","plan",
+    "narrative","strategy","benchmark","baseline","ablation","evaluation",
+    "metric","objective","constraint","novelty","feasibility","impact",
+  ],
+  models: [
+    "opus","claude","sonnet","haiku","gpt-4o","llama","gemini","mistral",
+    "phi-3","qwen","deepseek","command-r","falcon","yi","dbrx",
+  ],
+  metrics: [
+    "acc","f1","loss","bleu","rouge","bertscore","perplexity","mrr","ndcg",
+    "auc","mAP","recall","precision","cer","wer","exact-match","pass@k",
+  ],
+};
+const ALL_TERMS = Object.values(VOCAB).flat();
+
+// Module region config (vertical zones)
+const REGIONS = [
+  { name: "seed",       yStart: 0.00, yEnd: 0.15, color: [0,255,65],   speed: 0.25, density: 0.3, active: false },
+  { name: "hypothesis", yStart: 0.15, yEnd: 0.35, color: [187,102,255], speed: 0.5,  density: 0.5, active: false },
+  { name: "invention",  yStart: 0.35, yEnd: 0.75, color: [0,204,255],   speed: 1.0,  density: 1.0, active: true  },
+  { name: "paper",      yStart: 0.75, yEnd: 1.00, color: [51,85,68],    speed: 0.15, density: 0.15, active: false },
+];
+
+// Center text formation
+const CENTER_TEXTS = [
+  ["INVENTION LOOP", "Iteration 2/3", "Generating Artifacts: 3/5"],
+  ["INVENTION LOOP", "Iteration 2/3", "Artifact: demo_ssl.py"],
+  ["INVENTION LOOP", "Iteration 2/3", "Evaluating Baseline"],
+  ["INVENTION LOOP", "Iteration 2/3", "Generating Artifacts: 4/5"],
+];
+
+// ============================================================
+//  CANVAS SETUP
+// ============================================================
+const canvas = document.getElementById("rain");
+const ctx = canvas.getContext("2d");
+let W, H, cols, rows;
+
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  cols = Math.floor(W / CFG.colWidth);
+  rows = Math.floor(H / CFG.fontSize);
+  buildColumns();
+  buildCenterMap();
+}
+window.addEventListener("resize", resize);
+
+// ============================================================
+//  COLUMN DATA
+// ============================================================
+let columns = [];
+
+function pickTerm() {
+  return ALL_TERMS[Math.floor(Math.random() * ALL_TERMS.length)];
+}
+
+function regionAt(yNorm) {
+  for (const r of REGIONS) {
+    if (yNorm >= r.yStart && yNorm < r.yEnd) return r;
+  }
+  return REGIONS[REGIONS.length - 1];
+}
+
+function buildColumns() {
+  columns = [];
+  for (let i = 0; i < cols; i++) {
+    const x = i * CFG.colWidth + CFG.colWidth / 2;
+    // Determine dominant region for this column (center of column)
+    const regionSample = regionAt(0.5); // will be refined per-char
+    const speedMult = 0.4 + Math.random() * 0.6;
+    columns.push({
+      x,
+      index: i,
+      chars: [],           // array of { ch, y, brightness, age }
+      speed: (CFG.minSpeed + Math.random() * (CFG.maxSpeed - CFG.minSpeed)) * speedMult,
+      headY: -Math.random() * H * 1.5,  // stagger start
+      term: pickTerm(),
+      termIdx: 0,
+      burstTimer: 0,
+      burstBright: 0,
+    });
+  }
+}
+
+// ============================================================
+//  CENTER TEXT MAP — which grid cells should show bright chars
+// ============================================================
+let centerMap = {};  // key "col,row" => character
+let centerTextIdx = 0;
+let lastMorph = 0;
+
+function buildCenterMap() {
+  centerMap = {};
+  const lines = CENTER_TEXTS[centerTextIdx % CENTER_TEXTS.length];
+  const centerCol = Math.floor(cols / 2);
+  const centerRow = Math.floor(rows / 2);
+
+  // Measure max width to center all lines
+  lines.forEach((line, li) => {
+    const startCol = centerCol - Math.floor(line.length / 2);
+    const row = centerRow - 1 + li;
+    for (let ci = 0; ci < line.length; ci++) {
+      const ch = line[ci];
+      if (ch !== " ") {
+        centerMap[`${startCol + ci},${row}`] = ch;
+      }
+    }
+  });
+}
+
+// ============================================================
+//  BURST SYSTEM — random column flashes
+// ============================================================
+let lastBurst = 0;
+let bursts = [];  // { colIdx, startTime, duration }
+
+function triggerBurst() {
+  // Pick a column in the active (invention) region
+  const idx = Math.floor(Math.random() * cols);
+  bursts.push({ colIdx: idx, start: performance.now(), duration: 600 + Math.random() * 800 });
+}
+
+// ============================================================
+//  SUB-MODULE FLASH — briefly form a word in a random spot
+// ============================================================
+const SUB_MODULES = [
+  "gen_plan", "gen_paper", "review", "artifact", "benchmark",
+  "ablation", "evaluate", "proof", "dataset", "baseline",
+];
+let subFlashes = []; // { text, col, row, start, duration }
+let lastSubFlash = 0;
+
+function triggerSubFlash() {
+  const text = SUB_MODULES[Math.floor(Math.random() * SUB_MODULES.length)];
+  const col = Math.floor(Math.random() * (cols - text.length));
+  // Place within invention region
+  const rowStart = Math.floor(rows * 0.35);
+  const rowEnd = Math.floor(rows * 0.75);
+  const row = rowStart + Math.floor(Math.random() * (rowEnd - rowStart));
+  subFlashes.push({ text, col, row, start: performance.now(), duration: 1200 + Math.random() * 800 });
+}
+
+// Build sub-flash map for quick lookup
+function getSubFlashChar(c, r, now) {
+  for (const sf of subFlashes) {
+    const elapsed = now - sf.start;
+    if (elapsed < 0 || elapsed > sf.duration) continue;
+    if (r === sf.row && c >= sf.col && c < sf.col + sf.text.length) {
+      // Fade in/out
+      const progress = elapsed / sf.duration;
+      const alpha = progress < 0.2 ? progress / 0.2
+                  : progress > 0.7 ? (1 - progress) / 0.3
+                  : 1.0;
+      return { ch: sf.text[c - sf.col], alpha };
+    }
+  }
+  return null;
+}
+
+// ============================================================
+//  HUD TIMER
+// ============================================================
+let hudSeconds = 2 * 3600 + 34 * 60 + 17; // T+02:34:17
+let hudCost = 12.47;
+let hudTokens = 847;
+let lastHudTick = 0;
+
+function updateHud(now) {
+  if (now - lastHudTick < 1000) return;
+  lastHudTick = now;
+  hudSeconds++;
+  hudCost += 0.002 + Math.random() * 0.008;
+  hudTokens += Math.floor(Math.random() * 3);
+
+  const h = String(Math.floor(hudSeconds / 3600)).padStart(2, "0");
+  const m = String(Math.floor((hudSeconds % 3600) / 60)).padStart(2, "0");
+  const s = String(hudSeconds % 60).padStart(2, "0");
+  document.getElementById("elapsed").textContent = `T+${h}:${m}:${s}`;
+  document.getElementById("cost").textContent = `$${hudCost.toFixed(2)}`;
+  document.getElementById("tokens").textContent = `${hudTokens}K tokens`;
+}
+
+// ============================================================
+//  PROGRESS BAR
+// ============================================================
+let progressVal = 58;
+let progressDir = 0.02;
+
+function updateProgress(now) {
+  progressVal += progressDir;
+  if (progressVal > 62 || progressVal < 55) progressDir *= -1;
+  document.getElementById("progressFill").style.width = progressVal + "%";
+}
+
+// ============================================================
+//  RENDER
+// ============================================================
+const charPool = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.%_-+=/";
+
+function getNextChar(col) {
+  // Cycle through current term, then pick a new one
+  const ch = col.term[col.termIdx];
+  col.termIdx++;
+  if (col.termIdx >= col.term.length) {
+    // Small gap, then new term
+    col.term = pickTerm();
+    col.termIdx = 0;
+    // Occasionally inject a score or metric instead
+    if (Math.random() < 0.3) {
+      const pool = Math.random() < 0.5 ? VOCAB.scores : VOCAB.metrics;
+      col.term = pool[Math.floor(Math.random() * pool.length)];
+    }
+  }
+  return ch;
+}
+
+function render(now) {
+  // --- Clear with slight trail (ghosting effect) ---
+  ctx.fillStyle = "rgba(0, 0, 0, 0.06)";
+  ctx.fillRect(0, 0, W, H);
+
+  // --- Bursts ---
+  if (now - lastBurst > CFG.burstInterval) {
+    triggerBurst();
+    lastBurst = now;
+  }
+  // Clean expired bursts
+  bursts = bursts.filter(b => now - b.start < b.duration);
+
+  // --- Sub-module flashes ---
+  if (now - lastSubFlash > 5000 + Math.random() * 3000) {
+    triggerSubFlash();
+    lastSubFlash = now;
+  }
+  subFlashes = subFlashes.filter(sf => now - sf.start < sf.duration);
+
+  // --- Center text morph ---
+  if (now - lastMorph > CFG.morphInterval) {
+    centerTextIdx++;
+    buildCenterMap();
+    lastMorph = now;
+  }
+
+  // --- Update HUD ---
+  updateHud(now);
+  updateProgress(now);
+
+  // --- Draw columns ---
+  ctx.font = `${CFG.fontSize}px 'Courier New', monospace`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+
+  for (let ci = 0; ci < columns.length; ci++) {
+    const col = columns[ci];
+
+    // Determine region-based speed multiplier
+    const colCenterY = (col.headY / H);
+    const region = regionAt(Math.min(1, Math.max(0, colCenterY)));
+    const effectiveSpeed = col.speed * region.speed;
+
+    // Skip very sparse columns in pending region
+    if (region.density < 0.2 && Math.random() > region.density * 3) {
+      col.headY += effectiveSpeed * CFG.fontSize * 0.3;
+      if (col.headY > H * 1.3) {
+        col.headY = -Math.random() * H * 0.5;
+      }
+      continue;
+    }
+
+    // Advance head
+    col.headY += effectiveSpeed * CFG.fontSize * 0.35;
+
+    // Check for burst on this column
+    let burstMult = 0;
+    for (const b of bursts) {
+      if (b.colIdx === ci) {
+        const bp = (now - b.start) / b.duration;
+        burstMult = bp < 0.15 ? bp / 0.15 : (1 - bp) / 0.85;
+      }
+    }
+
+    // Draw trail
+    const headRow = Math.floor(col.headY / CFG.fontSize);
+    const trailLen = CFG.trailLength + Math.floor(region.density * 12);
+
+    for (let t = 0; t < trailLen; t++) {
+      const row = headRow - t;
+      if (row < 0 || row >= rows) continue;
+
+      const yPx = row * CFG.fontSize;
+      const yNorm = yPx / H;
+      const charRegion = regionAt(yNorm);
+
+      // Base brightness: head is brightest, fades with trail
+      let brightness = 1.0 - (t / trailLen);
+      brightness = Math.pow(brightness, 1.5); // steeper falloff
+
+      // Region density affects brightness
+      brightness *= (0.3 + charRegion.density * 0.7);
+
+      // Burst boost
+      if (burstMult > 0) {
+        brightness = Math.min(1, brightness + burstMult * 0.8);
+      }
+
+      if (brightness < 0.02) continue;
+
+      // Determine character
+      let ch;
+      let isCenterChar = false;
+      const centerKey = `${ci},${row}`;
+
+      // Check center text map
+      if (centerMap[centerKey]) {
+        // Show center char with higher probability when column passes through
+        if (t < 5 && brightness > 0.3) {
+          ch = centerMap[centerKey];
+          isCenterChar = true;
+          brightness = Math.min(1, brightness * 1.8);
+        }
+      }
+
+      // Check sub-flash
+      if (!isCenterChar) {
+        const sf = getSubFlashChar(ci, row, now);
+        if (sf) {
+          ch = sf.ch;
+          brightness = Math.min(1, brightness + sf.alpha * 0.6);
+          isCenterChar = true;
+        }
+      }
+
+      // Default: cycle through research terms
+      if (!ch) {
+        // Use a deterministic-ish char based on position + time for shimmer
+        const seed = (ci * 137 + row * 31 + Math.floor(now / 200)) % charPool.length;
+        if (t === 0) {
+          ch = getNextChar(col);
+        } else {
+          // Older trail chars shimmer between term chars and random
+          const termSeed = (ci * 73 + row * 17) % ALL_TERMS.length;
+          const term = ALL_TERMS[termSeed];
+          const charIdx = (row + Math.floor(now / 800)) % term.length;
+          ch = term[charIdx];
+        }
+      }
+
+      // Color: blend region color with brightness
+      const rc = charRegion.color;
+      let r = rc[0], g = rc[1], b = rc[2];
+
+      // Head character is white-ish
+      if (t === 0) {
+        const headWhite = 0.7;
+        r = Math.floor(r + (255 - r) * headWhite);
+        g = Math.floor(g + (255 - g) * headWhite);
+        b = Math.floor(b + (255 - b) * headWhite);
+      }
+
+      // Center chars get a glow boost
+      if (isCenterChar) {
+        r = Math.min(255, r + 80);
+        g = Math.min(255, g + 80);
+        b = Math.min(255, b + 80);
+      }
+
+      // Apply brightness
+      const alpha = brightness;
+
+      // Glow for bright characters
+      if (brightness > 0.6) {
+        ctx.shadowColor = `rgba(${rc[0]},${rc[1]},${rc[2]},${brightness * 0.6})`;
+        ctx.shadowBlur = 8 + brightness * 8;
+      } else {
+        ctx.shadowBlur = 0;
+      }
+
+      ctx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
+      ctx.fillText(ch, col.x, yPx);
+    }
+
+    // Reset column when it falls off screen
+    if (col.headY > H + trailLen * CFG.fontSize) {
+      col.headY = -Math.random() * H * 0.4 - CFG.fontSize * 5;
+      col.term = pickTerm();
+      col.termIdx = 0;
+    }
+  }
+
+  // Reset shadow
+  ctx.shadowBlur = 0;
+
+  // --- Draw center text with persistent glow overlay ---
+  drawCenterOverlay(now);
+
+  // --- Region boundary lines (very subtle) ---
+  drawRegionBounds();
+
+  requestAnimationFrame(render);
+}
+
+// ============================================================
+//  CENTER TEXT OVERLAY — persistent readable text
+// ============================================================
+function drawCenterOverlay(now) {
+  const lines = CENTER_TEXTS[centerTextIdx % CENTER_TEXTS.length];
+  const centerX = W / 2;
+  const centerY = H / 2;
+  const lineHeight = CFG.fontSize * 2.5;
+
+  // Pulse alpha
+  const pulse = 0.5 + 0.15 * Math.sin(now / 1500);
+
+  lines.forEach((line, li) => {
+    const y = centerY - lineHeight + li * lineHeight;
+    const size = li === 0 ? 28 : li === 1 ? 18 : 16;
+
+    ctx.font = `bold ${size}px 'Courier New', monospace`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+
+    // Determine color based on line
+    let color, glowColor;
+    if (li === 0) {
+      color = `rgba(0, 230, 255, ${pulse * 0.7})`;
+      glowColor = `rgba(0, 204, 255, ${pulse * 0.4})`;
+    } else {
+      color = `rgba(0, 255, 65, ${pulse * 0.5})`;
+      glowColor = `rgba(0, 255, 65, ${pulse * 0.25})`;
+    }
+
+    // Multi-layer glow
+    ctx.shadowColor = glowColor;
+    ctx.shadowBlur = 30;
+    ctx.fillStyle = color;
+    ctx.fillText(line, centerX, y);
+
+    // Second pass for stronger glow
+    ctx.shadowBlur = 15;
+    ctx.fillText(line, centerX, y);
+
+    ctx.shadowBlur = 0;
+  });
+}
+
+// ============================================================
+//  REGION BOUNDARIES — faint horizontal lines
+// ============================================================
+function drawRegionBounds() {
+  ctx.save();
+  for (const r of REGIONS) {
+    if (r.yStart === 0) continue;
+    const y = r.yStart * H;
+    ctx.strokeStyle = `rgba(${r.color[0]},${r.color[1]},${r.color[2]}, 0.06)`;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 12]);
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(W, y);
+    ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  ctx.restore();
+}
+
+// ============================================================
+//  INIT
+// ============================================================
+resize();
+lastBurst = performance.now();
+lastMorph = performance.now();
+lastSubFlash = performance.now();
+lastHudTick = performance.now();
+requestAnimationFrame(render);
+</script>
+</body>
+</html>

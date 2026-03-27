@@ -1,0 +1,1594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AII Pipeline - Growing Tree Path Navigator</title>
+<style>
+  /* --- RESET & VARIABLES --- */
+  *, *::before, *::after {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+  :root {
+    /* Slate palette */
+    --s950: #020617;
+    --s900: #0f172a;
+    --s850: #131c31;
+    --s800: #1e293b;
+    --s750: #253347;
+    --s700: #334155;
+    --s600: #475569;
+    --s500: #64748b;
+    --s400: #94a3b8;
+    --s300: #cbd5e1;
+    --s200: #e2e8f0;
+    --s100: #f1f5f9;
+    /* Accent colors */
+    --cy5: #06b6d4;
+    --cy4: #22d3ee;
+    --cy3: #67e8f9;
+    --em5: #10b981;
+    --em4: #34d399;
+    --am5: #f59e0b;
+    --am4: #fbbf24;
+    --ro5: #f43f5e;
+    --ro4: #fb7185;
+    --vi5: #8b5cf6;
+    --vi4: #a78bfa;
+    --bl5: #3b82f6;
+    --bl4: #60a5fa;
+    /* Layout */
+    --sidebar-w: 320px;
+    --header-h: 56px;
+    /* Tree grow timing */
+    --trunk-dur: 320ms;
+    --branch-dur: 180ms;
+    --branch-stagger: 100ms;
+    --label-fade: 200ms;
+  }
+  html {
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  body {
+    font-family: 'SF Mono', 'Cascadia Code', 'JetBrains Mono', 'Fira Code', monospace;
+    background: var(--s950);
+    color: var(--s300);
+    min-height: 100vh;
+    overflow: hidden;
+  }
+
+  /* --- LAYOUT SHELL --- */
+  .shell {
+    display: grid;
+    grid-template-columns: var(--sidebar-w) 1fr;
+    grid-template-rows: var(--header-h) 1fr;
+    height: 100vh;
+    width: 100vw;
+  }
+
+  /* --- HEADER --- */
+  .hdr {
+    grid-column: 1 / -1;
+    grid-row: 1;
+    background: var(--s900);
+    border-bottom: 1px solid var(--s800);
+    display: flex;
+    align-items: center;
+    padding: 0 24px;
+    gap: 16px;
+    z-index: 100;
+    position: relative;
+  }
+  .hdr::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg,
+      transparent,
+      var(--cy5) 20%,
+      var(--em5) 50%,
+      var(--cy5) 80%,
+      transparent
+    );
+    opacity: 0.3;
+  }
+  .hdr-logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--s100);
+    letter-spacing: 0.5px;
+  }
+  .hdr-logo-ic {
+    width: 28px;
+    height: 28px;
+    background: linear-gradient(135deg, var(--cy5), var(--em5));
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    color: var(--s950);
+    font-weight: 800;
+  }
+  .hdr-bc {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--s500);
+    margin-left: 24px;
+  }
+  .hdr-bc .sep {
+    color: var(--s700);
+    font-size: 10px;
+  }
+  .hdr-bc .act {
+    color: var(--cy4);
+    transition: color 0.2s;
+  }
+  .hdr-st {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .hdr-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--em5);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 4px var(--em5); }
+    50% { opacity: 0.5; box-shadow: 0 0 8px var(--em5); }
+  }
+  .hdr-st-txt {
+    font-size: 11px;
+    color: var(--s500);
+    letter-spacing: 0.3px;
+  }
+
+  /* --- SIDEBAR --- */
+  .side {
+    grid-column: 1;
+    grid-row: 2;
+    background: var(--s900);
+    border-right: 1px solid var(--s800);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+  }
+  .side::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 1px;
+    background: linear-gradient(180deg,
+      var(--cy5) 0%,
+      transparent 30%,
+      transparent 70%,
+      var(--cy5) 100%
+    );
+    opacity: 0.15;
+  }
+
+  /* --- MODULE TABS --- */
+  .mod-sel {
+    padding: 16px 16px 12px;
+    border-bottom: 1px solid var(--s800);
+    flex-shrink: 0;
+  }
+  .mod-sel-lbl {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--s600);
+    margin-bottom: 10px;
+  }
+  .mod-tabs {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+  .mtab {
+    padding: 6px 12px;
+    font-size: 11px;
+    font-family: inherit;
+    background: var(--s850);
+    border: 1px solid var(--s800);
+    border-radius: 6px;
+    color: var(--s500);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+    overflow: hidden;
+    user-select: none;
+  }
+  .mtab::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, var(--cy5), var(--em5));
+    opacity: 0;
+    transition: opacity 0.2s ease;
+  }
+  .mtab:hover {
+    border-color: var(--s700);
+    color: var(--s300);
+    transform: translateY(-1px);
+  }
+  .mtab.active {
+    background: transparent;
+    border-color: var(--cy5);
+    color: var(--s100);
+    box-shadow: 0 0 12px rgba(6, 182, 212, 0.15);
+  }
+  .mtab.active::before {
+    opacity: 0.08;
+  }
+
+  /* --- TREE CONTAINER --- */
+  .tree-ctn {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 16px;
+    position: relative;
+  }
+  .tree-ctn::-webkit-scrollbar {
+    width: 4px;
+  }
+  .tree-ctn::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .tree-ctn::-webkit-scrollbar-thumb {
+    background: var(--s700);
+    border-radius: 2px;
+  }
+
+  /* --- TREE STRUCTURE --- */
+  .tree-root {
+    position: relative;
+    padding-left: 8px;
+  }
+  /* Root label */
+  .tree-rlbl {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--s200);
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    opacity: 0;
+    transform: translateY(-4px);
+    transition: opacity 0.25s ease, transform 0.25s ease;
+  }
+  .tree-rlbl.vis {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .tree-rlbl .ri {
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  /* Vertical trunk line */
+  .trunk {
+    position: absolute;
+    left: 14px;
+    top: 26px;
+    width: 1px;
+    height: 0;
+    transform-origin: top;
+    transition: none;
+  }
+  .trunk-line {
+    width: 100%;
+    height: 100%;
+    background: var(--s700);
+    position: relative;
+  }
+  .trunk-glow {
+    position: absolute;
+    top: 0;
+    left: -1px;
+    width: 3px;
+    height: 100%;
+    background: linear-gradient(180deg,
+      rgba(6, 182, 212, 0.4),
+      rgba(6, 182, 212, 0.1) 40%,
+      transparent
+    );
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+  .trunk.growing .trunk-glow {
+    opacity: 1;
+  }
+  /* Branch rows -- 36px height each */
+  .brow {
+    position: relative;
+    display: flex;
+    align-items: center;
+    height: 36px;
+    padding-left: 8px;
+    cursor: pointer;
+    opacity: 0;
+    transition: background 0.15s;
+    border-radius: 4px;
+  }
+  .brow:hover {
+    background: rgba(30, 41, 59, 0.3);
+  }
+  /* Branch connector SVG */
+  .bconn {
+    display: flex;
+    align-items: center;
+    height: 100%;
+    position: relative;
+    flex-shrink: 0;
+    width: 24px;
+    overflow: hidden;
+  }
+  .bconn svg {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 24px;
+    height: 36px;
+  }
+  .bconn svg path {
+    stroke: var(--s700);
+    stroke-width: 1;
+    fill: none;
+    stroke-dasharray: 50;
+    stroke-dashoffset: 50;
+  }
+  /* Branch label */
+  .blbl {
+    font-size: 12px;
+    color: var(--s500);
+    padding: 4px 10px;
+    border-radius: 4px;
+    transition: all 0.18s ease;
+    white-space: nowrap;
+    opacity: 0;
+    transform: translateX(-6px);
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .blbl .bnum {
+    font-size: 9px;
+    color: var(--s600);
+    font-weight: 600;
+    min-width: 14px;
+  }
+  .blbl .btxt {
+    color: var(--s400);
+    transition: color 0.18s ease;
+  }
+  .blbl .bbdg {
+    font-size: 8px;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    opacity: 0.7;
+    margin-left: auto;
+  }
+  /* Hover state */
+  .brow:hover .blbl .btxt {
+    color: var(--s200);
+  }
+  /* Active branch */
+  .brow.active .blbl {
+    background: rgba(6, 182, 212, 0.08);
+  }
+  .brow.active .blbl .btxt {
+    color: var(--cy4);
+    font-weight: 500;
+  }
+  .brow.active .bconn svg path {
+    stroke: var(--cy5);
+  }
+  /* Animation: entering */
+  .brow.anim-in {
+    opacity: 1;
+  }
+  .brow.anim-in .bconn svg path {
+    animation: draw-b var(--branch-dur) ease-out forwards;
+  }
+  .brow.anim-in .blbl {
+    animation: fade-sl var(--label-fade) ease-out forwards;
+    animation-delay: calc(var(--branch-dur) * 0.6);
+  }
+  @keyframes draw-b {
+    from { stroke-dashoffset: 50; }
+    to   { stroke-dashoffset: 0; }
+  }
+  @keyframes fade-sl {
+    from { opacity: 0; transform: translateX(-6px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+  /* Animation: done */
+  .brow.anim-done {
+    opacity: 1;
+  }
+  .brow.anim-done .bconn svg path {
+    stroke-dashoffset: 0;
+  }
+  .brow.anim-done .blbl {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  /* --- PARTICLE CANVAS (overlays the tree) --- */
+  .pcvs {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 5;
+  }
+
+  /* --- SWITCH FLASH --- */
+  .sflash {
+    position: absolute;
+    top: 0;
+    left: 14px;
+    width: 1px;
+    height: 0;
+    background: linear-gradient(180deg, var(--cy4), transparent);
+    opacity: 0;
+    pointer-events: none;
+    z-index: 10;
+  }
+  .sflash.on {
+    animation: flash-d 0.4s ease-out forwards;
+  }
+  @keyframes flash-d {
+    0%  { height: 0;    opacity: 0.8; }
+    60% { height: 100%; opacity: 0.4; }
+    100%{ height: 100%; opacity: 0; }
+  }
+
+  /* --- SIDEBAR FOOTER --- */
+  .sfooter {
+    flex-shrink: 0;
+    border-top: 1px solid var(--s800);
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 10px;
+    color: var(--s600);
+  }
+  .sfooter-p {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--em5);
+    animation: pulse 2.5s ease-in-out infinite;
+  }
+
+  /* --- MAIN CONTENT AREA --- */
+  .main {
+    grid-column: 2;
+    grid-row: 2;
+    background: var(--s950);
+    overflow-y: auto;
+    overflow-x: hidden;
+    position: relative;
+  }
+  .main::-webkit-scrollbar {
+    width: 6px;
+  }
+  .main::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .main::-webkit-scrollbar-thumb {
+    background: var(--s800);
+    border-radius: 3px;
+  }
+  /* Background grid pattern */
+  .bg-grid {
+    position: fixed;
+    top: var(--header-h);
+    left: var(--sidebar-w);
+    right: 0;
+    bottom: 0;
+    background-image:
+      linear-gradient(var(--s900) 1px, transparent 1px),
+      linear-gradient(90deg, var(--s900) 1px, transparent 1px);
+    background-size: 48px 48px;
+    opacity: 0.3;
+    pointer-events: none;
+    z-index: 0;
+  }
+  /* Background radial glow */
+  .bg-rad {
+    position: fixed;
+    top: var(--header-h);
+    left: var(--sidebar-w);
+    right: 0;
+    bottom: 0;
+    background: radial-gradient(
+      ellipse 60% 50% at 50% 30%,
+      rgba(6, 182, 212, 0.03),
+      transparent
+    );
+    pointer-events: none;
+    z-index: 0;
+  }
+  /* Content inner */
+  .cin {
+    position: relative;
+    z-index: 1;
+    padding: 32px 40px;
+    max-width: 960px;
+  }
+  /* Content panel */
+  .cpan {
+    display: none;
+    animation: pan-in 0.4s ease-out;
+  }
+  .cpan.vis {
+    display: block;
+  }
+  @keyframes pan-in {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* --- PANEL HEADER --- */
+  .ph {
+    margin-bottom: 32px;
+  }
+  .ph-top {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 8px;
+  }
+  .ph-badge {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 4px;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+  }
+  .ph-title {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--s100);
+    letter-spacing: -0.3px;
+  }
+  .ph-sub {
+    font-size: 12px;
+    color: var(--s500);
+    margin-top: 6px;
+    line-height: 1.6;
+    max-width: 640px;
+  }
+
+  /* --- PANEL SECTIONS --- */
+  .ps {
+    margin-bottom: 28px;
+  }
+  .ps-t {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1.2px;
+    color: var(--s600);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .ps-t::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--s800);
+  }
+
+  /* --- INFO CARDS --- */
+  .ic {
+    background: var(--s900);
+    border: 1px solid var(--s800);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-bottom: 8px;
+    transition: border-color 0.2s;
+  }
+  .ic:hover {
+    border-color: var(--s750);
+  }
+  .ic-r {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 12px;
+  }
+  .ic-k {
+    color: var(--s500);
+    min-width: 110px;
+    flex-shrink: 0;
+  }
+  .ic-v {
+    color: var(--s300);
+    font-weight: 500;
+  }
+  .ic-v.mono {
+    font-family: 'SF Mono', 'Cascadia Code', monospace;
+    font-size: 11px;
+    color: var(--cy4);
+    background: rgba(6, 182, 212, 0.08);
+    padding: 2px 8px;
+    border-radius: 3px;
+  }
+
+  /* --- METRIC CARDS --- */
+  .mgrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 8px;
+  }
+  .mc {
+    background: var(--s900);
+    border: 1px solid var(--s800);
+    border-radius: 8px;
+    padding: 16px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.2s, transform 0.15s;
+  }
+  .mc:hover {
+    border-color: var(--s750);
+    transform: translateY(-1px);
+  }
+  .mc::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    border-radius: 8px 8px 0 0;
+  }
+  .mc.cy::before { background: var(--cy5); }
+  .mc.em::before { background: var(--em5); }
+  .mc.am::before { background: var(--am5); }
+  .mc.vi::before { background: var(--vi5); }
+  .mc.ro::before { background: var(--ro5); }
+  .mc.bl::before { background: var(--bl5); }
+  .mc-l {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--s600);
+    margin-bottom: 6px;
+  }
+  .mc-v {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--s100);
+    letter-spacing: -0.5px;
+  }
+  .mc-s {
+    font-size: 10px;
+    color: var(--s500);
+    margin-top: 4px;
+  }
+
+  /* --- CODE BLOCKS --- */
+  .cb {
+    background: var(--s900);
+    border: 1px solid var(--s800);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .cb-h {
+    display: flex;
+    align-items: center;
+    padding: 8px 16px;
+    background: var(--s850);
+    border-bottom: 1px solid var(--s800);
+    font-size: 10px;
+    color: var(--s500);
+    gap: 8px;
+  }
+  .cb-h .d {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+  }
+  .cb-b {
+    padding: 16px;
+    font-size: 11px;
+    line-height: 1.7;
+    color: var(--s400);
+    overflow-x: auto;
+  }
+  .cb-b .ln {
+    color: var(--s700);
+    display: inline-block;
+    width: 28px;
+    text-align: right;
+    margin-right: 16px;
+    user-select: none;
+  }
+  .cb-b .kw  { color: var(--vi4); }
+  .cb-b .fn  { color: var(--cy4); }
+  .cb-b .str { color: var(--em4); }
+  .cb-b .cm  { color: var(--s600); font-style: italic; }
+  .cb-b .num { color: var(--am4); }
+  .cb-b .op  { color: var(--s500); }
+
+  /* --- FLOW DIAGRAMS --- */
+  .fd {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+    padding: 16px 0;
+  }
+  .fn-node {
+    background: var(--s900);
+    border: 1px solid var(--s800);
+    border-radius: 6px;
+    padding: 8px 14px;
+    font-size: 11px;
+    color: var(--s400);
+    transition: all 0.2s;
+  }
+  .fn-node:hover {
+    border-color: var(--s700);
+    color: var(--s200);
+  }
+  .fn-node.hl {
+    border-color: var(--cy5);
+    color: var(--cy4);
+    box-shadow: 0 0 16px rgba(6, 182, 212, 0.1);
+  }
+  .fa {
+    font-size: 12px;
+    color: var(--s700);
+    flex-shrink: 0;
+  }
+
+  /* --- STATUS TAGS --- */
+  .st {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 4px;
+    letter-spacing: 0.5px;
+  }
+  .st.act {
+    background: rgba(6, 182, 212, 0.1);
+    color: var(--cy4);
+    border: 1px solid rgba(6, 182, 212, 0.2);
+  }
+  .st.done {
+    background: rgba(16, 185, 129, 0.1);
+    color: var(--em4);
+    border: 1px solid rgba(16, 185, 129, 0.2);
+  }
+  .st.pend {
+    background: rgba(100, 116, 139, 0.1);
+    color: var(--s500);
+    border: 1px solid rgba(100, 116, 139, 0.2);
+  }
+  .st.warn {
+    background: rgba(245, 158, 11, 0.1);
+    color: var(--am4);
+    border: 1px solid rgba(245, 158, 11, 0.2);
+  }
+  .st .sd {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  /* --- DATA TABLES --- */
+  .dtbl {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+  }
+  .dtbl th {
+    text-align: left;
+    padding: 8px 12px;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--s600);
+    border-bottom: 1px solid var(--s800);
+    font-weight: 600;
+  }
+  .dtbl td {
+    padding: 10px 12px;
+    color: var(--s400);
+    border-bottom: 1px solid var(--s850);
+  }
+  .dtbl tr:hover td {
+    background: rgba(15, 23, 42, 0.5);
+  }
+
+  /* --- AMBIENT CANVAS --- */
+  .acvs {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* --- RESPONSIVE --- */
+  @media (max-width: 900px) {
+    :root { --sidebar-w: 260px; }
+  }
+
+  @media (max-width: 700px) {
+    .shell { grid-template-columns: 1fr; }
+    .side { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <!-- HEADER -->
+  <header class="hdr">
+    <div class="hdr-logo">
+      <div class="hdr-logo-ic">AI</div>
+      <span>AII Pipeline</span>
+    </div>
+    <nav class="hdr-bc">
+      <span>pipeline</span>
+      <span class="sep">></span>
+      <span class="act" id="bcMod">seed_hypo</span>
+      <span class="sep">></span>
+      <span class="act" id="bcSub">invention_kg</span>
+    </nav>
+    <div class="hdr-st">
+      <div class="hdr-dot"></div>
+      <span class="hdr-st-txt">LIVE SESSION</span>
+    </div>
+  </header>
+
+  <!-- SIDEBAR -->
+  <aside class="side">
+    <div class="mod-sel">
+      <div class="mod-sel-lbl">Modules</div>
+      <div class="mod-tabs" id="modTabs"></div>
+    </div>
+    <div class="tree-ctn" id="treeCtn">
+      <canvas class="pcvs" id="tpCvs"></canvas>
+      <div class="sflash" id="sflash"></div>
+      <div class="tree-root" id="treeRoot"></div>
+    </div>
+    <div class="sfooter">
+      <div class="sfooter-p"></div>
+      <span>pipeline v23</span>
+      <span style="margin-left:auto;color:var(--s700)">tree_05</span>
+    </div>
+  </aside>
+
+  <!-- MAIN CONTENT -->
+  <main class="main" id="mainArea">
+    <div class="bg-grid"></div>
+    <div class="bg-rad"></div>
+    <div class="cin" id="cInner"></div>
+  </main>
+</div>
+
+<canvas class="acvs" id="aCvs"></canvas>
+
+<script>
+// --- DATA MODEL ---
+const MODS = [
+  { id: 'seed_hypo', label: '1. Seed Hypotheses', short: 'seed_hypo', icon: 'S', color: '#06b6d4',
+    branches: [
+      { id: 'invention_kg',   n: '1.1', t: 'invention_kg',   bdg: null,     st: 'done' },
+      { id: 'extract_seeds',  n: '1.2', t: 'extract_seeds',  bdg: null,     st: 'done' },
+      { id: 'cluster_merge',  n: '1.3', t: 'cluster_merge',  bdg: null,     st: 'done' },
+      { id: 'novelty_filter', n: '1.4', t: 'novelty_filter', bdg: 'filter', st: 'done' },
+      { id: 'rank_output',    n: '1.5', t: 'rank_output',    bdg: null,     st: 'active' },
+    ]
+  },
+  { id: 'hypo_loop', label: '2. Hypothesis Loop', short: 'hypo_loop', icon: 'H', color: '#10b981',
+    branches: [
+      { id: 'gen_hypo',    n: '2.1', t: 'gen_hypo',    bdg: 'llm',    st: 'done' },
+      { id: 'review_hypo', n: '2.2', t: 'review_hypo', bdg: 'critic', st: 'active' },
+      { id: 'refine_hypo', n: '2.3', t: 'refine_hypo', bdg: null,     st: 'pending' },
+      { id: 'converge',    n: '2.4', t: 'converge',    bdg: null,     st: 'pending' },
+    ]
+  },
+  { id: 'invention_loop', label: '3. Invention Loop', short: 'invention_loop', icon: 'I', color: '#8b5cf6',
+    branches: [
+      { id: 'gen_strategy',   n: '3.1', t: 'gen_strategy',   bdg: null,     st: 'done' },
+      { id: 'gen_plan',       n: '3.2', t: 'gen_plan',       bdg: 'plan',   st: 'done' },
+      { id: 'gen_narrative',  n: '3.3', t: 'gen_narrative',   bdg: null,     st: 'active' },
+      { id: 'gen_paper_text', n: '3.4', t: 'gen_paper_text', bdg: 'llm',    st: 'pending' },
+      { id: 'review_paper',   n: '3.5', t: 'review_paper',   bdg: 'critic', st: 'pending' },
+      { id: 'refine_paper',   n: '3.6', t: 'refine_paper',   bdg: null,     st: 'pending' },
+    ]
+  },
+  { id: 'gen_paper_repo', label: '4. Paper Repository', short: 'gen_paper_repo', icon: 'R', color: '#f59e0b',
+    branches: [
+      { id: 'gen_latex',      n: '4.1', t: 'gen_latex',      bdg: null,    st: 'pending' },
+      { id: 'gen_artifacts',  n: '4.2', t: 'gen_artifacts',  bdg: null,    st: 'pending' },
+      { id: 'gen_viz',        n: '4.3', t: 'gen_viz',        bdg: 'chart', st: 'pending' },
+      { id: 'gen_full_paper', n: '4.4', t: 'gen_full_paper', bdg: null,    st: 'pending' },
+      { id: 'compile_pdf',    n: '4.5', t: 'compile_pdf',    bdg: 'pdf',   st: 'pending' },
+    ]
+  },
+  { id: 'telemetry', label: '5. Telemetry', short: 'telemetry', icon: 'T', color: '#3b82f6',
+    branches: [
+      { id: 'console_sink',  n: '5.1', t: 'console_sink',  bdg: null,  st: 'active' },
+      { id: 'sse_sink',      n: '5.2', t: 'sse_sink',      bdg: 'sse', st: 'active' },
+      { id: 'context_track', n: '5.3', t: 'context_track', bdg: null,  st: 'done' },
+      { id: 'cost_agg',      n: '5.4', t: 'cost_agg',      bdg: '$',   st: 'done' },
+    ]
+  },
+];
+// Panel content keyed by branch id
+const P = {
+  invention_kg: { ti: 'Invention Knowledge Graph',
+    su: 'Builds a domain knowledge graph from scientific literature, patents, and technical reports to identify opportunity spaces.',
+    s: [
+      { t: 'Configuration', tp: 'info', items: [
+        { k: 'Source corpus', v: 'arxiv + patent_db', m: 1 },
+        { k: 'Graph backend', v: 'NetworkX (in-memory)', m: 0 },
+        { k: 'Max nodes', v: '12,000', m: 0 },
+        { k: 'Edge threshold', v: '0.72 cosine sim', m: 1 },
+      ]},
+      { t: 'Pipeline Flow', tp: 'flow', nodes: ['ingest', 'embed', 'cluster', 'link', 'prune', 'serialize'] },
+      { t: 'Graph Metrics', tp: 'met', items: [
+        { l: 'Nodes', v: '8,431', s: 'concepts', c: 'cy' },
+        { l: 'Edges', v: '23,107', s: 'relations', c: 'em' },
+        { l: 'Components', v: '14', s: 'connected', c: 'am' },
+        { l: 'Build Time', v: '4.2s', s: 'avg/run', c: 'vi' },
+      ]},
+    ]},
+  extract_seeds: { ti: 'Extract Seed Ideas',
+    su: 'Traverses the knowledge graph to extract promising seed hypothesis candidates based on gap analysis.',
+    s: [
+      { t: 'Extraction Parameters', tp: 'info', items: [
+        { k: 'Strategy', v: 'gap_bridge_hybrid', m: 1 },
+        { k: 'Min novelty', v: '0.65', m: 1 },
+        { k: 'Max candidates', v: '200', m: 0 },
+      ]},
+      { t: 'Performance', tp: 'met', items: [
+        { l: 'Seeds Found', v: '147', s: 'candidates', c: 'cy' },
+        { l: 'Avg Novelty', v: '0.78', s: 'score', c: 'em' },
+        { l: 'Clusters', v: '23', s: 'distinct', c: 'vi' },
+      ]},
+    ]},
+  cluster_merge: { ti: 'Cluster & Merge',
+    su: 'Groups semantically similar seed ideas and merges overlapping concepts for deduplication.',
+    s: [
+      { t: 'Algorithm', tp: 'info', items: [
+        { k: 'Method', v: 'HDBSCAN + LLM merge', m: 1 },
+        { k: 'Min cluster', v: '3', m: 1 },
+        { k: 'Merge thresh', v: '0.85 semantic sim', m: 1 },
+      ]},
+      { t: 'Results', tp: 'met', items: [
+        { l: 'Input', v: '147', s: 'seeds', c: 'cy' },
+        { l: 'Output', v: '42', s: 'merged', c: 'em' },
+        { l: 'Reduction', v: '71%', s: 'dedup rate', c: 'ro' },
+      ]},
+    ]},
+  novelty_filter: { ti: 'Novelty Filter',
+    su: 'Checks candidates against existing literature and patent databases to verify genuine novelty.',
+    s: [
+      { t: 'Filter Config', tp: 'info', items: [
+        { k: 'Databases', v: 'arxiv, USPTO, S2', m: 1 },
+        { k: 'Similarity cutoff', v: '0.90', m: 1 },
+      ]},
+      { t: 'Results', tp: 'met', items: [
+        { l: 'Passed', v: '28', s: 'novel', c: 'em' },
+        { l: 'Rejected', v: '14', s: 'duplicates', c: 'ro' },
+      ]},
+    ]},
+  rank_output: { ti: 'Rank Output',
+    su: 'Multi-criteria ranking producing the final ordered list of seed hypotheses for the refinement loop.',
+    s: [
+      { t: 'Ranking Criteria', tp: 'tbl', hd: ['Criterion', 'Weight', 'Method'], rows: [
+        ['Novelty', '0.35', 'embedding dist'],
+        ['Feasibility', '0.25', 'LLM assessment'],
+        ['Impact', '0.25', 'citation pot.'],
+        ['Clarity', '0.15', 'readability'],
+      ]},
+      { t: 'Output', tp: 'met', items: [
+        { l: 'Ranked', v: '28', s: 'hypotheses', c: 'cy' },
+        { l: 'Selected', v: '10', s: 'for loop', c: 'am' },
+      ]},
+    ]},
+  gen_hypo: { ti: 'Generate Hypothesis',
+    su: 'LLM-driven hypothesis generation expanding seeds into structured claims, mechanisms, and predicted outcomes.',
+    s: [
+      { t: 'Config', tp: 'info', items: [
+        { k: 'Model', v: 'claude-opus-4-20250514', m: 1 },
+        { k: 'Temperature', v: '0.7', m: 1 },
+        { k: 'Output', v: 'structured JSON', m: 1 },
+      ]},
+      { t: 'Schema', tp: 'code', fn: 'schema.py', lines: [
+        { n: 1, tk: [{ t: 'kw', v: 'class' }, { t: '', v: ' ' }, { t: 'fn', v: 'HypothesisOutput' }, { t: 'op', v: '(' }, { t: 'fn', v: 'BaseModel' }, { t: 'op', v: '):' }] },
+        { n: 2, tk: [{ t: '', v: '    title' }, { t: 'op', v: ': ' }, { t: 'fn', v: 'str' }] },
+        { n: 3, tk: [{ t: '', v: '    claim' }, { t: 'op', v: ': ' }, { t: 'fn', v: 'str' }] },
+        { n: 4, tk: [{ t: '', v: '    mechanism' }, { t: 'op', v: ': ' }, { t: 'fn', v: 'str' }] },
+        { n: 5, tk: [{ t: '', v: '    novelty_score' }, { t: 'op', v: ': ' }, { t: 'fn', v: 'float' }] },
+      ]},
+      { t: 'Stats', tp: 'met', items: [
+        { l: 'Generated', v: '10', s: 'hypotheses', c: 'cy' },
+        { l: 'Latency', v: '12.3s', s: 'avg/hypo', c: 'am' },
+      ]},
+    ]},
+  review_hypo: { ti: 'Review Hypothesis',
+    su: 'Multi-dimensional critique evaluating rigor, novelty, feasibility, and coherence.',
+    s: [
+      { t: 'Review Dimensions', tp: 'tbl', hd: ['Dimension', 'Score', 'Status'], rows: [
+        ['Scientific Rigor', '8.2/10', 'pass'],
+        ['Novelty Claim', '7.8/10', 'pass'],
+        ['Feasibility', '6.5/10', 'warn'],
+        ['Coherence', '9.1/10', 'pass'],
+      ]},
+      { t: 'Output', tp: 'met', items: [
+        { l: 'Passed', v: '7', s: 'accepted', c: 'em' },
+        { l: 'Flagged', v: '3', s: 'revision', c: 'am' },
+      ]},
+    ]},
+  refine_hypo: { ti: 'Refine Hypothesis', su: 'Iteratively refines flagged hypotheses based on reviewer feedback.', s: [
+      { t: 'Config', tp: 'info', items: [{ k: 'Max iterations', v: '3', m: 0 }, { k: 'Convergence', v: 'delta < 0.05', m: 1 }] }] },
+  converge: { ti: 'Converge', su: 'Checks loop convergence and decides whether to continue or exit.', s: [
+      { t: 'Criteria', tp: 'info', items: [{ k: 'Min score', v: '7.5 all dims', m: 0 }, { k: 'Max loops', v: '5', m: 0 }] }] },
+  gen_strategy: { ti: 'Generate Strategy', su: 'High-level invention strategy: approach, methodology, contributions.', s: [
+      { t: 'Metrics', tp: 'met', items: [{ l: 'Strategies', v: '3', s: 'generated', c: 'vi' }, { l: 'Selected', v: '1', s: 'top', c: 'em' }] }] },
+  gen_plan: { ti: 'Generate Plan', su: 'Detailed execution plan with section outlines and figure specs.', s: [
+      { t: 'Structure', tp: 'flow', nodes: ['abstract', 'intro', 'method', 'results', 'discussion', 'conclusion'] },
+      { t: 'Details', tp: 'met', items: [{ l: 'Sections', v: '6', s: 'outlined', c: 'cy' }, { l: 'Figures', v: '4', s: 'planned', c: 'am' }] }] },
+  gen_narrative: { ti: 'Generate Narrative', su: 'Weaves plan sections into a cohesive narrative arc.', s: [
+      { t: 'Progress', tp: 'met', items: [{ l: 'Sections', v: '3/6', s: 'complete', c: 'cy' }, { l: 'Words', v: '4,217', s: 'generated', c: 'em' }] }] },
+  gen_paper_text: { ti: 'Generate Paper Text', su: 'Full text for each section with citations and technical detail.', s: [
+      { t: 'Config', tp: 'info', items: [{ k: 'Citations', v: 'numbered [1]', m: 0 }] }] },
+  review_paper: { ti: 'Review Paper', su: 'Automated review: accuracy, writing quality, completeness.', s: [
+      { t: 'Criteria', tp: 'tbl', hd: ['Criterion', 'Weight'], rows: [['Technical', '0.30'], ['Writing', '0.20'], ['Novelty', '0.20'], ['Completeness', '0.30']] }] },
+  refine_paper: { ti: 'Refine Paper', su: 'Iterate on reviewer feedback to strengthen weak sections.', s: [
+      { t: 'Config', tp: 'info', items: [{ k: 'Max iters', v: '3', m: 0 }] }] },
+  gen_latex: { ti: 'Generate LaTeX', su: 'Converts paper text into formatted LaTeX using the target template.', s: [
+      { t: 'Config', tp: 'info', items: [{ k: 'Template', v: 'NeurIPS 2025', m: 0 }, { k: 'Compiler', v: 'pdflatex', m: 1 }] }] },
+  gen_artifacts: { ti: 'Generate Artifacts', su: 'Demo scripts, data files, and reproducibility packages.', s: [
+      { t: 'Artifacts', tp: 'tbl', hd: ['Type', 'Count', 'Format'], rows: [['Demos', '2', 'Python'], ['Data', '3', 'CSV/JSON'], ['Config', '1', 'YAML']] }] },
+  gen_viz: { ti: 'Generate Visualizations', su: 'Figures, charts, and diagrams with consistent styling.', s: [
+      { t: 'Queue', tp: 'tbl', hd: ['Figure', 'Type'], rows: [['Architecture', 'diagram'], ['Results', 'bar chart'], ['Ablation', 'line plot'], ['Comparison', 'heatmap']] }] },
+  gen_full_paper: { ti: 'Compile Full Paper', su: 'Assembles sections, figures, tables, and references.', s: [
+      { t: 'Assembly', tp: 'flow', nodes: ['text', 'figures', 'tables', 'refs', 'compile'] }] },
+  compile_pdf: { ti: 'Compile PDF', su: 'LaTeX compilation with automatic error resolution.', s: [
+      { t: 'Engine', tp: 'info', items: [{ k: 'Pipeline', v: 'pdflatex x3 + bibtex', m: 1 }, { k: 'Output', v: 'paper.pdf', m: 1 }] }] },
+  console_sink: { ti: 'Console Sink', su: 'Real-time formatted stdout with color-coded levels and structured events.',
+    s: [
+      { t: 'Implementation', tp: 'code', fn: 'console.py', lines: [
+        { n: 1, tk: [{ t: 'kw', v: 'class' }, { t: '', v: ' ' }, { t: 'fn', v: 'ConsoleSink' }, { t: 'op', v: '(' }, { t: 'fn', v: 'BaseSink' }, { t: 'op', v: '):' }] },
+        { n: 2, tk: [{ t: '', v: '    ' }, { t: 'kw', v: 'def' }, { t: '', v: ' ' }, { t: 'fn', v: 'emit' }, { t: 'op', v: '(' }, { t: '', v: 'self' }, { t: 'op', v: ', ' }, { t: '', v: 'event' }, { t: 'op', v: '):' }] },
+        { n: 3, tk: [{ t: '', v: '        formatted' }, { t: 'op', v: ' = ' }, { t: '', v: 'self' }, { t: 'op', v: '.' }, { t: 'fn', v: 'format' }, { t: 'op', v: '(' }, { t: '', v: 'event' }, { t: 'op', v: ')' }] },
+        { n: 4, tk: [{ t: '', v: '        ' }, { t: 'fn', v: 'print' }, { t: 'op', v: '(' }, { t: '', v: 'formatted' }, { t: 'op', v: ')' }] },
+      ]},
+      { t: 'Stats', tp: 'met', items: [
+        { l: 'Events', v: '1,247', s: 'emitted', c: 'cy' },
+        { l: 'Errors', v: '0', s: 'dropped', c: 'em' },
+        { l: 'Rate', v: '~14/s', s: 'avg', c: 'am' },
+      ]},
+    ]},
+  sse_sink: { ti: 'SSE Sink', su: 'Server-Sent Events streaming pipeline telemetry to UI clients.',
+    s: [{ t: 'Config', tp: 'info', items: [{ k: 'Endpoint', v: '/api/events', m: 1 }, { k: 'Heartbeat', v: '15s', m: 1 }, { k: 'Max clients', v: '50', m: 0 }] },
+      { t: 'Stats', tp: 'met', items: [{ l: 'Clients', v: '2', s: 'connected', c: 'cy' }, { l: 'Sent', v: '3,891', s: 'events', c: 'em' }] }] },
+  context_track: { ti: 'Context Tracker', su: 'Monitors token usage and cost per pipeline step across all LLM calls.',
+    s: [{ t: 'Data', tp: 'tbl', hd: ['Step', 'Input', 'Output', 'Cost'], rows: [
+        ['gen_hypo', '45.2k', '18.4k', '$0.89'], ['review_hypo', '62.1k', '8.3k', '$0.52'],
+        ['gen_strategy', '31.0k', '12.6k', '$0.61'], ['gen_plan', '28.4k', '15.2k', '$0.64']] },
+      { t: 'Totals', tp: 'met', items: [
+        { l: 'Total In', v: '218k', s: 'tokens', c: 'cy' }, { l: 'Total Out', v: '76k', s: 'tokens', c: 'em' },
+        { l: 'Cost', v: '$3.70', s: 'USD', c: 'am' }] }] },
+  cost_agg: { ti: 'Cost Aggregator', su: 'Total pipeline costs with breakdowns by model, step, and retry.',
+    s: [{ t: 'Breakdown', tp: 'tbl', hd: ['Category', 'Amount', '%'], rows: [
+        ['Generation', '$2.18', '59%'], ['Review', '$0.52', '14%'], ['Refinement', '$0.41', '11%'], ['Overhead', '$0.59', '16%']] },
+      { t: 'Summary', tp: 'met', items: [
+        { l: 'Total', v: '$3.70', s: 'this run', c: 'am' }, { l: 'Retries', v: '2', s: 'wasted', c: 'ro' }] }] },
+};
+
+// --- STATE ---
+let curMod = MODS[0].id;
+let curBranch = MODS[0].branches[0].id;
+let animating = false;
+let tpArr = [];   // tree-path particles
+let apArr = [];   // ambient particles
+// DOM references
+const $modTabs  = document.getElementById('modTabs');
+const $treeRoot = document.getElementById('treeRoot');
+const $treeCtn  = document.getElementById('treeCtn');
+const $cInner   = document.getElementById('cInner');
+const $bcMod    = document.getElementById('bcMod');
+const $bcSub    = document.getElementById('bcSub');
+const $sflash   = document.getElementById('sflash');
+const $tpCvs    = document.getElementById('tpCvs');
+const $aCvs     = document.getElementById('aCvs');
+const tpCtx     = $tpCvs.getContext('2d');
+const aCtx      = $aCvs.getContext('2d');
+
+// --- RENDER: Module Tabs ---
+function renderTabs() {
+  $modTabs.innerHTML = '';
+  MODS.forEach(m => {
+    const b = document.createElement('button');
+    b.className = 'mtab' + (m.id === curMod ? ' active' : '');
+    b.textContent = m.short;
+    b.dataset.mid = m.id;
+    b.addEventListener('click', () => switchMod(m.id));
+    $modTabs.appendChild(b);
+  });
+}
+
+// --- RENDER: Tree (with optional grow animation) ---
+function renderTree(modId, anim) {
+  const mod = MODS.find(m => m.id === modId);
+  if (!mod) return;
+  $treeRoot.innerHTML = '';
+  // Root label
+  const rl = document.createElement('div');
+  rl.className = 'tree-rlbl';
+  rl.innerHTML =
+    `<span class="ri" style="background:${mod.color};color:var(--s950)">${mod.icon}</span>` +
+    `<span>${mod.label}</span>`;
+  $treeRoot.appendChild(rl);
+  // Trunk (vertical line that grows downward)
+  const trunk = document.createElement('div');
+  trunk.className = 'trunk';
+  trunk.id = 'trunk';
+  const trunkH = (mod.branches.length - 1) * 36 + 18;
+  trunk.innerHTML =
+    '<div class="trunk-line"></div>' +
+    '<div class="trunk-glow"></div>';
+  $treeRoot.appendChild(trunk);
+  // Branch rows container
+  const bc = document.createElement('div');
+  bc.style.marginTop = '4px';
+  mod.branches.forEach((br, i) => {
+    const last = i === mod.branches.length - 1;
+    const row = document.createElement('div');
+    row.className = 'brow';
+    row.dataset.bid = br.id;
+    if (br.id === curBranch) row.classList.add('active');
+    // SVG connector path
+    const svgP = last
+      ? 'M 6 0 L 6 18 Q 6 22 10 22 L 24 22'
+      : 'M 6 0 L 6 36 M 6 18 Q 6 22 10 22 L 24 22';
+    row.innerHTML =
+      `<div class="bconn"><svg viewBox="0 0 24 36" preserveAspectRatio="none">` +
+      `<path d="${svgP}"/></svg></div>` +
+      `<div class="blbl">` +
+      `<span class="bnum">${br.n}</span>` +
+      `<span class="btxt">${br.t}</span>` +
+      (br.bdg
+        ? `<span class="bbdg" style="background:${mod.color}22;color:${mod.color}">${br.bdg}</span>`
+        : '') +
+      `</div>`;
+    row.addEventListener('click', () => selectBranch(br.id));
+    bc.appendChild(row);
+  });
+  $treeRoot.appendChild(bc);
+  // Animate or show instantly
+  if (anim) {
+    animGrow(trunk, trunkH, bc, rl, mod);
+  } else {
+    trunk.style.height = trunkH + 'px';
+    rl.classList.add('vis');
+    bc.querySelectorAll('.brow').forEach(r => r.classList.add('anim-done'));
+  }
+}
+
+// --- ANIMATE: Tree Grows Organically ---
+function animGrow(trunk, trunkH, bc, rl, mod) {
+  animating = true;
+  const rows = bc.querySelectorAll('.brow');
+  // 1) Flash effect along trunk
+  $sflash.classList.remove('on');
+  void $sflash.offsetWidth;
+  $sflash.classList.add('on');
+  // 2) Root label fades in
+  requestAnimationFrame(() => rl.classList.add('vis'));
+  // 3) Trunk grows downward
+  trunk.classList.add('growing');
+  trunk.style.transition = 'height 320ms cubic-bezier(0.22, 0.61, 0.36, 1)';
+  requestAnimationFrame(() => {
+    trunk.style.height = trunkH + 'px';
+  });
+  // 4) Branches draw out one-by-one with stagger
+  rows.forEach((row, i) => {
+    const delay = 320 + i * 100;
+    // Start branch draw animation
+    setTimeout(() => {
+      row.classList.add('anim-in');
+      spawnBranchPtcl(row, mod.color);
+    }, delay);
+    // Mark as fully drawn
+    setTimeout(() => {
+      row.classList.remove('anim-in');
+      row.classList.add('anim-done');
+    }, delay + 380);
+  });
+  // 5) Release animation lock
+  const totalTime = 320 + rows.length * 100 + 430;
+  setTimeout(() => {
+    animating = false;
+    trunk.classList.remove('growing');
+    trunk.style.transition = 'none';
+  }, totalTime);
+}
+
+// --- SWITCH MODULE ---
+function switchMod(modId) {
+  if (modId === curMod || animating) return;
+  curMod = modId;
+  const mod = MODS.find(m => m.id === modId);
+  curBranch = mod.branches[0].id;
+  // Update tab highlight
+  document.querySelectorAll('.mtab').forEach(t => {
+    t.classList.toggle('active', t.dataset.mid === modId);
+  });
+  // Update breadcrumb
+  $bcMod.textContent = mod.short;
+  $bcSub.textContent = mod.branches[0].t;
+  // Grow the new tree
+  renderTree(modId, true);
+  renderPanel(curBranch);
+}
+
+// --- SELECT BRANCH ---
+function selectBranch(bid) {
+  if (bid === curBranch || animating) return;
+  curBranch = bid;
+  // Update active highlight
+  document.querySelectorAll('.brow').forEach(r => {
+    r.classList.toggle('active', r.dataset.bid === bid);
+  });
+  // Update breadcrumb
+  const mod = MODS.find(m => m.id === curMod);
+  const br = mod.branches.find(b => b.id === bid);
+  $bcSub.textContent = br.t;
+  // Panel transition
+  renderPanel(bid);
+  // Selection burst particles
+  const ar = document.querySelector(`.brow[data-bid="${bid}"]`);
+  if (ar) spawnBurst(ar, mod.color);
+}
+
+// --- RENDER: Content Panel ---
+function renderPanel(bid) {
+  const d = P[bid];
+  if (!d) {
+    $cInner.innerHTML = '<div class="cpan vis"><div class="ph">' +
+      '<h1 class="ph-title" style="color:var(--s500)">No data</h1></div></div>';
+    return;
+  }
+  const mod = MODS.find(m => m.id === curMod);
+  const br = mod.branches.find(b => b.id === bid);
+  const stMap = {
+    done:    ['done', 'COMPLETE'],
+    active:  ['act',  'ACTIVE'],
+    pending: ['pend', 'PENDING'],
+    warn:    ['warn', 'WARNING'],
+  };
+  const [sc, sl] = stMap[br.st] || stMap.pending;
+  let h = '<div class="cpan vis"><div class="ph"><div class="ph-top">';
+  h += `<span class="ph-badge" style="background:${mod.color}18;color:${mod.color};border:1px solid ${mod.color}33">${br.n}</span>`;
+  h += `<span class="st ${sc}"><span class="sd"></span>${sl}</span>`;
+  h += `</div><h1 class="ph-title">${d.ti}</h1>`;
+  h += `<p class="ph-sub">${d.su}</p></div>`;
+  d.s.forEach(sec => {
+    h += `<div class="ps"><div class="ps-t">${sec.t}</div>`;
+    if (sec.tp === 'info') {
+      sec.items.forEach(it => {
+        h += `<div class="ic"><div class="ic-r">`;
+        h += `<span class="ic-k">${it.k}</span>`;
+        h += `<span class="ic-v${it.m ? ' mono' : ''}">${it.v}</span>`;
+        h += `</div></div>`;
+      });
+    }
+    else if (sec.tp === 'met') {
+      h += '<div class="mgrid">';
+      sec.items.forEach(it => {
+        h += `<div class="mc ${it.c}">`;
+        h += `<div class="mc-l">${it.l}</div>`;
+        h += `<div class="mc-v">${it.v}</div>`;
+        h += `<div class="mc-s">${it.s}</div>`;
+        h += `</div>`;
+      });
+      h += '</div>';
+    }
+    else if (sec.tp === 'flow') {
+      h += '<div class="fd">';
+      sec.nodes.forEach((nd, ni) => {
+        const hl = ni === 0 || ni === sec.nodes.length - 1;
+        h += `<div class="fn-node${hl ? ' hl' : ''}">${nd}</div>`;
+        if (ni < sec.nodes.length - 1) h += '<span class="fa">&#x2192;</span>';
+      });
+      h += '</div>';
+    }
+    else if (sec.tp === 'code') {
+      h += '<div class="cb"><div class="cb-h">';
+      h += '<span class="d" style="background:var(--ro5)"></span>';
+      h += '<span class="d" style="background:var(--am5)"></span>';
+      h += '<span class="d" style="background:var(--em5)"></span>';
+      h += `<span style="margin-left:8px">${sec.fn}</span>`;
+      h += '</div><div class="cb-b">';
+      sec.lines.forEach(ln => {
+        h += `<div><span class="ln">${ln.n}</span>`;
+        ln.tk.forEach(tk => {
+          h += tk.t ? `<span class="${tk.t}">${esc(tk.v)}</span>` : esc(tk.v);
+        });
+        h += '</div>';
+      });
+      h += '</div></div>';
+    }
+    else if (sec.tp === 'tbl') {
+      h += '<div class="cb"><div style="padding:0"><table class="dtbl"><thead><tr>';
+      sec.hd.forEach(hd => { h += `<th>${hd}</th>`; });
+      h += '</tr></thead><tbody>';
+      sec.rows.forEach(row => {
+        h += '<tr>';
+        row.forEach((c, ci) => {
+          const style = ci === 0 ? ' style="color:var(--s300);font-weight:500"' : '';
+          h += `<td${style}>${c}</td>`;
+        });
+        h += '</tr>';
+      });
+      h += '</tbody></table></div></div>';
+    }
+    h += '</div>';
+  });
+  h += '</div>';
+  $cInner.innerHTML = h;
+}
+function esc(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// --- PARTICLE: Tree-Path Particle Class ---
+class TP {
+  constructor(x, y, col, vx, vy, life) {
+    this.x = x;
+    this.y = y;
+    this.col = col;
+    this.vx = vx;
+    this.vy = vy;
+    this.life = life;
+    this.ml = life;
+    this.sz = 1.5 + Math.random() * 1.5;
+  }
+  update() {
+    this.x += this.vx;
+    this.y += this.vy;
+    this.vx *= 0.96;
+    this.vy *= 0.96;
+    this.life--;
+    return this.life > 0;
+  }
+  draw(ctx) {
+    const a = (this.life / this.ml) * 0.8;
+    // Core
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.sz, 0, Math.PI * 2);
+    ctx.fillStyle = this.col.replace(/[\d.]+\)$/, a + ')');
+    ctx.fill();
+    // Glow halo
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.sz * 3, 0, Math.PI * 2);
+    ctx.fillStyle = this.col.replace(/[\d.]+\)$/, (a * 0.2) + ')');
+    ctx.fill();
+  }
+}
+
+// --- PARTICLE HELPERS ---
+function hex2rgba(hex) {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, 0.8)`;
+}
+// Spawn particles along a drawing branch
+function spawnBranchPtcl(row, color) {
+  const rr = row.getBoundingClientRect();
+  const cr = $tpCvs.getBoundingClientRect();
+  const sx = rr.left - cr.left + 6;
+  const y = rr.top - cr.top + rr.height / 2;
+  const c = hex2rgba(color);
+  for (let i = 0; i < 6; i++) {
+    tpArr.push(new TP(
+      sx + Math.random() * 20,
+      y + (Math.random() - 0.5) * 8,
+      c,
+      0.3 + Math.random() * 0.8,
+      (Math.random() - 0.5) * 0.6,
+      30 + Math.random() * 20
+    ));
+  }
+}
+// Burst on branch selection
+function spawnBurst(row, color) {
+  const rr = row.getBoundingClientRect();
+  const cr = $tpCvs.getBoundingClientRect();
+  const cx = rr.left - cr.left + rr.width / 2;
+  const cy = rr.top - cr.top + rr.height / 2;
+  const c = hex2rgba(color);
+  for (let i = 0; i < 12; i++) {
+    const angle = (Math.PI * 2 / 12) * i + Math.random() * 0.3;
+    const speed = 0.5 + Math.random() * 1.5;
+    tpArr.push(new TP(
+      cx, cy, c,
+      Math.cos(angle) * speed,
+      Math.sin(angle) * speed,
+      25 + Math.random() * 15
+    ));
+  }
+}
+// Continuous trunk particles (ambient flow down the trunk line)
+function trunkPtcl() {
+  const trunk = document.getElementById('trunk');
+  if (!trunk || animating) return;
+  const rr = trunk.getBoundingClientRect();
+  const cr = $tpCvs.getBoundingClientRect();
+  const mod = MODS.find(m => m.id === curMod);
+  if (rr.height < 10 || Math.random() > 0.15) return;
+  const x = rr.left - cr.left + 0.5;
+  const y = rr.top - cr.top + Math.random() * 4;
+  tpArr.push(new TP(
+    x, y, hex2rgba(mod.color),
+    (Math.random() - 0.5) * 0.15,
+    0.4 + Math.random() * 0.6,
+    40 + Math.random() * 30
+  ));
+}
+
+// --- PARTICLE: Ambient Background ---
+class AP {
+  constructor(w, h) {
+    this.reset(w, h, true);
+  }
+  reset(w, h, init) {
+    this.x = Math.random() * w;
+    this.y = init ? Math.random() * h : h + 10;
+    this.sz = 0.5 + Math.random() * 1.2;
+    this.sy = -(0.08 + Math.random() * 0.15);
+    this.sx = (Math.random() - 0.5) * 0.05;
+    this.a = 0.03 + Math.random() * 0.08;
+    this.dr = Math.random() * Math.PI * 2;
+    this.ds = 0.003 + Math.random() * 0.005;
+    this.w = w;
+    this.h = h;
+  }
+  update() {
+    this.dr += this.ds;
+    this.x += this.sx + Math.sin(this.dr) * 0.08;
+    this.y += this.sy;
+    if (this.y < -10) this.reset(this.w, this.h, false);
+  }
+  draw(ctx) {
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.sz, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(148, 163, 184, ${this.a})`;
+    ctx.fill();
+  }
+}
+
+// --- CANVAS MANAGEMENT ---
+function resizeCvs() {
+  // Tree particle canvas
+  const tr = $treeCtn.getBoundingClientRect();
+  $tpCvs.width = tr.width;
+  $tpCvs.height = tr.height;
+  // Ambient canvas
+  $aCvs.width = window.innerWidth;
+  $aCvs.height = window.innerHeight;
+  // Initialize ambient particles
+  if (apArr.length === 0) {
+    for (let i = 0; i < 60; i++) {
+      apArr.push(new AP($aCvs.width, $aCvs.height));
+    }
+  } else {
+    apArr.forEach(p => {
+      p.w = $aCvs.width;
+      p.h = $aCvs.height;
+    });
+  }
+}
+
+// --- ANIMATION LOOP ---
+function loop() {
+  // Tree particles
+  tpCtx.clearRect(0, 0, $tpCvs.width, $tpCvs.height);
+  trunkPtcl();
+  tpArr = tpArr.filter(p => {
+    const alive = p.update();
+    if (alive) p.draw(tpCtx);
+    return alive;
+  });
+  // Ambient particles
+  aCtx.clearRect(0, 0, $aCvs.width, $aCvs.height);
+  apArr.forEach(p => {
+    p.update();
+    p.draw(aCtx);
+  });
+  requestAnimationFrame(loop);
+}
+
+// --- KEYBOARD NAVIGATION ---
+document.addEventListener('keydown', e => {
+  if (animating) return;
+  const mod = MODS.find(m => m.id === curMod);
+  const mi = MODS.indexOf(mod);
+  const bi = mod.branches.findIndex(b => b.id === curBranch);
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    if (bi < mod.branches.length - 1) selectBranch(mod.branches[bi + 1].id);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (bi > 0) selectBranch(mod.branches[bi - 1].id);
+  } else if (e.key === 'ArrowRight') {
+    e.preventDefault();
+    if (mi < MODS.length - 1) switchMod(MODS[mi + 1].id);
+  } else if (e.key === 'ArrowLeft') {
+    e.preventDefault();
+    if (mi > 0) switchMod(MODS[mi - 1].id);
+  }
+});
+
+// --- INIT ---
+function init() {
+  renderTabs();
+  renderTree(curMod, false);
+  renderPanel(curBranch);
+  resizeCvs();
+  loop();
+}
+window.addEventListener('resize', resizeCvs);
+window.addEventListener('DOMContentLoaded', init);
+if (document.readyState !== 'loading') init();
+</script>
+</body>
+</html>

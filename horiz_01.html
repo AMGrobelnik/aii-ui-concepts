@@ -1,0 +1,1142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Pipeline View</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #1a1d23;
+    --surface: #22262e;
+    --border: #2e3440;
+    --text: #e2e8f0;
+    --text-dim: #8892a4;
+    --text-muted: #5a6378;
+    --green: #22c55e;
+    --purple: #a78bfa;
+    --blue: #3b82f6;
+    --orange: #f59e0b;
+    --green-glow: rgba(34, 197, 94, 0.25);
+    --purple-glow: rgba(167, 139, 250, 0.25);
+    --blue-glow: rgba(59, 130, 246, 0.35);
+    --orange-glow: rgba(245, 158, 11, 0.25);
+    --card-bg: rgba(34, 38, 46, 0.65);
+    --card-bg-hover: rgba(34, 38, 46, 0.85);
+    --glass-border: rgba(255, 255, 255, 0.06);
+    --glass-shine: rgba(255, 255, 255, 0.03);
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Thin Left Sidebar ── */
+  .sidebar {
+    width: 60px;
+    min-width: 60px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding-top: 20px;
+    z-index: 10;
+  }
+
+  .ring-container {
+    position: relative;
+    width: 50px;
+    height: 50px;
+  }
+
+  .ring-container svg { width: 50px; height: 50px; transform: rotate(-90deg); }
+
+  .ring-bg {
+    fill: none;
+    stroke: var(--border);
+    stroke-width: 3.5;
+  }
+
+  .ring-progress {
+    fill: none;
+    stroke: url(#ringGradient);
+    stroke-width: 3.5;
+    stroke-linecap: round;
+    stroke-dasharray: 131.95;
+    stroke-dashoffset: 46.18;
+    filter: drop-shadow(0 0 4px rgba(59, 130, 246, 0.5));
+    transition: stroke-dashoffset 1s ease;
+  }
+
+  .ring-endpoint {
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--blue);
+    box-shadow: 0 0 8px var(--blue), 0 0 16px rgba(59, 130, 246, 0.4);
+    animation: endpointGlow 2s ease-in-out infinite;
+    /* Positioned via JS */
+  }
+
+  @keyframes endpointGlow {
+    0%, 100% { box-shadow: 0 0 6px var(--blue), 0 0 12px rgba(59, 130, 246, 0.3); }
+    50% { box-shadow: 0 0 12px var(--blue), 0 0 24px rgba(59, 130, 246, 0.6); }
+  }
+
+  .ring-label {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text);
+    letter-spacing: -0.3px;
+  }
+
+  /* ── Main Area ── */
+  .main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* ── Canvas Overlay ── */
+  #particleCanvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 5;
+  }
+
+  /* ── Module Cards Row ── */
+  .cards-row {
+    display: flex;
+    gap: 16px;
+    padding: 20px 24px 12px;
+    position: relative;
+    z-index: 6;
+  }
+
+  .module-card {
+    flex: 1;
+    max-width: 260px;
+    min-width: 180px;
+    height: 80px;
+    background: var(--card-bg);
+    backdrop-filter: blur(16px);
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    padding: 12px 14px 10px;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    transition: background 0.2s, transform 0.15s, box-shadow 0.3s;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+  }
+
+  .module-card::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    border-radius: 10px 0 0 10px;
+  }
+
+  .module-card::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, var(--glass-shine), transparent 60%);
+    pointer-events: none;
+    border-radius: 10px;
+  }
+
+  .module-card:hover {
+    background: var(--card-bg-hover);
+    transform: translateY(-1px);
+  }
+
+  .module-card.selected {
+    border-color: rgba(255, 255, 255, 0.1);
+    background: var(--card-bg-hover);
+  }
+
+  /* Color variants */
+  .module-card[data-color="green"]::before { background: var(--green); }
+  .module-card[data-color="purple"]::before { background: var(--purple); }
+  .module-card[data-color="blue"]::before { background: var(--blue); }
+  .module-card[data-color="orange"]::before { background: var(--orange); }
+
+  .module-card[data-color="green"].selected { box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.2); }
+  .module-card[data-color="purple"].selected { box-shadow: 0 0 0 1px rgba(167, 139, 250, 0.2); }
+  .module-card[data-color="blue"].selected { box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.2); }
+  .module-card[data-color="orange"].selected { box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.2); }
+
+  /* Active glow */
+  .module-card.active {
+    animation: cardGlow 2.5s ease-in-out infinite;
+  }
+
+  @keyframes cardGlow {
+    0%, 100% { box-shadow: 0 0 15px var(--blue-glow), 0 0 30px rgba(59, 130, 246, 0.1); }
+    50% { box-shadow: 0 0 25px var(--blue-glow), 0 0 50px rgba(59, 130, 246, 0.2); }
+  }
+
+  /* Dimmed card */
+  .module-card.dimmed {
+    opacity: 0.45;
+  }
+  .module-card.dimmed:hover { opacity: 0.65; }
+
+  .card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .card-name {
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .card-status {
+    font-size: 11px;
+    flex-shrink: 0;
+  }
+
+  .card-metric {
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    line-height: 1;
+  }
+
+  .module-card[data-color="green"] .card-metric { color: var(--green); }
+  .module-card[data-color="purple"] .card-metric { color: var(--purple); }
+  .module-card[data-color="blue"] .card-metric { color: var(--blue); }
+  .module-card[data-color="orange"] .card-metric { color: var(--text-muted); }
+
+  .card-progress {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .card-progress-fill {
+    height: 100%;
+    border-radius: 0 2px 0 0;
+    transition: width 0.8s ease;
+  }
+
+  .module-card[data-color="green"] .card-progress-fill { background: var(--green); }
+  .module-card[data-color="purple"] .card-progress-fill { background: var(--purple); }
+  .module-card[data-color="blue"] .card-progress-fill { background: var(--blue); }
+  .module-card[data-color="orange"] .card-progress-fill { background: var(--orange); }
+
+  /* ── Connector lines between cards ── */
+  .connectors {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 4;
+  }
+
+  /* ── Sub-module Columns ── */
+  .submodules-area {
+    display: flex;
+    gap: 16px;
+    padding: 4px 24px 8px;
+    position: relative;
+    z-index: 6;
+    min-height: 0;
+  }
+
+  .submodule-column {
+    flex: 1;
+    max-width: 260px;
+    min-width: 180px;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .submodule-row {
+    display: flex;
+    align-items: center;
+    height: 26px;
+    padding: 0 8px;
+    gap: 8px;
+    cursor: pointer;
+    border-radius: 5px;
+    transition: background 0.15s;
+  }
+
+  .submodule-row:hover {
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .submodule-row.selected {
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .sub-dot {
+    width: 8px;
+    height: 8px;
+    min-width: 8px;
+    border-radius: 50%;
+    border: 1.5px solid var(--text-muted);
+    background: transparent;
+    transition: all 0.2s;
+  }
+
+  .sub-dot.done { background: var(--green); border-color: var(--green); }
+  .sub-dot.active {
+    border-color: var(--blue);
+    background: var(--blue);
+    animation: dotPulse 2s ease-in-out infinite;
+  }
+  .sub-dot.pending { border-color: var(--text-muted); background: transparent; }
+
+  @keyframes dotPulse {
+    0%, 100% { box-shadow: 0 0 4px var(--blue), 0 0 8px rgba(59, 130, 246, 0.3); }
+    50% { box-shadow: 0 0 8px var(--blue), 0 0 16px rgba(59, 130, 246, 0.5); }
+  }
+
+  .sub-name {
+    font-size: 11px;
+    color: var(--text-dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+  }
+
+  .submodule-row.selected .sub-name { color: var(--text); }
+  .submodule-row .sub-name.done-text { color: var(--text-dim); }
+  .submodule-row .sub-name.active-text { color: var(--text); font-weight: 500; }
+
+  .sub-metric {
+    font-size: 10px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ── Content Area ── */
+  .content-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 24px 24px;
+    position: relative;
+    z-index: 6;
+    border-top: 1px solid var(--border);
+    margin-top: 6px;
+  }
+
+  .content-area::-webkit-scrollbar { width: 6px; }
+  .content-area::-webkit-scrollbar-track { background: transparent; }
+  .content-area::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .content-inner {
+    animation: contentFade 0.3s ease;
+    max-width: 900px;
+  }
+
+  @keyframes contentFade {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .content-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .content-title {
+    font-size: 16px;
+    font-weight: 600;
+  }
+
+  .status-badge {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .status-badge.done { background: rgba(34, 197, 94, 0.15); color: var(--green); }
+  .status-badge.active { background: rgba(59, 130, 246, 0.15); color: var(--blue); }
+  .status-badge.pending { background: rgba(90, 99, 120, 0.2); color: var(--text-muted); }
+
+  .content-summary {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-dim);
+    margin-bottom: 18px;
+    padding: 10px 14px;
+    background: rgba(255, 255, 255, 0.02);
+    border-radius: 8px;
+    border-left: 2px solid var(--border);
+  }
+
+  .content-summary em {
+    color: var(--text);
+    font-style: normal;
+    font-weight: 500;
+  }
+
+  /* Stat cards */
+  .stats-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+
+  .stat-card {
+    flex: 1;
+    background: var(--card-bg);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+
+  .stat-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+  }
+
+  .stat-value {
+    font-size: 18px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    letter-spacing: -0.3px;
+  }
+
+  .stat-bar {
+    height: 4px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .stat-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.8s ease;
+  }
+
+  .stat-bar-fill.green { background: var(--green); }
+  .stat-bar-fill.blue { background: var(--blue); }
+  .stat-bar-fill.purple { background: var(--purple); }
+  .stat-bar-fill.orange { background: var(--orange); }
+
+  .stat-detail {
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-top: 5px;
+  }
+
+  /* Item list */
+  .item-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .item-list-header {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .item-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: var(--card-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: 6px;
+    transition: background 0.15s;
+  }
+
+  .item-row:hover { background: var(--card-bg-hover); }
+
+  .item-status-dot {
+    width: 7px;
+    height: 7px;
+    min-width: 7px;
+    border-radius: 50%;
+  }
+
+  .item-status-dot.done { background: var(--green); }
+  .item-status-dot.active { background: var(--blue); box-shadow: 0 0 6px rgba(59, 130, 246, 0.5); }
+  .item-status-dot.pending { background: var(--text-muted); opacity: 0.5; }
+
+  .item-name {
+    font-size: 12px;
+    flex: 1;
+    color: var(--text-dim);
+  }
+
+  .item-metric {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .item-tag {
+    font-size: 9px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-weight: 500;
+  }
+
+  .item-tag.done { background: rgba(34, 197, 94, 0.12); color: var(--green); }
+  .item-tag.active { background: rgba(59, 130, 246, 0.12); color: var(--blue); }
+  .item-tag.pending { background: rgba(90, 99, 120, 0.15); color: var(--text-muted); }
+
+  /* Keyboard hint */
+  .kb-hint {
+    position: fixed;
+    bottom: 12px;
+    right: 16px;
+    display: flex;
+    gap: 6px;
+    z-index: 20;
+    opacity: 0.4;
+  }
+
+  .kb-key {
+    font-size: 9px;
+    color: var(--text-muted);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-family: 'Inter', monospace;
+  }
+</style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<div class="sidebar">
+  <div class="ring-container">
+    <svg viewBox="0 0 50 50">
+      <defs>
+        <linearGradient id="ringGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="var(--green)" />
+          <stop offset="50%" stop-color="var(--blue)" />
+          <stop offset="100%" stop-color="var(--purple)" />
+        </linearGradient>
+      </defs>
+      <circle class="ring-bg" cx="25" cy="25" r="21" />
+      <circle class="ring-progress" cx="25" cy="25" r="21" />
+    </svg>
+    <div class="ring-endpoint" id="ringEndpoint"></div>
+    <div class="ring-label">65%</div>
+  </div>
+</div>
+
+<!-- Main -->
+<div class="main">
+  <canvas id="particleCanvas"></canvas>
+
+  <!-- Module Cards Row -->
+  <div class="cards-row" id="cardsRow">
+    <div class="module-card selected" data-color="green" data-index="0" onclick="selectModule(0)">
+      <div class="card-top">
+        <span class="card-name">Seed Hypothesis</span>
+        <span class="card-status">&#10003;</span>
+      </div>
+      <div class="card-metric">12 gaps</div>
+      <div class="card-progress"><div class="card-progress-fill" style="width:100%"></div></div>
+    </div>
+    <div class="module-card" data-color="purple" data-index="1" onclick="selectModule(1)">
+      <div class="card-top">
+        <span class="card-name">Hypothesis Loop</span>
+        <span class="card-status">&#10003;</span>
+      </div>
+      <div class="card-metric">8.4 / 10</div>
+      <div class="card-progress"><div class="card-progress-fill" style="width:100%"></div></div>
+    </div>
+    <div class="module-card active" data-color="blue" data-index="2" onclick="selectModule(2)">
+      <div class="card-top">
+        <span class="card-name">Invention Loop</span>
+        <span class="card-status">&#9654;</span>
+      </div>
+      <div class="card-metric">3 / 5</div>
+      <div class="card-progress"><div class="card-progress-fill" style="width:60%"></div></div>
+    </div>
+    <div class="module-card dimmed" data-color="orange" data-index="3" onclick="selectModule(3)">
+      <div class="card-top">
+        <span class="card-name">Paper &amp; Repo</span>
+        <span class="card-status">&#9675;</span>
+      </div>
+      <div class="card-metric">&mdash;</div>
+      <div class="card-progress"><div class="card-progress-fill" style="width:0%"></div></div>
+    </div>
+  </div>
+
+  <!-- Sub-module Columns -->
+  <div class="submodules-area" id="submodulesArea"></div>
+
+  <!-- Content Area -->
+  <div class="content-area" id="contentArea"></div>
+
+  <!-- Keyboard hint -->
+  <div class="kb-hint">
+    <span class="kb-key">&larr; &rarr;</span>
+    <span class="kb-key">&uarr; &darr;</span>
+    <span class="kb-key">modules</span>
+  </div>
+</div>
+
+<script>
+// ── Data ──
+const DATA = {
+  modules: [
+    {
+      name: "Seed Hypothesis",
+      color: "green",
+      status: "done",
+      metric: "12 gaps",
+      progress: 100,
+      subs: [
+        {
+          name: "Mine Papers", status: "done", metric: "847",
+          summary: "I mined <em>847 papers</em> from arXiv, Semantic Scholar, and OpenAlex. Focused on transformer efficiency, mixture-of-experts routing, and speculative decoding. Filtered to 312 highly relevant papers published in the last 18 months.",
+          stats: { duration: "14m 22s", durationPct: 35, cost: "$1.84", costPct: 28, messages: "42 tool / 18 text" },
+          items: null
+        },
+        {
+          name: "Build KG", status: "done", metric: "1.2k nodes",
+          summary: "I constructed a knowledge graph with <em>1,247 concept nodes</em> and <em>3,891 edges</em>. Key clusters emerged around adaptive computation, token-level routing, and hardware-aware scheduling. Used entity extraction + coreference resolution across all 312 papers.",
+          stats: { duration: "8m 45s", durationPct: 22, cost: "$2.41", costPct: 37, messages: "86 tool / 12 text" },
+          items: null
+        },
+        {
+          name: "Find Gaps", status: "done", metric: "12 gaps",
+          summary: "I identified <em>12 research gaps</em> by analyzing sparse regions in the knowledge graph. Top gaps: (1) dynamic MoE routing without auxiliary losses, (2) speculative decoding with heterogeneous draft models, (3) cross-layer attention recycling for long contexts. Each gap scored by novelty and feasibility.",
+          stats: { duration: "6m 10s", durationPct: 15, cost: "$1.12", costPct: 17, messages: "28 tool / 22 text" },
+          items: null
+        },
+        {
+          name: "Select Seeds", status: "done", metric: "3 seeds",
+          summary: "I ranked all 12 gaps and selected the <em>top 3 seeds</em> for hypothesis generation. Seed 1: gradient-free MoE routing via bandit algorithms. Seed 2: speculative decoding with learned rejection. Seed 3: attention recycling with residual connections. All scored above 8.0 on novelty + feasibility.",
+          stats: { duration: "3m 05s", durationPct: 8, cost: "$0.67", costPct: 10, messages: "14 tool / 8 text" },
+          items: null
+        }
+      ]
+    },
+    {
+      name: "Hypothesis Loop",
+      color: "purple",
+      status: "done",
+      metric: "8.4 / 10",
+      progress: 100,
+      subs: [
+        {
+          name: "Gen Hypo 1", status: "done", metric: "6.2",
+          summary: "I generated the first hypothesis draft: <em>Bandit-Routed MoE</em> — using Thompson Sampling to dynamically route tokens to experts without auxiliary load-balancing losses. Initial formulation was rough; the mechanism for exploration/exploitation tradeoff needed refinement.",
+          stats: { duration: "4m 18s", durationPct: 30, cost: "$1.22", costPct: 25, messages: "32 tool / 14 text" },
+          items: null
+        },
+        {
+          name: "Review 1", status: "done", metric: "6.2 / 10",
+          summary: "I reviewed the hypothesis and scored it <em>6.2/10</em>. Strengths: novel routing mechanism, clear computational benefit. Weaknesses: no convergence guarantee, unclear how to handle expert cold-start, missing comparison with hash-routing baselines. Provided 4 specific revision directives.",
+          stats: { duration: "3m 42s", durationPct: 25, cost: "$0.98", costPct: 20, messages: "18 tool / 24 text" },
+          items: null
+        },
+        {
+          name: "Gen Hypo 2", status: "done", metric: "7.6",
+          summary: "I revised the hypothesis incorporating all review feedback. Added <em>UCB-based warm-start protocol</em>, formal regret bounds, and comparison framework against hash-routing and top-k routing. The mechanism now includes a decay schedule for exploration.",
+          stats: { duration: "5m 01s", durationPct: 35, cost: "$1.45", costPct: 30, messages: "38 tool / 16 text" },
+          items: null
+        },
+        {
+          name: "Review 2", status: "done", metric: "7.6 / 10",
+          summary: "I scored the revised hypothesis <em>7.6/10</em>. Major improvement in theoretical grounding. Remaining issues: scalability analysis for 128+ experts, interaction with gradient checkpointing, and need for ablation study design. Issued 3 targeted revision directives.",
+          stats: { duration: "3m 28s", durationPct: 24, cost: "$0.88", costPct: 18, messages: "16 tool / 20 text" },
+          items: null
+        },
+        {
+          name: "Gen Hypo 3", status: "done", metric: "8.4",
+          summary: "Final hypothesis revision: <em>Bandit-Routed MoE with Hierarchical Thompson Sampling</em>. Added two-level routing (cluster then expert), scalability proofs for up to 256 experts, memory-efficient implementation via chunked routing tables. Complete ablation study design included.",
+          stats: { duration: "5m 44s", durationPct: 40, cost: "$1.68", costPct: 34, messages: "44 tool / 18 text" },
+          items: null
+        },
+        {
+          name: "Review 3", status: "done", metric: "8.4 / 10",
+          summary: "I scored the final hypothesis <em>8.4/10</em>. Strong theoretical foundation, practical implementation path, clear novelty over existing work. Minor suggestion: add discussion of failure modes under adversarial token distributions. Hypothesis approved for invention phase.",
+          stats: { duration: "3m 15s", durationPct: 22, cost: "$0.76", costPct: 15, messages: "12 tool / 22 text" },
+          items: null
+        }
+      ]
+    },
+    {
+      name: "Invention Loop",
+      color: "blue",
+      status: "active",
+      metric: "3 / 5",
+      progress: 60,
+      subs: [
+        {
+          name: "Strategy", status: "done", metric: "3 axes",
+          summary: "I devised the invention strategy along <em>3 axes</em>: (1) algorithmic — implement hierarchical Thompson Sampling with regret tracking, (2) systems — design memory-efficient routing tables compatible with FSDP, (3) empirical — benchmark suite across GPT-2, LLaMA-7B, and Mixtral architectures.",
+          stats: { duration: "6m 30s", durationPct: 20, cost: "$1.92", costPct: 18, messages: "48 tool / 22 text" },
+          items: null
+        },
+        {
+          name: "Plan", status: "done", metric: "14 tasks",
+          summary: "I created a detailed execution plan with <em>14 tasks</em> across 3 phases. Phase 1: core routing algorithm (5 tasks). Phase 2: integration with existing MoE frameworks (4 tasks). Phase 3: benchmark and ablation studies (5 tasks). Estimated 8 artifacts total.",
+          stats: { duration: "4m 15s", durationPct: 13, cost: "$1.34", costPct: 13, messages: "36 tool / 14 text" },
+          items: null
+        },
+        {
+          name: "Artifacts", status: "active", metric: "3 / 5",
+          summary: "I am generating the invention artifacts. Completed: <em>routing algorithm implementation</em>, <em>benchmark harness</em>, and <em>integration adapter</em>. Currently working on the ablation study runner. One more artifact remaining: visualization dashboard for routing patterns.",
+          stats: { duration: "18m 42s", durationPct: 58, cost: "$4.87", costPct: 46, messages: "124 tool / 38 text" },
+          items: [
+            { name: "bandit_router.py — Core routing algorithm", status: "done", metric: "342 lines", tag: "done" },
+            { name: "benchmark_harness.py — Evaluation suite", status: "done", metric: "518 lines", tag: "done" },
+            { name: "moe_adapter.py — Framework integration", status: "done", metric: "287 lines", tag: "done" },
+            { name: "ablation_runner.py — Ablation study driver", status: "active", metric: "generating...", tag: "active" },
+            { name: "routing_viz.py — Pattern visualization", status: "pending", metric: "—", tag: "pending" }
+          ]
+        },
+        {
+          name: "Paper Draft", status: "pending", metric: "—",
+          summary: "Waiting to draft the paper sections. Will generate: abstract, introduction, method, experiments, and conclusion. Each section will reference the completed artifacts and benchmark results.",
+          stats: { duration: "—", durationPct: 0, cost: "—", costPct: 0, messages: "—" },
+          items: null
+        },
+        {
+          name: "Review", status: "pending", metric: "—",
+          summary: "Pending review of the paper draft. Will check for technical accuracy, logical flow, proper citations, and identify weaknesses before updating the hypothesis.",
+          stats: { duration: "—", durationPct: 0, cost: "—", costPct: 0, messages: "—" },
+          items: null
+        },
+        {
+          name: "Update Hypo", status: "pending", metric: "—",
+          summary: "Pending hypothesis update based on review feedback. Will incorporate findings from the invention phase to refine the hypothesis for the next iteration.",
+          stats: { duration: "—", durationPct: 0, cost: "—", costPct: 0, messages: "—" },
+          items: null
+        }
+      ]
+    },
+    {
+      name: "Paper & Repo",
+      color: "orange",
+      status: "pending",
+      metric: "—",
+      progress: 0,
+      subs: [
+        {
+          name: "Gen Repo", status: "pending", metric: "—",
+          summary: "Pending. Will generate a complete GitHub repository with proper package structure, pyproject.toml, tests, and CI/CD configuration.",
+          stats: { duration: "—", durationPct: 0, cost: "—", costPct: 0, messages: "—" },
+          items: null
+        },
+        {
+          name: "Demos", status: "pending", metric: "—",
+          summary: "Pending. Will create interactive demonstration notebooks and scripts showing the routing algorithm in action across different model architectures.",
+          stats: { duration: "—", durationPct: 0, cost: "—", costPct: 0, messages: "—" },
+          items: null
+        },
+        {
+          name: "Full Paper", status: "pending", metric: "—",
+          summary: "Pending. Will assemble all paper sections into a complete LaTeX document with proper formatting, figures, tables, and bibliography.",
+          stats: { duration: "—", durationPct: 0, cost: "—", costPct: 0, messages: "—" },
+          items: null
+        },
+        {
+          name: "Deploy Src", status: "pending", metric: "—",
+          summary: "Pending. Will publish the source code repository to GitHub with releases, documentation, and package distribution via PyPI.",
+          stats: { duration: "—", durationPct: 0, cost: "—", costPct: 0, messages: "—" },
+          items: null
+        },
+        {
+          name: "Deploy Paper", status: "pending", metric: "—",
+          summary: "Pending. Will compile the final paper PDF and prepare submission materials for the target venue.",
+          stats: { duration: "—", durationPct: 0, cost: "—", costPct: 0, messages: "—" },
+          items: null
+        }
+      ]
+    }
+  ]
+};
+
+// ── State ──
+let selectedModule = 2;
+let selectedSub = 2;
+
+// ── DOM refs ──
+const cardsRow = document.getElementById('cardsRow');
+const submodulesArea = document.getElementById('submodulesArea');
+const contentArea = document.getElementById('contentArea');
+const canvas = document.getElementById('particleCanvas');
+const ctx = canvas.getContext('2d');
+
+// ── Ring endpoint position ──
+function positionRingEndpoint() {
+  const pct = 0.65;
+  const angle = (Math.PI * 2 * pct) - (Math.PI / 2);
+  const cx = 25, cy = 25, r = 21;
+  const x = cx + r * Math.cos(angle);
+  const y = cy + r * Math.sin(angle);
+  const ep = document.getElementById('ringEndpoint');
+  ep.style.left = (x - 3) + 'px';
+  ep.style.top = (y - 3) + 'px';
+}
+positionRingEndpoint();
+
+// ── Render sub-modules ──
+function renderSubmodules() {
+  submodulesArea.innerHTML = '';
+  DATA.modules.forEach((mod, mi) => {
+    const col = document.createElement('div');
+    col.className = 'submodule-column';
+    mod.subs.forEach((sub, si) => {
+      const row = document.createElement('div');
+      row.className = 'submodule-row' + (mi === selectedModule && si === selectedSub ? ' selected' : '');
+      row.onclick = () => { selectSub(mi, si); };
+
+      const dot = document.createElement('div');
+      dot.className = 'sub-dot ' + sub.status;
+
+      const name = document.createElement('span');
+      name.className = 'sub-name' + (sub.status === 'done' ? ' done-text' : '') + (sub.status === 'active' ? ' active-text' : '');
+      name.textContent = sub.name;
+
+      const metric = document.createElement('span');
+      metric.className = 'sub-metric';
+      metric.textContent = sub.metric;
+
+      row.appendChild(dot);
+      row.appendChild(name);
+      row.appendChild(metric);
+      col.appendChild(row);
+    });
+    submodulesArea.appendChild(col);
+  });
+}
+
+// ── Render content area ──
+function renderContent() {
+  const mod = DATA.modules[selectedModule];
+  const sub = mod.subs[selectedSub];
+  const colorVar = `var(--${mod.color})`;
+
+  let statusClass = sub.status;
+  let statusText = sub.status === 'done' ? 'Complete' : sub.status === 'active' ? 'Running' : 'Pending';
+
+  let html = `<div class="content-inner" key="${selectedModule}-${selectedSub}">`;
+  html += `<div class="content-header">`;
+  html += `<span class="content-title" style="color:${colorVar}">${sub.name}</span>`;
+  html += `<span class="status-badge ${statusClass}">${statusText}</span>`;
+  html += `</div>`;
+
+  html += `<div class="content-summary">${sub.summary}</div>`;
+
+  // Stats
+  html += `<div class="stats-row">`;
+  html += `<div class="stat-card">
+    <div class="stat-label">Duration</div>
+    <div class="stat-value">${sub.stats.duration}</div>
+    <div class="stat-bar"><div class="stat-bar-fill ${mod.color}" style="width:${sub.stats.durationPct}%"></div></div>
+  </div>`;
+  html += `<div class="stat-card">
+    <div class="stat-label">Cost</div>
+    <div class="stat-value">${sub.stats.cost}</div>
+    <div class="stat-bar"><div class="stat-bar-fill ${mod.color}" style="width:${sub.stats.costPct}%"></div></div>
+  </div>`;
+  html += `<div class="stat-card">
+    <div class="stat-label">Messages</div>
+    <div class="stat-value" style="font-size:14px">${sub.stats.messages}</div>
+    <div class="stat-bar"><div class="stat-bar-fill ${mod.color}" style="width:${sub.stats.durationPct}%"></div></div>
+  </div>`;
+  html += `</div>`;
+
+  // Items if present
+  if (sub.items && sub.items.length > 0) {
+    html += `<div class="item-list-header">Artifacts</div>`;
+    html += `<div class="item-list">`;
+    sub.items.forEach(item => {
+      html += `<div class="item-row">
+        <div class="item-status-dot ${item.status}"></div>
+        <span class="item-name">${item.name}</span>
+        <span class="item-metric">${item.metric}</span>
+        <span class="item-tag ${item.tag}">${item.tag}</span>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
+  html += `</div>`;
+  contentArea.innerHTML = html;
+}
+
+// ── Selection logic ──
+function selectModule(idx) {
+  selectedModule = idx;
+  selectedSub = 0;
+  // Find first active or last done sub for better UX
+  const subs = DATA.modules[idx].subs;
+  const activeIdx = subs.findIndex(s => s.status === 'active');
+  if (activeIdx !== -1) selectedSub = activeIdx;
+
+  updateCardSelection();
+  renderSubmodules();
+  renderContent();
+  rebuildParticles();
+}
+
+function selectSub(mi, si) {
+  if (mi !== selectedModule) {
+    selectedModule = mi;
+    updateCardSelection();
+  }
+  selectedSub = si;
+  renderSubmodules();
+  renderContent();
+  rebuildParticles();
+}
+
+function updateCardSelection() {
+  const cards = cardsRow.querySelectorAll('.module-card');
+  cards.forEach((c, i) => {
+    c.classList.toggle('selected', i === selectedModule);
+  });
+}
+
+// ── Keyboard navigation ──
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight') {
+    e.preventDefault();
+    selectModule(Math.min(selectedModule + 1, 3));
+  } else if (e.key === 'ArrowLeft') {
+    e.preventDefault();
+    selectModule(Math.max(selectedModule - 1, 0));
+  } else if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    const maxSub = DATA.modules[selectedModule].subs.length - 1;
+    selectedSub = Math.min(selectedSub + 1, maxSub);
+    renderSubmodules();
+    renderContent();
+    rebuildParticles();
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    selectedSub = Math.max(selectedSub - 1, 0);
+    renderSubmodules();
+    renderContent();
+    rebuildParticles();
+  }
+});
+
+// ── Canvas / Particles ──
+let particles = [];
+let connectorParticles = [];
+let verticalParticles = [];
+let animFrame;
+
+function resizeCanvas() {
+  const rect = canvas.parentElement.getBoundingClientRect();
+  canvas.width = rect.width;
+  canvas.height = rect.height;
+}
+
+function getCardCenter(idx) {
+  const card = cardsRow.children[idx];
+  if (!card) return null;
+  const cr = card.getBoundingClientRect();
+  const pr = canvas.parentElement.getBoundingClientRect();
+  return {
+    x: cr.left - pr.left + cr.width / 2,
+    y: cr.top - pr.top + cr.height / 2,
+    right: cr.left - pr.left + cr.width,
+    left: cr.left - pr.left,
+    bottom: cr.top - pr.top + cr.height,
+    top: cr.top - pr.top
+  };
+}
+
+function getSubDotCenter(mi, si) {
+  const cols = submodulesArea.children;
+  if (!cols[mi]) return null;
+  const rows = cols[mi].children;
+  if (!rows[si]) return null;
+  const dot = rows[si].querySelector('.sub-dot');
+  if (!dot) return null;
+  const dr = dot.getBoundingClientRect();
+  const pr = canvas.parentElement.getBoundingClientRect();
+  return {
+    x: dr.left - pr.left + dr.width / 2,
+    y: dr.top - pr.top + dr.height / 2
+  };
+}
+
+function rebuildParticles() {
+  // Connector particles between cards
+  connectorParticles = [];
+  for (let i = 0; i < 3; i++) {
+    const a = getCardCenter(i);
+    const b = getCardCenter(i + 1);
+    if (a && b) {
+      for (let p = 0; p < 3; p++) {
+        connectorParticles.push({
+          fromX: a.right + 2,
+          fromY: a.y,
+          toX: b.left - 2,
+          toY: b.y,
+          t: p / 3,
+          speed: 0.003 + Math.random() * 0.002,
+          color: DATA.modules[i].color
+        });
+      }
+    }
+  }
+
+  // Vertical particles from active card to active sub
+  verticalParticles = [];
+  const activeModIdx = DATA.modules.findIndex(m => m.status === 'active');
+  if (activeModIdx !== -1) {
+    const activeSub = DATA.modules[activeModIdx].subs.findIndex(s => s.status === 'active');
+    if (activeSub !== -1) {
+      const cardPos = getCardCenter(activeModIdx);
+      const subPos = getSubDotCenter(activeModIdx, activeSub);
+      if (cardPos && subPos) {
+        for (let p = 0; p < 4; p++) {
+          verticalParticles.push({
+            fromX: cardPos.x,
+            fromY: cardPos.bottom + 2,
+            toX: subPos.x,
+            toY: subPos.y,
+            t: p / 4,
+            speed: 0.006 + Math.random() * 0.003,
+            color: 'blue'
+          });
+        }
+      }
+    }
+  }
+}
+
+function getColor(name, alpha) {
+  const map = { green: '34,197,94', purple: '167,139,250', blue: '59,130,246', orange: '245,158,11' };
+  return `rgba(${map[name] || map.blue},${alpha})`;
+}
+
+function drawParticle(px, py, color, size) {
+  ctx.beginPath();
+  ctx.arc(px, py, size, 0, Math.PI * 2);
+  ctx.fillStyle = getColor(color, 0.9);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(px, py, size + 2, 0, Math.PI * 2);
+  ctx.fillStyle = getColor(color, 0.2);
+  ctx.fill();
+}
+
+function drawLine(x1, y1, x2, y2, color) {
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.strokeStyle = getColor(color, 0.08);
+  ctx.lineWidth = 1;
+  ctx.stroke();
+}
+
+function animate() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Connector lines + particles
+  connectorParticles.forEach(p => {
+    drawLine(p.fromX, p.fromY, p.toX, p.toY, p.color);
+    p.t += p.speed;
+    if (p.t > 1) p.t -= 1;
+    const px = p.fromX + (p.toX - p.fromX) * p.t;
+    const py = p.fromY + (p.toY - p.fromY) * p.t;
+    drawParticle(px, py, p.color, 1.5);
+  });
+
+  // Vertical line + particles
+  verticalParticles.forEach(p => {
+    drawLine(p.fromX, p.fromY, p.toX, p.toY, p.color);
+    p.t += p.speed;
+    if (p.t > 1) p.t -= 1;
+    const px = p.fromX + (p.toX - p.fromX) * p.t;
+    const py = p.fromY + (p.toY - p.fromY) * p.t;
+    drawParticle(px, py, p.color, 2);
+  });
+
+  animFrame = requestAnimationFrame(animate);
+}
+
+// ── Init ──
+function init() {
+  resizeCanvas();
+  renderSubmodules();
+  renderContent();
+  updateCardSelection();
+
+  // Small delay to let layout settle before computing particle positions
+  requestAnimationFrame(() => {
+    rebuildParticles();
+    animate();
+  });
+}
+
+window.addEventListener('resize', () => {
+  resizeCanvas();
+  rebuildParticles();
+});
+
+init();
+</script>
+</body>
+</html>

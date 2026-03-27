@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: #0a0c10;
+    color: #e0e0e0;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ---- Status Card ---- */
+  .card-wrap {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 18px;
+    cursor: pointer;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .card {
+    width: 450px;
+    min-height: 280px;
+    padding: 32px 36px 28px;
+    border-radius: 20px;
+    background: rgba(255,255,255,0.04);
+    backdrop-filter: blur(40px);
+    -webkit-backdrop-filter: blur(40px);
+    box-shadow: 0 8px 40px rgba(0,0,0,0.35), inset 0 0.5px 0 rgba(255,255,255,0.06);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+  }
+  .card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 48px rgba(0,0,0,0.45), inset 0 0.5px 0 rgba(255,255,255,0.08);
+  }
+
+  .card-brand {
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.28);
+    margin-bottom: 2px;
+  }
+
+  .card-module {
+    font-size: 22px;
+    font-weight: 700;
+    color: #f0f0f0;
+    line-height: 1.2;
+  }
+
+  .card-stage {
+    font-size: 16px;
+    font-weight: 500;
+    margin-top: 2px;
+  }
+
+  .card-badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    background: rgba(255,255,255,0.06);
+    color: rgba(255,255,255,0.5);
+    margin-top: 4px;
+  }
+
+  /* ---- Progress Ring ---- */
+  .ring-wrap {
+    position: relative;
+    width: 80px;
+    height: 80px;
+    margin: 12px 0 8px;
+  }
+
+  .ring-svg {
+    width: 80px;
+    height: 80px;
+    transform: rotate(-90deg);
+  }
+
+  .ring-bg {
+    fill: none;
+    stroke: rgba(255,255,255,0.06);
+    stroke-width: 5;
+  }
+
+  .ring-fill {
+    fill: none;
+    stroke-width: 5;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.9s cubic-bezier(0.4,0,0.2,1), stroke 0.4s ease;
+  }
+
+  .ring-label {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    font-weight: 700;
+    color: #f0f0f0;
+  }
+
+  /* ---- Summary & Footer ---- */
+  .card-summary {
+    font-size: 14px;
+    line-height: 1.55;
+    color: rgba(255,255,255,0.45);
+    text-align: center;
+    max-width: 360px;
+  }
+
+  .card-footer {
+    font-size: 12px;
+    color: rgba(255,255,255,0.22);
+    margin-top: 8px;
+    letter-spacing: 0.3px;
+  }
+
+  .card-more {
+    font-size: 11px;
+    font-weight: 500;
+    color: rgba(255,255,255,0.2);
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    margin-top: 4px;
+    transition: color 0.2s;
+  }
+  .card:hover .card-more { color: rgba(255,255,255,0.35); }
+
+  /* ---- Dot Selector ---- */
+  .dots {
+    display: flex;
+    gap: 10px;
+    margin-top: 4px;
+  }
+
+  .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: transform 0.2s ease, opacity 0.2s ease, box-shadow 0.25s ease;
+    opacity: 0.9;
+  }
+  .dot:hover { transform: scale(1.3); }
+  .dot.active {
+    box-shadow: 0 0 0 3px rgba(255,255,255,0.08);
+    transform: scale(1.15);
+  }
+
+  /* ---- Drawer Overlay ---- */
+  .drawer-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 9;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+  }
+  .drawer-overlay.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  /* ---- Drawer ---- */
+  .drawer {
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    z-index: 10;
+    background: #0f1117;
+    border-radius: 16px 16px 0 0;
+    transform: translateY(100%);
+    transition: transform 0.3s cubic-bezier(0.32,0.72,0,1), max-height 0.3s cubic-bezier(0.32,0.72,0,1);
+    max-height: 60vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 -8px 40px rgba(0,0,0,0.5);
+  }
+  .drawer.open {
+    transform: translateY(0);
+  }
+  .drawer.expanded {
+    max-height: 92vh;
+  }
+
+  .drawer-handle-area {
+    display: flex;
+    justify-content: center;
+    padding: 12px 0 4px;
+    cursor: grab;
+    flex-shrink: 0;
+  }
+  .drawer-handle {
+    width: 36px;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255,255,255,0.15);
+  }
+
+  .drawer-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 28px 12px;
+    flex-shrink: 0;
+  }
+
+  .drawer-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.7);
+  }
+
+  .drawer-close {
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: rgba(255,255,255,0.06);
+    border-radius: 50%;
+    color: rgba(255,255,255,0.4);
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s;
+    flex-shrink: 0;
+  }
+  .drawer-close:hover { background: rgba(255,255,255,0.1); }
+
+  .drawer-body {
+    padding: 0 28px 28px;
+    overflow-y: auto;
+    flex: 1;
+  }
+
+  /* ---- Sub-stage rows ---- */
+  .substage {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 14px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    cursor: pointer;
+    transition: background 0.15s;
+    border-radius: 8px;
+    padding-left: 8px;
+    padding-right: 8px;
+    margin: 0 -8px;
+  }
+  .substage:last-child { border-bottom: none; }
+  .substage:hover { background: rgba(255,255,255,0.02); }
+
+  .substage-icon {
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  .substage-content { flex: 1; min-width: 0; }
+
+  .substage-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.8);
+    line-height: 1.3;
+  }
+  .substage.done .substage-name { color: rgba(255,255,255,0.4); }
+  .substage.active .substage-name { color: #e0e0e0; }
+
+  .substage-desc {
+    font-size: 12px;
+    color: rgba(255,255,255,0.3);
+    margin-top: 3px;
+    line-height: 1.4;
+  }
+
+  .substage-right {
+    font-size: 11px;
+    color: rgba(255,255,255,0.2);
+    white-space: nowrap;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  /* ---- Detail View (expanded) ---- */
+  .drawer-detail { display: none; }
+  .drawer.expanded .drawer-stages { display: none; }
+  .drawer.expanded .drawer-detail { display: block; }
+
+  .detail-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 18px;
+  }
+
+  .detail-back {
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: rgba(255,255,255,0.06);
+    border-radius: 50%;
+    color: rgba(255,255,255,0.4);
+    font-size: 13px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s;
+    flex-shrink: 0;
+  }
+  .detail-back:hover { background: rgba(255,255,255,0.1); }
+
+  .detail-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: rgba(255,255,255,0.7);
+  }
+
+  .detail-meta {
+    font-size: 12px;
+    color: rgba(255,255,255,0.25);
+    margin-left: auto;
+  }
+
+  .artifact {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 13px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+  .artifact:last-child { border-bottom: none; }
+
+  .artifact-icon {
+    font-size: 13px;
+    width: 20px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+
+  .artifact-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: rgba(255,255,255,0.65);
+    flex: 1;
+  }
+  .artifact.active .artifact-name { color: #e0e0e0; }
+  .artifact.done .artifact-name { color: rgba(255,255,255,0.35); }
+
+  .artifact-value {
+    font-size: 12px;
+    color: rgba(255,255,255,0.25);
+    font-variant-numeric: tabular-nums;
+  }
+
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+  .pulse { animation: pulse-dot 1.6s ease-in-out infinite; }
+
+  /* Transition for card content */
+  .card-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    transition: opacity 0.2s ease;
+  }
+  .card-inner.fading { opacity: 0; }
+</style>
+</head>
+<body>
+
+<!-- Status Card -->
+<div class="card-wrap">
+  <div class="card" id="card">
+    <div class="card-inner" id="cardInner">
+      <div class="card-brand">AI Inventor</div>
+      <div class="card-module" id="cardModule">Invention Loop</div>
+      <div class="card-stage" id="cardStage" style="color:#4da6ff">Generating Artifacts</div>
+      <div class="card-badge" id="cardBadge">Iteration 2 of 3</div>
+
+      <div class="ring-wrap" id="ringWrap">
+        <svg class="ring-svg" viewBox="0 0 80 80">
+          <circle class="ring-bg" cx="40" cy="40" r="34"/>
+          <circle class="ring-fill" id="ringFill" cx="40" cy="40" r="34"
+            stroke="#4da6ff"
+            stroke-dasharray="213.63"
+            stroke-dashoffset="213.63"/>
+        </svg>
+        <div class="ring-label" id="ringLabel">3/5</div>
+      </div>
+
+      <div class="card-summary" id="cardSummary">Running ablation study. Baseline: 0.847 accuracy (+17.5%).</div>
+      <div class="card-footer" id="cardFooter">02:34:17 &bull; $12.47</div>
+      <div class="card-more">More</div>
+    </div>
+  </div>
+
+  <div class="dots" id="dots">
+    <div class="dot" data-idx="0" style="background:#34d399"></div>
+    <div class="dot" data-idx="1" style="background:#a78bfa"></div>
+    <div class="dot active" data-idx="2" style="background:#4da6ff"></div>
+    <div class="dot" data-idx="3" style="background:rgba(255,255,255,0.18)"></div>
+  </div>
+</div>
+
+<!-- Drawer Overlay -->
+<div class="drawer-overlay" id="overlay"></div>
+
+<!-- Pull-up Drawer -->
+<div class="drawer" id="drawer">
+  <div class="drawer-handle-area" id="handleArea">
+    <div class="drawer-handle"></div>
+  </div>
+
+  <div class="drawer-header">
+    <div class="drawer-title" id="drawerTitle">Invention Loop &mdash; Sub-stages</div>
+    <button class="drawer-close" id="drawerClose">&times;</button>
+  </div>
+
+  <div class="drawer-body">
+    <!-- Stage list -->
+    <div class="drawer-stages" id="drawerStages">
+      <div class="substage done" data-stage="strategy">
+        <div class="substage-icon" style="color:#34d399">&#10003;</div>
+        <div class="substage-content">
+          <div class="substage-name">Strategy</div>
+          <div class="substage-desc">Contrastive alignment, ablation focus</div>
+        </div>
+        <div class="substage-right">1m 42s</div>
+      </div>
+      <div class="substage done" data-stage="plan">
+        <div class="substage-icon" style="color:#34d399">&#10003;</div>
+        <div class="substage-content">
+          <div class="substage-name">Plan</div>
+          <div class="substage-desc">5 artifacts planned</div>
+        </div>
+        <div class="substage-right">3m 11s</div>
+      </div>
+      <div class="substage active" data-stage="artifacts">
+        <div class="substage-icon pulse" style="color:#4da6ff">&#9654;</div>
+        <div class="substage-content">
+          <div class="substage-name">Artifacts</div>
+          <div class="substage-desc">3/5 complete</div>
+        </div>
+        <div class="substage-right">12m 08s</div>
+      </div>
+      <div class="substage" data-stage="paper">
+        <div class="substage-icon" style="color:rgba(255,255,255,0.18)">&#9675;</div>
+        <div class="substage-content">
+          <div class="substage-name">Paper Draft</div>
+          <div class="substage-desc">Waiting</div>
+        </div>
+      </div>
+      <div class="substage" data-stage="review">
+        <div class="substage-icon" style="color:rgba(255,255,255,0.18)">&#9675;</div>
+        <div class="substage-content">
+          <div class="substage-name">Review</div>
+          <div class="substage-desc">Waiting</div>
+        </div>
+      </div>
+      <div class="substage" data-stage="updatehypo">
+        <div class="substage-icon" style="color:rgba(255,255,255,0.18)">&#9675;</div>
+        <div class="substage-content">
+          <div class="substage-name">Update Hypothesis</div>
+          <div class="substage-desc">Waiting</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Detail view (shown when expanded) -->
+    <div class="drawer-detail" id="drawerDetail">
+      <div class="detail-header">
+        <button class="detail-back" id="detailBack">&#8249;</button>
+        <div class="detail-title" id="detailTitle">Artifacts</div>
+        <div class="detail-meta" id="detailMeta">12m 08s &bull; $5.41</div>
+      </div>
+      <div id="detailItems">
+        <div class="artifact done">
+          <div class="artifact-icon" style="color:#34d399">&#10003;</div>
+          <div class="artifact-name">Contrastive Baseline</div>
+          <div class="artifact-value">0.847</div>
+        </div>
+        <div class="artifact done">
+          <div class="artifact-icon" style="color:#34d399">&#10003;</div>
+          <div class="artifact-name">Multilingual Pairs</div>
+          <div class="artifact-value">2,400 ex</div>
+        </div>
+        <div class="artifact done">
+          <div class="artifact-icon" style="color:#34d399">&#10003;</div>
+          <div class="artifact-name">Convergence Proof</div>
+          <div class="artifact-value">verified</div>
+        </div>
+        <div class="artifact active">
+          <div class="artifact-icon pulse" style="color:#4da6ff">&#9654;</div>
+          <div class="artifact-name">Ablation Study</div>
+          <div class="artifact-value" style="color:rgba(255,255,255,0.35)">running</div>
+        </div>
+        <div class="artifact">
+          <div class="artifact-icon" style="color:rgba(255,255,255,0.18)">&#9675;</div>
+          <div class="artifact-name">Cross-lingual Eval</div>
+          <div class="artifact-value">pending</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  // --- Module data ---
+  const modules = [
+    {
+      module: 'Seed Hypothesis',
+      stage: 'Complete',
+      stageColor: '#34d399',
+      badge: '847 papers mined',
+      progress: 1.0,
+      ringLabel: '12',
+      ringColor: '#34d399',
+      summary: 'Mined 847 papers, 12 gaps found.',
+      footer: '00:48:22 &bull; $3.14',
+      dotColor: '#34d399',
+      drawerTitle: 'Seed Hypothesis &mdash; Sub-stages',
+      stages: [
+        { name: 'Paper Mining', desc: '847 papers processed', status: 'done', time: '32m 14s' },
+        { name: 'Gap Analysis', desc: '12 research gaps identified', status: 'done', time: '11m 40s' },
+        { name: 'Hypothesis Seed', desc: 'Initial hypothesis generated', status: 'done', time: '4m 28s' }
+      ]
+    },
+    {
+      module: 'Hypothesis Loop',
+      stage: 'Score: 8.4/10',
+      stageColor: '#a78bfa',
+      badge: '3 iterations',
+      progress: 1.0,
+      ringLabel: '8.4',
+      ringColor: '#a78bfa',
+      summary: '3 iterations, improved from 6.2 to 8.4.',
+      footer: '01:12:05 &bull; $7.82',
+      dotColor: '#a78bfa',
+      drawerTitle: 'Hypothesis Loop &mdash; Sub-stages',
+      stages: [
+        { name: 'Iteration 1', desc: 'Score: 6.2 / 10', status: 'done', time: '18m 44s' },
+        { name: 'Iteration 2', desc: 'Score: 7.6 / 10', status: 'done', time: '22m 11s' },
+        { name: 'Iteration 3', desc: 'Score: 8.4 / 10', status: 'done', time: '31m 10s' }
+      ]
+    },
+    {
+      module: 'Invention Loop',
+      stage: 'Generating Artifacts',
+      stageColor: '#4da6ff',
+      badge: 'Iteration 2 of 3',
+      progress: 0.6,
+      ringLabel: '3/5',
+      ringColor: '#4da6ff',
+      summary: 'Running ablation study. Baseline: 0.847 accuracy (+17.5%).',
+      footer: '02:34:17 &bull; $12.47',
+      dotColor: '#4da6ff',
+      drawerTitle: 'Invention Loop &mdash; Sub-stages',
+      stages: [
+        { name: 'Strategy', desc: 'Contrastive alignment, ablation focus', status: 'done', time: '1m 42s' },
+        { name: 'Plan', desc: '5 artifacts planned', status: 'done', time: '3m 11s' },
+        { name: 'Artifacts', desc: '3/5 complete', status: 'active', time: '12m 08s' },
+        { name: 'Paper Draft', desc: 'Waiting', status: 'pending' },
+        { name: 'Review', desc: 'Waiting', status: 'pending' },
+        { name: 'Update Hypothesis', desc: 'Waiting', status: 'pending' }
+      ]
+    },
+    {
+      module: 'Paper & Repository',
+      stage: 'Pending',
+      stageColor: 'rgba(255,255,255,0.25)',
+      badge: 'Awaiting',
+      progress: 0.0,
+      ringLabel: '--',
+      ringColor: 'rgba(255,255,255,0.18)',
+      summary: 'Awaiting invention loop completion.',
+      footer: '-- &bull; --',
+      dotColor: 'rgba(255,255,255,0.18)',
+      drawerTitle: 'Paper & Repository &mdash; Sub-stages',
+      stages: [
+        { name: 'Generate Demos', desc: 'Pending', status: 'pending' },
+        { name: 'Generate Visualizations', desc: 'Pending', status: 'pending' },
+        { name: 'Generate Full Paper', desc: 'Pending', status: 'pending' },
+        { name: 'Build Repository', desc: 'Pending', status: 'pending' }
+      ]
+    }
+  ];
+
+  // Detail data for invention loop artifacts stage
+  const artifactDetails = {
+    title: 'Artifacts',
+    meta: '12m 08s &bull; $5.41',
+    items: [
+      { name: 'Contrastive Baseline', value: '0.847', status: 'done' },
+      { name: 'Multilingual Pairs', value: '2,400 ex', status: 'done' },
+      { name: 'Convergence Proof', value: 'verified', status: 'done' },
+      { name: 'Ablation Study', value: 'running', status: 'active' },
+      { name: 'Cross-lingual Eval', value: 'pending', status: 'pending' }
+    ]
+  };
+
+  let currentIdx = 2;
+  const circumference = 2 * Math.PI * 34; // ~213.63
+
+  // Elements
+  const card = document.getElementById('card');
+  const cardInner = document.getElementById('cardInner');
+  const cardModule = document.getElementById('cardModule');
+  const cardStage = document.getElementById('cardStage');
+  const cardBadge = document.getElementById('cardBadge');
+  const ringFill = document.getElementById('ringFill');
+  const ringLabel = document.getElementById('ringLabel');
+  const cardSummary = document.getElementById('cardSummary');
+  const cardFooter = document.getElementById('cardFooter');
+  const dotsEl = document.getElementById('dots');
+  const dots = dotsEl.querySelectorAll('.dot');
+  const overlay = document.getElementById('overlay');
+  const drawer = document.getElementById('drawer');
+  const drawerTitle = document.getElementById('drawerTitle');
+  const drawerStages = document.getElementById('drawerStages');
+  const drawerDetail = document.getElementById('drawerDetail');
+  const detailBack = document.getElementById('detailBack');
+  const detailTitle = document.getElementById('detailTitle');
+  const detailMeta = document.getElementById('detailMeta');
+  const detailItems = document.getElementById('detailItems');
+  const drawerClose = document.getElementById('drawerClose');
+
+  function setRing(progress, color) {
+    const offset = circumference * (1 - progress);
+    ringFill.style.strokeDashoffset = offset;
+    ringFill.setAttribute('stroke', color);
+  }
+
+  function updateCard(idx, animate) {
+    const m = modules[idx];
+    if (animate) {
+      cardInner.classList.add('fading');
+      setTimeout(() => {
+        applyCardData(m);
+        cardInner.classList.remove('fading');
+      }, 180);
+    } else {
+      applyCardData(m);
+    }
+
+    // Update dots
+    dots.forEach((d, i) => {
+      d.classList.toggle('active', i === idx);
+      d.style.background = modules[i].dotColor;
+    });
+  }
+
+  function applyCardData(m) {
+    cardModule.textContent = m.module;
+    cardStage.textContent = m.stage;
+    cardStage.style.color = m.stageColor;
+    cardBadge.textContent = m.badge;
+    ringLabel.textContent = m.ringLabel;
+    cardSummary.textContent = m.summary;
+    cardFooter.innerHTML = m.footer;
+    setRing(m.progress, m.ringColor);
+  }
+
+  function buildStageRows(stages) {
+    drawerStages.innerHTML = '';
+    stages.forEach((s, i) => {
+      const row = document.createElement('div');
+      row.className = 'substage ' + (s.status === 'done' ? 'done' : s.status === 'active' ? 'active' : '');
+
+      let iconHtml, iconColor;
+      if (s.status === 'done') {
+        iconHtml = '&#10003;';
+        iconColor = '#34d399';
+      } else if (s.status === 'active') {
+        iconHtml = '&#9654;';
+        iconColor = '#4da6ff';
+      } else {
+        iconHtml = '&#9675;';
+        iconColor = 'rgba(255,255,255,0.18)';
+      }
+
+      row.innerHTML = `
+        <div class="substage-icon${s.status === 'active' ? ' pulse' : ''}" style="color:${iconColor}">${iconHtml}</div>
+        <div class="substage-content">
+          <div class="substage-name">${s.name}</div>
+          <div class="substage-desc">${s.desc}</div>
+        </div>
+        ${s.time ? '<div class="substage-right">' + s.time + '</div>' : ''}
+      `;
+
+      // Click to expand detail (only for active/done stages in invention loop)
+      if (currentIdx === 2 && s.name === 'Artifacts') {
+        row.addEventListener('click', function(e) {
+          e.stopPropagation();
+          showDetail(artifactDetails);
+        });
+      }
+
+      drawerStages.appendChild(row);
+    });
+  }
+
+  function showDetail(detail) {
+    detailTitle.textContent = detail.title;
+    detailMeta.innerHTML = detail.meta;
+    detailItems.innerHTML = '';
+
+    detail.items.forEach(item => {
+      const el = document.createElement('div');
+      el.className = 'artifact ' + (item.status === 'done' ? 'done' : item.status === 'active' ? 'active' : '');
+
+      let iconHtml, iconColor;
+      if (item.status === 'done') {
+        iconHtml = '&#10003;';
+        iconColor = '#34d399';
+      } else if (item.status === 'active') {
+        iconHtml = '&#9654;';
+        iconColor = '#4da6ff';
+      } else {
+        iconHtml = '&#9675;';
+        iconColor = 'rgba(255,255,255,0.18)';
+      }
+
+      const valueStyle = item.status === 'active' ? 'color:rgba(255,255,255,0.35)' : '';
+
+      el.innerHTML = `
+        <div class="artifact-icon${item.status === 'active' ? ' pulse' : ''}" style="color:${iconColor}">${iconHtml}</div>
+        <div class="artifact-name">${item.name}</div>
+        <div class="artifact-value" style="${valueStyle}">${item.value}</div>
+      `;
+      detailItems.appendChild(el);
+    });
+
+    drawer.classList.add('expanded');
+  }
+
+  function hideDetail() {
+    drawer.classList.remove('expanded');
+  }
+
+  // --- Drawer open/close ---
+  function openDrawer() {
+    const m = modules[currentIdx];
+    drawerTitle.innerHTML = m.drawerTitle;
+    buildStageRows(m.stages);
+    hideDetail();
+    drawer.classList.add('open');
+    overlay.classList.add('visible');
+  }
+
+  function closeDrawer() {
+    drawer.classList.remove('open');
+    drawer.classList.remove('expanded');
+    overlay.classList.remove('visible');
+  }
+
+  // --- Events ---
+  card.addEventListener('click', openDrawer);
+  overlay.addEventListener('click', closeDrawer);
+  drawerClose.addEventListener('click', closeDrawer);
+  detailBack.addEventListener('click', function(e) {
+    e.stopPropagation();
+    hideDetail();
+  });
+
+  dots.forEach(d => {
+    d.addEventListener('click', function(e) {
+      e.stopPropagation();
+      const idx = parseInt(this.dataset.idx);
+      if (idx === currentIdx) return;
+      currentIdx = idx;
+      updateCard(idx, true);
+      if (drawer.classList.contains('open')) {
+        const m = modules[idx];
+        drawerTitle.innerHTML = m.drawerTitle;
+        buildStageRows(m.stages);
+        hideDetail();
+      }
+    });
+  });
+
+  // Swipe on card
+  let touchStartX = 0;
+  card.addEventListener('touchstart', function(e) {
+    touchStartX = e.touches[0].clientX;
+  }, { passive: true });
+
+  card.addEventListener('touchend', function(e) {
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    if (Math.abs(dx) > 50) {
+      const dir = dx < 0 ? 1 : -1;
+      const next = Math.max(0, Math.min(modules.length - 1, currentIdx + dir));
+      if (next !== currentIdx) {
+        currentIdx = next;
+        updateCard(currentIdx, true);
+      }
+    }
+  }, { passive: true });
+
+  // Keyboard nav
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      if (drawer.classList.contains('expanded')) {
+        hideDetail();
+      } else if (drawer.classList.contains('open')) {
+        closeDrawer();
+      }
+    }
+    if (e.key === 'ArrowLeft' && !drawer.classList.contains('open')) {
+      const next = Math.max(0, currentIdx - 1);
+      if (next !== currentIdx) { currentIdx = next; updateCard(currentIdx, true); }
+    }
+    if (e.key === 'ArrowRight' && !drawer.classList.contains('open')) {
+      const next = Math.min(modules.length - 1, currentIdx + 1);
+      if (next !== currentIdx) { currentIdx = next; updateCard(currentIdx, true); }
+    }
+  });
+
+  // Drawer drag to dismiss
+  let dragStartY = 0;
+  let isDragging = false;
+  const handleArea = document.getElementById('handleArea');
+
+  handleArea.addEventListener('mousedown', startDrag);
+  handleArea.addEventListener('touchstart', startDrag, { passive: true });
+
+  function startDrag(e) {
+    isDragging = true;
+    dragStartY = e.type === 'touchstart' ? e.touches[0].clientY : e.clientY;
+    drawer.style.transition = 'none';
+    document.addEventListener('mousemove', onDrag);
+    document.addEventListener('mouseup', endDrag);
+    document.addEventListener('touchmove', onDrag, { passive: true });
+    document.addEventListener('touchend', endDrag);
+  }
+
+  function onDrag(e) {
+    if (!isDragging) return;
+    const y = e.type === 'touchmove' ? e.touches[0].clientY : e.clientY;
+    const dy = y - dragStartY;
+    if (dy > 0) {
+      drawer.style.transform = 'translateY(' + dy + 'px)';
+    }
+  }
+
+  function endDrag(e) {
+    if (!isDragging) return;
+    isDragging = false;
+    const y = e.type === 'touchend' ? e.changedTouches[0].clientY : e.clientY;
+    const dy = y - dragStartY;
+    drawer.style.transition = '';
+    if (dy > 100) {
+      closeDrawer();
+    } else {
+      drawer.style.transform = '';
+      if (drawer.classList.contains('open')) {
+        drawer.style.transform = 'translateY(0)';
+      }
+    }
+    document.removeEventListener('mousemove', onDrag);
+    document.removeEventListener('mouseup', endDrag);
+    document.removeEventListener('touchmove', onDrag);
+    document.removeEventListener('touchend', endDrag);
+  }
+
+  // --- Init ---
+  // Animate ring on load
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      setRing(modules[currentIdx].progress, modules[currentIdx].ringColor);
+    });
+  });
+})();
+</script>
+</body>
+</html>

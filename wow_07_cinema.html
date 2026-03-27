@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Cinematic Reveal</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #08080f;
+    --fg: #e8e8f0;
+    --fg-dim: #555568;
+    --green: #34d399;
+    --purple: #a78bfa;
+    --blue: #60a5fa;
+    --orange: #fb923c;
+    --gold: #fbbf24;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--fg);
+    font-family: 'Inter', -apple-system, sans-serif;
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+    cursor: default;
+    user-select: none;
+  }
+
+  /* ── Canvas ── */
+  #cinema {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* ── Ambient background particles ── */
+  #particles {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+  }
+  .particle {
+    position: absolute;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255,255,255,0.15), transparent 70%);
+    animation: particleDrift linear infinite;
+    opacity: 0;
+  }
+  @keyframes particleDrift {
+    0%   { transform: translateY(0) scale(1); opacity: 0; }
+    10%  { opacity: 0.6; }
+    90%  { opacity: 0.6; }
+    100% { transform: translateY(-100vh) scale(0.3); opacity: 0; }
+  }
+
+  /* ── Scene container ── */
+  .scene {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 1;
+    transition: none;
+  }
+  .scene.active {
+    pointer-events: auto;
+  }
+
+  /* ── Scene element animations ── */
+  .scene-el {
+    opacity: 0;
+    transform: translateY(28px);
+  }
+  .scene.active .scene-el.revealed {
+    opacity: 1;
+    transform: translateY(0);
+    transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1),
+                transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .scene.exiting .scene-el.revealed {
+    opacity: 0;
+    transform: translateY(-20px);
+    transition: opacity 0.45s ease-in,
+                transform 0.45s ease-in;
+  }
+
+  /* ── Title card ── */
+  .title-main {
+    font-size: 68px;
+    font-weight: 100;
+    letter-spacing: 14px;
+    text-transform: uppercase;
+    position: relative;
+    padding: 0 14px;
+  }
+  .title-sub {
+    font-size: 16px;
+    font-weight: 300;
+    letter-spacing: 6px;
+    color: var(--fg-dim);
+    margin-top: 20px;
+    text-transform: uppercase;
+  }
+
+  /* Lens flare */
+  .lens-flare {
+    position: absolute;
+    top: 50%;
+    left: -20%;
+    width: 140%;
+    height: 3px;
+    background: linear-gradient(90deg,
+      transparent 0%,
+      rgba(255,255,255,0.0) 20%,
+      rgba(255,255,255,0.7) 45%,
+      rgba(255,255,255,1) 50%,
+      rgba(255,255,255,0.7) 55%,
+      rgba(255,255,255,0.0) 80%,
+      transparent 100%);
+    transform: translateY(-50%) translateX(-120%);
+    opacity: 0;
+    pointer-events: none;
+    filter: blur(1px);
+  }
+  .lens-flare::after {
+    content: '';
+    position: absolute;
+    top: -8px;
+    left: 0;
+    right: 0;
+    height: 20px;
+    background: linear-gradient(90deg,
+      transparent 0%,
+      rgba(255,255,255,0.0) 30%,
+      rgba(160,180,255,0.15) 48%,
+      rgba(160,180,255,0.2) 50%,
+      rgba(160,180,255,0.15) 52%,
+      rgba(255,255,255,0.0) 70%,
+      transparent 100%);
+    filter: blur(4px);
+  }
+  .lens-flare.animate {
+    animation: flareSweep 1.8s 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+  }
+  @keyframes flareSweep {
+    0%   { transform: translateY(-50%) translateX(-120%); opacity: 0; }
+    10%  { opacity: 1; }
+    80%  { opacity: 1; }
+    100% { transform: translateY(-50%) translateX(120%); opacity: 0; }
+  }
+
+  /* ── Phase header shared ── */
+  .phase-label {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 5px;
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  .phase-title {
+    font-size: 44px;
+    font-weight: 200;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    margin-bottom: 32px;
+  }
+  .phase-stats {
+    font-size: 15px;
+    font-weight: 300;
+    color: var(--fg-dim);
+    letter-spacing: 1px;
+    line-height: 1.8;
+    text-align: center;
+  }
+  .phase-stats .num {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--fg);
+    font-size: 17px;
+  }
+
+  /* ── Scene 2 — Seed ── */
+  .seed-stat-row {
+    display: flex;
+    gap: 40px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+  .seed-stat {
+    text-align: center;
+  }
+  .seed-stat .big-num {
+    font-size: 48px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    display: block;
+    line-height: 1;
+  }
+  .seed-stat .label {
+    font-size: 12px;
+    font-weight: 400;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    margin-top: 8px;
+    display: block;
+  }
+
+  /* ── Scene 3 — Hypothesis iterations ── */
+  .hypo-row {
+    text-align: center;
+    margin: 8px 0;
+    white-space: nowrap;
+  }
+  .hypo-row .iter-label {
+    font-weight: 300;
+    color: var(--fg-dim);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-right: 12px;
+  }
+  .hypo-row .score-val {
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .hypo-row .score-suffix {
+    font-weight: 300;
+    color: var(--fg-dim);
+  }
+  .hypo-iter-1 { font-size: 18px; }
+  .hypo-iter-2 { font-size: 26px; }
+  .hypo-iter-3 {
+    font-size: 42px;
+    margin-top: 16px;
+  }
+  .hypo-iter-3 .score-val {
+    position: relative;
+  }
+  .score-glow {
+    position: absolute;
+    inset: -12px -20px;
+    border-radius: 12px;
+    animation: pulseGlow 2.4s ease-in-out infinite;
+    pointer-events: none;
+  }
+  @keyframes pulseGlow {
+    0%, 100% { box-shadow: 0 0 20px rgba(167,139,250,0.0), 0 0 60px rgba(167,139,250,0.0); }
+    50%      { box-shadow: 0 0 20px rgba(167,139,250,0.25), 0 0 60px rgba(167,139,250,0.1); }
+  }
+
+  /* ── Scene 4 — Invention cards ── */
+  .inv-status {
+    font-size: 15px;
+    font-weight: 300;
+    color: var(--fg-dim);
+    letter-spacing: 1px;
+    margin-bottom: 8px;
+  }
+  .inv-typing {
+    font-size: 22px;
+    font-weight: 500;
+    letter-spacing: 1px;
+    margin-bottom: 36px;
+    min-height: 34px;
+  }
+  .inv-typing .cursor {
+    display: inline-block;
+    width: 2px;
+    height: 22px;
+    background: var(--blue);
+    margin-left: 3px;
+    vertical-align: text-bottom;
+    animation: blink 0.9s step-end infinite;
+  }
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0; }
+  }
+
+  .artifact-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    align-items: flex-start;
+    max-width: 480px;
+    width: 100%;
+  }
+  .artifact-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    font-size: 14px;
+    font-weight: 400;
+    letter-spacing: 0.5px;
+    padding: 12px 20px;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.025);
+    border: 1px solid rgba(255,255,255,0.04);
+    width: 100%;
+    color: var(--fg-dim);
+  }
+  .artifact-card.done {
+    color: var(--fg);
+    border-color: rgba(52,211,153,0.15);
+    background: rgba(52,211,153,0.03);
+  }
+  .artifact-card.done .card-icon {
+    color: var(--green);
+  }
+  .artifact-card.running {
+    color: var(--fg);
+    border-color: rgba(96,165,250,0.25);
+    background: rgba(96,165,250,0.04);
+    animation: cardPulse 2s ease-in-out infinite;
+  }
+  .artifact-card.running .card-icon {
+    color: var(--blue);
+  }
+  @keyframes cardPulse {
+    0%, 100% { border-color: rgba(96,165,250,0.15); box-shadow: 0 0 0 rgba(96,165,250,0); }
+    50%      { border-color: rgba(96,165,250,0.35); box-shadow: 0 0 20px rgba(96,165,250,0.06); }
+  }
+  .card-icon {
+    font-size: 15px;
+    flex-shrink: 0;
+    width: 20px;
+    text-align: center;
+  }
+  .card-detail {
+    font-size: 12px;
+    color: var(--fg-dim);
+    margin-left: auto;
+    font-weight: 300;
+    white-space: nowrap;
+  }
+
+  /* ── Scene 5 — Paper (pending) ── */
+  .paper-outline {
+    width: 180px;
+    height: 240px;
+    border: 1px dashed rgba(251,146,60,0.15);
+    border-radius: 8px;
+    margin-top: 32px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .paper-outline::before {
+    content: '';
+    position: absolute;
+    inset: 8px;
+    border: 1px solid rgba(251,146,60,0.06);
+    border-radius: 4px;
+  }
+  .paper-outline .paper-lines {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 60%;
+    opacity: 0.12;
+  }
+  .paper-outline .paper-lines span {
+    display: block;
+    height: 2px;
+    background: var(--orange);
+    border-radius: 1px;
+  }
+  .paper-outline .paper-lines span:nth-child(2) { width: 80%; }
+  .paper-outline .paper-lines span:nth-child(3) { width: 60%; }
+  .paper-outline .paper-lines span:nth-child(4) { width: 90%; }
+  .paper-outline .paper-lines span:nth-child(5) { width: 45%; }
+  .paper-await {
+    font-size: 14px;
+    font-weight: 300;
+    color: var(--fg-dim);
+    letter-spacing: 2px;
+    margin-top: 12px;
+  }
+
+  /* ── Navigation dots ── */
+  #nav-dots {
+    position: fixed;
+    bottom: 40px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 14px;
+    z-index: 100;
+  }
+  .nav-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.15);
+    cursor: pointer;
+    transition: all 0.4s ease;
+    position: relative;
+  }
+  .nav-dot:hover {
+    background: rgba(255,255,255,0.2);
+    border-color: rgba(255,255,255,0.3);
+  }
+  .nav-dot.active {
+    background: rgba(255,255,255,0.8);
+    border-color: rgba(255,255,255,0.9);
+    box-shadow: 0 0 10px rgba(255,255,255,0.2);
+  }
+  .nav-dot .dot-label {
+    position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 10px;
+    font-weight: 400;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    white-space: nowrap;
+    color: var(--fg-dim);
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+  }
+  .nav-dot:hover .dot-label { opacity: 1; }
+
+  /* ── Progress bar ── */
+  #progress-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--green), var(--purple), var(--blue), var(--orange));
+    z-index: 100;
+    transition: width 0.1s linear;
+    box-shadow: 0 0 12px rgba(96,165,250,0.3);
+  }
+
+  /* ── Pause indicator ── */
+  #pause-indicator {
+    position: fixed;
+    top: 28px;
+    right: 32px;
+    font-size: 11px;
+    font-weight: 400;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--fg-dim);
+    opacity: 0;
+    transition: opacity 0.4s;
+    z-index: 100;
+  }
+  #pause-indicator.visible { opacity: 1; }
+
+  /* ── Ambient vignette ── */
+  #vignette {
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(ellipse at center, transparent 40%, rgba(8,8,15,0.7) 100%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── Scene-specific ambient glow ── */
+  #ambient-glow {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    width: 600px;
+    height: 600px;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    filter: blur(120px);
+    opacity: 0.06;
+    transition: background 1.2s ease, opacity 1.2s ease;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 768px) {
+    .title-main { font-size: 36px; letter-spacing: 8px; }
+    .phase-title { font-size: 28px; letter-spacing: 2px; }
+    .seed-stat .big-num { font-size: 32px; }
+    .hypo-iter-3 { font-size: 28px; }
+    .artifact-cards { max-width: 340px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="vignette"></div>
+<div id="ambient-glow"></div>
+<div id="particles"></div>
+
+<div id="cinema">
+
+  <!-- Scene 0: Title Card -->
+  <div class="scene" id="scene-0">
+    <div class="scene-el title-main" data-delay="200">
+      AI INVENTOR
+      <div class="lens-flare" id="lens-flare"></div>
+    </div>
+    <div class="scene-el title-sub" data-delay="900">Autonomous Research Discovery</div>
+  </div>
+
+  <!-- Scene 1: Seed Hypothesis -->
+  <div class="scene" id="scene-1">
+    <div class="scene-el phase-label" data-delay="100" style="color:var(--green)">Phase I</div>
+    <div class="scene-el phase-title" data-delay="300" style="color:var(--green)">Seed Hypothesis</div>
+    <div class="scene-el seed-stat-row" data-delay="700">
+      <div class="seed-stat">
+        <span class="big-num" style="color:var(--green)" data-count="847" data-from="0">0</span>
+        <span class="label">Papers Mined</span>
+      </div>
+      <div class="seed-stat">
+        <span class="big-num" style="color:var(--green)" data-count="2341" data-from="0">0</span>
+        <span class="label">Knowledge Triples</span>
+      </div>
+      <div class="seed-stat">
+        <span class="big-num" style="color:var(--green)" data-count="12" data-from="0">0</span>
+        <span class="label">Research Gaps</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scene 2: Hypothesis Refinement -->
+  <div class="scene" id="scene-2">
+    <div class="scene-el phase-label" data-delay="100" style="color:var(--purple)">Phase II</div>
+    <div class="scene-el phase-title" data-delay="300" style="color:var(--purple)">Hypothesis Refinement</div>
+    <div class="scene-el hypo-row hypo-iter-1" data-delay="800">
+      <span class="iter-label">Iteration 1:</span>
+      <span class="score-val" data-score-animate="6.2" data-score-from="0">0.0</span>
+      <span class="score-suffix"> / 10</span>
+    </div>
+    <div class="scene-el hypo-row hypo-iter-2" data-delay="1400">
+      <span class="iter-label">Iteration 2:</span>
+      <span class="score-val" data-score-animate="7.8" data-score-from="6.2">0.0</span>
+      <span class="score-suffix"> / 10</span>
+    </div>
+    <div class="scene-el hypo-row hypo-iter-3" data-delay="2000">
+      <span class="iter-label">Iteration 3:</span>
+      <span class="score-val" data-score-animate="8.4" data-score-from="7.8">
+        0.0
+        <span class="score-glow"></span>
+      </span>
+      <span class="score-suffix"> / 10</span>
+    </div>
+  </div>
+
+  <!-- Scene 3: Invention Loop -->
+  <div class="scene" id="scene-3">
+    <div class="scene-el phase-label" data-delay="100" style="color:var(--blue)">Phase III</div>
+    <div class="scene-el phase-title" data-delay="300" style="color:var(--blue)">Invention Loop</div>
+    <div class="scene-el inv-status" data-delay="600">Currently generating research artifacts...</div>
+    <div class="scene-el inv-typing" data-delay="800" id="typing-container">
+      <span id="typing-text"></span><span class="cursor"></span>
+    </div>
+    <div class="scene-el artifact-cards" data-delay="1000">
+      <div class="artifact-card done" data-card-delay="0">
+        <span class="card-icon">&#10003;</span>
+        <span>Contrastive Baseline</span>
+        <span class="card-detail">acc: 0.847</span>
+      </div>
+      <div class="artifact-card done" data-card-delay="200">
+        <span class="card-icon">&#10003;</span>
+        <span>Multilingual Dataset</span>
+        <span class="card-detail">2,400 examples</span>
+      </div>
+      <div class="artifact-card done" data-card-delay="400">
+        <span class="card-icon">&#10003;</span>
+        <span>Convergence Proof</span>
+        <span class="card-detail">verified</span>
+      </div>
+      <div class="artifact-card running" data-card-delay="600">
+        <span class="card-icon">&#9654;</span>
+        <span>Ablation Study</span>
+        <span class="card-detail">running...</span>
+      </div>
+      <div class="artifact-card" data-card-delay="800">
+        <span class="card-icon">&#9675;</span>
+        <span>Cross-lingual Evaluation</span>
+        <span class="card-detail"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scene 4: Paper & Repository -->
+  <div class="scene" id="scene-4">
+    <div class="scene-el phase-label" data-delay="100" style="color:var(--orange); opacity:0.5">Phase IV</div>
+    <div class="scene-el phase-title" data-delay="300" style="color:var(--orange); opacity:0.4">Paper & Repository</div>
+    <div class="scene-el paper-outline" data-delay="700">
+      <div class="paper-lines">
+        <span></span><span></span><span></span><span></span><span></span>
+      </div>
+    </div>
+    <div class="scene-el paper-await" data-delay="900">Awaiting completion...</div>
+  </div>
+
+</div>
+
+<!-- Navigation -->
+<div id="nav-dots">
+  <div class="nav-dot active" data-scene="0"><span class="dot-label">Title</span></div>
+  <div class="nav-dot" data-scene="1"><span class="dot-label">Seed</span></div>
+  <div class="nav-dot" data-scene="2"><span class="dot-label">Hypothesis</span></div>
+  <div class="nav-dot" data-scene="3"><span class="dot-label">Invention</span></div>
+  <div class="nav-dot" data-scene="4"><span class="dot-label">Paper</span></div>
+</div>
+
+<div id="progress-bar"></div>
+<div id="pause-indicator">PAUSED</div>
+
+<script>
+(() => {
+  /* ── State ── */
+  const SCENE_COUNT = 5;
+  const AUTO_ADVANCE_MS = 5000;
+  let currentScene = -1;
+  let paused = false;
+  let autoTimer = null;
+  let progressStart = 0;
+  let progressRAF = null;
+  let transitioning = false;
+
+  /* ── DOM refs ── */
+  const scenes = Array.from(document.querySelectorAll('.scene'));
+  const dots = Array.from(document.querySelectorAll('.nav-dot'));
+  const progressBar = document.getElementById('progress-bar');
+  const pauseIndicator = document.getElementById('pause-indicator');
+  const ambientGlow = document.getElementById('ambient-glow');
+
+  const sceneColors = [
+    'rgba(200,200,255,0.5)',   // title - white-ish
+    'rgba(52,211,153,0.5)',    // seed - green
+    'rgba(167,139,250,0.5)',   // hypo - purple
+    'rgba(96,165,250,0.5)',    // invention - blue
+    'rgba(251,146,60,0.5)'     // paper - orange
+  ];
+
+  /* ── Particles ── */
+  function spawnParticles() {
+    const container = document.getElementById('particles');
+    for (let i = 0; i < 35; i++) {
+      const p = document.createElement('div');
+      p.className = 'particle';
+      const size = Math.random() * 4 + 1;
+      p.style.width = size + 'px';
+      p.style.height = size + 'px';
+      p.style.left = Math.random() * 100 + '%';
+      p.style.bottom = '-10px';
+      p.style.animationDuration = (Math.random() * 15 + 10) + 's';
+      p.style.animationDelay = (Math.random() * 20) + 's';
+      container.appendChild(p);
+    }
+  }
+  spawnParticles();
+
+  /* ── Number counter animation ── */
+  function animateCounter(el, from, to, duration = 1200) {
+    const start = performance.now();
+    const fmt = to > 999
+      ? (n) => Math.round(n).toLocaleString()
+      : (n) => Math.round(n).toLocaleString();
+    function tick(now) {
+      const t = Math.min((now - start) / duration, 1);
+      const ease = 1 - Math.pow(1 - t, 3); // ease-out cubic
+      const val = from + (to - from) * ease;
+      el.textContent = fmt(val);
+      if (t < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+
+  /* ── Score animation ── */
+  function animateScore(el, from, to, duration = 900) {
+    const start = performance.now();
+    function tick(now) {
+      const t = Math.min((now - start) / duration, 1);
+      const ease = 1 - Math.pow(1 - t, 3);
+      const val = from + (to - from) * ease;
+      // Preserve the glow span if it exists
+      const glow = el.querySelector('.score-glow');
+      el.textContent = val.toFixed(1);
+      if (glow) el.appendChild(glow);
+      if (t < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+
+  /* ── Typing effect ── */
+  let typingTimeout = null;
+  function typeText(targetEl, text, speed = 45) {
+    if (typingTimeout) clearTimeout(typingTimeout);
+    targetEl.textContent = '';
+    let i = 0;
+    function next() {
+      if (i < text.length) {
+        targetEl.textContent += text[i];
+        i++;
+        typingTimeout = setTimeout(next, speed);
+      }
+    }
+    next();
+  }
+
+  /* ── Card stagger ── */
+  function staggerCards(scene) {
+    const cards = scene.querySelectorAll('.artifact-card');
+    cards.forEach((card, idx) => {
+      card.style.opacity = '0';
+      card.style.transform = 'translateY(16px)';
+      setTimeout(() => {
+        card.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+        card.style.opacity = '1';
+        card.style.transform = 'translateY(0)';
+      }, idx * 200 + 600);
+    });
+  }
+
+  /* ── Scene-specific triggers ── */
+  function onSceneEnter(idx) {
+    const scene = scenes[idx];
+
+    // Ambient glow color
+    ambientGlow.style.background = sceneColors[idx];
+    ambientGlow.style.opacity = idx === 0 ? '0.04' : '0.06';
+
+    // Scene 0 — lens flare
+    if (idx === 0) {
+      const flare = document.getElementById('lens-flare');
+      flare.classList.remove('animate');
+      void flare.offsetWidth; // force reflow
+      flare.classList.add('animate');
+    }
+
+    // Scene 1 — count-up numbers
+    if (idx === 1) {
+      scene.querySelectorAll('[data-count]').forEach(el => {
+        const to = parseInt(el.getAttribute('data-count'));
+        setTimeout(() => animateCounter(el, 0, to, 1500), 800);
+      });
+    }
+
+    // Scene 2 — score animations
+    if (idx === 2) {
+      scene.querySelectorAll('[data-score-animate]').forEach(el => {
+        const to = parseFloat(el.getAttribute('data-score-animate'));
+        const from = parseFloat(el.getAttribute('data-score-from'));
+        const parentDelay = parseInt(el.closest('.scene-el').getAttribute('data-delay')) || 0;
+        setTimeout(() => animateScore(el, from, to, 900), parentDelay + 300);
+      });
+    }
+
+    // Scene 3 — typing + card stagger
+    if (idx === 3) {
+      setTimeout(() => {
+        typeText(document.getElementById('typing-text'), '3/5 artifacts complete', 50);
+      }, 1000);
+      staggerCards(scene);
+    }
+  }
+
+  /* ── Transition to scene ── */
+  function goToScene(idx, skipExit = false) {
+    if (idx < 0 || idx >= SCENE_COUNT || idx === currentScene || transitioning) return;
+    transitioning = true;
+
+    const prev = currentScene;
+    currentScene = idx;
+
+    // Update dots
+    dots.forEach((d, i) => d.classList.toggle('active', i === idx));
+
+    // Exit previous scene
+    if (prev >= 0 && !skipExit) {
+      const prevScene = scenes[prev];
+      prevScene.classList.add('exiting');
+      setTimeout(() => {
+        prevScene.classList.remove('active', 'exiting');
+        prevScene.querySelectorAll('.scene-el').forEach(el => el.classList.remove('revealed'));
+        prevScene.style.opacity = '0';
+      }, 500);
+    }
+
+    // Enter new scene
+    const enterDelay = (prev >= 0 && !skipExit) ? 500 : 0;
+    setTimeout(() => {
+      const scene = scenes[idx];
+      scene.style.opacity = '1';
+      scene.classList.add('active');
+
+      // Reveal elements with stagger
+      const els = scene.querySelectorAll('.scene-el');
+      els.forEach(el => {
+        const delay = parseInt(el.getAttribute('data-delay')) || 0;
+        setTimeout(() => el.classList.add('revealed'), delay);
+      });
+
+      onSceneEnter(idx);
+      transitioning = false;
+    }, enterDelay);
+
+    // Restart auto-advance timer
+    resetAutoAdvance();
+  }
+
+  /* ── Auto advance ── */
+  function resetAutoAdvance() {
+    if (autoTimer) clearTimeout(autoTimer);
+    if (progressRAF) cancelAnimationFrame(progressRAF);
+    progressBar.style.width = '0%';
+
+    if (paused) return;
+
+    progressStart = performance.now();
+    function tickProgress() {
+      if (paused) return;
+      const elapsed = performance.now() - progressStart;
+      const pct = Math.min(elapsed / AUTO_ADVANCE_MS * 100, 100);
+      progressBar.style.width = pct + '%';
+      if (pct < 100) {
+        progressRAF = requestAnimationFrame(tickProgress);
+      }
+    }
+    progressRAF = requestAnimationFrame(tickProgress);
+
+    autoTimer = setTimeout(() => {
+      const next = (currentScene + 1) % SCENE_COUNT;
+      goToScene(next);
+    }, AUTO_ADVANCE_MS);
+  }
+
+  function togglePause() {
+    paused = !paused;
+    pauseIndicator.classList.toggle('visible', paused);
+    if (paused) {
+      if (autoTimer) clearTimeout(autoTimer);
+      if (progressRAF) cancelAnimationFrame(progressRAF);
+    } else {
+      resetAutoAdvance();
+    }
+  }
+
+  /* ── Input handlers ── */
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      goToScene(Math.min(currentScene + 1, SCENE_COUNT - 1));
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      goToScene(Math.max(currentScene - 1, 0));
+    } else if (e.key === ' ') {
+      e.preventDefault();
+      togglePause();
+    }
+  });
+
+  dots.forEach(dot => {
+    dot.addEventListener('click', () => {
+      goToScene(parseInt(dot.getAttribute('data-scene')));
+    });
+  });
+
+  // Click left/right halves to navigate
+  document.getElementById('cinema').addEventListener('click', (e) => {
+    if (e.target.closest('#nav-dots')) return;
+    const x = e.clientX / window.innerWidth;
+    if (x < 0.3) {
+      goToScene(Math.max(currentScene - 1, 0));
+    } else if (x > 0.7) {
+      goToScene(Math.min(currentScene + 1, SCENE_COUNT - 1));
+    } else {
+      togglePause();
+    }
+  });
+
+  /* ── Init ── */
+  // Short delay before first scene for dramatic pause
+  setTimeout(() => goToScene(0, true), 400);
+})();
+</script>
+</body>
+</html>

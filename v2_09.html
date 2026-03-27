@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor - Expanding Inline Capsule (v2_09)</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f; --surface: #12121a; --surface2: #1a1a26;
+    --border: #2a2a3a; --text: #e0e0e8; --text-dim: #8888a0;
+    --green: #34d399; --purple: #a78bfa; --blue: #60a5fa; --orange: #fb923c; --gray: #4a4a5e;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; min-height: 100vh; }
+
+  .layout {
+    display: grid;
+    grid-template-columns: 160px 1fr;
+    grid-template-rows: auto auto 1fr;
+    min-height: 100vh;
+  }
+
+  /* -- Ring Panel -- */
+  .ring-panel {
+    grid-column: 1; grid-row: 1 / 4;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 28px 12px;
+    border-right: 1px solid var(--border); background: var(--surface);
+    position: sticky; top: 0; height: 100vh;
+  }
+  .ring-container { position: relative; width: 120px; height: 120px; margin-bottom: 8px; }
+  .ring-svg { width: 120px; height: 120px; transform: rotate(-90deg); }
+  .ring-track { fill: none; stroke: var(--border); stroke-width: 7; }
+  .ring-progress {
+    fill: none; stroke-width: 7; stroke-linecap: round;
+    stroke-dasharray: 301.6; stroke-dashoffset: 301.6;
+    transition: stroke-dashoffset 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+    filter: drop-shadow(0 0 6px rgba(96,165,250,0.4));
+  }
+  .ring-endpoint {
+    position: absolute; width: 10px; height: 10px; border-radius: 50%;
+    background: var(--blue);
+    box-shadow: 0 0 10px rgba(96,165,250,.6), 0 0 20px rgba(96,165,250,.3);
+    transition: all 1.2s cubic-bezier(0.4, 0, 0.2, 1); pointer-events: none;
+  }
+  .ring-center-text {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%); text-align: center;
+  }
+  .ring-percent {
+    font-size: 26px; font-weight: 700;
+    background: linear-gradient(135deg, var(--green), var(--purple), var(--blue));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .ring-label {
+    font-size: 10px; color: var(--text-dim); text-transform: uppercase;
+    letter-spacing: 1px; text-align: center; margin-bottom: 20px;
+  }
+
+  /* Module legend in ring panel */
+  .legend { width: 100%; display: flex; flex-direction: column; gap: 6px; }
+  .legend-item {
+    display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+    border-radius: 6px; cursor: pointer; transition: all 0.2s;
+    font-size: 11px; color: var(--text-dim);
+  }
+  .legend-item:hover { background: var(--surface2); color: var(--text); }
+  .legend-item.active { background: var(--surface2); color: var(--text); }
+  .legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .legend-count { margin-left: auto; font-size: 10px; font-weight: 600; opacity: 0.6; }
+
+  /* Ring arc highlight */
+  .ring-highlight {
+    fill: none; stroke-width: 11; stroke-linecap: round; opacity: 0;
+    transition: opacity 0.4s, stroke-dashoffset 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .ring-highlight.visible { opacity: 0.25; }
+
+  /* -- Row 1: Module Dots -- */
+  .module-row {
+    grid-column: 2; grid-row: 1;
+    display: flex; align-items: center; justify-content: center;
+    padding: 16px 24px 12px; gap: 12px;
+    border-bottom: 1px solid var(--border); background: var(--surface);
+    position: sticky; top: 0; z-index: 11;
+  }
+  .mod-node {
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    cursor: pointer; transition: all 0.3s;
+  }
+  .mod-node .node-circle {
+    width: 36px; height: 36px; border-radius: 50%; position: relative;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700; transition: all 0.3s;
+    border: 2px solid transparent;
+  }
+  .mod-node.completed .node-circle { border-color: var(--color); background: color-mix(in srgb, var(--color) 15%, transparent); }
+  .mod-node.active .node-circle {
+    border-color: var(--color);
+    background: color-mix(in srgb, var(--color) 20%, transparent);
+    animation: nodePulse 2s ease-in-out infinite;
+  }
+  .mod-node.pending .node-circle { border-color: var(--gray); background: transparent; opacity: 0.5; }
+  .mod-node.selected .node-circle {
+    transform: scale(1.15);
+    box-shadow: 0 0 16px var(--color), 0 0 32px color-mix(in srgb, var(--color) 40%, transparent);
+  }
+  .mod-node .node-label { font-size: 10px; color: var(--text-dim); transition: color 0.3s; }
+  .mod-node.selected .node-label { color: var(--text); }
+  .mod-connector {
+    width: 40px; height: 2px; border-radius: 1px; transition: background 0.3s;
+  }
+  .mod-connector.done { background: linear-gradient(90deg, var(--from), var(--to)); }
+  .mod-connector.pending { background: var(--gray); opacity: 0.3; }
+  .mod-connector.active {
+    background: linear-gradient(90deg, var(--from), var(--to));
+    position: relative; overflow: hidden;
+  }
+  .mod-connector.active::after {
+    content: ''; position: absolute; top: -1px; width: 12px; height: 4px;
+    border-radius: 2px; background: white; opacity: 0.6;
+    animation: flowDot 1.5s linear infinite;
+  }
+  @keyframes flowDot { from { left: -12px; } to { left: calc(100% + 12px); } }
+  @keyframes nodePulse {
+    0%, 100% { box-shadow: 0 0 8px var(--color); }
+    50% { box-shadow: 0 0 20px var(--color), 0 0 36px color-mix(in srgb, var(--color) 30%, transparent); }
+  }
+
+  /* -- Row 2: Sub-module Dots with Inline Capsule -- */
+  .sub-row {
+    grid-column: 2; grid-row: 2;
+    display: flex; align-items: center; justify-content: center;
+    padding: 10px 24px; gap: 6px;
+    border-bottom: 1px solid var(--border);
+    background: color-mix(in srgb, var(--surface) 80%, var(--bg));
+    position: sticky; top: 64px; z-index: 10;
+    min-height: 50px;
+    transition: max-height 0.35s ease, padding 0.35s ease, opacity 0.3s;
+    opacity: 1;
+  }
+  .sub-row.collapsed { max-height: 0; padding: 0 24px; opacity: 0; border-bottom: none; overflow: hidden; }
+
+  .sub-dot-wrapper {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    cursor: pointer; transition: all 0.25s;
+    position: relative;
+  }
+  .sub-dot {
+    width: 12px; height: 12px; border-radius: 50%;
+    border: 2px solid transparent; transition: all 0.3s;
+    flex-shrink: 0;
+  }
+  .sub-dot.completed { background: var(--color); border-color: var(--color); opacity: 0.8; }
+  .sub-dot.active {
+    background: color-mix(in srgb, var(--color) 30%, transparent);
+    border-color: var(--color);
+    box-shadow: 0 0 8px var(--color);
+    animation: subPulse 2s ease-in-out infinite;
+  }
+  .sub-dot.pending { border-color: var(--gray); opacity: 0.4; }
+  .sub-dot.selected {
+    transform: scale(1.4);
+    box-shadow: 0 0 12px var(--color), 0 0 24px color-mix(in srgb, var(--color) 40%, transparent);
+  }
+  .sub-dot-label {
+    font-size: 9px; color: var(--text-dim); white-space: nowrap;
+    transition: color 0.3s;
+  }
+  .sub-dot-wrapper.sel .sub-dot-label { color: var(--text); }
+  .sub-connector { width: 16px; height: 1px; background: var(--border); flex-shrink: 0; }
+  @keyframes subPulse {
+    0%, 100% { box-shadow: 0 0 6px var(--color); }
+    50% { box-shadow: 0 0 14px var(--color); }
+  }
+
+  /* -- Inline Capsule (expanding sub-step) -- */
+  .capsule-wrapper {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    cursor: pointer; position: relative;
+  }
+  .capsule {
+    display: flex; align-items: center; gap: 0;
+    height: 28px;
+    border-radius: 14px;
+    padding: 0 10px;
+    border: 1.5px solid var(--color);
+    background: color-mix(in srgb, var(--color) 8%, var(--surface));
+    box-shadow: 0 0 16px color-mix(in srgb, var(--color) 20%, transparent),
+                inset 0 0 12px color-mix(in srgb, var(--color) 6%, transparent);
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow: hidden;
+    position: relative;
+  }
+  .capsule-label {
+    font-size: 9px; font-weight: 600; color: var(--color);
+    white-space: nowrap; margin-right: 6px;
+    letter-spacing: 0.3px;
+  }
+  .capsule-dots {
+    display: flex; align-items: center; gap: 5px;
+  }
+  .capsule-child {
+    width: 8px; height: 8px; border-radius: 50%;
+    border: 1.5px solid transparent;
+    transition: all 0.25s;
+    cursor: pointer;
+    position: relative;
+    flex-shrink: 0;
+  }
+  .capsule-child.completed {
+    background: var(--color); border-color: var(--color); opacity: 0.85;
+  }
+  .capsule-child.active {
+    background: color-mix(in srgb, var(--color) 35%, transparent);
+    border-color: var(--color);
+    box-shadow: 0 0 6px var(--color);
+    animation: childPulse 2s ease-in-out infinite;
+  }
+  .capsule-child.pending {
+    border-color: var(--gray); opacity: 0.45;
+  }
+  .capsule-child.child-selected {
+    transform: scale(1.5);
+    box-shadow: 0 0 8px var(--color), 0 0 16px color-mix(in srgb, var(--color) 40%, transparent);
+  }
+  @keyframes childPulse {
+    0%, 100% { box-shadow: 0 0 4px var(--color); }
+    50% { box-shadow: 0 0 10px var(--color); }
+  }
+  .capsule-bottom-label {
+    font-size: 9px; color: var(--text); white-space: nowrap;
+    transition: color 0.3s;
+  }
+
+  /* Tooltip for capsule child on hover */
+  .capsule-child-tip {
+    position: absolute; bottom: calc(100% + 6px); left: 50%;
+    transform: translateX(-50%); white-space: nowrap;
+    background: var(--surface2); border: 1px solid var(--border);
+    padding: 3px 8px; border-radius: 4px;
+    font-size: 9px; color: var(--text); pointer-events: none;
+    opacity: 0; transition: opacity 0.2s;
+    z-index: 20;
+  }
+  .capsule-child:hover .capsule-child-tip { opacity: 1; }
+
+  /* -- Content -- */
+  .content {
+    grid-column: 2; grid-row: 3;
+    padding: 24px 32px; overflow-y: auto;
+  }
+  .content-inner { max-width: 700px; }
+  .tag {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 12px; border-radius: 20px;
+    font-size: 11px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.8px; margin-bottom: 8px; border: 1px solid;
+  }
+  .title { font-size: 20px; font-weight: 700; margin-bottom: 6px; }
+  .summary {
+    font-size: 14px; color: var(--text-dim); line-height: 1.65;
+    margin-bottom: 20px; max-width: 650px;
+  }
+
+  /* Expandable rows */
+  .rows { display: flex; flex-direction: column; gap: 6px; }
+  .row-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; overflow: hidden; transition: all 0.3s;
+  }
+  .row-card:hover { border-color: #3a3a50; }
+  .row-card.expanded { box-shadow: 0 2px 16px rgba(0,0,0,.3); }
+  .row-card.child-active { border-color: color-mix(in srgb, var(--accent) 50%, var(--border)); }
+  .row-hdr {
+    display: flex; align-items: center; padding: 12px 16px;
+    cursor: pointer; gap: 12px; transition: background 0.2s;
+  }
+  .row-hdr:hover { background: var(--surface2); }
+  .row-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .row-name { font-size: 13px; font-weight: 600; flex: 1; }
+  .row-meta { font-size: 11px; color: var(--text-dim); }
+  .row-chev {
+    width: 16px; height: 16px; color: var(--text-dim);
+    transition: transform 0.3s; flex-shrink: 0;
+  }
+  .row-card.expanded .row-chev { transform: rotate(180deg); }
+  .row-body { max-height: 0; overflow: hidden; transition: max-height 0.35s ease; }
+  .row-card.expanded .row-body { max-height: 300px; }
+  .row-detail {
+    padding: 0 16px 14px 36px; font-size: 12.5px;
+    color: var(--text-dim); line-height: 1.65;
+  }
+
+  .footer { margin-top: 20px; font-size: 11px; color: var(--text-dim); }
+  .nav-hint {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    margin-top: 14px; font-size: 11px; color: var(--text-dim);
+  }
+  .key {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 24px; height: 22px; padding: 0 5px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 4px; font-size: 10px;
+  }
+  .nav-sep { margin: 0 4px; opacity: 0.4; }
+
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  .fade-in { animation: fadeIn 0.4s ease forwards; opacity: 0; }
+</style>
+</head>
+<body>
+<div class="layout">
+
+  <!-- Ring Panel (left) -->
+  <div class="ring-panel">
+    <div class="ring-container">
+      <svg class="ring-svg" viewBox="0 0 120 120">
+        <defs>
+          <linearGradient id="rg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="var(--green)"/>
+            <stop offset="40%" stop-color="var(--purple)"/>
+            <stop offset="70%" stop-color="var(--blue)"/>
+            <stop offset="100%" stop-color="var(--gray)"/>
+          </linearGradient>
+        </defs>
+        <circle class="ring-track" cx="60" cy="60" r="48"/>
+        <circle class="ring-progress" cx="60" cy="60" r="48" stroke="url(#rg)"/>
+        <circle class="ring-highlight" cx="60" cy="60" r="48"/>
+      </svg>
+      <div class="ring-endpoint" id="ep"></div>
+      <div class="ring-center-text"><div class="ring-percent" id="pct">0%</div></div>
+    </div>
+    <div class="ring-label">Pipeline Progress</div>
+    <div class="legend" id="legend"></div>
+  </div>
+
+  <!-- Row 1: Module dots -->
+  <div class="module-row" id="modRow"></div>
+
+  <!-- Row 2: Sub-module dots (with inline capsule expansion) -->
+  <div class="sub-row" id="subRow"></div>
+
+  <!-- Content -->
+  <div class="content">
+    <div class="content-inner" id="contentInner"></div>
+  </div>
+
+</div>
+
+<script>
+const CIRC = 2 * Math.PI * 48;
+
+const MODULES = [
+  {
+    id: 'seed', name: 'Seed Hypothesis', short: 'Seed', color: 'var(--green)', raw: '#34d399',
+    status: 'completed', metric: '\u2713', weight: 10,
+    summary: 'Mined 847 papers from OpenAlex, built knowledge graph with 2,341 triples. Identified 12 research gaps. Selected 5 seed topics.',
+    steps: [
+      { name: 'Mine Papers', status: 'completed', metric: '847 papers',
+        detail: 'Extracted papers from OpenAlex API across computational linguistics domain.' },
+      { name: 'Build KG', status: 'completed', metric: '2,341 triples',
+        detail: 'Constructed knowledge graph from paper abstracts using NER and relation extraction.' },
+      { name: 'Find Gaps', status: 'completed', metric: '12 gaps',
+        detail: 'Identified unexplored intersections in the knowledge graph via blind spot analysis.' },
+      { name: 'Select Seeds', status: 'completed', metric: '5 topics',
+        detail: 'BM25-matched seed topics against research direction. Round-robin agent assignment.' },
+    ]
+  },
+  {
+    id: 'hypo', name: 'Hypothesis Loop', short: 'Hypothesis', color: 'var(--purple)', raw: '#a78bfa',
+    status: 'completed', metric: '8.4', weight: 25,
+    summary: 'Refined hypothesis over 3 iterations. Score improved from 6.2 to 8.4/10. Final: "Cross-lingual Contrastive Pre-training with Synthetic Code-Switching."',
+    steps: [
+      { name: 'Gen Hypo 1', status: 'completed', metric: 'Score 6.2',
+        detail: 'Generated 8 hypotheses across 3 models. Best: cross-lingual transfer via code-switching. 3 major issues flagged.' },
+      { name: 'Review 1', status: 'completed', metric: '3 major',
+        detail: 'Adversarial review: weak baselines, unclear methodology, missing related work.' },
+      { name: 'Gen Hypo 2', status: 'completed', metric: 'Score 7.8',
+        detail: 'Refined to 4 hypotheses. Added contrastive pre-training approach. 1 major issue remaining.' },
+      { name: 'Review 2', status: 'completed', metric: '1 major',
+        detail: 'Needs convergence analysis. 2 minor: strengthen baselines, tighten abstract.' },
+      { name: 'Gen Hypo 3', status: 'completed', metric: 'Score 8.4',
+        detail: 'Final refinement. Narrowed to 8 language families. Added convergence analysis.' },
+      { name: 'Review 3', status: 'completed', metric: '0 major',
+        detail: 'Score 8.4/10. Confidence 4/5. 0 major issues, 2 minor. Ready for research.' },
+    ]
+  },
+  {
+    id: 'inv', name: 'Invention Loop', short: 'Invention', color: 'var(--blue)', raw: '#60a5fa',
+    status: 'active', metric: '3/5', weight: 40,
+    summary: 'Iteration 2 of 3. Generating artifacts to validate the hypothesis. Baseline shows 17.5% accuracy improvement. Ablation study running.',
+    steps: [
+      { name: 'Strategy', status: 'completed', metric: 'Selected',
+        detail: 'Contrastive alignment with code-switching augmentation. Added ablation experiments per reviewer feedback.' },
+      { name: 'Plan', status: 'completed', metric: '5 planned',
+        detail: '5 artifacts: 2 experiments, 1 dataset, 1 evaluation, 1 proof. Compute profiles assigned.' },
+      { name: 'Artifacts', status: 'active', metric: '3/5',
+        detail: '3 complete: Contrastive Baseline (acc 0.847, +17.5%), Multilingual Pairs (2,400 examples), Convergence Proof (Lean 4 verified). Running: Ablation Study. Pending: Cross-lingual Eval.',
+        children: [
+          { name: 'Contrastive Baseline', status: 'completed', metric: 'acc: 0.847 (+17.5%)', time: '4m 32s', cost: '$2.14',
+            detail: 'Trained contrastive model on 8 language pairs. Accuracy 0.847, a 17.5% improvement over mBERT baseline. F1: 0.831.' },
+          { name: 'Multilingual Pairs', status: 'completed', metric: '2,400 examples', time: '3m 15s', cost: '$1.02',
+            detail: 'Generated 2,400 synthetic code-switching examples across 8 language families. Quality score: 4.2/5.' },
+          { name: 'Convergence Proof', status: 'completed', metric: 'Verified (Lean 4)', time: '2m 41s', cost: '$0.89',
+            detail: 'Formal convergence proof for contrastive objective. Verified in Lean 4. Bounded by O(1/sqrt(n)).' },
+          { name: 'Ablation Study', status: 'active', metric: 'Running...', time: '1m 20s', cost: '$1.36',
+            detail: 'Ablating code-switching ratio, language family count, and contrastive temperature. 6/12 configurations complete.' },
+          { name: 'Cross-lingual Eval', status: 'pending', metric: 'Pending', time: '\u2014', cost: '\u2014',
+            detail: 'Will evaluate on XTREME benchmark across all 8 language families. Blocked on ablation results.' },
+        ]
+      },
+      { name: 'Paper Draft', status: 'pending', metric: '\u2014',
+        detail: 'Will synthesize paper from artifact results.' },
+      { name: 'Review', status: 'pending', metric: '\u2014',
+        detail: 'Adversarial review of paper draft.' },
+      { name: 'Update Hypo', status: 'pending', metric: '\u2014',
+        detail: 'Refine hypothesis based on findings.' },
+    ]
+  },
+  {
+    id: 'paper', name: 'Paper & Repository', short: 'Paper', color: 'var(--orange)', raw: '#fb923c',
+    status: 'pending', metric: '\u25CB', weight: 25,
+    summary: 'Waiting for Invention Loop to complete. Will generate demos, visualizations, compile LaTeX paper, and deploy to GitHub.',
+    steps: [
+      { name: 'Gen Repo', status: 'pending', metric: '\u2014',
+        detail: 'Initialize GitHub repository with standard ML project structure.',
+        children: [
+          { name: 'Scaffold', status: 'pending', metric: 'Pending', time: '\u2014', cost: '\u2014',
+            detail: 'Create directory structure, pyproject.toml, README template.' },
+          { name: 'Data Config', status: 'pending', metric: 'Pending', time: '\u2014', cost: '\u2014',
+            detail: 'Set up DVC tracking and data pipeline configuration.' },
+          { name: 'CI Pipeline', status: 'pending', metric: 'Pending', time: '\u2014', cost: '\u2014',
+            detail: 'GitHub Actions for linting, testing, and paper compilation.' },
+        ]
+      },
+      { name: 'Demos + Viz', status: 'pending', metric: '\u2014',
+        detail: 'Generate artifact demos and figure visualizations.',
+        children: [
+          { name: 'Demo Scripts', status: 'pending', metric: 'Pending', time: '\u2014', cost: '\u2014',
+            detail: 'Interactive demo scripts for each artifact.' },
+          { name: 'Figures', status: 'pending', metric: 'Pending', time: '\u2014', cost: '\u2014',
+            detail: 'Generate publication-quality figures for all experiments.' },
+          { name: 'Tables', status: 'pending', metric: 'Pending', time: '\u2014', cost: '\u2014',
+            detail: 'Format result tables in LaTeX.' },
+          { name: 'Interactive Viz', status: 'pending', metric: 'Pending', time: '\u2014', cost: '\u2014',
+            detail: 'Plotly dashboards for exploring results.' },
+        ]
+      },
+      { name: 'Full Paper', status: 'pending', metric: '\u2014',
+        detail: 'Compile LaTeX paper with all sections and figures.' },
+      { name: 'Deploy Source', status: 'pending', metric: '\u2014',
+        detail: 'Push code and data to GitHub.' },
+      { name: 'Deploy Paper', status: 'pending', metric: '\u2014',
+        detail: 'Upload compiled PDF and deploy.' },
+    ]
+  }
+];
+
+// State: selected module, selected step, selected child (-1 = none / step level)
+let selMod = 2;
+let selStep = 2;
+let selChild = -1;     // index within children array, -1 means capsule not focused inside
+let capsuleOpen = false; // whether the capsule is expanded
+
+// -- Compute progress --
+function progress() {
+  let total = 0, done = 0;
+  MODULES.forEach(m => {
+    const w = m.weight / m.steps.length;
+    m.steps.forEach(s => {
+      if (s.children) {
+        const cw = w / s.children.length;
+        s.children.forEach(c => {
+          total += cw;
+          if (c.status === 'completed') done += cw;
+          else if (c.status === 'active') done += cw * 0.5;
+        });
+      } else {
+        total += w;
+        if (s.status === 'completed') done += w;
+        else if (s.status === 'active') done += w * 0.5;
+      }
+    });
+  });
+  return Math.round(done / total * 100);
+}
+
+// -- Ring --
+function updateRing(pct) {
+  document.querySelector('.ring-progress').style.strokeDashoffset = CIRC - (pct / 100) * CIRC;
+  const el = document.getElementById('pct');
+  let c = 0; const step = pct / 30;
+  const iv = setInterval(() => {
+    c += step; if (c >= pct) { c = pct; clearInterval(iv); }
+    el.textContent = Math.round(c) + '%';
+  }, 30);
+  const ang = (pct / 100) * 360 - 90, rad = ang * Math.PI / 180;
+  const ep = document.getElementById('ep');
+  ep.style.left = (60 + 48 * Math.cos(rad) - 5) + 'px';
+  ep.style.top = (60 + 48 * Math.sin(rad) - 5) + 'px';
+}
+
+function highlightArc(mi) {
+  const hl = document.querySelector('.ring-highlight');
+  if (mi < 0) { hl.classList.remove('visible'); return; }
+  let off = 0;
+  for (let i = 0; i < mi; i++) off += (MODULES[i].weight / 100) * CIRC;
+  const len = (MODULES[mi].weight / 100) * CIRC;
+  hl.style.stroke = MODULES[mi].color;
+  hl.style.strokeDasharray = `${len} ${CIRC}`;
+  hl.style.strokeDashoffset = -off;
+  hl.classList.add('visible');
+}
+
+// -- Legend --
+function buildLegend() {
+  const el = document.getElementById('legend');
+  MODULES.forEach((m, i) => {
+    const done = m.steps.filter(s => s.status === 'completed').length;
+    const d = document.createElement('div');
+    d.className = 'legend-item' + (i === selMod ? ' active' : '');
+    d.innerHTML = `<span class="legend-dot" style="background:${m.color}"></span><span>${m.short}</span><span class="legend-count">${done}/${m.steps.length}</span>`;
+    d.onclick = () => selectModule(i);
+    el.appendChild(d);
+  });
+}
+
+// -- Row 1: Module Nodes --
+function buildModuleRow() {
+  const row = document.getElementById('modRow');
+  MODULES.forEach((m, i) => {
+    if (i > 0) {
+      const conn = document.createElement('div');
+      conn.className = 'mod-connector';
+      const prev = MODULES[i - 1];
+      if (prev.status === 'completed' && (m.status === 'completed' || m.status === 'active')) {
+        conn.classList.add(m.status === 'active' ? 'active' : 'done');
+        conn.style.setProperty('--from', prev.raw);
+        conn.style.setProperty('--to', m.raw);
+      } else { conn.classList.add('pending'); }
+      row.appendChild(conn);
+    }
+    const node = document.createElement('div');
+    node.className = `mod-node ${m.status}`;
+    node.style.setProperty('--color', m.raw);
+    node.dataset.idx = i;
+    node.innerHTML = `<div class="node-circle">${m.metric}</div><div class="node-label">${m.short}</div>`;
+    node.onclick = () => selectModule(i);
+    row.appendChild(node);
+  });
+}
+
+// -- Row 2: Sub-module Dots with Inline Capsule --
+function buildSubRow() {
+  const row = document.getElementById('subRow');
+  row.innerHTML = '';
+  const m = MODULES[selMod];
+  if (!m.steps.length) { row.classList.add('collapsed'); return; }
+  row.classList.remove('collapsed');
+
+  m.steps.forEach((s, i) => {
+    if (i > 0) {
+      const c = document.createElement('div');
+      c.className = 'sub-connector';
+      row.appendChild(c);
+    }
+
+    const isSel = (i === selStep);
+    const hasKids = s.children && s.children.length > 0;
+    const showCapsule = isSel && hasKids && capsuleOpen;
+
+    if (showCapsule) {
+      // -- Render expanded capsule --
+      const cw = document.createElement('div');
+      cw.className = 'capsule-wrapper';
+      cw.style.setProperty('--color', m.raw);
+
+      const capsule = document.createElement('div');
+      capsule.className = 'capsule';
+      capsule.style.setProperty('--color', m.raw);
+
+      const label = document.createElement('span');
+      label.className = 'capsule-label';
+      label.textContent = s.name + ':';
+      capsule.appendChild(label);
+
+      const dotsContainer = document.createElement('div');
+      dotsContainer.className = 'capsule-dots';
+
+      s.children.forEach((child, ci) => {
+        const dot = document.createElement('div');
+        dot.className = `capsule-child ${child.status}`;
+        dot.style.setProperty('--color', m.raw);
+        if (ci === selChild) dot.classList.add('child-selected');
+
+        // Tooltip
+        const tip = document.createElement('span');
+        tip.className = 'capsule-child-tip';
+        tip.textContent = child.name;
+        dot.appendChild(tip);
+
+        dot.onclick = (e) => { e.stopPropagation(); selectChild(ci); };
+        dotsContainer.appendChild(dot);
+      });
+
+      capsule.appendChild(dotsContainer);
+      capsule.onclick = () => { capsuleOpen = false; selChild = -1; updateAll(); };
+
+      const bottomLabel = document.createElement('div');
+      bottomLabel.className = 'capsule-bottom-label';
+      if (selChild >= 0 && s.children[selChild]) {
+        bottomLabel.textContent = s.children[selChild].name;
+      } else {
+        bottomLabel.textContent = s.name;
+      }
+
+      cw.appendChild(capsule);
+      cw.appendChild(bottomLabel);
+      row.appendChild(cw);
+    } else {
+      // -- Render normal dot (may have a subtle indicator for children) --
+      const w = document.createElement('div');
+      w.className = 'sub-dot-wrapper' + (isSel ? ' sel' : '');
+      w.style.setProperty('--color', m.raw);
+
+      const dot = document.createElement('div');
+      dot.className = `sub-dot ${s.status}`;
+      dot.style.setProperty('--color', m.raw);
+      if (isSel) dot.classList.add('selected');
+
+      const lbl = document.createElement('div');
+      lbl.className = 'sub-dot-label';
+      lbl.textContent = s.name;
+
+      w.appendChild(dot);
+      w.appendChild(lbl);
+
+      // If this step has children show a tiny indicator count
+      if (hasKids) {
+        const badge = document.createElement('div');
+        badge.style.cssText = `
+          font-size: 7px; color: ${m.raw}; opacity: 0.7;
+          margin-top: -2px; letter-spacing: 0.5px;
+        `;
+        const doneCount = s.children.filter(c => c.status === 'completed').length;
+        badge.textContent = doneCount + '/' + s.children.length;
+        w.appendChild(badge);
+      }
+
+      w.onclick = () => {
+        if (isSel && hasKids) {
+          // Second click opens capsule
+          capsuleOpen = true;
+          // Auto-select the active child, or first non-completed
+          selChild = 0;
+          for (let j = 0; j < s.children.length; j++) {
+            if (s.children[j].status === 'active') { selChild = j; break; }
+            if (s.children[j].status !== 'completed') { selChild = j; break; }
+          }
+          updateAll();
+        } else {
+          selectStep(i);
+        }
+      };
+      row.appendChild(w);
+    }
+  });
+}
+
+// -- Content --
+function renderContent() {
+  const m = MODULES[selMod];
+  const s = m.steps[selStep];
+  const el = document.getElementById('contentInner');
+
+  // Determine what we are showing: child detail or step detail
+  const inCapsule = capsuleOpen && s.children && selChild >= 0;
+  const child = inCapsule ? s.children[selChild] : null;
+
+  let html = '<div class="fade-in">';
+
+  if (inCapsule && child) {
+    // Show child-level content
+    const cStatus = child.status === 'completed' ? '\u2713' : child.status === 'active' ? '\u25B6' : '\u25CB';
+    html += `
+      <div class="tag" style="border-color:${m.color};color:${m.raw};background:${m.raw}15">
+        ${cStatus} ${m.short} / ${s.name} / ${child.name}
+      </div>
+      <div class="title">${child.name}</div>
+      <div class="summary">${child.detail || 'No details available.'}</div>
+      <div class="rows">
+        <div class="row-card expanded fade-in" style="--accent:${m.raw}">
+          <div class="row-hdr" onclick="this.parentElement.classList.toggle('expanded')">
+            <div class="row-dot" style="background:${child.status === 'pending' ? 'var(--gray)' : m.raw};${child.status === 'active' ? 'box-shadow:0 0 6px '+m.raw : ''}"></div>
+            <div class="row-name">${cStatus} ${child.name}</div>
+            <div class="row-meta">${child.metric}</div>
+            <svg class="row-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </div>
+          <div class="row-body"><div class="row-detail">
+            Time: ${child.time} &bull; Cost: ${child.cost}<br/>
+            ${child.detail || ''}
+          </div></div>
+        </div>`;
+
+    // Also show siblings as collapsed cards for context
+    s.children.forEach((sib, si) => {
+      if (si === selChild) return;
+      const sibStatus = sib.status === 'completed' ? '\u2713' : sib.status === 'active' ? '\u25B6' : '\u25CB';
+      const sibColor = sib.status === 'pending' ? 'var(--gray)' : m.raw;
+      const sibGlow = sib.status === 'active' ? `box-shadow:0 0 6px ${m.raw}` : '';
+      html += `
+        <div class="row-card fade-in" style="animation-delay:${si * 0.05}s;--accent:${m.raw}">
+          <div class="row-hdr" onclick="this.parentElement.classList.toggle('expanded')">
+            <div class="row-dot" style="background:${sibColor};${sibGlow}"></div>
+            <div class="row-name" style="opacity:0.6">${sibStatus} ${sib.name}</div>
+            <div class="row-meta">${sib.metric}</div>
+            <svg class="row-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </div>
+          <div class="row-body"><div class="row-detail">${sib.time} &bull; ${sib.cost}</div></div>
+        </div>`;
+    });
+    html += '</div>';
+  } else {
+    // Show step-level content (normal)
+    const sStatus = s.status === 'completed' ? '\u2713' : s.status === 'active' ? '\u25B6' : '\u25CB';
+    html += `
+      <div class="tag" style="border-color:${m.color};color:${m.raw};background:${m.raw}15">
+        ${m.status === 'completed' ? '\u2713' : m.status === 'active' ? '\u25B6' : '\u25CB'} ${m.short} / ${s.name}
+      </div>
+      <div class="title">${s.name} \u2014 ${m.name}</div>
+      <div class="summary">${s.detail || m.summary}</div>`;
+
+    if (s.children) {
+      html += '<div class="rows">';
+      s.children.forEach((c, ci) => {
+        const sc = c.status === 'completed' ? m.raw : c.status === 'active' ? m.raw : 'var(--gray)';
+        const glow = c.status === 'active' ? `box-shadow:0 0 6px ${sc}` : '';
+        const icon = c.status === 'completed' ? '\u2713' : c.status === 'active' ? '\u25B6' : '\u25CB';
+        html += `<div class="row-card fade-in" style="animation-delay:${ci * 0.06}s;--accent:${m.raw}">
+          <div class="row-hdr" onclick="this.parentElement.classList.toggle('expanded')">
+            <div class="row-dot" style="background:${sc};${glow}"></div>
+            <div class="row-name">${icon} ${c.name}</div>
+            <div class="row-meta">${c.metric}</div>
+            <svg class="row-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </div>
+          <div class="row-body"><div class="row-detail">${c.time} &bull; ${c.cost}<br/>${c.detail || ''}</div></div>
+        </div>`;
+      });
+      html += '</div>';
+      // Hint to expand capsule
+      if (!capsuleOpen) {
+        html += `<div style="margin-top:10px;font-size:11px;color:var(--text-dim);opacity:0.7">
+          Click the <strong>${s.name}</strong> dot again or press <span class="key">Enter</span> to expand inline detail
+        </div>`;
+      }
+    } else if (s.status !== 'pending') {
+      html += `<div class="rows">
+        <div class="row-card expanded fade-in">
+          <div class="row-hdr" onclick="this.parentElement.classList.toggle('expanded')">
+            <div class="row-dot" style="background:${m.raw}"></div>
+            <div class="row-name">Details</div>
+            <div class="row-meta">${s.metric}</div>
+            <svg class="row-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </div>
+          <div class="row-body"><div class="row-detail">${s.detail}</div></div>
+        </div>
+      </div>`;
+    }
+  }
+
+  // Footer
+  html += `<div class="footer">
+    ${m.status === 'completed' ? '\u2713 Complete' : m.status === 'active' ? '\u25B6 Running \u2014 42m \u2022 $12.47' : '\u25CB Pending'}
+  </div>
+  <div class="nav-hint">
+    <span class="key">\u2190</span><span class="key">\u2192</span> steps
+    <span class="nav-sep">|</span>
+    <span class="key">\u2191</span><span class="key">\u2193</span> modules
+    <span class="nav-sep">|</span>
+    <span class="key">Enter</span> expand/collapse
+    <span class="nav-sep">|</span>
+    <span class="key">Esc</span> close capsule
+  </div></div>`;
+
+  el.innerHTML = html;
+}
+
+// -- Selection --
+function selectModule(i) {
+  selMod = i;
+  capsuleOpen = false;
+  selChild = -1;
+  const m = MODULES[i];
+  selStep = 0;
+  for (let j = 0; j < m.steps.length; j++) {
+    if (m.steps[j].status === 'active') { selStep = j; break; }
+    if (m.steps[j].status !== 'completed') { selStep = j; break; }
+  }
+  updateAll();
+}
+
+function selectStep(i) {
+  const m = MODULES[selMod];
+  const newStep = Math.max(0, Math.min(i, m.steps.length - 1));
+  if (newStep !== selStep) {
+    capsuleOpen = false;
+    selChild = -1;
+  }
+  selStep = newStep;
+  updateAll();
+}
+
+function selectChild(ci) {
+  const s = MODULES[selMod].steps[selStep];
+  if (!s.children) return;
+  selChild = Math.max(0, Math.min(ci, s.children.length - 1));
+  updateAll();
+}
+
+function updateAll() {
+  highlightArc(selMod);
+  document.querySelectorAll('.mod-node').forEach((n, i) => n.classList.toggle('selected', i === selMod));
+  document.querySelectorAll('.legend-item').forEach((n, i) => n.classList.toggle('active', i === selMod));
+  buildSubRow();
+  renderContent();
+}
+
+// -- Keyboard Navigation --
+document.addEventListener('keydown', e => {
+  const m = MODULES[selMod];
+  const s = m.steps[selStep];
+  const hasKids = s.children && s.children.length > 0;
+
+  switch (e.key) {
+    case 'ArrowUp':
+      e.preventDefault();
+      selectModule(Math.max(0, selMod - 1));
+      break;
+
+    case 'ArrowDown':
+      e.preventDefault();
+      selectModule(Math.min(MODULES.length - 1, selMod + 1));
+      break;
+
+    case 'ArrowLeft':
+      e.preventDefault();
+      if (capsuleOpen && hasKids) {
+        // Navigate within capsule children
+        if (selChild > 0) {
+          selectChild(selChild - 1);
+        } else {
+          // Already at first child, close capsule and go to prev step
+          capsuleOpen = false;
+          selChild = -1;
+          selectStep(selStep - 1);
+        }
+      } else {
+        selectStep(selStep - 1);
+      }
+      break;
+
+    case 'ArrowRight':
+      e.preventDefault();
+      if (capsuleOpen && hasKids) {
+        // Navigate within capsule children
+        if (selChild < s.children.length - 1) {
+          selectChild(selChild + 1);
+        } else {
+          // Past last child, close capsule and go to next step
+          capsuleOpen = false;
+          selChild = -1;
+          selectStep(selStep + 1);
+        }
+      } else {
+        selectStep(selStep + 1);
+      }
+      break;
+
+    case 'Enter':
+      e.preventDefault();
+      if (hasKids && !capsuleOpen) {
+        capsuleOpen = true;
+        selChild = 0;
+        for (let j = 0; j < s.children.length; j++) {
+          if (s.children[j].status === 'active') { selChild = j; break; }
+          if (s.children[j].status !== 'completed') { selChild = j; break; }
+        }
+        updateAll();
+      } else if (capsuleOpen) {
+        capsuleOpen = false;
+        selChild = -1;
+        updateAll();
+      }
+      break;
+
+    case 'Escape':
+      e.preventDefault();
+      if (capsuleOpen) {
+        capsuleOpen = false;
+        selChild = -1;
+        updateAll();
+      }
+      break;
+  }
+});
+
+// -- Init --
+buildLegend();
+buildModuleRow();
+requestAnimationFrame(() => setTimeout(() => updateRing(progress()), 200));
+selectModule(selMod);
+</script>
+</body>
+</html>

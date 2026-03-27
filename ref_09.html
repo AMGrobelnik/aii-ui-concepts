@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Bioluminescent Orbs</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+  :root {
+    --bg: #0a0a10;
+    --surface: #111118;
+    --surface-hover: #18182a;
+    --border: #1e1e30;
+    --text: #c8c8d8;
+    --text-dim: #6a6a80;
+    --text-bright: #e8e8f4;
+
+    --seed-color: #3ddc84;
+    --seed-glow: rgba(61, 220, 132, 0.45);
+    --hypo-color: #b06dff;
+    --hypo-glow: rgba(176, 109, 255, 0.45);
+    --inv-color: #4da6ff;
+    --inv-glow: rgba(77, 166, 255, 0.55);
+    --paper-color: #6a6a80;
+    --paper-glow: rgba(106, 106, 128, 0.2);
+
+    --strip-height: 110px;
+    --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  html, body {
+    height: 100%;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    overflow: hidden;
+  }
+
+  /* ── Layout ─────────────────────────────────── */
+  .app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+
+  /* ── Top strip — orb navigation ─────────────── */
+  .orb-strip {
+    position: relative;
+    height: var(--strip-height);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 80px;
+    background: linear-gradient(180deg, #0e0e18 0%, var(--bg) 100%);
+    border-bottom: 1px solid var(--border);
+    z-index: 10;
+    flex-shrink: 0;
+    overflow: visible;
+  }
+
+  /* SVG connector layer */
+  .orb-connectors {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    overflow: visible;
+  }
+  .orb-connectors path {
+    fill: none;
+    stroke-width: 1;
+    opacity: 0.3;
+    transition: opacity 0.4s var(--ease-smooth);
+  }
+
+  /* Particle canvas overlay */
+  #particle-canvas {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  /* ── Orb node ───────────────────────────────── */
+  .orb-node {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    z-index: 2;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    outline: none;
+  }
+
+  .orb-wrapper {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* The glow halo — larger, blurred, behind the orb */
+  .orb-halo {
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+    transition: transform 0.5s var(--ease-smooth), opacity 0.5s var(--ease-smooth);
+  }
+
+  /* The solid orb */
+  .orb-core {
+    position: relative;
+    border-radius: 50%;
+    transition: transform 0.5s var(--ease-smooth);
+  }
+
+  /* Per-orb sizing and color */
+  .orb-node[data-stage="seed"] .orb-core {
+    width: 36px; height: 36px;
+    background: radial-gradient(circle at 35% 35%, #7dffb4, var(--seed-color) 60%, #1a9050);
+    box-shadow: 0 0 12px var(--seed-glow);
+  }
+  .orb-node[data-stage="seed"] .orb-halo {
+    width: 100px; height: 100px;
+    background: var(--seed-glow);
+    filter: blur(40px);
+    opacity: 0.6;
+  }
+
+  .orb-node[data-stage="hypothesis"] .orb-core {
+    width: 36px; height: 36px;
+    background: radial-gradient(circle at 35% 35%, #d4a6ff, var(--hypo-color) 60%, #6a30b0);
+    box-shadow: 0 0 12px var(--hypo-glow);
+  }
+  .orb-node[data-stage="hypothesis"] .orb-halo {
+    width: 100px; height: 100px;
+    background: var(--hypo-glow);
+    filter: blur(40px);
+    opacity: 0.6;
+  }
+
+  .orb-node[data-stage="invention"] .orb-core {
+    width: 44px; height: 44px;
+    background: radial-gradient(circle at 35% 35%, #8fd4ff, var(--inv-color) 60%, #1a6ab0);
+    box-shadow: 0 0 18px var(--inv-glow);
+  }
+  .orb-node[data-stage="invention"] .orb-halo {
+    width: 140px; height: 140px;
+    background: var(--inv-glow);
+    filter: blur(60px);
+    opacity: 0.7;
+  }
+
+  .orb-node[data-stage="paper"] .orb-core {
+    width: 30px; height: 30px;
+    background: radial-gradient(circle at 35% 35%, #9a9ab0, var(--paper-color) 60%, #404060);
+    box-shadow: 0 0 6px var(--paper-glow);
+  }
+  .orb-node[data-stage="paper"] .orb-halo {
+    width: 70px; height: 70px;
+    background: var(--paper-glow);
+    filter: blur(30px);
+    opacity: 0.3;
+  }
+
+  /* Labels */
+  .orb-label {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    transition: color 0.4s var(--ease-smooth), opacity 0.4s var(--ease-smooth);
+    white-space: nowrap;
+  }
+
+  /* ── Selection states ───────────────────────── */
+  .orb-node.selected .orb-label {
+    color: var(--text-bright);
+  }
+  .orb-node:not(.selected) {
+    opacity: 0.55;
+    transition: opacity 0.5s var(--ease-smooth);
+  }
+  .orb-node.selected {
+    opacity: 1;
+  }
+
+  /* Selected glow doubles */
+  .orb-node.selected .orb-halo {
+    transform: scale(1.6);
+    opacity: 1;
+  }
+
+  /* Inner shine on selected */
+  .orb-node.selected .orb-core::after {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.15);
+    animation: ring-pulse 2.5s ease-in-out infinite;
+  }
+
+  @keyframes ring-pulse {
+    0%, 100% { transform: scale(1); opacity: 0.3; }
+    50% { transform: scale(1.15); opacity: 0.08; }
+  }
+
+  /* ── Content area ───────────────────────────── */
+  .content-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 32px 40px;
+    scrollbar-width: thin;
+    scrollbar-color: #2a2a40 transparent;
+  }
+  .content-area::-webkit-scrollbar { width: 6px; }
+  .content-area::-webkit-scrollbar-thumb { background: #2a2a40; border-radius: 3px; }
+
+  /* Panel that fades in/out */
+  .panel {
+    display: none;
+    animation: panel-in 0.45s var(--ease-smooth) forwards;
+    max-width: 860px;
+    margin: 0 auto;
+  }
+  .panel.active { display: block; }
+
+  @keyframes panel-in {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Panel header */
+  .panel-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 28px;
+  }
+  .panel-header .dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .panel-header h2 {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-bright);
+  }
+  .panel-header .badge {
+    font-size: 11px;
+    font-weight: 500;
+    padding: 3px 10px;
+    border-radius: 20px;
+    margin-left: auto;
+  }
+
+  /* Seed colors */
+  .panel[data-panel="seed"] .dot { background: var(--seed-color); box-shadow: 0 0 8px var(--seed-glow); }
+  .panel[data-panel="seed"] .badge { background: rgba(61,220,132,0.12); color: var(--seed-color); }
+
+  .panel[data-panel="hypothesis"] .dot { background: var(--hypo-color); box-shadow: 0 0 8px var(--hypo-glow); }
+  .panel[data-panel="hypothesis"] .badge { background: rgba(176,109,255,0.12); color: var(--hypo-color); }
+
+  .panel[data-panel="invention"] .dot { background: var(--inv-color); box-shadow: 0 0 8px var(--inv-glow); }
+  .panel[data-panel="invention"] .badge { background: rgba(77,166,255,0.12); color: var(--inv-color); }
+
+  .panel[data-panel="paper"] .dot { background: var(--paper-color); box-shadow: 0 0 4px var(--paper-glow); }
+  .panel[data-panel="paper"] .badge { background: rgba(106,106,128,0.12); color: var(--paper-color); }
+
+  /* Cards */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px 24px;
+    margin-bottom: 16px;
+    transition: border-color 0.3s, background 0.3s;
+  }
+  .card:hover {
+    border-color: #2a2a48;
+    background: var(--surface-hover);
+  }
+  .card h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-bright);
+    margin-bottom: 8px;
+  }
+  .card p {
+    font-size: 13px;
+    line-height: 1.65;
+    color: var(--text-dim);
+  }
+
+  /* Metadata row */
+  .meta-row {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    margin-bottom: 24px;
+  }
+  .meta-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .meta-item .label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--text-dim);
+  }
+  .meta-item .value {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-bright);
+  }
+
+  /* Tags */
+  .tag-list {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+  }
+  .tag {
+    font-size: 11px;
+    padding: 4px 12px;
+    border-radius: 14px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+  }
+
+  /* Progress bars */
+  .progress-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .progress-row .prog-label {
+    font-size: 12px;
+    color: var(--text-dim);
+    min-width: 100px;
+  }
+  .progress-track {
+    flex: 1;
+    height: 4px;
+    background: #1a1a2a;
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.6s var(--ease-smooth);
+  }
+  .progress-row .prog-value {
+    font-size: 11px;
+    color: var(--text-dim);
+    min-width: 36px;
+    text-align: right;
+  }
+
+  /* Table */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 20px;
+  }
+  .data-table th {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--text-dim);
+    padding: 8px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  .data-table td {
+    font-size: 13px;
+    color: var(--text);
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(30,30,48,0.5);
+  }
+  .data-table tr:hover td {
+    background: rgba(255,255,255,0.015);
+  }
+
+  /* Status dot */
+  .status-dot {
+    display: inline-block;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+  .status-dot.green { background: var(--seed-color); }
+  .status-dot.purple { background: var(--hypo-color); }
+  .status-dot.blue { background: var(--inv-color); }
+  .status-dot.gray { background: var(--paper-color); }
+
+  /* Keyboard hint */
+  .kb-hint {
+    position: fixed;
+    bottom: 16px;
+    right: 20px;
+    font-size: 11px;
+    color: var(--text-dim);
+    opacity: 0.5;
+    pointer-events: none;
+  }
+  .kb-hint kbd {
+    display: inline-block;
+    padding: 2px 7px;
+    border: 1px solid #2a2a40;
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 10px;
+    margin: 0 2px;
+    background: var(--surface);
+  }
+
+  /* Section divider */
+  .section-gap { height: 8px; }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ═══ Top strip: floating orbs ═══ -->
+  <div class="orb-strip" id="orb-strip">
+
+    <!-- SVG connector curves -->
+    <svg class="orb-connectors" id="orb-connectors" xmlns="http://www.w3.org/2000/svg"></svg>
+
+    <!-- Particle canvas -->
+    <canvas id="particle-canvas"></canvas>
+
+    <!-- Orb: Seed -->
+    <div class="orb-node selected" data-stage="seed" data-index="0" tabindex="0"
+         data-phase="0" data-breath-speed="4.2">
+      <div class="orb-wrapper">
+        <div class="orb-halo"></div>
+        <div class="orb-core"></div>
+      </div>
+      <span class="orb-label">Seed</span>
+    </div>
+
+    <!-- Orb: Hypothesis -->
+    <div class="orb-node" data-stage="hypothesis" data-index="1" tabindex="0"
+         data-phase="1.8" data-breath-speed="3.6">
+      <div class="orb-wrapper">
+        <div class="orb-halo"></div>
+        <div class="orb-core"></div>
+      </div>
+      <span class="orb-label">Hypothesis</span>
+    </div>
+
+    <!-- Orb: Invention -->
+    <div class="orb-node" data-stage="invention" data-index="2" tabindex="0"
+         data-phase="3.5" data-breath-speed="3.0">
+      <div class="orb-wrapper">
+        <div class="orb-halo"></div>
+        <div class="orb-core"></div>
+      </div>
+      <span class="orb-label">Invention</span>
+    </div>
+
+    <!-- Orb: Paper -->
+    <div class="orb-node" data-stage="paper" data-index="3" tabindex="0"
+         data-phase="5.0" data-breath-speed="5.0">
+      <div class="orb-wrapper">
+        <div class="orb-halo"></div>
+        <div class="orb-core"></div>
+      </div>
+      <span class="orb-label">Paper</span>
+    </div>
+  </div>
+
+  <!-- ═══ Content area ═══ -->
+  <div class="content-area">
+
+    <!-- ── Seed panel ── -->
+    <div class="panel active" data-panel="seed">
+      <div class="panel-header">
+        <div class="dot"></div>
+        <h2>Seed Hypotheses</h2>
+        <span class="badge">12 seeds</span>
+      </div>
+
+      <div class="meta-row">
+        <div class="meta-item">
+          <span class="label">Knowledge Graph</span>
+          <span class="value">847 nodes</span>
+        </div>
+        <div class="meta-item">
+          <span class="label">Papers Ingested</span>
+          <span class="value">2,340</span>
+        </div>
+        <div class="meta-item">
+          <span class="label">Extraction Time</span>
+          <span class="value">14m 22s</span>
+        </div>
+        <div class="meta-item">
+          <span class="label">Domains</span>
+          <span class="value">3</span>
+        </div>
+      </div>
+
+      <div class="tag-list">
+        <span class="tag">materials science</span>
+        <span class="tag">computational chemistry</span>
+        <span class="tag">photovoltaics</span>
+        <span class="tag">graph neural nets</span>
+      </div>
+
+      <div class="card">
+        <h3>Perovskite Defect Tolerance via Strain Engineering</h3>
+        <p>Lattice strain modulates halide vacancy formation energies in mixed-cation perovskites.
+           A targeted biaxial strain of 0.8-1.2% could suppress non-radiative recombination
+           centers by 40%, improving V_oc by ~60 mV without compositional changes.</p>
+      </div>
+      <div class="card">
+        <h3>GNN-Guided Catalyst Surface Reconstruction</h3>
+        <p>Graph neural network potentials trained on DFT relaxation trajectories can predict
+           surface reconstruction pathways for bimetallic oxygen evolution catalysts. Preliminary
+           evidence suggests 3x screening speedup over conventional DFT workflows.</p>
+      </div>
+      <div class="card">
+        <h3>Topological Phonon Modes in 2D Heterostructures</h3>
+        <p>Twisted bilayer transition-metal dichalcogenides may host topologically protected
+           phonon edge modes at moire domain boundaries. These modes could enable directional
+           thermal transport with potential applications in nanoscale heat management.</p>
+      </div>
+      <div class="card">
+        <h3>Self-Healing Polymer Electrolytes via Dynamic Covalent Bonds</h3>
+        <p>Boronate ester crosslinks in PEO-based electrolytes provide autonomous crack repair
+           at room temperature. Ionic conductivity retention after 50 damage-heal cycles
+           exceeds 92%, offering a path to safer solid-state lithium batteries.</p>
+      </div>
+    </div>
+
+    <!-- ── Hypothesis panel ── -->
+    <div class="panel" data-panel="hypothesis">
+      <div class="panel-header">
+        <div class="dot"></div>
+        <h2>Hypothesis Loop</h2>
+        <span class="badge">iteration 3 / 5</span>
+      </div>
+
+      <div class="meta-row">
+        <div class="meta-item">
+          <span class="label">Active Hypotheses</span>
+          <span class="value">4</span>
+        </div>
+        <div class="meta-item">
+          <span class="label">Reviewed</span>
+          <span class="value">9</span>
+        </div>
+        <div class="meta-item">
+          <span class="label">Avg Novelty</span>
+          <span class="value">7.2 / 10</span>
+        </div>
+        <div class="meta-item">
+          <span class="label">Avg Feasibility</span>
+          <span class="value">6.8 / 10</span>
+        </div>
+      </div>
+
+      <div class="progress-row">
+        <span class="prog-label">Novelty</span>
+        <div class="progress-track">
+          <div class="progress-fill" style="width:72%;background:var(--hypo-color)"></div>
+        </div>
+        <span class="prog-value">7.2</span>
+      </div>
+      <div class="progress-row">
+        <span class="prog-label">Feasibility</span>
+        <div class="progress-track">
+          <div class="progress-fill" style="width:68%;background:var(--hypo-color)"></div>
+        </div>
+        <span class="prog-value">6.8</span>
+      </div>
+      <div class="progress-row">
+        <span class="prog-label">Specificity</span>
+        <div class="progress-track">
+          <div class="progress-fill" style="width:81%;background:var(--hypo-color)"></div>
+        </div>
+        <span class="prog-value">8.1</span>
+      </div>
+      <div class="progress-row">
+        <span class="prog-label">Grounding</span>
+        <div class="progress-track">
+          <div class="progress-fill" style="width:74%;background:var(--hypo-color)"></div>
+        </div>
+        <span class="prog-value">7.4</span>
+      </div>
+
+      <div class="section-gap"></div>
+
+      <div class="card">
+        <h3>H-04: Strain-Defect Coupling in Cs0.05FA0.95PbI3</h3>
+        <p>Applying epitaxial biaxial strain (1.0%) to Cs0.05FA0.95PbI3 thin films reduces
+           halide vacancy concentration by suppressing the Frenkel defect formation pathway.
+           DFT nudged-elastic-band calculations predict a 0.18 eV increase in migration barrier.</p>
+      </div>
+      <div class="card">
+        <h3>H-07: Message-Passing Potential for OER Surfaces</h3>
+        <p>A SchNet-variant trained on 12k DFT relaxation snapshots of NiFe-OOH surfaces
+           achieves MAE of 14 meV/atom on held-out reconstructions. Active learning loop
+           identifies 3 novel low-overpotential facets missed by conventional screening.</p>
+      </div>
+      <div class="card">
+        <h3>Reviewer Feedback (iteration 2)</h3>
+        <p>H-04 strengthened significantly with quantitative DFT backing. H-07 needs clearer
+           comparison against RPBE baseline. Dropped H-02 (polymer electrolyte) due to
+           overlap with existing literature on Diels-Alder networks.</p>
+      </div>
+    </div>
+
+    <!-- ── Invention panel ── -->
+    <div class="panel" data-panel="invention">
+      <div class="panel-header">
+        <div class="dot"></div>
+        <h2>Invention Loop</h2>
+        <span class="badge">generating plan</span>
+      </div>
+
+      <div class="meta-row">
+        <div class="meta-item">
+          <span class="label">Selected Hypothesis</span>
+          <span class="value">H-04</span>
+        </div>
+        <div class="meta-item">
+          <span class="label">Plan Sections</span>
+          <span class="value">6</span>
+        </div>
+        <div class="meta-item">
+          <span class="label">Figures Planned</span>
+          <span class="value">4</span>
+        </div>
+        <div class="meta-item">
+          <span class="label">Loop Iteration</span>
+          <span class="value">1 / 3</span>
+        </div>
+      </div>
+
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Section</th>
+            <th>Status</th>
+            <th>Tokens</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Abstract</td>
+            <td><span class="status-dot green"></span>Complete</td>
+            <td>312</td>
+          </tr>
+          <tr>
+            <td>Introduction</td>
+            <td><span class="status-dot green"></span>Complete</td>
+            <td>1,847</td>
+          </tr>
+          <tr>
+            <td>Methods</td>
+            <td><span class="status-dot blue"></span>Generating</td>
+            <td>~2,400</td>
+          </tr>
+          <tr>
+            <td>Results</td>
+            <td><span class="status-dot gray"></span>Pending</td>
+            <td>--</td>
+          </tr>
+          <tr>
+            <td>Discussion</td>
+            <td><span class="status-dot gray"></span>Pending</td>
+            <td>--</td>
+          </tr>
+          <tr>
+            <td>Conclusion</td>
+            <td><span class="status-dot gray"></span>Pending</td>
+            <td>--</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="card">
+        <h3>Paper Plan: Strain-Engineered Defect Tolerance</h3>
+        <p>The paper establishes a computational framework combining DFT with continuum
+           elasticity theory to predict optimal strain windows for defect suppression in
+           mixed-cation lead halide perovskites. Key novelty: the coupling between
+           macroscopic strain fields and point-defect thermodynamics via a Landau-type
+           free energy functional.</p>
+      </div>
+      <div class="card">
+        <h3>Figure 1: Strain-Defect Phase Diagram</h3>
+        <p>Contour plot of vacancy formation energy as a function of biaxial strain (x-axis)
+           and Cs fraction (y-axis). Color scale from 0.4 eV (red, high defect density) to
+           1.2 eV (blue, suppressed). Overlaid experimental data points from 4 literature sources.</p>
+      </div>
+      <div class="card">
+        <h3>Review Cycle Status</h3>
+        <p>First draft of Introduction accepted after minor restructuring. Methods section
+           currently being generated with emphasis on computational parameters and convergence
+           criteria. Reviewer flagged need for explicit discussion of spin-orbit coupling effects.</p>
+      </div>
+    </div>
+
+    <!-- ── Paper panel ── -->
+    <div class="panel" data-panel="paper">
+      <div class="panel-header">
+        <div class="dot"></div>
+        <h2>Paper Output</h2>
+        <span class="badge">pending</span>
+      </div>
+
+      <div class="meta-row">
+        <div class="meta-item">
+          <span class="label">Status</span>
+          <span class="value">Waiting</span>
+        </div>
+        <div class="meta-item">
+          <span class="label">Artifacts</span>
+          <span class="value">0</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Not Yet Available</h3>
+        <p>The paper output stage will become active once the invention loop completes
+           its review cycles. This stage assembles the final LaTeX document, generates
+           visualizations, and produces the paper repository with all artifacts.</p>
+      </div>
+      <div class="card">
+        <h3>Expected Outputs</h3>
+        <p>Full paper PDF, LaTeX source, Python visualization scripts, supplementary
+           data tables, and a self-contained repository with reproducibility instructions.
+           Typical generation time: 8-15 minutes after invention loop completion.</p>
+      </div>
+    </div>
+
+  </div><!-- /content-area -->
+
+  <div class="kb-hint"><kbd>&larr;</kbd> <kbd>&rarr;</kbd> navigate stages</div>
+
+</div><!-- /app -->
+
+<script>
+// ════════════════════════════════════════════════
+//  Bioluminescent Orb Navigation
+// ════════════════════════════════════════════════
+
+(function () {
+  'use strict';
+
+  const STAGES = ['seed', 'hypothesis', 'invention', 'paper'];
+  const COLORS = {
+    seed:       { r: 61,  g: 220, b: 132 },
+    hypothesis: { r: 176, g: 109, b: 255 },
+    invention:  { r: 77,  g: 166, b: 255 },
+    paper:      { r: 106, g: 106, b: 128 },
+  };
+
+  let selectedIndex = 0;
+  const orbNodes = document.querySelectorAll('.orb-node');
+  const panels   = document.querySelectorAll('.panel');
+  const strip    = document.getElementById('orb-strip');
+  const svgEl    = document.getElementById('orb-connectors');
+  const canvas   = document.getElementById('particle-canvas');
+  const ctx      = canvas.getContext('2d');
+
+  // ── Selection ──────────────────────────────
+  function selectOrb(index) {
+    if (index < 0 || index >= STAGES.length) return;
+    selectedIndex = index;
+    orbNodes.forEach((n, i) => {
+      n.classList.toggle('selected', i === index);
+    });
+    panels.forEach(p => {
+      p.classList.toggle('active', p.dataset.panel === STAGES[index]);
+    });
+  }
+
+  orbNodes.forEach((node, i) => {
+    node.addEventListener('click', () => selectOrb(i));
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight') selectOrb(selectedIndex + 1);
+    if (e.key === 'ArrowLeft')  selectOrb(selectedIndex - 1);
+  });
+
+  // ── Breathing animation ────────────────────
+  function breathe(timestamp) {
+    const t = timestamp / 1000;
+    orbNodes.forEach(node => {
+      const phase = parseFloat(node.dataset.phase) || 0;
+      const speed = parseFloat(node.dataset.breathSpeed) || 4;
+      const wave  = Math.sin((t + phase) * (2 * Math.PI / speed));
+      const scale = 0.97 + 0.03 * wave;              // 0.97 - 1.03
+      const haloWave = 0.9 + 0.1 * wave;             // subtle halo pulse
+
+      const core = node.querySelector('.orb-core');
+      const halo = node.querySelector('.orb-halo');
+      core.style.transform = `scale(${scale})`;
+
+      // Only apply halo breathing if not in the CSS-driven selected expansion
+      if (!node.classList.contains('selected')) {
+        halo.style.opacity = String(parseFloat(getComputedStyle(halo).opacity) * 0.98 + 0.02 * haloWave);
+      }
+    });
+    requestAnimationFrame(breathe);
+  }
+  requestAnimationFrame(breathe);
+
+  // ── SVG bezier connectors ──────────────────
+  function getOrbCenter(node) {
+    const rect = node.querySelector('.orb-core').getBoundingClientRect();
+    const stripRect = strip.getBoundingClientRect();
+    return {
+      x: rect.left + rect.width / 2 - stripRect.left,
+      y: rect.top  + rect.height / 2 - stripRect.top,
+    };
+  }
+
+  function drawConnectors(timestamp) {
+    const t = timestamp / 1000;
+    let pathsHTML = '';
+    for (let i = 0; i < orbNodes.length - 1; i++) {
+      const a = getOrbCenter(orbNodes[i]);
+      const b = getOrbCenter(orbNodes[i + 1]);
+
+      // Flex offset — subtle sine displacement
+      const flex = Math.sin(t * 0.8 + i * 1.5) * 6;
+
+      const mx = (a.x + b.x) / 2;
+      const my = (a.y + b.y) / 2 + flex;
+      const cp1x = a.x + (b.x - a.x) * 0.3;
+      const cp1y = a.y + flex * 0.6;
+      const cp2x = a.x + (b.x - a.x) * 0.7;
+      const cp2y = b.y + flex * 0.6;
+
+      const cA = COLORS[STAGES[i]];
+      const cB = COLORS[STAGES[i + 1]];
+      const avgR = Math.round((cA.r + cB.r) / 2);
+      const avgG = Math.round((cA.g + cB.g) / 2);
+      const avgB = Math.round((cA.b + cB.b) / 2);
+
+      pathsHTML += `<path d="M${a.x},${a.y} C${cp1x},${cp1y} ${cp2x},${cp2y} ${b.x},${b.y}"
+        stroke="rgb(${avgR},${avgG},${avgB})" />`;
+    }
+    svgEl.innerHTML = pathsHTML;
+    requestAnimationFrame(drawConnectors);
+  }
+  requestAnimationFrame(drawConnectors);
+
+  // ── Particle canvas ────────────────────────
+  function resizeCanvas() {
+    const rect = strip.getBoundingClientRect();
+    canvas.width  = rect.width  * devicePixelRatio;
+    canvas.height = rect.height * devicePixelRatio;
+    canvas.style.width  = rect.width  + 'px';
+    canvas.style.height = rect.height + 'px';
+    ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
+  }
+  resizeCanvas();
+  window.addEventListener('resize', resizeCanvas);
+
+  // Particle pool
+  const MAX_PARTICLES = 60;
+  const particles = [];
+
+  class Particle {
+    constructor() { this.reset(); }
+
+    reset() {
+      // Pick a random connector segment
+      const seg = Math.floor(Math.random() * (orbNodes.length - 1));
+      this.seg = seg;
+      this.t = 0;                                     // progress 0..1
+      this.speed = 0.003 + Math.random() * 0.006;     // per frame
+      this.size  = 1 + Math.random() * 2;
+      this.alpha = 0;
+      this.maxAlpha = 0.3 + Math.random() * 0.5;
+      this.alive = true;
+      // Direction: 70% forward, 30% reverse for organic feel
+      this.dir = Math.random() < 0.7 ? 1 : -1;
+      if (this.dir === -1) this.t = 1;
+    }
+
+    update() {
+      this.t += this.speed * this.dir;
+      // Fade in/out at endpoints
+      const edge = Math.min(this.t, 1 - this.t);
+      this.alpha = Math.min(edge * 6, 1) * this.maxAlpha;
+      if (this.t < 0 || this.t > 1) {
+        this.alive = false;
+      }
+    }
+
+    getPosition() {
+      const a = getOrbCenter(orbNodes[this.seg]);
+      const b = getOrbCenter(orbNodes[this.seg + 1]);
+      const t = this.t;
+      // Cubic bezier interpolation (simplified)
+      const cp1x = a.x + (b.x - a.x) * 0.35;
+      const cp1y = a.y - 8;
+      const cp2x = a.x + (b.x - a.x) * 0.65;
+      const cp2y = b.y - 8;
+      const u = 1 - t;
+      const x = u*u*u*a.x + 3*u*u*t*cp1x + 3*u*t*t*cp2x + t*t*t*b.x;
+      const y = u*u*u*a.y + 3*u*u*t*cp1y + 3*u*t*t*cp2y + t*t*t*b.y;
+      return { x, y };
+    }
+  }
+
+  // Spawn rate control
+  let spawnAccum = 0;
+
+  function tickParticles() {
+    ctx.clearRect(0, 0, canvas.width / devicePixelRatio, canvas.height / devicePixelRatio);
+
+    // Spawn new particles occasionally
+    spawnAccum += 0.35;  // ~0.35 per frame
+    while (spawnAccum >= 1 && particles.length < MAX_PARTICLES) {
+      particles.push(new Particle());
+      spawnAccum -= 1;
+    }
+
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.update();
+      if (!p.alive) {
+        // Recycle
+        p.reset();
+        continue;
+      }
+      const pos = p.getPosition();
+      const stageA = STAGES[p.seg];
+      const stageB = STAGES[p.seg + 1];
+      const c = COLORS[p.t < 0.5 ? stageA : stageB];
+
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, p.size, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${c.r},${c.g},${c.b},${p.alpha})`;
+      ctx.fill();
+
+      // Small glow
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, p.size * 3, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${c.r},${c.g},${c.b},${p.alpha * 0.15})`;
+      ctx.fill();
+    }
+
+    requestAnimationFrame(tickParticles);
+  }
+  requestAnimationFrame(tickParticles);
+
+  // ── Init ───────────────────────────────────
+  selectOrb(0);
+
+})();
+</script>
+
+</body>
+</html>

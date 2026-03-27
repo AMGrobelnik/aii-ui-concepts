@@ -1,0 +1,922 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Dashboard</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0a0f;
+    --card: #0f1117;
+    --card-border: rgba(255,255,255,0.06);
+    --card-shadow: 0 2px 12px rgba(0,0,0,0.4);
+    --text-primary: #e4e4e7;
+    --text-secondary: #71717a;
+    --text-muted: #52525b;
+    --accent-blue: #3b82f6;
+    --accent-green: #22c55e;
+    --accent-amber: #f59e0b;
+    --accent-purple: #a855f7;
+    --accent-cyan: #06b6d4;
+    --accent-red: #ef4444;
+    --glass-bg: rgba(255,255,255,0.03);
+    --glass-border: rgba(255,255,255,0.08);
+    --row-alt: rgba(255,255,255,0.015);
+    --expand-duration: 300ms;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text-primary);
+    line-height: 1.5;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Top Bar ── */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+    height: 56px;
+    background: var(--card);
+    border-bottom: 1px solid var(--card-border);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .topbar-left { display: flex; align-items: center; gap: 16px; }
+  .brand {
+    font-weight: 700;
+    font-size: 15px;
+    background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    letter-spacing: -0.3px;
+  }
+  .brand-sep {
+    width: 1px;
+    height: 20px;
+    background: var(--card-border);
+  }
+  .run-name {
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-weight: 500;
+  }
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 3px 10px 3px 8px;
+    border-radius: 9999px;
+    background: rgba(34,197,94,0.1);
+    color: var(--accent-green);
+    border: 1px solid rgba(34,197,94,0.2);
+  }
+  .pulse-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--accent-green);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(34,197,94,0.4); }
+    50% { opacity: 0.7; box-shadow: 0 0 0 4px rgba(34,197,94,0); }
+  }
+  .topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+  .topbar-right span { font-variant-numeric: tabular-nums; }
+
+  /* ── Metric Strip ── */
+  .metric-strip {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    padding: 12px 24px;
+    background: linear-gradient(180deg, rgba(15,17,23,0.8), transparent);
+  }
+  .metric-card {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    backdrop-filter: blur(8px);
+  }
+  .metric-label {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .metric-value-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .metric-value {
+    font-size: 22px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.5px;
+  }
+  .metric-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .mini-progress-track {
+    height: 4px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .mini-progress-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.6s ease;
+  }
+
+  /* Mini gauge */
+  .mini-gauge {
+    width: 36px;
+    height: 36px;
+    position: relative;
+  }
+  .mini-gauge svg { transform: rotate(-90deg); }
+  .mini-gauge-bg { fill: none; stroke: rgba(255,255,255,0.06); stroke-width: 3; }
+  .mini-gauge-fill { fill: none; stroke-width: 3; stroke-linecap: round; transition: stroke-dashoffset 0.6s ease; }
+  .mini-gauge-text {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--text-secondary);
+  }
+
+  /* Trend indicator */
+  .trend {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .trend.up { color: var(--accent-green); }
+  .trend.up::before { content: "↑"; }
+
+  /* ── Main Layout ── */
+  .main {
+    display: grid;
+    grid-template-columns: 55fr 45fr;
+    gap: 16px;
+    padding: 16px 24px 24px;
+    max-height: calc(100vh - 56px - 72px);
+  }
+
+  /* ── Card Base ── */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    box-shadow: var(--card-shadow);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px 12px;
+    border-bottom: 1px solid var(--card-border);
+    flex-shrink: 0;
+  }
+  .card-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    letter-spacing: -0.2px;
+  }
+  .card-subtitle {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  .card-body {
+    flex: 1;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.08) transparent;
+  }
+  .card-body::-webkit-scrollbar { width: 5px; }
+  .card-body::-webkit-scrollbar-track { background: transparent; }
+  .card-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
+
+  /* ── Pipeline Status (Left) ── */
+  .pipeline-card { min-height: 0; }
+
+  .pipeline-row {
+    display: grid;
+    grid-template-columns: 160px 72px 1fr 120px;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 20px;
+    cursor: pointer;
+    transition: background 0.15s;
+    border-left: 3px solid transparent;
+    user-select: none;
+  }
+  .pipeline-row:hover { background: rgba(255,255,255,0.02); }
+  .pipeline-row.active { border-left-color: var(--accent-blue); background: rgba(59,130,246,0.04); }
+  .pipeline-row + .pipeline-row { border-top: 1px solid var(--card-border); }
+
+  .module-name {
+    font-size: 13px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .module-icon {
+    font-size: 13px;
+    flex-shrink: 0;
+    width: 18px;
+    text-align: center;
+  }
+  .module-icon.done { color: var(--accent-green); }
+  .module-icon.active { color: var(--accent-blue); }
+  .module-icon.pending { color: var(--text-muted); }
+
+  .module-status {
+    font-size: 11px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .module-status.done { color: var(--accent-green); }
+  .module-status.active { color: var(--accent-blue); }
+  .module-status.pending { color: var(--text-muted); }
+
+  .progress-bar-track {
+    height: 6px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 0.6s ease;
+  }
+
+  .module-metric {
+    font-size: 12px;
+    color: var(--text-secondary);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .expand-chevron {
+    display: inline-block;
+    font-size: 10px;
+    color: var(--text-muted);
+    transition: transform var(--expand-duration) ease;
+    margin-left: auto;
+  }
+  .pipeline-row.expanded .expand-chevron { transform: rotate(90deg); }
+
+  /* Sub-step panel */
+  .sub-panel {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height var(--expand-duration) ease;
+    background: rgba(0,0,0,0.2);
+    border-top: 1px solid var(--card-border);
+  }
+  .sub-panel.open { /* max-height set via JS */ }
+  .sub-panel-inner { padding: 8px 20px 12px 48px; }
+
+  .sub-step {
+    display: grid;
+    grid-template-columns: 180px 72px 1fr 100px;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0;
+    font-size: 12px;
+  }
+  .sub-step + .sub-step { border-top: 1px solid rgba(255,255,255,0.03); }
+  .sub-step-name {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-secondary);
+    font-weight: 500;
+  }
+  .sub-step-status {
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .sub-step-status.done { color: var(--accent-green); }
+  .sub-step-status.active { color: var(--accent-blue); }
+  .sub-step-status.pending { color: var(--text-muted); }
+
+  .sub-progress-track {
+    height: 4px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .sub-progress-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.6s ease;
+  }
+  .sub-metric {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Iteration rows for hypothesis */
+  .iteration-row {
+    display: grid;
+    grid-template-columns: 100px 60px 1fr 80px;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0;
+    font-size: 12px;
+  }
+  .iteration-row + .iteration-row { border-top: 1px solid rgba(255,255,255,0.03); }
+  .iter-label { color: var(--text-secondary); font-weight: 500; }
+  .iter-score {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .iter-score.high { color: var(--accent-green); }
+  .iter-score.mid { color: var(--accent-amber); }
+  .iter-detail {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-align: right;
+  }
+
+  /* ── Right Column ── */
+  .right-col {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-height: 0;
+  }
+  .right-col .card { flex: 1; min-height: 0; }
+
+  /* Activity Card */
+  .activity-header-info {
+    padding: 16px 20px 0;
+    flex-shrink: 0;
+  }
+  .activity-title-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 4px;
+  }
+  .live-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--accent-blue);
+    animation: live-pulse 1.5s ease-in-out infinite;
+  }
+  @keyframes live-pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.85); }
+  }
+  .activity-meta {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 14px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .artifact-list { padding: 0 20px 16px; flex: 1; overflow-y: auto; }
+  .artifact-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 0;
+    font-size: 13px;
+  }
+  .artifact-item + .artifact-item { border-top: 1px solid var(--card-border); }
+  .artifact-icon { flex-shrink: 0; width: 18px; text-align: center; font-size: 13px; }
+  .artifact-icon.done { color: var(--accent-green); }
+  .artifact-icon.running { color: var(--accent-blue); }
+  .artifact-icon.pending { color: var(--text-muted); }
+  .artifact-info { flex: 1; min-width: 0; }
+  .artifact-name { font-weight: 500; font-size: 13px; }
+  .artifact-detail { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+  .artifact-bar-wrap {
+    width: 80px;
+    flex-shrink: 0;
+  }
+  .artifact-running-bar {
+    height: 4px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 2px;
+    overflow: hidden;
+    position: relative;
+  }
+  .artifact-running-bar::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -40%;
+    width: 40%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, var(--accent-blue), transparent);
+    border-radius: 2px;
+    animation: shimmer 1.4s ease-in-out infinite;
+  }
+  @keyframes shimmer {
+    0% { left: -40%; }
+    100% { left: 100%; }
+  }
+
+  /* Milestones */
+  .milestone-list { padding: 4px 0; }
+  .milestone-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 10px 20px;
+    font-size: 12px;
+    transition: background 0.15s;
+  }
+  .milestone-item:nth-child(odd) { background: var(--row-alt); }
+  .milestone-item:hover { background: rgba(255,255,255,0.03); }
+
+  .milestone-time {
+    font-variant-numeric: tabular-nums;
+    color: var(--text-muted);
+    flex-shrink: 0;
+    font-size: 11px;
+    font-weight: 500;
+    min-width: 56px;
+    padding-top: 1px;
+  }
+  .milestone-desc {
+    flex: 1;
+    line-height: 1.45;
+  }
+  .milestone-icon {
+    flex-shrink: 0;
+    width: 16px;
+    text-align: center;
+    font-size: 12px;
+    padding-top: 1px;
+  }
+
+  /* Fade effect for older milestones */
+  .milestone-item.age-0 { opacity: 1; }
+  .milestone-item.age-1 { opacity: 0.85; }
+  .milestone-item.age-2 { opacity: 0.7; }
+  .milestone-item.age-3 { opacity: 0.55; }
+  .milestone-item.age-4 { opacity: 0.45; }
+  .milestone-item.age-5 { opacity: 0.38; }
+
+  /* Color coding by module */
+  .color-green { color: var(--accent-green); }
+  .color-blue { color: var(--accent-blue); }
+  .color-amber { color: var(--accent-amber); }
+  .color-purple { color: var(--accent-purple); }
+  .color-cyan { color: var(--accent-cyan); }
+
+  /* Cost trend mini sparkline */
+  .cost-trend-wrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+</style>
+</head>
+<body>
+
+<!-- ─── Top Bar ─── -->
+<header class="topbar">
+  <div class="topbar-left">
+    <span class="brand">AI Inventor</span>
+    <span class="brand-sep"></span>
+    <span class="run-name">cross-lingual-probe-v4</span>
+    <span class="status-badge"><span class="pulse-dot"></span>Running</span>
+  </div>
+  <div class="topbar-right">
+    <span id="elapsed-time">02:34:17</span>
+    <span>$12.47</span>
+  </div>
+</header>
+
+<!-- ─── Metric Strip ─── -->
+<div class="metric-strip">
+  <!-- Pipeline Progress -->
+  <div class="metric-card">
+    <span class="metric-label">Pipeline Progress</span>
+    <div class="metric-value-row">
+      <span class="metric-value color-blue">65%</span>
+    </div>
+    <div class="mini-progress-track">
+      <div class="mini-progress-fill" style="width:65%; background: linear-gradient(90deg, var(--accent-blue), var(--accent-cyan));"></div>
+    </div>
+  </div>
+
+  <!-- Hypothesis Score -->
+  <div class="metric-card">
+    <span class="metric-label">Hypothesis Score</span>
+    <div class="metric-value-row">
+      <span class="metric-value color-green">8.4<span style="font-size:13px;color:var(--text-muted);font-weight:500;">/10</span></span>
+      <div class="mini-gauge">
+        <svg width="36" height="36" viewBox="0 0 36 36">
+          <circle class="mini-gauge-bg" cx="18" cy="18" r="15"/>
+          <circle class="mini-gauge-fill" cx="18" cy="18" r="15"
+            stroke="var(--accent-green)"
+            stroke-dasharray="94.25"
+            stroke-dashoffset="15.08"/>
+        </svg>
+        <span class="mini-gauge-text">84%</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Artifacts -->
+  <div class="metric-card">
+    <span class="metric-label">Artifacts</span>
+    <div class="metric-value-row">
+      <span class="metric-value">3<span style="font-size:13px;color:var(--text-muted);font-weight:500;">/5</span> <span style="font-size:12px;color:var(--text-secondary);font-weight:400;">complete</span></span>
+    </div>
+    <div class="mini-progress-track">
+      <div class="mini-progress-fill" style="width:60%; background: linear-gradient(90deg, var(--accent-purple), var(--accent-amber));"></div>
+    </div>
+  </div>
+
+  <!-- Cost -->
+  <div class="metric-card">
+    <span class="metric-label">Cost</span>
+    <div class="metric-value-row">
+      <div class="cost-trend-wrap">
+        <span class="metric-value">$12.47</span>
+        <span class="trend up">$2.1/hr</span>
+      </div>
+    </div>
+    <span class="metric-sub">Seed $1.20 &middot; Hypo $3.86 &middot; Inv $7.41</span>
+  </div>
+</div>
+
+<!-- ─── Main Content ─── -->
+<div class="main">
+
+  <!-- ─── Left: Pipeline Status ─── -->
+  <div class="card pipeline-card">
+    <div class="card-header">
+      <span class="card-title">Pipeline Status</span>
+      <span class="card-subtitle">4 modules &middot; 2 complete</span>
+    </div>
+    <div class="card-body" id="pipeline-body">
+
+      <!-- Module 1: Seed Hypothesis -->
+      <div class="pipeline-row" data-module="seed" onclick="toggleModule(this)">
+        <span class="module-name">
+          <span class="module-icon done">&#10003;</span>
+          Seed Hypothesis
+          <span class="expand-chevron">&#9654;</span>
+        </span>
+        <span class="module-status done">Done</span>
+        <div class="progress-bar-track">
+          <div class="progress-bar-fill" style="width:100%;background:var(--accent-green);"></div>
+        </div>
+        <span class="module-metric">12 gaps found</span>
+      </div>
+      <div class="sub-panel" id="sub-seed">
+        <div class="sub-panel-inner">
+          <div class="sub-step">
+            <span class="sub-step-name"><span class="module-icon done" style="font-size:11px;">&#10003;</span> Literature Survey</span>
+            <span class="sub-step-status done">Done</span>
+            <div class="sub-progress-track"><div class="sub-progress-fill" style="width:100%;background:var(--accent-green);"></div></div>
+            <span class="sub-metric">47 papers</span>
+          </div>
+          <div class="sub-step">
+            <span class="sub-step-name"><span class="module-icon done" style="font-size:11px;">&#10003;</span> Gap Analysis</span>
+            <span class="sub-step-status done">Done</span>
+            <div class="sub-progress-track"><div class="sub-progress-fill" style="width:100%;background:var(--accent-green);"></div></div>
+            <span class="sub-metric">12 gaps</span>
+          </div>
+          <div class="sub-step">
+            <span class="sub-step-name"><span class="module-icon done" style="font-size:11px;">&#10003;</span> Hypothesis Seed</span>
+            <span class="sub-step-status done">Done</span>
+            <div class="sub-progress-track"><div class="sub-progress-fill" style="width:100%;background:var(--accent-green);"></div></div>
+            <span class="sub-metric">1 selected</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Module 2: Hypothesis Loop -->
+      <div class="pipeline-row" data-module="hypo" onclick="toggleModule(this)">
+        <span class="module-name">
+          <span class="module-icon done">&#10003;</span>
+          Hypothesis Loop
+          <span class="expand-chevron">&#9654;</span>
+        </span>
+        <span class="module-status done">Done</span>
+        <div class="progress-bar-track">
+          <div class="progress-bar-fill" style="width:100%;background:var(--accent-green);"></div>
+        </div>
+        <span class="module-metric">8.4 / 10</span>
+      </div>
+      <div class="sub-panel" id="sub-hypo">
+        <div class="sub-panel-inner">
+          <div class="iteration-row">
+            <span class="iter-label">Iteration 1</span>
+            <span class="iter-score mid">6.2</span>
+            <div class="sub-progress-track"><div class="sub-progress-fill" style="width:62%;background:var(--accent-amber);"></div></div>
+            <span class="iter-detail">Initial draft</span>
+          </div>
+          <div class="iteration-row">
+            <span class="iter-label">Iteration 2</span>
+            <span class="iter-score mid">7.5</span>
+            <div class="sub-progress-track"><div class="sub-progress-fill" style="width:75%;background:var(--accent-amber);"></div></div>
+            <span class="iter-detail">+novelty, +rigor</span>
+          </div>
+          <div class="iteration-row">
+            <span class="iter-label">Iteration 3</span>
+            <span class="iter-score high">8.4</span>
+            <div class="sub-progress-track"><div class="sub-progress-fill" style="width:84%;background:var(--accent-green);"></div></div>
+            <span class="iter-detail">Final &mdash; accepted</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Module 3: Invention Loop (active) -->
+      <div class="pipeline-row active" data-module="invention" onclick="toggleModule(this)">
+        <span class="module-name">
+          <span class="module-icon active">&#9654;</span>
+          Invention Loop
+          <span class="expand-chevron">&#9654;</span>
+        </span>
+        <span class="module-status active">Active</span>
+        <div class="progress-bar-track">
+          <div class="progress-bar-fill" style="width:58%;background:linear-gradient(90deg, var(--accent-blue), var(--accent-cyan));"></div>
+        </div>
+        <span class="module-metric">3/5 artifacts</span>
+      </div>
+      <div class="sub-panel" id="sub-invention">
+        <div class="sub-panel-inner">
+          <div class="sub-step">
+            <span class="sub-step-name"><span class="module-icon done" style="font-size:11px;">&#10003;</span> Gen Strategy</span>
+            <span class="sub-step-status done">Done</span>
+            <div class="sub-progress-track"><div class="sub-progress-fill" style="width:100%;background:var(--accent-green);"></div></div>
+            <span class="sub-metric">5 planned</span>
+          </div>
+          <div class="sub-step">
+            <span class="sub-step-name"><span class="module-icon done" style="font-size:11px;">&#10003;</span> Gen Plan</span>
+            <span class="sub-step-status done">Done</span>
+            <div class="sub-progress-track"><div class="sub-progress-fill" style="width:100%;background:var(--accent-green);"></div></div>
+            <span class="sub-metric">5 plans</span>
+          </div>
+          <div class="sub-step">
+            <span class="sub-step-name"><span class="module-icon done" style="font-size:11px;">&#10003;</span> Gen Paper Text</span>
+            <span class="sub-step-status done">Done</span>
+            <div class="sub-progress-track"><div class="sub-progress-fill" style="width:100%;background:var(--accent-green);"></div></div>
+            <span class="sub-metric">4,200 words</span>
+          </div>
+          <div class="sub-step">
+            <span class="sub-step-name"><span class="module-icon active" style="font-size:11px;">&#9654;</span> Gen Artifacts</span>
+            <span class="sub-step-status active">Running</span>
+            <div class="sub-progress-track"><div class="sub-progress-fill" style="width:60%;background:var(--accent-blue);"></div></div>
+            <span class="sub-metric">3/5 done</span>
+          </div>
+          <div class="sub-step">
+            <span class="sub-step-name"><span class="module-icon pending" style="font-size:11px;">&#9675;</span> Review Paper</span>
+            <span class="sub-step-status pending">Pending</span>
+            <div class="sub-progress-track"><div class="sub-progress-fill" style="width:0%;background:var(--text-muted);"></div></div>
+            <span class="sub-metric">&mdash;</span>
+          </div>
+          <div class="sub-step">
+            <span class="sub-step-name"><span class="module-icon pending" style="font-size:11px;">&#9675;</span> Revise</span>
+            <span class="sub-step-status pending">Pending</span>
+            <div class="sub-progress-track"><div class="sub-progress-fill" style="width:0%;background:var(--text-muted);"></div></div>
+            <span class="sub-metric">&mdash;</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Module 4: Paper & Repo -->
+      <div class="pipeline-row" data-module="paper" onclick="toggleModule(this)">
+        <span class="module-name">
+          <span class="module-icon pending">&#9675;</span>
+          Paper &amp; Repo
+          <span class="expand-chevron">&#9654;</span>
+        </span>
+        <span class="module-status pending">Pending</span>
+        <div class="progress-bar-track">
+          <div class="progress-bar-fill" style="width:0%;background:var(--text-muted);"></div>
+        </div>
+        <span class="module-metric">&mdash;</span>
+      </div>
+      <div class="sub-panel" id="sub-paper">
+        <div class="sub-panel-inner">
+          <div class="sub-step">
+            <span class="sub-step-name"><span class="module-icon pending" style="font-size:11px;">&#9675;</span> Compile LaTeX</span>
+            <span class="sub-step-status pending">Pending</span>
+            <div class="sub-progress-track"><div class="sub-progress-fill" style="width:0%;"></div></div>
+            <span class="sub-metric">&mdash;</span>
+          </div>
+          <div class="sub-step">
+            <span class="sub-step-name"><span class="module-icon pending" style="font-size:11px;">&#9675;</span> Gen Visualizations</span>
+            <span class="sub-step-status pending">Pending</span>
+            <div class="sub-progress-track"><div class="sub-progress-fill" style="width:0%;"></div></div>
+            <span class="sub-metric">&mdash;</span>
+          </div>
+          <div class="sub-step">
+            <span class="sub-step-name"><span class="module-icon pending" style="font-size:11px;">&#9675;</span> Build Repository</span>
+            <span class="sub-step-status pending">Pending</span>
+            <div class="sub-progress-track"><div class="sub-progress-fill" style="width:0%;"></div></div>
+            <span class="sub-metric">&mdash;</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ─── Right Column ─── -->
+  <div class="right-col">
+
+    <!-- Current Activity -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Current Activity</span>
+        <span class="card-subtitle">Iteration 2</span>
+      </div>
+      <div class="activity-header-info">
+        <div class="activity-title-line">
+          <span class="live-dot"></span>
+          Generating Artifacts
+        </div>
+        <div class="activity-meta">Started 12m ago &middot; $5.41 so far</div>
+      </div>
+      <div class="artifact-list">
+        <div class="artifact-item">
+          <span class="artifact-icon done">&#10003;</span>
+          <div class="artifact-info">
+            <div class="artifact-name">Contrastive Baseline</div>
+            <div class="artifact-detail">acc: 0.847</div>
+          </div>
+        </div>
+        <div class="artifact-item">
+          <span class="artifact-icon done">&#10003;</span>
+          <div class="artifact-info">
+            <div class="artifact-name">Multilingual Pairs</div>
+            <div class="artifact-detail">2,400 examples</div>
+          </div>
+        </div>
+        <div class="artifact-item">
+          <span class="artifact-icon done">&#10003;</span>
+          <div class="artifact-info">
+            <div class="artifact-name">Convergence Proof</div>
+            <div class="artifact-detail">verified in Lean 4</div>
+          </div>
+        </div>
+        <div class="artifact-item">
+          <span class="artifact-icon running">&#9654;</span>
+          <div class="artifact-info">
+            <div class="artifact-name">Ablation Study</div>
+            <div class="artifact-detail">running...</div>
+          </div>
+          <div class="artifact-bar-wrap">
+            <div class="artifact-running-bar"></div>
+          </div>
+        </div>
+        <div class="artifact-item">
+          <span class="artifact-icon pending">&#9675;</span>
+          <div class="artifact-info">
+            <div class="artifact-name">Cross-lingual Eval</div>
+            <div class="artifact-detail">pending</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recent Milestones -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Recent Milestones</span>
+        <span class="card-subtitle">6 events</span>
+      </div>
+      <div class="card-body">
+        <div class="milestone-list">
+          <div class="milestone-item age-0">
+            <span class="milestone-time">02:32:04</span>
+            <span class="milestone-desc">Convergence proof verified in Lean 4</span>
+            <span class="milestone-icon color-green">&#10003;</span>
+          </div>
+          <div class="milestone-item age-1">
+            <span class="milestone-time">02:28:41</span>
+            <span class="milestone-desc">Multilingual pairs dataset generated (2,400 examples)</span>
+            <span class="milestone-icon color-green">&#10003;</span>
+          </div>
+          <div class="milestone-item age-2">
+            <span class="milestone-time">02:21:15</span>
+            <span class="milestone-desc">Contrastive baseline experiment complete (acc: 0.847)</span>
+            <span class="milestone-icon color-green">&#10003;</span>
+          </div>
+          <div class="milestone-item age-3">
+            <span class="milestone-time">02:18:30</span>
+            <span class="milestone-desc">Artifact plans generated (5 planned)</span>
+            <span class="milestone-icon color-blue">&#10003;</span>
+          </div>
+          <div class="milestone-item age-4">
+            <span class="milestone-time">02:15:12</span>
+            <span class="milestone-desc">Strategy refined: added ablation experiments</span>
+            <span class="milestone-icon color-blue">&#10003;</span>
+          </div>
+          <div class="milestone-item age-5">
+            <span class="milestone-time">02:12:00</span>
+            <span class="milestone-desc">Iteration 2 started</span>
+            <span class="milestone-icon color-purple">&#9654;</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  // ── Row expand/collapse ──
+  function toggleModule(row) {
+    const moduleName = row.dataset.module;
+    const panel = document.getElementById('sub-' + moduleName);
+    if (!panel) return;
+
+    const isOpen = row.classList.contains('expanded');
+
+    // Close all
+    document.querySelectorAll('.pipeline-row.expanded').forEach(r => {
+      r.classList.remove('expanded');
+    });
+    document.querySelectorAll('.sub-panel').forEach(p => {
+      p.style.maxHeight = '0px';
+      p.classList.remove('open');
+    });
+
+    // If was closed, open this one
+    if (!isOpen) {
+      row.classList.add('expanded');
+      panel.classList.add('open');
+      // Measure inner height and animate
+      const inner = panel.querySelector('.sub-panel-inner');
+      const height = inner.scrollHeight + 20;
+      panel.style.maxHeight = height + 'px';
+    }
+  }
+
+  // Auto-expand the active module on load
+  document.addEventListener('DOMContentLoaded', () => {
+    const activeRow = document.querySelector('.pipeline-row.active');
+    if (activeRow) toggleModule(activeRow);
+  });
+
+  // ── Elapsed time ticker ──
+  let elapsed = 2 * 3600 + 34 * 60 + 17; // 02:34:17
+  const elapsedEl = document.getElementById('elapsed-time');
+
+  setInterval(() => {
+    elapsed++;
+    const h = String(Math.floor(elapsed / 3600)).padStart(2, '0');
+    const m = String(Math.floor((elapsed % 3600) / 60)).padStart(2, '0');
+    const s = String(elapsed % 60).padStart(2, '0');
+    elapsedEl.textContent = h + ':' + m + ':' + s;
+  }, 1000);
+</script>
+
+</body>
+</html>

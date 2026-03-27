@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor Pipeline — v3.03</title>
+<style>
+  :root {
+    --bg: #1a1d23;
+    --surface: #22262e;
+    --border: #2e3440;
+    --text: #e2e4e9;
+    --muted: #8b919a;
+    --green: #22c55e;
+    --purple: #a78bfa;
+    --blue: #3b82f6;
+    --orange: #f59e0b;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ---------- header ---------- */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 32px 12px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .header h1 { font-size: 15px; font-weight: 600; letter-spacing: .4px; }
+  .header .run-id { font-size: 12px; color: var(--muted); font-family: monospace; }
+  .header .keys-hint {
+    font-size: 11px; color: var(--muted);
+    display: flex; gap: 10px; align-items: center;
+  }
+  .keys-hint kbd {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 4px; padding: 1px 7px; font-size: 11px;
+    font-family: monospace; color: var(--text);
+  }
+
+  /* ---------- big ring ---------- */
+  .ring-section {
+    display: flex; justify-content: center; align-items: center;
+    padding: 28px 0 18px;
+  }
+  .big-ring {
+    position: relative; width: 170px; height: 170px;
+  }
+  .big-ring canvas { position: absolute; top: 0; left: 0; }
+  .big-ring .ring-label {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+  }
+  .ring-label .pct { font-size: 34px; font-weight: 700; }
+  .ring-label .sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  /* ---------- row 1 — diamond-in-ring markers ---------- */
+  .row1-wrap {
+    position: relative;
+    padding: 10px 48px 8px;
+  }
+  .row1-canvas { position: absolute; inset: 0; pointer-events: none; }
+  .row1 {
+    position: relative;
+    display: flex; justify-content: space-between; align-items: center;
+    z-index: 2;
+  }
+  .marker {
+    display: flex; flex-direction: column; align-items: center;
+    cursor: pointer; user-select: none; gap: 8px;
+  }
+  .marker .diamond-ring {
+    position: relative; width: 42px; height: 42px;
+  }
+  .marker .diamond-ring canvas {
+    position: absolute; top: 0; left: 0;
+  }
+  .marker .diamond-icon {
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 18px; height: 18px;
+    transform: translate(-50%, -50%) rotate(45deg);
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 3px;
+    transition: box-shadow .3s;
+  }
+  .marker .diamond-icon span {
+    transform: rotate(-45deg);
+    font-size: 11px;
+    line-height: 1;
+  }
+  .marker .mlabel { font-size: 11px; color: var(--muted); white-space: nowrap; }
+  .marker.active .mlabel { color: var(--text); font-weight: 600; }
+  .marker .mpct { font-size: 10px; font-weight: 600; margin-top: -4px; }
+
+  /* ---------- row 2 — sub-step dots ---------- */
+  .row2-wrap {
+    padding: 6px 48px 16px;
+  }
+  .row2 {
+    display: flex; gap: 0; justify-content: center; align-items: flex-start;
+  }
+  .substep {
+    display: flex; flex-direction: column; align-items: center;
+    min-width: 72px; cursor: pointer; user-select: none; gap: 4px;
+  }
+  .substep .dot-line {
+    display: flex; align-items: center; gap: 0;
+  }
+  .substep .dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    border: 2px solid var(--border);
+    background: var(--bg);
+    transition: all .25s;
+  }
+  .substep .dot.done { background: var(--green); border-color: var(--green); }
+  .substep .dot.active { border-color: var(--blue); box-shadow: 0 0 6px var(--blue); }
+  .substep .dot.pending { border-color: var(--border); }
+  .substep .slabel { font-size: 10px; color: var(--muted); text-align: center; }
+  .substep.active .slabel { color: var(--text); font-weight: 600; }
+  .substep-connector {
+    width: 28px; height: 2px; background: var(--border); align-self: center;
+    margin-top: 4px;
+  }
+  .substep-connector.done { background: var(--green); }
+
+  /* ---------- detail panel ---------- */
+  .detail-panel {
+    margin: 0 32px 24px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .detail-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .detail-header .dh-left { display: flex; align-items: center; gap: 10px; }
+  .detail-header .dh-badge {
+    font-size: 10px; font-weight: 600;
+    padding: 2px 9px; border-radius: 9999px;
+    text-transform: uppercase; letter-spacing: .5px;
+  }
+  .detail-header .dh-title { font-size: 14px; font-weight: 600; }
+  .detail-header .dh-right { font-size: 11px; color: var(--muted); font-family: monospace; }
+
+  .detail-body { padding: 0; }
+
+  .detail-row {
+    display: grid; grid-template-columns: 140px 1fr 100px;
+    padding: 10px 20px; border-bottom: 1px solid var(--border);
+    font-size: 12px; align-items: center;
+    cursor: pointer; transition: background .15s;
+  }
+  .detail-row:hover { background: rgba(255,255,255,.02); }
+  .detail-row:last-child { border-bottom: none; }
+  .detail-row .dr-key { color: var(--muted); }
+  .detail-row .dr-val { color: var(--text); }
+  .detail-row .dr-extra { color: var(--muted); text-align: right; font-family: monospace; font-size: 11px; }
+
+  .detail-row.expandable .dr-key::before {
+    content: '\25B6'; font-size: 8px; margin-right: 6px;
+    display: inline-block; transition: transform .2s;
+    color: var(--muted);
+  }
+  .detail-row.expandable.open .dr-key::before { transform: rotate(90deg); }
+
+  .detail-expand {
+    display: none;
+    padding: 8px 20px 12px 160px;
+    font-size: 12px; color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    line-height: 1.6;
+  }
+  .detail-expand.open { display: block; }
+
+  .bar-track {
+    height: 4px; background: var(--bg); border-radius: 2px;
+    overflow: hidden; width: 100%; max-width: 180px;
+  }
+  .bar-fill {
+    height: 100%; border-radius: 2px;
+    transition: width .4s ease;
+  }
+
+  .status-chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 10px; font-weight: 600; padding: 2px 8px;
+    border-radius: 9999px;
+  }
+  .status-chip.running { background: rgba(59,130,246,.15); color: var(--blue); }
+  .status-chip.done { background: rgba(34,197,94,.12); color: var(--green); }
+  .status-chip.pending { background: rgba(139,145,154,.12); color: var(--muted); }
+
+  /* ---------- footer ---------- */
+  .footer {
+    text-align: center; padding: 12px;
+    font-size: 10px; color: var(--muted);
+    border-top: 1px solid var(--border);
+  }
+
+  /* ---------- stats bar ---------- */
+  .stats-bar {
+    display: flex;
+    justify-content: center;
+    gap: 32px;
+    padding: 14px 32px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .stat-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+  .stat-item .stat-val {
+    font-size: 16px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .stat-item .stat-label {
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .5px;
+  }
+
+  /* ---------- elapsed timer ---------- */
+  .elapsed-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    color: var(--muted);
+    font-family: monospace;
+  }
+  .elapsed-chip .blink-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--blue);
+    animation: blinkDot 1.4s ease-in-out infinite;
+  }
+  @keyframes blinkDot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: .25; }
+  }
+
+  /* ---------- log tail ---------- */
+  .log-section {
+    margin: 0 32px 24px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .log-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 20px;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    cursor: pointer;
+    user-select: none;
+  }
+  .log-header .toggle-arrow {
+    display: inline-block;
+    font-size: 9px;
+    transition: transform .2s;
+  }
+  .log-header.open .toggle-arrow {
+    transform: rotate(90deg);
+  }
+  .log-body {
+    display: none;
+    padding: 10px 20px 14px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 11px;
+    line-height: 1.7;
+    color: var(--muted);
+    max-height: 180px;
+    overflow-y: auto;
+  }
+  .log-body.open { display: block; }
+  .log-line { white-space: nowrap; }
+  .log-line .ts { color: var(--green); }
+  .log-line .level { font-weight: 600; }
+  .log-line .level.info { color: var(--blue); }
+  .log-line .level.warn { color: var(--orange); }
+  .log-line .level.ok { color: var(--green); }
+  .log-line .fn { color: #7dd3fc; }
+
+  /* ---------- glow for active diamond ---------- */
+  @keyframes diamondPulse {
+    0%, 100% { transform: translate(-50%,-50%) rotate(45deg) scale(1); }
+    50% { transform: translate(-50%,-50%) rotate(45deg) scale(1.12); }
+  }
+  .marker.active .diamond-icon {
+    animation: diamondPulse 2s ease-in-out infinite;
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>AI INVENTOR PIPELINE</h1>
+    <span class="run-id">run-2026-0326-f7a1</span>
+  </div>
+  <div class="keys-hint">
+    <span><kbd>&larr;</kbd> <kbd>&rarr;</kbd> steps</span>
+    <span><kbd>&uarr;</kbd> <kbd>&darr;</kbd> sub-steps</span>
+  </div>
+</div>
+
+<!-- stats bar -->
+<div class="stats-bar" id="statsBar">
+  <div class="stat-item">
+    <span class="stat-val" style="color:var(--green)">42</span>
+    <span class="stat-label">Hypotheses</span>
+  </div>
+  <div class="stat-item">
+    <span class="stat-val" style="color:var(--purple)">12</span>
+    <span class="stat-label">Active</span>
+  </div>
+  <div class="stat-item">
+    <span class="stat-val" style="color:var(--blue)">3/5</span>
+    <span class="stat-label">Iteration</span>
+  </div>
+  <div class="stat-item">
+    <span class="stat-val" style="color:var(--orange)">$1.38</span>
+    <span class="stat-label">Cost</span>
+  </div>
+  <div class="stat-item">
+    <span class="stat-val" style="color:var(--text)">224k</span>
+    <span class="stat-label">Tokens</span>
+  </div>
+  <div class="stat-item">
+    <span class="elapsed-chip">
+      <span class="blink-dot"></span>
+      <span id="elapsedTimer">00:12:53</span>
+    </span>
+    <span class="stat-label">Elapsed</span>
+  </div>
+</div>
+
+<!-- big ring -->
+<div class="ring-section">
+  <div class="big-ring">
+    <canvas id="bigRingCanvas" width="170" height="170"></canvas>
+    <div class="ring-label">
+      <span class="pct" id="bigPct">0%</span>
+      <span class="sub" id="bigSub">Pipeline</span>
+    </div>
+  </div>
+</div>
+
+<!-- row 1 — diamond-in-ring markers -->
+<div class="row1-wrap">
+  <canvas class="row1-canvas" id="connectorCanvas"></canvas>
+  <div class="row1" id="row1"></div>
+</div>
+
+<!-- row 2 — sub-step dots -->
+<div class="row2-wrap">
+  <div class="row2" id="row2"></div>
+</div>
+
+<!-- detail panel -->
+<div class="detail-panel" id="detailPanel"></div>
+
+<!-- log tail -->
+<div class="log-section" id="logSection">
+  <div class="log-header" id="logToggle">
+    <span><span class="toggle-arrow">&#9654;</span> &nbsp;Recent Log Output</span>
+    <span style="font-weight:400;font-size:11px">8 entries</span>
+  </div>
+  <div class="log-body" id="logBody">
+    <div class="log-line"><span class="ts">12:41:02</span> <span class="level info">INFO </span> <span class="fn">kg_build</span> &mdash; Knowledge graph constructed: 1,247 nodes, 3,891 edges</div>
+    <div class="log-line"><span class="ts">12:41:04</span> <span class="level ok">OK   </span> <span class="fn">kg_cluster</span> &mdash; 18 thematic clusters identified via Louvain partitioning</div>
+    <div class="log-line"><span class="ts">12:42:22</span> <span class="level info">INFO </span> <span class="fn">gen_seeds</span> &mdash; Generated 42 seed hypotheses (mean novelty: 0.74)</div>
+    <div class="log-line"><span class="ts">12:42:23</span> <span class="level ok">OK   </span> <span class="fn">seed_hypo</span> &mdash; Seed stage complete in 4m 12s &mdash; proceeding to hypothesis loop</div>
+    <div class="log-line"><span class="ts">12:44:18</span> <span class="level info">INFO </span> <span class="fn">gen_hypo</span> &mdash; Round 1: 42 hypotheses generated, 12 above feasibility threshold</div>
+    <div class="log-line"><span class="ts">12:47:31</span> <span class="level info">INFO </span> <span class="fn">gen_hypo</span> &mdash; Round 2: score delta 0.082, continuing refinement</div>
+    <div class="log-line"><span class="ts">12:50:44</span> <span class="level info">INFO </span> <span class="fn">review_hypo</span> &mdash; Round 3: reviewing 12 active candidates (8/12 complete)</div>
+    <div class="log-line"><span class="ts">12:53:55</span> <span class="level warn">WARN </span> <span class="fn">review_hypo</span> &mdash; H-03 flagged: feasibility score dropped below 0.40 threshold</div>
+  </div>
+</div>
+
+<div class="footer">AI Inventor &mdash; Pipeline Monitor v3.03</div>
+
+<script>
+// ============================================================
+//  DATA
+// ============================================================
+const COLORS = {
+  green: '#22c55e', purple: '#a78bfa', blue: '#3b82f6', orange: '#f59e0b',
+  bg: '#1a1d23', surface: '#22262e', border: '#2e3440',
+  text: '#e2e4e9', muted: '#8b919a'
+};
+
+const STEPS = [
+  {
+    id: 'seed', label: 'Seed Hypotheses', color: COLORS.green, pct: 100, status: 'done',
+    icon: '\u2714',
+    subs: [
+      { id: 'kg_build', label: 'Build KG', status: 'done' },
+      { id: 'kg_cluster', label: 'Cluster', status: 'done' },
+      { id: 'gen_seeds', label: 'Gen Seeds', status: 'done' },
+    ],
+    detail: {
+      title: 'Seed Hypothesis Generation',
+      badge: { text: 'DONE', bg: 'rgba(34,197,94,.15)', color: COLORS.green },
+      time: '4m 12s',
+      rows: [
+        { key: 'Knowledge Graph', val: '1,247 nodes / 3,891 edges', extra: '2.1s' },
+        { key: 'Clusters Found', val: '18 thematic clusters', extra: '0.8s' },
+        { key: 'Seeds Generated', val: '42 seed hypotheses', extra: '1m 18s',
+          expand: 'Top seeds span cross-domain intersections: bio-inspired computing (12), quantum error correction (8), neuromorphic architectures (7), and hybrid classical-quantum approaches (15). Each seed includes domain tags, novelty score, and feasibility estimate.' },
+        { key: 'Novelty Scores', val: 'Mean: 0.74 | Median: 0.71', extra: '',
+          expand: 'Distribution: 0.9+: 4 seeds, 0.7-0.9: 21 seeds, 0.5-0.7: 12 seeds, <0.5: 5 seeds. Novelty is computed via embedding distance from the existing literature corpus.' },
+        { key: 'Feasibility', val: 'Mean: 0.68 | High: 23 / Low: 19', extra: '',
+          expand: 'Feasibility scoring considers resource requirements, existing tool availability, and estimated complexity. Seeds with feasibility below 0.4 are auto-demoted but retained for cross-pollination potential.' },
+        { key: 'Domain Coverage', val: '4 primary domains, 7 cross-domain', extra: '',
+          expand: 'Bio-inspired computing (12), quantum error correction (8), neuromorphic architectures (7), hybrid classical-quantum (15). Cross-domain seeds bridge two or more of these areas.' },
+        { key: 'Token Usage', val: '48,200 prompt / 12,400 completion', extra: '$0.31' },
+        { key: 'Model', val: 'claude-opus-4-6 (temperature: 0.7)', extra: '' },
+      ]
+    }
+  },
+  {
+    id: 'hypo', label: 'Hypothesis Loop', color: COLORS.purple, pct: 72, status: 'running',
+    icon: '\u21BB',
+    subs: [
+      { id: 'gen_hypo', label: 'Generate', status: 'done' },
+      { id: 'review_hypo', label: 'Review', status: 'active' },
+      { id: 'refine_hypo', label: 'Refine', status: 'pending' },
+      { id: 'converge', label: 'Converge', status: 'pending' },
+    ],
+    detail: {
+      title: 'Hypothesis Loop — Iteration 3/5',
+      badge: { text: 'RUNNING', bg: 'rgba(59,130,246,.15)', color: COLORS.blue },
+      time: '8m 41s',
+      rows: [
+        { key: 'Current Iteration', val: 'Round 3 of 5 — reviewing candidates', extra: '' },
+        { key: 'Hypotheses Active', val: '12 active / 30 pruned', extra: '' },
+        { key: 'Review Status', val: '8 of 12 reviewed', extra: '66%',
+          expand: 'Reviewer model evaluates each hypothesis on novelty, feasibility, and impact dimensions. Scores are aggregated with exponential weighting across rounds. Hypotheses below threshold 0.45 are pruned automatically.' },
+        { key: 'Top Candidate', val: 'H-07: Neuromorphic error correction via spiking autoencoders', extra: '0.91',
+          expand: 'Proposes using spiking neural network autoencoders for real-time quantum error correction. Combines biological plausibility with hardware-efficient syndrome decoding. Reviewer flagged potential scalability concerns above 100 qubits.' },
+        { key: 'Convergence', val: 'Score delta: 0.034 (target < 0.01)', extra: '',
+          expand: 'Convergence is measured as the maximum absolute score change across all active hypotheses between rounds. Once delta falls below 0.01, the loop exits. Current trajectory suggests 1-2 more iterations needed.' },
+        { key: 'Pruned This Round', val: '4 hypotheses (H-03, H-11, H-19, H-28)', extra: '',
+          expand: 'H-03: feasibility collapsed after domain expert check. H-11: duplicate of H-07 after refinement. H-19: novelty score regression. H-28: infeasible hardware requirements identified.' },
+        { key: 'Token Usage', val: '124,800 prompt / 38,600 completion', extra: '$1.07' },
+        { key: 'Model', val: 'claude-opus-4-6 (temperature: 0.4)', extra: '' },
+        { key: 'Retry Count', val: '1 (rate limit at 12:46:02, resumed after 8s)', extra: '' },
+      ]
+    }
+  },
+  {
+    id: 'invent', label: 'Invention Loop', color: COLORS.blue, pct: 0, status: 'pending',
+    icon: '\u25CB',
+    subs: [
+      { id: 'gen_strat', label: 'Strategy', status: 'pending' },
+      { id: 'gen_plan', label: 'Plan', status: 'pending' },
+      { id: 'gen_paper', label: 'Draft', status: 'pending' },
+      { id: 'review_p', label: 'Review', status: 'pending' },
+    ],
+    detail: {
+      title: 'Invention Loop',
+      badge: { text: 'PENDING', bg: 'rgba(139,145,154,.12)', color: COLORS.muted },
+      time: '--',
+      rows: [
+        { key: 'Status', val: 'Awaiting hypothesis convergence', extra: '',
+          expand: 'The invention loop begins once the hypothesis review loop converges (score delta below 0.01). This stage takes the top-ranked hypothesis and develops it into a full research strategy, plan, and draft paper.' },
+        { key: 'Strategy', val: 'Not started', extra: '',
+          expand: 'Strategy generation produces a research direction document covering motivation, related work positioning, technical approach outline, and expected contributions. Typically generates 3 strategy variants for selection.' },
+        { key: 'Plan', val: 'Not started', extra: '' },
+        { key: 'Paper Draft', val: 'Not started', extra: '' },
+        { key: 'Review', val: 'Not started', extra: '' },
+        { key: 'Est. Duration', val: '~15-20 min based on recent runs', extra: '' },
+        { key: 'Est. Cost', val: '~$2.50-4.00 (depends on revision rounds)', extra: '' },
+      ]
+    }
+  },
+  {
+    id: 'paper', label: 'Paper & Repo', color: COLORS.orange, pct: 0, status: 'pending',
+    icon: '\u25CB',
+    subs: [
+      { id: 'artifacts', label: 'Artifacts', status: 'pending' },
+      { id: 'viz', label: 'Viz', status: 'pending' },
+      { id: 'full_paper', label: 'Full Paper', status: 'pending' },
+    ],
+    detail: {
+      title: 'Paper & Repository Generation',
+      badge: { text: 'PENDING', bg: 'rgba(139,145,154,.12)', color: COLORS.muted },
+      time: '--',
+      rows: [
+        { key: 'Status', val: 'Awaiting invention loop completion', extra: '',
+          expand: 'Final stage transforms the reviewed paper draft into a complete LaTeX paper with accompanying code artifacts, visualizations, and a Git repository.' },
+        { key: 'Artifacts', val: 'Not started', extra: '',
+          expand: 'Generates Python demo scripts, Jupyter notebooks, and supporting utility modules. Each artifact includes inline documentation and is tested for import correctness before inclusion.' },
+        { key: 'Visualizations', val: 'Not started', extra: '',
+          expand: 'Produces matplotlib/plotly figures for key results: architecture diagrams, performance curves, ablation charts, and comparison tables. Output in both SVG and PNG formats.' },
+        { key: 'Full Paper', val: 'Not started', extra: '' },
+        { key: 'Repository', val: 'Not started', extra: '' },
+        { key: 'Est. Duration', val: '~8-12 min', extra: '' },
+        { key: 'Est. Cost', val: '~$1.20-2.00', extra: '' },
+      ]
+    }
+  }
+];
+
+let activeStep = 1;
+let activeSub = 1;
+
+// ============================================================
+//  UTILITY — drawing helpers
+// ============================================================
+function drawArc(ctx, cx, cy, r, startDeg, endDeg, color, width) {
+  const toRad = d => (d - 90) * Math.PI / 180;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, toRad(startDeg), toRad(endDeg));
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+}
+
+// ============================================================
+//  BIG RING
+// ============================================================
+function renderBigRing() {
+  const cvs = document.getElementById('bigRingCanvas');
+  const ctx = cvs.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  cvs.width = 170 * dpr; cvs.height = 170 * dpr;
+  cvs.style.width = '170px'; cvs.style.height = '170px';
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, 170, 170);
+
+  const cx = 85, cy = 85, r = 72, w = 7;
+  // track
+  drawArc(ctx, cx, cy, r, 0, 360, COLORS.border, w);
+
+  // compute overall pct
+  let totalPct = 0;
+  STEPS.forEach((s, i) => { totalPct += s.pct * (1 / STEPS.length); });
+
+  // segments
+  let angle = 0;
+  const gap = 4;
+  const segSpan = (360 - gap * STEPS.length) / STEPS.length;
+  STEPS.forEach((s) => {
+    const filled = segSpan * (s.pct / 100);
+    if (filled > 0) {
+      drawArc(ctx, cx, cy, r, angle, angle + filled, s.color, w);
+    }
+    angle += segSpan + gap;
+  });
+
+  document.getElementById('bigPct').textContent = Math.round(totalPct) + '%';
+  document.getElementById('bigSub').textContent = STEPS[activeStep].label;
+}
+
+// ============================================================
+//  ROW 1 — diamond-in-ring markers
+// ============================================================
+function renderRow1() {
+  const container = document.getElementById('row1');
+  container.innerHTML = '';
+
+  STEPS.forEach((step, i) => {
+    const m = document.createElement('div');
+    m.className = 'marker' + (i === activeStep ? ' active' : '');
+    m.dataset.idx = i;
+
+    // diamond-ring container
+    const dr = document.createElement('div');
+    dr.className = 'diamond-ring';
+
+    const cvs = document.createElement('canvas');
+    cvs.width = 42; cvs.height = 42;
+    cvs.style.width = '42px'; cvs.style.height = '42px';
+    dr.appendChild(cvs);
+
+    // draw ring percentage arc
+    const ctx = cvs.getContext('2d');
+    const cx = 21, cy = 21, r = 18, w = 3;
+    drawArc(ctx, cx, cy, r, 0, 360, COLORS.border, w);
+    if (step.pct > 0) {
+      drawArc(ctx, cx, cy, r, 0, 3.6 * step.pct, step.color, w);
+    }
+    // active glow ring
+    if (i === activeStep) {
+      ctx.shadowColor = step.color;
+      ctx.shadowBlur = 10;
+      drawArc(ctx, cx, cy, r, 0, 3.6 * step.pct, step.color, w);
+      ctx.shadowBlur = 0;
+    }
+
+    // diamond icon
+    const diamond = document.createElement('div');
+    diamond.className = 'diamond-icon';
+    diamond.style.background = step.status === 'pending' ? COLORS.surface : step.color + '22';
+    diamond.style.border = '2px solid ' + (step.status === 'pending' ? COLORS.border : step.color);
+    if (i === activeStep) {
+      diamond.style.boxShadow = '0 0 12px ' + step.color + '66';
+    }
+    const span = document.createElement('span');
+    span.textContent = step.icon;
+    span.style.color = step.status === 'pending' ? COLORS.muted : step.color;
+    span.style.fontSize = step.status === 'done' ? '10px' : '11px';
+    diamond.appendChild(span);
+    dr.appendChild(diamond);
+    m.appendChild(dr);
+
+    // pct label
+    const pctEl = document.createElement('div');
+    pctEl.className = 'mpct';
+    pctEl.style.color = step.status === 'pending' ? COLORS.muted : step.color;
+    pctEl.textContent = step.pct + '%';
+    m.appendChild(pctEl);
+
+    // text label
+    const lbl = document.createElement('div');
+    lbl.className = 'mlabel';
+    lbl.textContent = step.label;
+    m.appendChild(lbl);
+
+    m.addEventListener('click', () => { activeStep = i; activeSub = 0; render(); });
+    container.appendChild(m);
+  });
+}
+
+// ============================================================
+//  PARTICLE CONNECTOR CANVAS (Row 1)
+// ============================================================
+let particles = [];
+let connectorRAF;
+
+function initParticles() {
+  particles = [];
+  for (let i = 0; i < STEPS.length - 1; i++) {
+    for (let p = 0; p < 5; p++) {
+      particles.push({
+        seg: i,
+        t: Math.random(),
+        speed: 0.002 + Math.random() * 0.003,
+        size: 1.5 + Math.random() * 1.5,
+        opacity: 0.3 + Math.random() * 0.5
+      });
+    }
+  }
+}
+
+function animateConnectors() {
+  const cvs = document.getElementById('connectorCanvas');
+  const row1 = document.getElementById('row1');
+  if (!row1.children.length) { connectorRAF = requestAnimationFrame(animateConnectors); return; }
+
+  cvs.width = cvs.parentElement.offsetWidth;
+  cvs.height = cvs.parentElement.offsetHeight;
+  const ctx = cvs.getContext('2d');
+  ctx.clearRect(0, 0, cvs.width, cvs.height);
+
+  const markers = row1.querySelectorAll('.marker');
+  const points = [];
+  markers.forEach(m => {
+    const rect = m.querySelector('.diamond-ring').getBoundingClientRect();
+    const pRect = cvs.parentElement.getBoundingClientRect();
+    points.push({
+      x: rect.left + rect.width / 2 - pRect.left,
+      y: rect.top + rect.height / 2 - pRect.top
+    });
+  });
+
+  // draw connector lines
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i], b = points[i + 1];
+    const step = STEPS[i];
+    const nextStep = STEPS[i + 1];
+
+    // line color based on completion
+    let lineColor = COLORS.border;
+    if (step.status === 'done') lineColor = step.color + '55';
+
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.strokeStyle = lineColor;
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([4, 4]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // animate particles
+  particles.forEach(p => {
+    if (p.seg >= points.length - 1) return;
+    const a = points[p.seg], b = points[p.seg + 1];
+    const step = STEPS[p.seg];
+
+    p.t += p.speed;
+    if (p.t > 1) p.t -= 1;
+
+    const x = a.x + (b.x - a.x) * p.t;
+    const y = a.y + (b.y - a.y) * p.t;
+
+    const clr = step.status === 'done' ? step.color : COLORS.muted;
+
+    ctx.beginPath();
+    ctx.arc(x, y, p.size, 0, Math.PI * 2);
+    ctx.fillStyle = clr;
+    ctx.globalAlpha = p.opacity;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  });
+
+  // glow at active marker node
+  const ai = activeStep;
+  if (ai < points.length) {
+    const pt = points[ai];
+    const step = STEPS[ai];
+    const grad = ctx.createRadialGradient(pt.x, pt.y, 0, pt.x, pt.y, 24);
+    grad.addColorStop(0, step.color + '30');
+    grad.addColorStop(1, step.color + '00');
+    ctx.beginPath();
+    ctx.arc(pt.x, pt.y, 24, 0, Math.PI * 2);
+    ctx.fillStyle = grad;
+    ctx.fill();
+  }
+
+  connectorRAF = requestAnimationFrame(animateConnectors);
+}
+
+// ============================================================
+//  ROW 2 — sub-step dots
+// ============================================================
+function renderRow2() {
+  const container = document.getElementById('row2');
+  container.innerHTML = '';
+  const subs = STEPS[activeStep].subs;
+
+  subs.forEach((s, i) => {
+    if (i > 0) {
+      const conn = document.createElement('div');
+      conn.className = 'substep-connector' + (s.status === 'done' || subs[i - 1].status === 'done' ? ' done' : '');
+      container.appendChild(conn);
+    }
+
+    const el = document.createElement('div');
+    el.className = 'substep' + (i === activeSub ? ' active' : '');
+    el.dataset.idx = i;
+
+    const dotWrap = document.createElement('div');
+    dotWrap.className = 'dot-line';
+    const dot = document.createElement('div');
+    dot.className = 'dot ' + s.status;
+    dotWrap.appendChild(dot);
+    el.appendChild(dotWrap);
+
+    const lbl = document.createElement('div');
+    lbl.className = 'slabel';
+    lbl.textContent = s.label;
+    el.appendChild(lbl);
+
+    el.addEventListener('click', () => { activeSub = i; render(); });
+    container.appendChild(el);
+  });
+}
+
+// ============================================================
+//  DETAIL PANEL
+// ============================================================
+function renderDetail() {
+  const panel = document.getElementById('detailPanel');
+  const step = STEPS[activeStep];
+  const d = step.detail;
+
+  let html = `
+    <div class="detail-header">
+      <div class="dh-left">
+        <span class="dh-badge" style="background:${d.badge.bg};color:${d.badge.color}">${d.badge.text}</span>
+        <span class="dh-title">${d.title}</span>
+      </div>
+      <div class="dh-right">${d.time}</div>
+    </div>
+    <div class="detail-body">
+  `;
+
+  d.rows.forEach((r, i) => {
+    const hasExpand = !!r.expand;
+    const cls = hasExpand ? 'detail-row expandable' : 'detail-row';
+
+    // Build val content — include bar if extra looks like a percentage
+    let valHtml = r.val;
+    if (r.extra && r.extra.endsWith('%')) {
+      const pctNum = parseInt(r.extra);
+      valHtml += `
+        <div style="margin-top:4px">
+          <div class="bar-track">
+            <div class="bar-fill" style="width:${pctNum}%;background:${step.color}"></div>
+          </div>
+        </div>
+      `;
+    }
+
+    html += `<div class="${cls}" data-expand="${i}">
+      <div class="dr-key">${r.key}</div>
+      <div class="dr-val">${valHtml}</div>
+      <div class="dr-extra">${r.extra || ''}</div>
+    </div>`;
+
+    if (hasExpand) {
+      html += `<div class="detail-expand" data-expand-body="${i}">${r.expand}</div>`;
+    }
+  });
+
+  html += '</div>';
+  panel.innerHTML = html;
+
+  // expandable row clicks
+  panel.querySelectorAll('.detail-row.expandable').forEach(row => {
+    row.addEventListener('click', () => {
+      const idx = row.dataset.expand;
+      const body = panel.querySelector(`[data-expand-body="${idx}"]`);
+      row.classList.toggle('open');
+      body.classList.toggle('open');
+    });
+  });
+}
+
+// ============================================================
+//  KEYBOARD NAV
+// ============================================================
+document.addEventListener('keydown', (e) => {
+  const subs = STEPS[activeStep].subs;
+
+  if (e.key === 'ArrowRight') {
+    e.preventDefault();
+    if (activeStep < STEPS.length - 1) { activeStep++; activeSub = 0; render(); }
+  } else if (e.key === 'ArrowLeft') {
+    e.preventDefault();
+    if (activeStep > 0) { activeStep--; activeSub = 0; render(); }
+  } else if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    if (activeSub < subs.length - 1) { activeSub++; render(); }
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (activeSub > 0) { activeSub--; render(); }
+  }
+});
+
+// ============================================================
+//  RENDER
+// ============================================================
+function render() {
+  renderBigRing();
+  renderRow1();
+  renderRow2();
+  renderDetail();
+}
+
+// ============================================================
+//  INIT
+// ============================================================
+initParticles();
+render();
+animateConnectors();
+
+// resize handler
+window.addEventListener('resize', () => { render(); });
+
+// ============================================================
+//  LOG TOGGLE
+// ============================================================
+document.getElementById('logToggle').addEventListener('click', () => {
+  const header = document.getElementById('logToggle');
+  const body = document.getElementById('logBody');
+  header.classList.toggle('open');
+  body.classList.toggle('open');
+});
+
+// ============================================================
+//  ELAPSED TIMER
+// ============================================================
+let elapsedSeconds = 12 * 60 + 53; // start at 12:53
+function tickTimer() {
+  elapsedSeconds++;
+  const h = Math.floor(elapsedSeconds / 3600);
+  const m = Math.floor((elapsedSeconds % 3600) / 60);
+  const s = elapsedSeconds % 60;
+  const pad = n => String(n).padStart(2, '0');
+  document.getElementById('elapsedTimer').textContent =
+    pad(h) + ':' + pad(m) + ':' + pad(s);
+}
+setInterval(tickTimer, 1000);
+
+// ============================================================
+//  SMOOTH RING ANIMATION ON LOAD
+// ============================================================
+(function animateRingOnLoad() {
+  const original = STEPS.map(s => s.pct);
+  const startTime = performance.now();
+  const duration = 900;
+
+  function frame(now) {
+    const t = Math.min((now - startTime) / duration, 1);
+    const ease = t < 0.5
+      ? 4 * t * t * t
+      : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+    STEPS.forEach((s, i) => { s.pct = Math.round(original[i] * ease); });
+    renderBigRing();
+    renderRow1();
+
+    if (t < 1) requestAnimationFrame(frame);
+    else STEPS.forEach((s, i) => { s.pct = original[i]; });
+  }
+  requestAnimationFrame(frame);
+})();
+
+// ============================================================
+//  TOOLTIP HOVER FEEDBACK ON MARKERS
+// ============================================================
+document.getElementById('row1').addEventListener('mouseover', (e) => {
+  const marker = e.target.closest('.marker');
+  if (!marker) return;
+  const idx = parseInt(marker.dataset.idx);
+  const step = STEPS[idx];
+  marker.title = step.label + ' — ' + step.pct + '% (' + step.status + ')';
+});
+
+// ============================================================
+//  SUBSTEP CLICK — update detail header context
+// ============================================================
+document.getElementById('row2').addEventListener('click', (e) => {
+  const sub = e.target.closest('.substep');
+  if (!sub) return;
+  const idx = parseInt(sub.dataset.idx);
+  const step = STEPS[activeStep];
+  const subData = step.subs[idx];
+  // Update detail title to show sub-step context
+  const titleEl = document.querySelector('.dh-title');
+  if (titleEl && subData) {
+    titleEl.textContent = step.detail.title + ' / ' + subData.label;
+  }
+});
+</script>
+</body>
+</html>

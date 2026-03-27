@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Minimal Diamond Dots</title>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #12121a;
+    --border: #1e1e2e;
+    --text: #c8c8d4;
+    --text-dim: #6a6a80;
+    --text-bright: #eeeef4;
+
+    --seed: #10b981;
+    --hypo: #6366f1;
+    --invention: #f59e0b;
+    --paper: #64748b;
+
+    --seed-glow: rgba(16, 185, 129, 0.5);
+    --hypo-glow: rgba(99, 102, 241, 0.5);
+    --invention-glow: rgba(245, 158, 11, 0.5);
+
+    --accent: #818cf8;
+    --dot-done: #4ade80;
+    --dot-active: #facc15;
+    --dot-pending: #334155;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Top Strip ── */
+  .strip {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 32px;
+    backdrop-filter: blur(12px);
+  }
+
+  /* Row container shared */
+  .dot-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 14px 0;
+    position: relative;
+    overflow: hidden;
+    max-height: 0;
+    opacity: 0;
+    transition: max-height 0.4s ease, opacity 0.35s ease, padding 0.4s ease;
+  }
+  .dot-row.visible {
+    max-height: 80px;
+    opacity: 1;
+    padding: 14px 0;
+  }
+  .dot-row.row-1 {
+    max-height: 80px;
+    opacity: 1;
+    padding: 18px 0 14px;
+  }
+
+  /* Connector line behind dots */
+  .dot-row .connector {
+    position: absolute;
+    height: 2px;
+    background: var(--border);
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 0;
+    border-radius: 1px;
+  }
+
+  /* ── Diamond (Row 1) ── */
+  .diamond-node {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    z-index: 1;
+    cursor: pointer;
+    position: relative;
+    transition: transform 0.2s ease;
+  }
+  .diamond-node:hover { transform: scale(1.08); }
+
+  .diamond {
+    width: 20px;
+    height: 20px;
+    transform: rotate(45deg);
+    border-radius: 3px;
+    transition: box-shadow 0.3s ease, background 0.3s ease, border-color 0.3s ease;
+    position: relative;
+  }
+  .diamond.done {
+    background: var(--dot-done);
+    border: 2px solid var(--dot-done);
+  }
+  .diamond.active {
+    border: 2px solid currentColor;
+    background: currentColor;
+  }
+  .diamond.active.glow {
+    box-shadow: 0 0 12px 4px var(--glow-color), 0 0 24px 8px var(--glow-color);
+    animation: diamondPulse 2.5s ease-in-out infinite;
+  }
+  .diamond.pending {
+    background: transparent;
+    border: 2px solid var(--dot-pending);
+  }
+
+  .diamond .check {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(-45deg);
+    font-size: 10px;
+    color: var(--bg);
+    font-weight: 700;
+    line-height: 1;
+  }
+
+  @keyframes diamondPulse {
+    0%, 100% { box-shadow: 0 0 10px 3px var(--glow-color); }
+    50% { box-shadow: 0 0 18px 6px var(--glow-color); }
+  }
+
+  .diamond-label {
+    font-size: 10px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    white-space: nowrap;
+    transition: color 0.3s ease;
+  }
+  .diamond-node.selected .diamond-label,
+  .diamond-node:hover .diamond-label {
+    color: var(--text-bright);
+  }
+
+  .diamond-badge {
+    font-size: 9px;
+    color: var(--text-dim);
+    margin-top: -3px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .diamond-spacer {
+    flex: 1;
+    max-width: 120px;
+    min-width: 40px;
+    height: 2px;
+    background: var(--border);
+    z-index: 0;
+    position: relative;
+  }
+  .diamond-spacer.done-segment {
+    background: linear-gradient(90deg, var(--dot-done), var(--dot-done));
+  }
+  .diamond-spacer.active-segment {
+    background: linear-gradient(90deg, var(--dot-done), var(--border));
+  }
+
+  /* ── Round Dots (Rows 2 & 3) ── */
+  .round-node {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+    z-index: 1;
+    cursor: pointer;
+    transition: transform 0.2s ease;
+  }
+  .round-node:hover { transform: scale(1.12); }
+
+  .dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    transition: box-shadow 0.3s ease, background 0.3s ease, border-color 0.3s ease;
+  }
+  .dot.done {
+    background: var(--dot-done);
+    border: 2px solid var(--dot-done);
+  }
+  .dot.active {
+    background: var(--dot-active);
+    border: 2px solid var(--dot-active);
+    box-shadow: 0 0 8px 3px rgba(250, 204, 21, 0.45);
+    animation: dotGlow 2s ease-in-out infinite;
+  }
+  .dot.pending {
+    background: transparent;
+    border: 2px solid var(--dot-pending);
+  }
+
+  @keyframes dotGlow {
+    0%, 100% { box-shadow: 0 0 6px 2px rgba(250, 204, 21, 0.35); }
+    50% { box-shadow: 0 0 12px 4px rgba(250, 204, 21, 0.55); }
+  }
+
+  .dot-label {
+    font-size: 9px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    white-space: nowrap;
+    transition: color 0.2s ease;
+  }
+  .round-node:hover .dot-label,
+  .round-node.selected .dot-label {
+    color: var(--text-bright);
+  }
+
+  .dot-spacer {
+    flex: 1;
+    max-width: 80px;
+    min-width: 24px;
+    height: 1px;
+    background: var(--border);
+    z-index: 0;
+  }
+  .dot-spacer.done-line { background: var(--dot-done); }
+  .dot-spacer.active-line {
+    background: linear-gradient(90deg, var(--dot-done), var(--border));
+  }
+
+  /* row divider */
+  .row-divider {
+    height: 1px;
+    background: var(--border);
+    margin: 0 60px;
+    opacity: 0;
+    transition: opacity 0.35s ease;
+  }
+  .row-divider.visible { opacity: 1; }
+
+  /* ── Content Panel ── */
+  .content {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 28px 32px 60px;
+  }
+
+  .content-header {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .content-header h2 {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-bright);
+  }
+  .content-header .tag {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: rgba(250, 204, 21, 0.12);
+    color: var(--dot-active);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+  }
+
+  .content-block {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px 24px;
+    margin-bottom: 16px;
+  }
+  .content-block h3 {
+    font-size: 12px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 12px;
+  }
+  .content-block p, .content-block li {
+    font-size: 13px;
+    line-height: 1.7;
+    color: var(--text);
+  }
+  .content-block ul {
+    list-style: none;
+    padding: 0;
+  }
+  .content-block li::before {
+    content: ">";
+    color: var(--text-dim);
+    margin-right: 8px;
+    font-weight: 600;
+  }
+  .content-block li + li { margin-top: 6px; }
+
+  .metric-row {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  .metric-card {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    text-align: center;
+  }
+  .metric-card .val {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text-bright);
+    font-variant-numeric: tabular-nums;
+  }
+  .metric-card .lbl {
+    font-size: 9px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-top: 4px;
+  }
+
+  .log-block {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    font-size: 12px;
+    line-height: 1.8;
+    color: var(--text-dim);
+    max-height: 200px;
+    overflow-y: auto;
+  }
+  .log-block .ts { color: #4ade80; }
+  .log-block .lvl { color: var(--text); }
+  .log-block .msg { color: var(--text-dim); }
+
+  .log-block::-webkit-scrollbar { width: 4px; }
+  .log-block::-webkit-scrollbar-track { background: transparent; }
+  .log-block::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* Fade-in for content */
+  .content { animation: fadeUp 0.4s ease; }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Selection highlight on row 1 */
+  .diamond-node.selected .diamond {
+    outline: 2px solid rgba(255,255,255,0.15);
+    outline-offset: 4px;
+    border-radius: 3px;
+  }
+</style>
+</head>
+<body>
+
+<!-- ── Top Strip ── -->
+<div class="strip" id="strip">
+
+  <!-- Row 1: Diamond modules -->
+  <div class="dot-row row-1" id="row1"></div>
+
+  <div class="row-divider" id="divider1"></div>
+
+  <!-- Row 2: Sub-steps (round dots) -->
+  <div class="dot-row" id="row2"></div>
+
+  <div class="row-divider" id="divider2"></div>
+
+  <!-- Row 3: Detail items (round dots) -->
+  <div class="dot-row" id="row3"></div>
+</div>
+
+<!-- ── Content ── -->
+<div class="content" id="content"></div>
+
+<script>
+// ── Data Model ──
+const DATA = {
+  modules: [
+    {
+      id: "seed",
+      label: "Seed",
+      color: "var(--seed)",
+      glow: "var(--seed-glow)",
+      state: "done",
+      badge: null,
+      substeps: [
+        { id: "kg_build", label: "KG Build", state: "done" },
+        { id: "embed", label: "Embed", state: "done" },
+        { id: "cluster", label: "Cluster", state: "done" },
+        { id: "sample", label: "Sample", state: "done" }
+      ],
+      details: null,
+      content: {
+        title: "Seed Hypotheses",
+        tag: "complete",
+        tagColor: "rgba(74,222,128,0.12)",
+        tagText: "#4ade80",
+        blocks: [
+          {
+            heading: "Knowledge Graph",
+            text: "Built invention KG from 2,847 papers across 14 domains. Extracted 18,420 concept nodes and 43,102 relational edges."
+          },
+          {
+            heading: "Seeded Hypotheses",
+            items: [
+              "142 cross-domain hypotheses generated via analogical bridging",
+              "Embedding similarity filtered to top 68 candidates",
+              "Clustered into 12 thematic groups for diversity"
+            ]
+          }
+        ],
+        metrics: [
+          { val: "2,847", lbl: "Papers Ingested" },
+          { val: "18.4k", lbl: "Concept Nodes" },
+          { val: "142", lbl: "Hypotheses Seeded" }
+        ]
+      }
+    },
+    {
+      id: "hypo",
+      label: "Hypo",
+      color: "var(--hypo)",
+      glow: "var(--hypo-glow)",
+      state: "active",
+      badge: "8.4",
+      substeps: [
+        { id: "gen", label: "Generate", state: "done" },
+        { id: "review", label: "Review", state: "done" },
+        { id: "refine", label: "Refine", state: "active" },
+        { id: "score", label: "Score", state: "pending" },
+        { id: "select", label: "Select", state: "pending" }
+      ],
+      details: [
+        { id: "novelty", label: "Novelty", state: "done" },
+        { id: "feasibility", label: "Feasible", state: "done" },
+        { id: "specificity", label: "Specific", state: "active" },
+        { id: "testability", label: "Testable", state: "pending" }
+      ],
+      content: {
+        title: "Hypothesis Loop",
+        tag: "refining",
+        tagColor: "rgba(99,102,241,0.12)",
+        tagText: "#818cf8",
+        blocks: [
+          {
+            heading: "Current Hypothesis",
+            text: "Compositional activation steering via sparse concept dictionaries enables controllable multi-attribute text generation without retraining, achieving attribute disentanglement through orthogonal subspace projection in the residual stream."
+          },
+          {
+            heading: "Review Feedback (Round 3)",
+            items: [
+              "Novelty: orthogonal subspace constraint is well-differentiated from prior SAE steering",
+              "Feasibility: requires only forward-pass intervention, no gradient updates",
+              "Specificity: needs tighter operationalization of 'disentanglement' metric",
+              "Testability: ablation plan should include single-attribute baselines"
+            ]
+          }
+        ],
+        metrics: [
+          { val: "8.4", lbl: "Composite Score" },
+          { val: "3/5", lbl: "Review Round" },
+          { val: "0.91", lbl: "Novelty Score" }
+        ]
+      }
+    },
+    {
+      id: "invention",
+      label: "Invention",
+      color: "var(--invention)",
+      glow: "var(--invention-glow)",
+      state: "active",
+      badge: "3/5",
+      substeps: [
+        { id: "strat", label: "Strategy", state: "done" },
+        { id: "plan", label: "Plan", state: "done" },
+        { id: "art", label: "Artifacts", state: "active" },
+        { id: "paper", label: "Paper", state: "pending" },
+        { id: "review", label: "Review", state: "pending" },
+        { id: "update", label: "Update", state: "pending" }
+      ],
+      details: [
+        { id: "baseline", label: "Baseline", state: "done" },
+        { id: "dataset", label: "Dataset", state: "done" },
+        { id: "proof", label: "Proof", state: "done" },
+        { id: "ablation", label: "Ablation", state: "active" },
+        { id: "eval", label: "Eval", state: "pending" }
+      ],
+      content: {
+        title: "Invention Loop  /  Artifacts",
+        tag: "ablation",
+        tagColor: "rgba(245,158,11,0.12)",
+        tagText: "#f59e0b",
+        blocks: [
+          {
+            heading: "Ablation Study",
+            text: "Generating ablation artifact: removing the orthogonality constraint from subspace projection to measure disentanglement degradation. Comparing full method vs. unconstrained steering across 4 attribute pairs."
+          },
+          {
+            heading: "Completed Artifacts",
+            items: [
+              "Baseline: vanilla prompting + standard SAE steering (5 attributes)",
+              "Dataset: 2,400 test prompts across 6 attribute combinations",
+              "Proof: orthogonal projection preserves 94.2% of single-attribute accuracy"
+            ]
+          }
+        ],
+        metrics: [
+          { val: "3/5", lbl: "Artifacts Done" },
+          { val: "94.2%", lbl: "Proof Accuracy" },
+          { val: "2,400", lbl: "Test Prompts" }
+        ],
+        logs: [
+          { ts: "14:22:07", lvl: "INFO", msg: "ablation_gen | removing orthogonality constraint" },
+          { ts: "14:22:09", lvl: "INFO", msg: "ablation_gen | running unconstrained steering on 4 attr pairs" },
+          { ts: "14:22:14", lvl: "INFO", msg: "ablation_gen | pair 1/4 complete: disentanglement=0.61 (vs 0.93)" },
+          { ts: "14:22:19", lvl: "INFO", msg: "ablation_gen | pair 2/4 complete: disentanglement=0.58 (vs 0.91)" },
+          { ts: "14:22:24", lvl: "WARN", msg: "ablation_gen | pair 3/4 high variance in formality+sentiment" },
+          { ts: "14:22:28", lvl: "INFO", msg: "ablation_gen | pair 3/4 complete: disentanglement=0.49 (vs 0.89)" },
+          { ts: "14:22:31", lvl: "INFO", msg: "ablation_gen | running pair 4/4: toxicity+complexity ..." }
+        ]
+      }
+    },
+    {
+      id: "paper",
+      label: "Paper",
+      color: "var(--paper)",
+      glow: "rgba(100,116,139,0.4)",
+      state: "pending",
+      badge: null,
+      substeps: [
+        { id: "outline", label: "Outline", state: "pending" },
+        { id: "sections", label: "Sections", state: "pending" },
+        { id: "viz", label: "Visuals", state: "pending" },
+        { id: "compile", label: "Compile", state: "pending" }
+      ],
+      details: null,
+      content: {
+        title: "Paper Generation",
+        tag: "waiting",
+        tagColor: "rgba(100,116,139,0.12)",
+        tagText: "#94a3b8",
+        blocks: [
+          {
+            heading: "Status",
+            text: "Paper generation will begin once the invention loop completes all 5 artifact iterations and the review cycle converges."
+          }
+        ],
+        metrics: [
+          { val: "--", lbl: "Sections" },
+          { val: "--", lbl: "Figures" },
+          { val: "--", lbl: "References" }
+        ]
+      }
+    }
+  ]
+};
+
+// ── State ──
+let selectedModule = 2;  // invention
+let selectedSubstep = 2; // artifacts
+
+// ── Render Row 1: Diamonds ──
+function renderRow1() {
+  const row = document.getElementById("row1");
+  row.innerHTML = "";
+  const mods = DATA.modules;
+
+  mods.forEach((mod, i) => {
+    // Diamond node
+    const node = document.createElement("div");
+    node.className = "diamond-node" + (i === selectedModule ? " selected" : "");
+    node.onclick = () => selectModule(i);
+
+    const d = document.createElement("div");
+    d.className = "diamond " + mod.state;
+    d.style.color = mod.color;
+    if (mod.state === "active") {
+      d.classList.add("glow");
+      d.style.setProperty("--glow-color", mod.glow);
+    }
+    if (mod.state === "done") {
+      const chk = document.createElement("span");
+      chk.className = "check";
+      chk.textContent = "\u2713";
+      d.appendChild(chk);
+    }
+
+    const lbl = document.createElement("div");
+    lbl.className = "diamond-label";
+    lbl.textContent = mod.label;
+
+    node.appendChild(d);
+    node.appendChild(lbl);
+
+    if (mod.badge) {
+      const badge = document.createElement("div");
+      badge.className = "diamond-badge";
+      badge.textContent = mod.badge;
+      node.appendChild(badge);
+    }
+
+    row.appendChild(node);
+
+    // Spacer between diamonds
+    if (i < mods.length - 1) {
+      const spacer = document.createElement("div");
+      spacer.className = "diamond-spacer";
+      if (mods[i].state === "done" && mods[i + 1].state === "done") {
+        spacer.classList.add("done-segment");
+      } else if (mods[i].state === "done" && mods[i + 1].state !== "pending") {
+        spacer.classList.add("active-segment");
+      }
+      row.appendChild(spacer);
+    }
+  });
+}
+
+// ── Render Row 2: Substeps (round dots) ──
+function renderRow2() {
+  const row = document.getElementById("row2");
+  const divider = document.getElementById("divider1");
+  const mod = DATA.modules[selectedModule];
+  row.innerHTML = "";
+
+  if (!mod.substeps || mod.substeps.length === 0) {
+    row.classList.remove("visible");
+    divider.classList.remove("visible");
+    return;
+  }
+
+  divider.classList.add("visible");
+
+  mod.substeps.forEach((step, i) => {
+    const node = document.createElement("div");
+    node.className = "round-node" + (i === selectedSubstep ? " selected" : "");
+    node.onclick = () => selectSubstep(i);
+
+    const dot = document.createElement("div");
+    dot.className = "dot " + step.state;
+
+    const lbl = document.createElement("div");
+    lbl.className = "dot-label";
+    lbl.textContent = step.label;
+
+    node.appendChild(dot);
+    node.appendChild(lbl);
+    row.appendChild(node);
+
+    if (i < mod.substeps.length - 1) {
+      const spacer = document.createElement("div");
+      spacer.className = "dot-spacer";
+      const next = mod.substeps[i + 1];
+      if (step.state === "done" && next.state === "done") {
+        spacer.classList.add("done-line");
+      } else if (step.state === "done" && next.state !== "pending") {
+        spacer.classList.add("active-line");
+      }
+      row.appendChild(spacer);
+    }
+  });
+
+  // Trigger slide-in
+  requestAnimationFrame(() => row.classList.add("visible"));
+}
+
+// ── Render Row 3: Detail items (round dots) ──
+function renderRow3() {
+  const row = document.getElementById("row3");
+  const divider = document.getElementById("divider2");
+  const mod = DATA.modules[selectedModule];
+  row.innerHTML = "";
+
+  if (!mod.details || mod.details.length === 0) {
+    row.classList.remove("visible");
+    divider.classList.remove("visible");
+    return;
+  }
+
+  divider.classList.add("visible");
+
+  mod.details.forEach((item, i) => {
+    const node = document.createElement("div");
+    node.className = "round-node";
+
+    const dot = document.createElement("div");
+    dot.className = "dot " + item.state;
+
+    const lbl = document.createElement("div");
+    lbl.className = "dot-label";
+    lbl.textContent = item.label;
+
+    node.appendChild(dot);
+    node.appendChild(lbl);
+    row.appendChild(node);
+
+    if (i < mod.details.length - 1) {
+      const spacer = document.createElement("div");
+      spacer.className = "dot-spacer";
+      const next = mod.details[i + 1];
+      if (item.state === "done" && next.state === "done") {
+        spacer.classList.add("done-line");
+      } else if (item.state === "done" && next.state !== "pending") {
+        spacer.classList.add("active-line");
+      }
+      row.appendChild(spacer);
+    }
+  });
+
+  requestAnimationFrame(() => row.classList.add("visible"));
+}
+
+// ── Render Content ──
+function renderContent() {
+  const el = document.getElementById("content");
+  const mod = DATA.modules[selectedModule];
+  const c = mod.content;
+
+  let html = `<div class="content-header">
+    <h2>${c.title}</h2>
+    <span class="tag" style="background:${c.tagColor};color:${c.tagText}">${c.tag}</span>
+  </div>`;
+
+  // Metrics
+  if (c.metrics) {
+    html += `<div class="metric-row">`;
+    c.metrics.forEach(m => {
+      html += `<div class="metric-card">
+        <div class="val">${m.val}</div>
+        <div class="lbl">${m.lbl}</div>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
+  // Blocks
+  if (c.blocks) {
+    c.blocks.forEach(b => {
+      html += `<div class="content-block"><h3>${b.heading}</h3>`;
+      if (b.text) html += `<p>${b.text}</p>`;
+      if (b.items) {
+        html += `<ul>`;
+        b.items.forEach(it => { html += `<li>${it}</li>`; });
+        html += `</ul>`;
+      }
+      html += `</div>`;
+    });
+  }
+
+  // Logs
+  if (c.logs) {
+    html += `<div class="log-block">`;
+    c.logs.forEach(l => {
+      html += `<div><span class="ts">${l.ts}</span> <span class="lvl">${l.lvl.padEnd(5)}</span> <span class="msg">${l.msg}</span></div>`;
+    });
+    html += `</div>`;
+  }
+
+  el.innerHTML = html;
+}
+
+// ── Interaction ──
+function selectModule(i) {
+  selectedModule = i;
+  const mod = DATA.modules[i];
+
+  // Pick a sensible default substep: the active one, or last done
+  selectedSubstep = 0;
+  if (mod.substeps) {
+    const activeIdx = mod.substeps.findIndex(s => s.state === "active");
+    selectedSubstep = activeIdx >= 0 ? activeIdx : 0;
+  }
+
+  // Collapse rows 2/3 then re-render
+  document.getElementById("row2").classList.remove("visible");
+  document.getElementById("row3").classList.remove("visible");
+  document.getElementById("divider1").classList.remove("visible");
+  document.getElementById("divider2").classList.remove("visible");
+
+  renderRow1();
+
+  setTimeout(() => {
+    renderRow2();
+    setTimeout(() => renderRow3(), 80);
+  }, 60);
+
+  renderContent();
+}
+
+function selectSubstep(i) {
+  selectedSubstep = i;
+  renderRow2();
+}
+
+// ── Init ──
+renderRow1();
+setTimeout(() => {
+  renderRow2();
+  setTimeout(() => renderRow3(), 120);
+}, 80);
+renderContent();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Dot Map Pipeline</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#0b0e14;--surface:#12161f;--border:#1e2433;
+    --text:#c8cdd8;--text-dim:#5a6278;--text-bright:#e8ecf4;
+    --seed:#22d3ee;--hypo:#a78bfa;--invention:#f472b6;--paper:#34d399;
+    --active-glow:rgba(244,114,182,.55);
+    --ring-track:#1a1f2e;
+  }
+  body{
+    font-family:'SF Mono','Cascadia Code','JetBrains Mono',monospace;
+    background:var(--bg);color:var(--text);
+    display:flex;justify-content:center;align-items:flex-start;
+    min-height:100vh;padding:32px 16px;
+  }
+
+  /* ---- layout ---- */
+  .shell{width:720px;display:flex;flex-direction:column;gap:20px}
+  .top-bar{
+    display:flex;align-items:flex-start;gap:24px;
+    background:var(--surface);border:1px solid var(--border);
+    border-radius:14px;padding:20px 24px;
+  }
+
+  /* ---- progress ring ---- */
+  .ring-wrap{flex:0 0 80px;height:80px;position:relative}
+  .ring-svg{width:80px;height:80px;transform:rotate(-90deg)}
+  .ring-track{fill:none;stroke:var(--ring-track);stroke-width:6}
+  .ring-fill{
+    fill:none;stroke-width:6;stroke-linecap:round;
+    stroke:url(#ringGrad);
+    transition:stroke-dashoffset .6s ease;
+  }
+  .ring-label{
+    position:absolute;inset:0;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;
+    font-size:17px;font-weight:700;color:var(--text-bright);
+    line-height:1.1;
+  }
+  .ring-label small{font-size:9px;font-weight:400;color:var(--text-dim);letter-spacing:.5px;margin-top:2px}
+
+  /* ---- dot map ---- */
+  .dot-map{flex:1;display:flex;flex-direction:column;gap:6px;min-width:0}
+  .module-section{display:flex;flex-direction:column;gap:3px}
+  .module-header{
+    display:flex;align-items:center;gap:8px;
+    font-size:10px;font-weight:600;letter-spacing:.6px;
+    text-transform:uppercase;color:var(--text-dim);
+    padding:0 0 1px 0;user-select:none;
+  }
+  .module-diamond{
+    width:8px;height:8px;transform:rotate(45deg);border-radius:1.5px;
+    flex-shrink:0;
+  }
+  .module-header .iter-label{
+    margin-left:auto;font-size:9px;font-weight:400;
+    color:var(--text-dim);opacity:.6;letter-spacing:0;text-transform:none;
+  }
+  .dot-row{
+    display:flex;align-items:center;gap:0;
+    padding:2px 0 2px 18px;
+  }
+
+  /* ---- dots ---- */
+  .dot{
+    width:18px;height:18px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    cursor:pointer;position:relative;transition:transform .15s;
+    flex-shrink:0;
+  }
+  .dot:hover{transform:scale(1.25)}
+  .dot::before{
+    content:'';width:9px;height:9px;border-radius:50%;
+    transition:all .2s;
+  }
+  /* states */
+  .dot.done::before{background:var(--dot-color);opacity:.85}
+  .dot.active::before{
+    background:var(--dot-color);
+    box-shadow:0 0 8px 3px var(--dot-color),0 0 18px 5px var(--dot-color);
+    animation:pulse 1.8s ease-in-out infinite;
+  }
+  .dot.pending::before{
+    background:transparent;
+    border:1.5px solid var(--dot-color);opacity:.35;
+  }
+  .dot.selected{transform:scale(1.3)}
+  .dot.selected::after{
+    content:'';position:absolute;inset:-3px;border-radius:50%;
+    border:1.5px solid var(--dot-color);opacity:.5;
+  }
+
+  @keyframes pulse{
+    0%,100%{box-shadow:0 0 6px 2px var(--dot-color),0 0 14px 4px var(--dot-color)}
+    50%{box-shadow:0 0 12px 5px var(--dot-color),0 0 28px 10px var(--dot-color)}
+  }
+
+  /* ---- detail panel ---- */
+  .detail-panel{
+    background:var(--surface);border:1px solid var(--border);
+    border-radius:14px;padding:20px 24px;
+    min-height:140px;transition:border-color .3s;
+  }
+  .detail-panel.has-selection{border-color:color-mix(in srgb,var(--sel-color) 40%,var(--border))}
+  .detail-header{
+    display:flex;align-items:center;gap:10px;margin-bottom:12px;
+  }
+  .detail-module-badge{
+    font-size:9px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;
+    padding:3px 8px;border-radius:5px;
+    background:color-mix(in srgb,var(--badge-color) 15%,transparent);
+    color:var(--badge-color);
+  }
+  .detail-step-name{font-size:14px;font-weight:600;color:var(--text-bright)}
+  .detail-status{
+    margin-left:auto;font-size:10px;font-weight:600;letter-spacing:.4px;
+    text-transform:uppercase;
+  }
+  .detail-body{font-size:12px;line-height:1.7;color:var(--text-dim)}
+  .detail-body .kv{display:flex;gap:8px;padding:2px 0}
+  .detail-body .kv .k{color:var(--text-dim);min-width:90px;flex-shrink:0}
+  .detail-body .kv .v{color:var(--text)}
+  .detail-empty{
+    display:flex;align-items:center;justify-content:center;
+    height:100px;color:var(--text-dim);font-size:12px;
+    letter-spacing:.3px;
+  }
+
+  /* ---- keyboard hint ---- */
+  .hint{
+    text-align:center;font-size:10px;color:var(--text-dim);
+    letter-spacing:.3px;padding:4px 0;user-select:none;
+  }
+  .hint kbd{
+    display:inline-block;padding:1px 6px;border-radius:4px;
+    background:#181d28;border:1px solid var(--border);
+    font-family:inherit;font-size:10px;color:var(--text);
+    margin:0 1px;
+  }
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- ============ TOP BAR: Ring + Dot Map ============ -->
+  <div class="top-bar">
+
+    <!-- Progress Ring -->
+    <div class="ring-wrap">
+      <svg class="ring-svg" viewBox="0 0 80 80">
+        <defs>
+          <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="var(--seed)"/>
+            <stop offset="35%" stop-color="var(--hypo)"/>
+            <stop offset="65%" stop-color="var(--invention)"/>
+            <stop offset="100%" stop-color="var(--paper)"/>
+          </linearGradient>
+        </defs>
+        <circle class="ring-track" cx="40" cy="40" r="34"/>
+        <circle class="ring-fill" cx="40" cy="40" r="34"
+                stroke-dasharray="213.63" stroke-dashoffset="213.63"/>
+      </svg>
+      <div class="ring-label">
+        <span id="ringPct">0%</span>
+        <small>TOTAL</small>
+      </div>
+    </div>
+
+    <!-- Dot Map -->
+    <div class="dot-map" id="dotMap"></div>
+  </div>
+
+  <!-- ============ DETAIL PANEL ============ -->
+  <div class="detail-panel" id="detailPanel">
+    <div class="detail-empty" id="detailEmpty">Click a dot or press arrow keys to inspect a step</div>
+    <div id="detailContent" style="display:none">
+      <div class="detail-header">
+        <span class="detail-module-badge" id="detBadge"></span>
+        <span class="detail-step-name" id="detName"></span>
+        <span class="detail-status" id="detStatus"></span>
+      </div>
+      <div class="detail-body" id="detBody"></div>
+    </div>
+  </div>
+
+  <div class="hint">
+    <kbd>&larr;</kbd> <kbd>&rarr;</kbd> navigate dots
+    &nbsp;&middot;&nbsp; <kbd>Enter</kbd> expand
+    &nbsp;&middot;&nbsp; click any dot
+  </div>
+</div>
+
+<script>
+// ==================================================================
+// DATA MODEL — every step the pipeline touches
+// ==================================================================
+const MODULES = {
+  seed:      { label:'Seed',      color:'var(--seed)',      hex:'#22d3ee' },
+  hypo:      { label:'Hypo',      color:'var(--hypo)',      hex:'#a78bfa' },
+  invention: { label:'Invention', color:'var(--invention)', hex:'#f472b6' },
+  paper:     { label:'Paper',     color:'var(--paper)',     hex:'#34d399' },
+};
+
+// Steps grouped by module. Invention/hypo can have iterations.
+const PIPELINE = [
+  {
+    module:'seed', iterations:[
+      { label:null, steps:[
+        { id:'s1', name:'Collect Sources',      status:'done', duration:'12s', detail:'Fetched 48 papers from Semantic Scholar + arXiv.' },
+        { id:'s2', name:'Build Knowledge Graph', status:'done', duration:'34s', detail:'Constructed KG with 312 nodes, 876 edges across 6 research clusters.' },
+        { id:'s3', name:'Extract Seed Ideas',    status:'done', duration:'8s',  detail:'Distilled 14 seed hypotheses from frontier gap analysis.' },
+        { id:'s4', name:'Rank Seeds',            status:'done', duration:'5s',  detail:'Swiss-system ranking selected top 6 seeds for expansion.' },
+      ]}
+    ]
+  },
+  {
+    module:'hypo', iterations:[
+      { label:null, steps:[
+        { id:'h1', name:'Generate Hypotheses',  status:'done', duration:'22s', detail:'Produced 24 candidate hypotheses from 6 seeds via structured prompting.' },
+        { id:'h2', name:'Review Hypotheses',     status:'done', duration:'18s', detail:'LLM review scored novelty, feasibility, impact for each hypothesis.' },
+        { id:'h3', name:'Deduplicate',           status:'done', duration:'4s',  detail:'Semantic dedup removed 7 near-duplicates (cosine > 0.92).' },
+        { id:'h4', name:'Rank Hypotheses',       status:'done', duration:'9s',  detail:'Bradley-Terry ranking: top hypothesis scored 0.87 composite.' },
+        { id:'h5', name:'Select Top-K',          status:'done', duration:'2s',  detail:'Selected top 3 hypotheses for invention loop entry.' },
+        { id:'h6', name:'Format Output',         status:'done', duration:'1s',  detail:'Packaged hypothesis cards with citation links and confidence bands.' },
+      ]}
+    ]
+  },
+  {
+    module:'invention', iterations:[
+      { label:'Iter 1', steps:[
+        { id:'i1a', name:'Generate Strategy',   status:'done', duration:'15s', detail:'Iter 1: Devised experimental strategy with 4 sub-experiments.' },
+        { id:'i1b', name:'Generate Plan',       status:'done', duration:'20s', detail:'Iter 1: Detailed execution plan with milestones and resource estimates.' },
+        { id:'i1c', name:'Draft Paper Text',    status:'done', duration:'45s', detail:'Iter 1: 2800-word initial draft covering method, results skeleton.' },
+        { id:'i1d', name:'Review Draft',        status:'done', duration:'12s', detail:'Iter 1: Structural review flagged 3 gaps in methodology section.' },
+        { id:'i1e', name:'Revise Strategy',     status:'done', duration:'8s',  detail:'Iter 1: Incorporated review feedback, tightened claims.' },
+        { id:'i1f', name:'Checkpoint',          status:'done', duration:'1s',  detail:'Iter 1: Saved iteration state + diff for rollback capability.' },
+      ]},
+      { label:'Iter 2', steps:[
+        { id:'i2a', name:'Generate Strategy',   status:'done', duration:'11s', detail:'Iter 2: Refined strategy addresses reviewer gap in control design.' },
+        { id:'i2b', name:'Generate Plan',       status:'done', duration:'16s', detail:'Iter 2: Updated plan adds ablation study and baseline comparison.' },
+        { id:'i2c', name:'Draft Paper Text',    status:'active', duration:'--', detail:'Iter 2: Expanding results section with ablation analysis (in progress).' },
+        { id:'i2d', name:'Review Draft',        status:'pending', duration:'--', detail:'Iter 2: Pending — will evaluate completeness and coherence.' },
+        { id:'i2e', name:'Revise Strategy',     status:'pending', duration:'--', detail:'Iter 2: Pending — will adjust based on review outcome.' },
+        { id:'i2f', name:'Checkpoint',          status:'pending', duration:'--', detail:'Iter 2: Pending — final iteration checkpoint.' },
+      ]},
+    ]
+  },
+  {
+    module:'paper', iterations:[
+      { label:null, steps:[
+        { id:'p1', name:'Generate Artifact Demos', status:'pending', duration:'--', detail:'Will produce interactive code demos for key results.' },
+        { id:'p2', name:'Generate Visualizations', status:'pending', duration:'--', detail:'Will render figures, charts and architecture diagrams.' },
+        { id:'p3', name:'Compile Full Paper',      status:'pending', duration:'--', detail:'Will assemble final LaTeX document with all sections.' },
+        { id:'p4', name:'Build Repository',         status:'pending', duration:'--', detail:'Will scaffold repo with code, data links, README.' },
+        { id:'p5', name:'Final Review',             status:'pending', duration:'--', detail:'Will run automated quality and plagiarism checks.' },
+      ]}
+    ]
+  }
+];
+
+// ==================================================================
+// BUILD THE DOT MAP
+// ==================================================================
+const dotMap = document.getElementById('dotMap');
+const allDots = [];   // flat ordered list of {el, data, module}
+let selectedIdx = -1;
+
+PIPELINE.forEach(group => {
+  const mod = MODULES[group.module];
+  const section = document.createElement('div');
+  section.className = 'module-section';
+
+  group.iterations.forEach((iter, iterIdx) => {
+    // header row — only show once per module (first iter) or per iteration label
+    if (iterIdx === 0 || iter.label) {
+      const header = document.createElement('div');
+      header.className = 'module-header';
+
+      const diamond = document.createElement('span');
+      diamond.className = 'module-diamond';
+      diamond.style.background = mod.color;
+      header.appendChild(diamond);
+
+      const lbl = document.createElement('span');
+      lbl.textContent = iterIdx === 0 ? mod.label : '';
+      header.appendChild(lbl);
+
+      if (iter.label) {
+        const iterLbl = document.createElement('span');
+        iterLbl.className = 'iter-label';
+        iterLbl.textContent = iter.label;
+        header.appendChild(iterLbl);
+      }
+      section.appendChild(header);
+    }
+
+    // dot row
+    const row = document.createElement('div');
+    row.className = 'dot-row';
+
+    iter.steps.forEach(step => {
+      const dot = document.createElement('div');
+      dot.className = `dot ${step.status}`;
+      dot.style.setProperty('--dot-color', mod.color);
+      dot.setAttribute('tabindex', '-1');
+      dot.setAttribute('aria-label', `${mod.label}: ${step.name} (${step.status})`);
+      dot.setAttribute('title', step.name);
+
+      const idx = allDots.length;
+      dot.addEventListener('click', () => selectDot(idx));
+      allDots.push({ el: dot, data: step, module: group.module });
+      row.appendChild(dot);
+    });
+
+    section.appendChild(row);
+  });
+
+  dotMap.appendChild(section);
+});
+
+// ==================================================================
+// RING PROGRESS
+// ==================================================================
+function updateRing() {
+  const total = allDots.length;
+  const done = allDots.filter(d => d.data.status === 'done').length;
+  const active = allDots.filter(d => d.data.status === 'active').length;
+  const pct = Math.round(((done + active * 0.5) / total) * 100);
+
+  const circ = 2 * Math.PI * 34;  // ~213.63
+  const offset = circ - (circ * pct / 100);
+
+  const ring = document.querySelector('.ring-fill');
+  ring.style.strokeDashoffset = offset;
+
+  document.getElementById('ringPct').textContent = pct + '%';
+}
+updateRing();
+
+// ==================================================================
+// DOT SELECTION + DETAIL PANEL
+// ==================================================================
+const detailPanel  = document.getElementById('detailPanel');
+const detailEmpty  = document.getElementById('detailEmpty');
+const detailCont   = document.getElementById('detailContent');
+const detBadge     = document.getElementById('detBadge');
+const detName      = document.getElementById('detName');
+const detStatus    = document.getElementById('detStatus');
+const detBody      = document.getElementById('detBody');
+
+function selectDot(idx) {
+  if (idx < 0 || idx >= allDots.length) return;
+
+  // clear previous
+  if (selectedIdx >= 0) allDots[selectedIdx].el.classList.remove('selected');
+
+  selectedIdx = idx;
+  const {el, data, module} = allDots[idx];
+  el.classList.add('selected');
+  el.focus();
+
+  const mod = MODULES[module];
+
+  // panel styling
+  detailPanel.classList.add('has-selection');
+  detailPanel.style.setProperty('--sel-color', mod.color);
+
+  detailEmpty.style.display = 'none';
+  detailCont.style.display  = 'block';
+
+  // badge
+  detBadge.textContent = mod.label;
+  detBadge.style.setProperty('--badge-color', mod.color);
+
+  // name
+  detName.textContent = data.name;
+
+  // status
+  const statusColors = { done:'var(--paper)', active:'var(--invention)', pending:'var(--text-dim)' };
+  const statusLabels = { done:'Completed', active:'Running', pending:'Pending' };
+  detStatus.textContent = statusLabels[data.status] || data.status;
+  detStatus.style.color = statusColors[data.status] || 'var(--text)';
+
+  // body
+  detBody.innerHTML = `
+    <div class="kv"><span class="k">Step ID</span><span class="v">${data.id}</span></div>
+    <div class="kv"><span class="k">Duration</span><span class="v">${data.duration}</span></div>
+    <div class="kv"><span class="k">Position</span><span class="v">${idx + 1} of ${allDots.length}</span></div>
+    <div class="kv"><span class="k">Detail</span><span class="v">${data.detail}</span></div>
+  `;
+
+  // smooth scroll dot into view
+  el.scrollIntoView({ behavior:'smooth', block:'nearest', inline:'nearest' });
+}
+
+// ==================================================================
+// KEYBOARD NAVIGATION
+// ==================================================================
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+    e.preventDefault();
+    selectDot(selectedIdx < 0 ? 0 : Math.min(selectedIdx + 1, allDots.length - 1));
+  } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    selectDot(selectedIdx < 0 ? 0 : Math.max(selectedIdx - 1, 0));
+  } else if (e.key === 'Home') {
+    e.preventDefault();
+    selectDot(0);
+  } else if (e.key === 'End') {
+    e.preventDefault();
+    selectDot(allDots.length - 1);
+  } else if (e.key === 'Enter' && selectedIdx >= 0) {
+    // Re-trigger to refresh panel (could be extended to expand)
+    selectDot(selectedIdx);
+  }
+});
+
+// ==================================================================
+// SIMULATED PROGRESS (for demo feel)
+// ==================================================================
+let simTimer = null;
+function simulateProgress() {
+  const activeIdx = allDots.findIndex(d => d.data.status === 'active');
+  if (activeIdx < 0) { clearInterval(simTimer); return; }
+
+  // Complete current active step
+  const curr = allDots[activeIdx];
+  curr.data.status = 'done';
+  curr.data.duration = Math.floor(Math.random() * 30 + 5) + 's';
+  curr.el.classList.remove('active');
+  curr.el.classList.add('done');
+
+  // Advance next pending to active
+  const nextIdx = allDots.findIndex((d, i) => i > activeIdx && d.data.status === 'pending');
+  if (nextIdx >= 0) {
+    const next = allDots[nextIdx];
+    next.data.status = 'active';
+    next.el.classList.remove('pending');
+    next.el.classList.add('active');
+  }
+
+  updateRing();
+
+  // Refresh detail if we're looking at something that changed
+  if (selectedIdx === activeIdx || selectedIdx === nextIdx) {
+    selectDot(selectedIdx);
+  }
+}
+
+// Advance every 4 seconds for demo
+simTimer = setInterval(simulateProgress, 4000);
+
+// Select the active dot on load
+const initialActive = allDots.findIndex(d => d.data.status === 'active');
+if (initialActive >= 0) selectDot(initialActive);
+</script>
+
+</body>
+</html>

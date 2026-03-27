@@ -1,0 +1,925 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Stacked Horizontal Bars</title>
+<style>
+  /* ── Reset & Base ─────────────────────────────────────── */
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg:         #0c0e14;
+    --bg-surface: #12151e;
+    --bg-card:    #181c28;
+    --border:     #252a3a;
+    --text:       #c8cdd8;
+    --text-dim:   #6b7280;
+    --text-bright:#eef0f6;
+
+    --green:      #34d399;
+    --green-dim:  #166534;
+    --purple:     #a78bfa;
+    --purple-dim: #4c1d95;
+    --blue:       #60a5fa;
+    --blue-dim:   #1e3a5f;
+    --gray:       #4b5563;
+    --gray-dim:   #1f2937;
+
+    --green-glow:  rgba(52, 211, 153, 0.35);
+    --purple-glow: rgba(167, 139, 250, 0.35);
+    --blue-glow:   rgba(96, 165, 250, 0.40);
+    --gray-glow:   rgba(75, 85, 99, 0.20);
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  /* ── Top Strip: Stacked Bars (~90px) ──────────────────── */
+  .bar-strip {
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-height: 90px;
+    justify-content: center;
+  }
+
+  .bar-row {
+    display: grid;
+    grid-template-columns: 90px 1fr 80px;
+    align-items: center;
+    height: 16px;
+    gap: 10px;
+    cursor: pointer;
+    border-radius: 4px;
+    padding: 0 4px;
+    transition: background 0.2s ease;
+  }
+
+  .bar-row:hover {
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .bar-row.selected {
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .bar-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    white-space: nowrap;
+  }
+
+  .bar-row[data-module="seed"]       .bar-label { color: var(--green); }
+  .bar-row[data-module="hypothesis"] .bar-label { color: var(--purple); }
+  .bar-row[data-module="invention"]  .bar-label { color: var(--blue); }
+  .bar-row[data-module="paper"]      .bar-label { color: var(--gray); }
+
+  .bar-status {
+    font-size: 10px;
+    font-weight: 500;
+    text-align: right;
+    color: var(--text-dim);
+    white-space: nowrap;
+  }
+
+  .bar-track {
+    position: relative;
+    height: 16px;
+    border-radius: 4px;
+    overflow: visible;
+  }
+
+  /* Track backgrounds per module */
+  .bar-row[data-module="seed"]       .bar-track { background: var(--green-dim); max-width: 30%; }
+  .bar-row[data-module="hypothesis"] .bar-track { background: var(--purple-dim); max-width: 55%; }
+  .bar-row[data-module="invention"]  .bar-track { background: var(--blue-dim); max-width: 100%; }
+  .bar-row[data-module="paper"]      .bar-track { background: transparent; border: 1px solid var(--gray); max-width: 70%; }
+
+  .bar-fill {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    border-radius: 4px;
+    transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .bar-row[data-module="seed"]       .bar-fill { background: var(--green); width: 100%; }
+  .bar-row[data-module="hypothesis"] .bar-fill { background: var(--purple); width: 100%; }
+  .bar-row[data-module="invention"]  .bar-fill { background: var(--blue); width: 60%; }
+  .bar-row[data-module="paper"]      .bar-fill { background: var(--gray); width: 0%; }
+
+  /* Glow on selected bar */
+  .bar-row.selected[data-module="seed"]       .bar-fill { box-shadow: 0 0 12px var(--green-glow), 0 0 24px var(--green-glow); }
+  .bar-row.selected[data-module="hypothesis"] .bar-fill { box-shadow: 0 0 12px var(--purple-glow), 0 0 24px var(--purple-glow); }
+  .bar-row.selected[data-module="invention"]  .bar-fill { box-shadow: 0 0 12px var(--blue-glow), 0 0 24px var(--blue-glow); }
+  .bar-row.selected[data-module="paper"]      .bar-track { box-shadow: 0 0 8px var(--gray-glow); }
+
+  /* ── Sparkle edge on active (Invention) bar ───────────── */
+  .sparkle-container {
+    position: absolute;
+    top: -8px;
+    bottom: -8px;
+    width: 24px;
+    pointer-events: none;
+    overflow: visible;
+  }
+
+  .sparkle-container canvas {
+    position: absolute;
+    top: -12px;
+    left: -12px;
+    width: 48px;
+    height: 40px;
+  }
+
+  /* ── Tab Selectors ────────────────────────────────────── */
+  .tab-bar {
+    display: flex;
+    gap: 0;
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border);
+    padding: 0 28px;
+  }
+
+  .tab {
+    padding: 10px 20px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-dim);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: color 0.2s, border-color 0.3s;
+    letter-spacing: 0.3px;
+  }
+
+  .tab:hover { color: var(--text); }
+
+  .tab.active {
+    color: var(--text-bright);
+    font-weight: 700;
+    border-bottom-color: var(--blue);
+  }
+
+  .tab[data-module="seed"].active       { border-bottom-color: var(--green); }
+  .tab[data-module="hypothesis"].active { border-bottom-color: var(--purple); }
+  .tab[data-module="invention"].active  { border-bottom-color: var(--blue); }
+  .tab[data-module="paper"].active      { border-bottom-color: var(--gray); }
+
+  /* ── Content Area ─────────────────────────────────────── */
+  .content-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px 32px;
+  }
+
+  .content-area::-webkit-scrollbar { width: 6px; }
+  .content-area::-webkit-scrollbar-track { background: transparent; }
+  .content-area::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 3px;
+  }
+
+  .module-panel {
+    display: none;
+    animation: fadeSlideIn 0.35s ease;
+  }
+
+  .module-panel.visible { display: block; }
+
+  @keyframes fadeSlideIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .panel-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  .panel-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+
+  .panel-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-bright);
+  }
+
+  .panel-subtitle {
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-bottom: 24px;
+    line-height: 1.6;
+  }
+
+  /* Cards */
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px;
+    transition: border-color 0.2s, transform 0.15s;
+  }
+
+  .card:hover {
+    border-color: #3a3f52;
+    transform: translateY(-1px);
+  }
+
+  .card-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-bright);
+    margin-bottom: 8px;
+  }
+
+  .card-body {
+    font-size: 12.5px;
+    color: var(--text-dim);
+    line-height: 1.65;
+  }
+
+  .card-tag {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 4px;
+    margin-top: 10px;
+  }
+
+  .tag-done   { background: rgba(52,211,153,0.15); color: var(--green); }
+  .tag-active { background: rgba(96,165,250,0.15); color: var(--blue); }
+  .tag-wait   { background: rgba(75,85,99,0.15);   color: var(--gray); }
+  .tag-info   { background: rgba(167,139,250,0.15); color: var(--purple); }
+
+  /* Stats row */
+  .stats-row {
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    margin-bottom: 24px;
+  }
+
+  .stat {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .stat-value {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text-bright);
+  }
+
+  .stat-label {
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  /* Log lines */
+  .log-block {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 12px;
+    line-height: 1.7;
+    max-height: 260px;
+    overflow-y: auto;
+  }
+
+  .log-block::-webkit-scrollbar { width: 4px; }
+  .log-block::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .log-line { color: var(--text-dim); }
+  .log-line .ts  { color: var(--green); }
+  .log-line .fn  { color: #818cf8; }
+  .log-line .msg { color: var(--text); }
+  .log-line .dim { color: #4b5563; }
+
+  /* Section heading inside panels */
+  .section-heading {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    margin: 24px 0 12px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* Keyboard hint */
+  .kb-hint {
+    position: fixed;
+    bottom: 16px;
+    right: 24px;
+    font-size: 11px;
+    color: var(--text-dim);
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    padding: 6px 12px;
+    border-radius: 6px;
+    pointer-events: none;
+  }
+
+  .kb-hint kbd {
+    display: inline-block;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 6px;
+    font-family: inherit;
+    font-size: 11px;
+    color: var(--text);
+  }
+</style>
+</head>
+<body>
+
+<!-- ── Top Strip: Stacked Horizontal Bars ─────────────── -->
+<div class="bar-strip">
+  <div class="bar-row selected" data-module="seed" data-index="0">
+    <span class="bar-label">Seed</span>
+    <div class="bar-track">
+      <div class="bar-fill"></div>
+    </div>
+    <span class="bar-status">Complete</span>
+  </div>
+
+  <div class="bar-row" data-module="hypothesis" data-index="1">
+    <span class="bar-label">Hypothesis</span>
+    <div class="bar-track">
+      <div class="bar-fill"></div>
+    </div>
+    <span class="bar-status">Complete</span>
+  </div>
+
+  <div class="bar-row" data-module="invention" data-index="2">
+    <span class="bar-label">Invention</span>
+    <div class="bar-track">
+      <div class="bar-fill"></div>
+      <div class="sparkle-container" id="sparkle-mount">
+        <canvas id="sparkle-canvas"></canvas>
+      </div>
+    </div>
+    <span class="bar-status">Iter 3 / 5</span>
+  </div>
+
+  <div class="bar-row" data-module="paper" data-index="3">
+    <span class="bar-label">Paper</span>
+    <div class="bar-track">
+      <div class="bar-fill"></div>
+    </div>
+    <span class="bar-status">Pending</span>
+  </div>
+</div>
+
+<!-- ── Tab Selectors ──────────────────────────────────── -->
+<div class="tab-bar">
+  <div class="tab" data-module="seed" data-index="0">Seed</div>
+  <div class="tab" data-module="hypothesis" data-index="1">Hypothesis</div>
+  <div class="tab active" data-module="invention" data-index="2">Invention</div>
+  <div class="tab" data-module="paper" data-index="3">Paper</div>
+</div>
+
+<!-- ── Content Area ───────────────────────────────────── -->
+<div class="content-area">
+
+  <!-- Seed Panel -->
+  <div class="module-panel" id="panel-seed">
+    <div class="panel-header">
+      <div class="panel-dot" style="background:var(--green)"></div>
+      <div class="panel-title">Seed Hypotheses</div>
+    </div>
+    <p class="panel-subtitle">
+      Knowledge-graph seeding extracted 14 candidate hypotheses from the
+      source literature across 3 research domains. Completed in 2m 18s.
+    </p>
+
+    <div class="stats-row">
+      <div class="stat">
+        <span class="stat-value">14</span>
+        <span class="stat-label">Candidates</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value">3</span>
+        <span class="stat-label">Domains</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value">2m 18s</span>
+        <span class="stat-label">Duration</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value">$0.42</span>
+        <span class="stat-label">Cost</span>
+      </div>
+    </div>
+
+    <div class="card-grid">
+      <div class="card">
+        <div class="card-title">Adaptive Mesh Refinement via GNNs</div>
+        <div class="card-body">
+          Proposes graph neural networks for runtime mesh adaptation
+          in computational fluid dynamics, replacing static heuristics
+          with learned refinement policies.
+        </div>
+        <span class="card-tag tag-done">Seeded</span>
+      </div>
+      <div class="card">
+        <div class="card-title">Topological Data Augmentation</div>
+        <div class="card-body">
+          Persistent homology features as a data augmentation
+          strategy for small-sample medical imaging classification.
+        </div>
+        <span class="card-tag tag-done">Seeded</span>
+      </div>
+      <div class="card">
+        <div class="card-title">Causal Discovery in Time Series</div>
+        <div class="card-body">
+          Granger-causal structure learning with differentiable DAG
+          constraints for multivariate sensor streams.
+        </div>
+        <span class="card-tag tag-done">Seeded</span>
+      </div>
+    </div>
+
+    <div class="section-heading">Extraction Log</div>
+    <div class="log-block">
+      <div class="log-line"><span class="ts">09:41:02</span> | INFO    | <span class="fn">seed_hypo</span> | <span class="msg">Starting knowledge-graph seeding</span></div>
+      <div class="log-line"><span class="ts">09:41:04</span> | INFO    | <span class="fn">seed_hypo</span> | <span class="msg">Loaded 23 source papers from pool</span></div>
+      <div class="log-line"><span class="ts">09:41:18</span> | INFO    | <span class="fn">extract_kg</span> | <span class="msg">Extracted 148 entities, 312 relations</span></div>
+      <div class="log-line"><span class="ts">09:42:01</span> | INFO    | <span class="fn">gen_hypo</span> | <span class="msg">Generated 14 candidate hypotheses</span></div>
+      <div class="log-line"><span class="ts">09:43:20</span> | INFO    | <span class="fn">seed_hypo</span> | <span class="msg">Seeding complete &mdash; 14 hypotheses ready</span></div>
+    </div>
+  </div>
+
+  <!-- Hypothesis Panel -->
+  <div class="module-panel" id="panel-hypothesis">
+    <div class="panel-header">
+      <div class="panel-dot" style="background:var(--purple)"></div>
+      <div class="panel-title">Hypothesis Loop</div>
+    </div>
+    <p class="panel-subtitle">
+      Iterative refinement narrowed 14 seed hypotheses down to 4 viable
+      candidates through review cycles with domain-specific critique agents.
+      3 iterations completed over 8m 45s.
+    </p>
+
+    <div class="stats-row">
+      <div class="stat">
+        <span class="stat-value">14 &rarr; 4</span>
+        <span class="stat-label">Filtered</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value">3</span>
+        <span class="stat-label">Iterations</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value">8m 45s</span>
+        <span class="stat-label">Duration</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value">$1.87</span>
+        <span class="stat-label">Cost</span>
+      </div>
+    </div>
+
+    <div class="card-grid">
+      <div class="card">
+        <div class="card-title">Adaptive Mesh via GNNs</div>
+        <div class="card-body">
+          Scored 0.91 novelty, 0.87 feasibility. Reviewer flagged
+          minor concern: training data scarcity for 3D meshes.
+          Author rebuttal accepted.
+        </div>
+        <span class="card-tag tag-info">Top Pick</span>
+      </div>
+      <div class="card">
+        <div class="card-title">Topological Augmentation</div>
+        <div class="card-body">
+          Scored 0.84 novelty, 0.79 feasibility. Reviewer recommended
+          narrowing scope to retinal imaging. Revision adopted.
+        </div>
+        <span class="card-tag tag-info">Revised</span>
+      </div>
+      <div class="card">
+        <div class="card-title">Causal Time Series</div>
+        <div class="card-body">
+          Scored 0.78 novelty, 0.82 feasibility. Moved forward with
+          DAG constraint approach after two review rounds.
+        </div>
+        <span class="card-tag tag-done">Accepted</span>
+      </div>
+      <div class="card">
+        <div class="card-title">Neural Symbolic Regression</div>
+        <div class="card-body">
+          Late addition from iteration 2. Hybrid transformer
+          plus symbolic search scored 0.88 novelty.
+        </div>
+        <span class="card-tag tag-done">Accepted</span>
+      </div>
+    </div>
+
+    <div class="section-heading">Review Trace</div>
+    <div class="log-block">
+      <div class="log-line"><span class="ts">09:43:22</span> | INFO    | <span class="fn">hypo_loop</span> | <span class="msg">Starting hypothesis refinement &mdash; 14 candidates</span></div>
+      <div class="log-line"><span class="ts">09:44:10</span> | INFO    | <span class="fn">review_hypo</span> | <span class="msg">Iteration 1: reviewed 14, pruned 6</span></div>
+      <div class="log-line"><span class="ts">09:46:33</span> | INFO    | <span class="fn">review_hypo</span> | <span class="msg">Iteration 2: reviewed 8, pruned 3, added 1</span></div>
+      <div class="log-line"><span class="ts">09:49:58</span> | INFO    | <span class="fn">review_hypo</span> | <span class="msg">Iteration 3: reviewed 5, pruned 1 &mdash; converged</span></div>
+      <div class="log-line"><span class="ts">09:52:07</span> | INFO    | <span class="fn">hypo_loop</span> | <span class="msg">Final: 4 hypotheses forwarded to invention loop</span></div>
+    </div>
+  </div>
+
+  <!-- Invention Panel (active) -->
+  <div class="module-panel visible" id="panel-invention">
+    <div class="panel-header">
+      <div class="panel-dot" style="background:var(--blue)"></div>
+      <div class="panel-title">Invention Loop</div>
+    </div>
+    <p class="panel-subtitle">
+      Generating detailed invention plans and drafting paper sections for
+      each hypothesis. Currently processing hypothesis 3 of 4, iteration 3 of 5.
+    </p>
+
+    <div class="stats-row">
+      <div class="stat">
+        <span class="stat-value">3 / 4</span>
+        <span class="stat-label">Hypotheses</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value">3 / 5</span>
+        <span class="stat-label">Iteration</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value">14m 32s</span>
+        <span class="stat-label">Elapsed</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value">$4.21</span>
+        <span class="stat-label">Cost</span>
+      </div>
+    </div>
+
+    <div class="card-grid">
+      <div class="card">
+        <div class="card-title">Plan Generation</div>
+        <div class="card-body">
+          Detailed experimental plan with methodology, baselines,
+          evaluation metrics, and expected outcomes. Structured
+          into 5 sections with citation anchors.
+        </div>
+        <span class="card-tag tag-done">Done</span>
+      </div>
+      <div class="card">
+        <div class="card-title">Paper Text Draft</div>
+        <div class="card-body">
+          Introduction and related work sections complete.
+          Methods section currently generating. Results and
+          discussion pending.
+        </div>
+        <span class="card-tag tag-active">Writing</span>
+      </div>
+      <div class="card">
+        <div class="card-title">Paper Review</div>
+        <div class="card-body">
+          Automated reviewer will assess coherence, novelty claims,
+          and experimental design once full draft is available.
+        </div>
+        <span class="card-tag tag-wait">Waiting</span>
+      </div>
+    </div>
+
+    <div class="section-heading">Live Output</div>
+    <div class="log-block" id="live-log">
+      <div class="log-line"><span class="ts">09:52:10</span> | INFO    | <span class="fn">inv_loop</span> | <span class="msg">Starting invention loop &mdash; 4 hypotheses</span></div>
+      <div class="log-line"><span class="ts">09:53:44</span> | INFO    | <span class="fn">gen_plan</span> | <span class="msg">Hypo 1: plan generated (5 sections, 12 citations)</span></div>
+      <div class="log-line"><span class="ts">09:56:18</span> | INFO    | <span class="fn">gen_text</span> | <span class="msg">Hypo 1: paper text complete (4,218 tokens)</span></div>
+      <div class="log-line"><span class="ts">09:58:02</span> | INFO    | <span class="fn">review</span> | <span class="msg">Hypo 1: review score 0.86 &mdash; accepted</span></div>
+      <div class="log-line"><span class="ts">09:59:30</span> | INFO    | <span class="fn">gen_plan</span> | <span class="msg">Hypo 2: plan generated (4 sections, 9 citations)</span></div>
+      <div class="log-line"><span class="ts">10:02:15</span> | INFO    | <span class="fn">gen_text</span> | <span class="msg">Hypo 2: paper text complete (3,891 tokens)</span></div>
+      <div class="log-line"><span class="ts">10:03:48</span> | INFO    | <span class="fn">review</span> | <span class="msg">Hypo 2: review score 0.82 &mdash; accepted with revisions</span></div>
+      <div class="log-line"><span class="ts">10:04:22</span> | INFO    | <span class="fn">gen_plan</span> | <span class="msg">Hypo 3: plan generated (5 sections, 11 citations)</span></div>
+      <div class="log-line"><span class="ts">10:06:42</span> | INFO    | <span class="fn">gen_text</span> | <span class="msg">Hypo 3: drafting methods section...</span></div>
+    </div>
+  </div>
+
+  <!-- Paper Panel -->
+  <div class="module-panel" id="panel-paper">
+    <div class="panel-header">
+      <div class="panel-dot" style="background:var(--gray)"></div>
+      <div class="panel-title">Paper Generation</div>
+    </div>
+    <p class="panel-subtitle">
+      Final paper assembly, visualization generation, and repository
+      creation. This stage begins after the invention loop completes.
+    </p>
+
+    <div class="stats-row">
+      <div class="stat">
+        <span class="stat-value">&mdash;</span>
+        <span class="stat-label">Artifacts</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value">&mdash;</span>
+        <span class="stat-label">Figures</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value">&mdash;</span>
+        <span class="stat-label">Duration</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value">&mdash;</span>
+        <span class="stat-label">Cost</span>
+      </div>
+    </div>
+
+    <div class="card-grid">
+      <div class="card">
+        <div class="card-title">Artifact Demos</div>
+        <div class="card-body">
+          Interactive Python demonstrations for each invention.
+          Generated after paper text is finalized.
+        </div>
+        <span class="card-tag tag-wait">Pending</span>
+      </div>
+      <div class="card">
+        <div class="card-title">Visualizations</div>
+        <div class="card-body">
+          Figures, diagrams, and comparison plots. Includes
+          architecture overviews and result tables.
+        </div>
+        <span class="card-tag tag-wait">Pending</span>
+      </div>
+      <div class="card">
+        <div class="card-title">Full Paper Assembly</div>
+        <div class="card-body">
+          LaTeX compilation with all sections, figures, and
+          references. Output as PDF and source repository.
+        </div>
+        <span class="card-tag tag-wait">Pending</span>
+      </div>
+    </div>
+
+    <div class="section-heading">Queued Steps</div>
+    <div class="log-block">
+      <div class="log-line"><span class="dim">Waiting for invention loop to complete...</span></div>
+      <div class="log-line"><span class="dim">Step 1: gen_artifact_demos</span></div>
+      <div class="log-line"><span class="dim">Step 2: gen_viz</span></div>
+      <div class="log-line"><span class="dim">Step 3: gen_full_paper</span></div>
+      <div class="log-line"><span class="dim">Step 4: compile &amp; publish</span></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Keyboard Hint -->
+<div class="kb-hint">
+  <kbd>&larr;</kbd> <kbd>&rarr;</kbd> navigate modules
+</div>
+
+<script>
+/* ── State ──────────────────────────────────────────────── */
+const MODULES = ['seed', 'hypothesis', 'invention', 'paper'];
+let activeIndex = 2; // start on Invention
+
+const barRows = document.querySelectorAll('.bar-row');
+const tabs    = document.querySelectorAll('.tab');
+const panels  = document.querySelectorAll('.module-panel');
+
+/* ── Navigation ─────────────────────────────────────────── */
+function navigate(index) {
+  if (index < 0 || index >= MODULES.length) return;
+  activeIndex = index;
+  const mod = MODULES[index];
+
+  /* Bars: highlight selected */
+  barRows.forEach(r => r.classList.remove('selected'));
+  barRows[index].classList.add('selected');
+
+  /* Tabs */
+  tabs.forEach(t => t.classList.remove('active'));
+  tabs[index].classList.add('active');
+
+  /* Panels */
+  panels.forEach(p => p.classList.remove('visible'));
+  const panel = document.getElementById('panel-' + mod);
+  if (panel) {
+    panel.classList.remove('visible');
+    /* Force reflow for re-trigger of animation */
+    void panel.offsetWidth;
+    panel.classList.add('visible');
+  }
+}
+
+/* Click on bars */
+barRows.forEach(row => {
+  row.addEventListener('click', () => {
+    navigate(parseInt(row.dataset.index));
+  });
+});
+
+/* Click on tabs */
+tabs.forEach(tab => {
+  tab.addEventListener('click', () => {
+    navigate(parseInt(tab.dataset.index));
+  });
+});
+
+/* Arrow keys */
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowLeft')  { e.preventDefault(); navigate(activeIndex - 1); }
+  if (e.key === 'ArrowRight') { e.preventDefault(); navigate(activeIndex + 1); }
+});
+
+/* ── Sparkle Particle System ────────────────────────────── */
+const sparkleCanvas = document.getElementById('sparkle-canvas');
+const ctx = sparkleCanvas.getContext('2d');
+
+/* High-DPI support */
+const DPR = window.devicePixelRatio || 1;
+sparkleCanvas.width  = 48 * DPR;
+sparkleCanvas.height = 40 * DPR;
+ctx.scale(DPR, DPR);
+
+class Particle {
+  constructor() { this.reset(); }
+
+  reset() {
+    this.x  = 22 + (Math.random() - 0.5) * 6;
+    this.y  = 18 + (Math.random() - 0.5) * 14;
+    this.vx = (Math.random() - 0.3) * 1.8;
+    this.vy = (Math.random() - 0.5) * 1.2;
+    this.life    = 1.0;
+    this.decay   = 0.015 + Math.random() * 0.025;
+    this.radius  = 1.0 + Math.random() * 2.0;
+    this.bright  = 0.6 + Math.random() * 0.4;
+    /* Color variation: white to cyan to blue */
+    const hue = 200 + Math.random() * 30;
+    const sat = 70 + Math.random() * 30;
+    this.hue = hue;
+    this.sat = sat;
+  }
+
+  update() {
+    this.x    += this.vx;
+    this.y    += this.vy;
+    this.vy   -= 0.01; /* slight upward drift */
+    this.life -= this.decay;
+    if (this.life <= 0) this.reset();
+  }
+
+  draw(ctx) {
+    const alpha = this.life * this.bright;
+    if (alpha <= 0) return;
+
+    /* Glow */
+    const grad = ctx.createRadialGradient(
+      this.x, this.y, 0,
+      this.x, this.y, this.radius * 3
+    );
+    grad.addColorStop(0, `hsla(${this.hue}, ${this.sat}%, 90%, ${alpha})`);
+    grad.addColorStop(0.4, `hsla(${this.hue}, ${this.sat}%, 70%, ${alpha * 0.5})`);
+    grad.addColorStop(1, `hsla(${this.hue}, ${this.sat}%, 50%, 0)`);
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.radius * 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    /* Core bright dot */
+    ctx.fillStyle = `hsla(${this.hue}, 30%, 95%, ${alpha})`;
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.radius * 0.6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+const PARTICLE_COUNT = 28;
+const particles = Array.from({ length: PARTICLE_COUNT }, () => new Particle());
+
+function positionSparkle() {
+  const inventionBar = document.querySelector(
+    '.bar-row[data-module="invention"] .bar-fill'
+  );
+  const mount = document.getElementById('sparkle-mount');
+  if (!inventionBar || !mount) return;
+
+  const fillWidth = inventionBar.offsetWidth;
+  mount.style.left = (fillWidth - 12) + 'px';
+}
+
+function animateSparkles() {
+  ctx.clearRect(0, 0, 48, 40);
+  particles.forEach(p => { p.update(); p.draw(ctx); });
+  requestAnimationFrame(animateSparkles);
+}
+
+positionSparkle();
+window.addEventListener('resize', positionSparkle);
+animateSparkles();
+
+/* ── Pulsing glow on invention bar fill edge ────────────── */
+const inventionFill = document.querySelector(
+  '.bar-row[data-module="invention"] .bar-fill'
+);
+
+let glowPhase = 0;
+function pulseGlow() {
+  glowPhase += 0.03;
+  const intensity = 0.25 + 0.15 * Math.sin(glowPhase);
+  const spread    = 10 + 6 * Math.sin(glowPhase);
+  if (inventionFill) {
+    const isSelected = document
+      .querySelector('.bar-row[data-module="invention"]')
+      .classList.contains('selected');
+    if (isSelected) {
+      inventionFill.style.boxShadow =
+        `0 0 ${spread}px rgba(96,165,250,${intensity}), ` +
+        `0 0 ${spread * 2}px rgba(96,165,250,${intensity * 0.6})`;
+    }
+  }
+  requestAnimationFrame(pulseGlow);
+}
+pulseGlow();
+
+/* ── Simulated live log append ──────────────────────────── */
+const liveLog = document.getElementById('live-log');
+const fakeLogLines = [
+  { ts: '10:07:11', fn: 'gen_text', msg: 'Hypo 3: methods section 68% complete...' },
+  { ts: '10:07:34', fn: 'gen_text', msg: 'Hypo 3: generating evaluation subsection...' },
+  { ts: '10:07:58', fn: 'gen_text', msg: 'Hypo 3: methods section complete (1,842 tokens)' },
+  { ts: '10:08:22', fn: 'gen_text', msg: 'Hypo 3: drafting results section...' },
+  { ts: '10:08:49', fn: 'gen_text', msg: 'Hypo 3: results section 40% complete...' },
+  { ts: '10:09:15', fn: 'gen_text', msg: 'Hypo 3: results complete (1,204 tokens)' },
+  { ts: '10:09:38', fn: 'gen_text', msg: 'Hypo 3: paper text complete (3,946 tokens)' },
+  { ts: '10:10:02', fn: 'review',   msg: 'Hypo 3: submitting for automated review...' },
+  { ts: '10:10:31', fn: 'review',   msg: 'Hypo 3: review score 0.89 \u2014 accepted' },
+  { ts: '10:10:44', fn: 'gen_plan', msg: 'Hypo 4: starting plan generation...' },
+];
+
+let logIndex = 0;
+function appendLogLine() {
+  if (logIndex >= fakeLogLines.length) return;
+  const entry = fakeLogLines[logIndex++];
+  const div = document.createElement('div');
+  div.className = 'log-line';
+  div.innerHTML = `<span class="ts">${entry.ts}</span> | INFO    | ` +
+    `<span class="fn">${entry.fn}</span> | <span class="msg">${entry.msg}</span>`;
+  div.style.opacity = '0';
+  div.style.transform = 'translateY(4px)';
+  liveLog.appendChild(div);
+
+  /* Animate in */
+  requestAnimationFrame(() => {
+    div.style.transition = 'opacity 0.3s, transform 0.3s';
+    div.style.opacity = '1';
+    div.style.transform = 'translateY(0)';
+  });
+
+  liveLog.scrollTop = liveLog.scrollHeight;
+
+  /* Schedule next */
+  const delay = 3000 + Math.random() * 4000;
+  setTimeout(appendLogLine, delay);
+}
+
+/* Start appending after initial delay */
+setTimeout(appendLogLine, 4000);
+
+/* ── Init: ensure correct bar is selected ───────────────── */
+navigate(2);
+</script>
+</body>
+</html>

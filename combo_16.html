@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Concentric Ring Progress</title>
+<style>
+  :root {
+    --bg: #0a0e1a;
+    --surface: #111827;
+    --border: #1e293b;
+    --text: #e2e8f0;
+    --text-dim: #64748b;
+    --text-muted: #475569;
+    --accent-green: #34d399;
+    --accent-blue: #60a5fa;
+    --accent-cyan: #22d3ee;
+    --accent-purple: #a78bfa;
+    --accent-amber: #fbbf24;
+    --accent-rose: #fb7185;
+    --ring-track: rgba(255,255,255,0.06);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ---- Top ring area ---- */
+  .ring-area {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 28px 0 0;
+    position: relative;
+  }
+
+  .ring-container {
+    position: relative;
+    width: 160px;
+    height: 160px;
+  }
+
+  .ring-svg {
+    width: 160px;
+    height: 160px;
+    transform: rotate(-90deg);
+  }
+
+  .ring-track { fill: none; stroke: var(--ring-track); }
+  .ring-progress {
+    fill: none; stroke-linecap: round;
+    transition: stroke-dashoffset 0.6s cubic-bezier(0.4,0,0.2,1), stroke 0.4s ease;
+  }
+  .ring-center-text {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%,-50%); text-align: center; pointer-events: none;
+  }
+  .ring-center-text .big { font-size: 18px; font-weight: 700; color: var(--text); line-height: 1; }
+  .ring-center-text .small { font-size: 9px; color: var(--text-dim); margin-top: 2px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .ring-labels { display: flex; justify-content: center; gap: 18px; margin-top: 10px; }
+  .ring-label { display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--text-dim); letter-spacing: 0.3px; }
+  .ring-label .swatch { width: 8px; height: 8px; border-radius: 50%; }
+
+  .module-selector { display: flex; justify-content: center; gap: 10px; margin-top: 16px; }
+  .mod-icon { width: 28px; height: 28px; position: relative; cursor: pointer; transition: transform 0.2s ease; }
+  .mod-icon:hover { transform: scale(1.15); }
+  .mod-icon svg { width: 28px; height: 28px; }
+  .mod-ring { fill: none; stroke: var(--ring-track); stroke-width: 2; }
+  .mod-ring-progress { fill: none; stroke-width: 2; stroke-linecap: round; transition: stroke-dashoffset 0.4s ease; }
+  .mod-diamond { transition: fill 0.3s ease, opacity 0.3s ease; }
+  .mod-icon.active .mod-diamond { opacity: 1; }
+  .mod-icon:not(.active) .mod-diamond { opacity: 0.4; }
+  .mod-icon.active::after {
+    content: ''; position: absolute; bottom: -5px; left: 50%; transform: translateX(-50%);
+    width: 4px; height: 4px; border-radius: 50%; background: var(--accent-blue);
+  }
+  .module-name { text-align: center; font-size: 11px; color: var(--text-dim); margin-top: 8px; letter-spacing: 0.4px; height: 16px; transition: color 0.3s ease; }
+
+  /* ---- Sub-module dot row ---- */
+  .sub-dot-row {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 12px;
+    min-height: 20px;
+  }
+
+  .sub-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    border: 1.5px solid transparent;
+    position: relative;
+  }
+
+  .sub-dot.done {
+    background: var(--accent-green);
+    border-color: var(--accent-green);
+    opacity: 0.85;
+  }
+
+  .sub-dot.active {
+    border-color: var(--accent-blue);
+    background: var(--accent-blue);
+    box-shadow: 0 0 8px rgba(96, 165, 250, 0.5);
+    transform: scale(1.2);
+  }
+
+  .sub-dot.pending {
+    background: transparent;
+    border-color: var(--text-muted);
+    opacity: 0.5;
+  }
+
+  .sub-dot:hover:not(.active) {
+    transform: scale(1.15);
+    opacity: 1;
+  }
+
+  .sub-step-name {
+    text-align: center;
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-top: 5px;
+    height: 14px;
+    letter-spacing: 0.3px;
+  }
+
+  /* ---- Detail dot row (artifacts) ---- */
+  .detail-row-container {
+    margin-top: 10px;
+    min-height: 26px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .detail-label {
+    font-size: 9px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    margin-bottom: 5px;
+  }
+
+  .detail-dot-row {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+  }
+
+  .detail-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    transition: all 0.25s ease;
+    cursor: pointer;
+  }
+
+  .detail-dot.done { background: var(--accent-green); opacity: 0.8; }
+  .detail-dot.active {
+    background: var(--accent-cyan);
+    box-shadow: 0 0 6px rgba(34, 211, 238, 0.5);
+  }
+  .detail-dot.pending { background: var(--text-muted); opacity: 0.3; }
+
+  .detail-dot:hover { transform: scale(1.3); opacity: 1; }
+
+  /* ---- Divider ---- */
+  .divider {
+    width: 90%;
+    max-width: 600px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--border), transparent);
+    margin: 16px auto 0;
+  }
+
+  /* ---- Content area ---- */
+  .content-area {
+    max-width: 640px;
+    margin: 0 auto;
+    padding: 18px 24px 40px;
+  }
+
+  .content-header {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .content-header h2 {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .content-header .tag {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 9999px;
+    font-weight: 500;
+    letter-spacing: 0.3px;
+  }
+
+  .tag-running {
+    background: rgba(96, 165, 250, 0.15);
+    color: var(--accent-blue);
+    border: 1px solid rgba(96, 165, 250, 0.25);
+  }
+
+  .tag-done {
+    background: rgba(52, 211, 153, 0.12);
+    color: var(--accent-green);
+    border: 1px solid rgba(52, 211, 153, 0.2);
+  }
+
+  .tag-pending {
+    background: rgba(100, 116, 139, 0.12);
+    color: var(--text-dim);
+    border: 1px solid rgba(100, 116, 139, 0.2);
+  }
+
+  .content-body {
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1.7;
+  }
+
+  .content-body p { margin-bottom: 10px; }
+
+  .content-meta {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 10px;
+    margin-top: 14px;
+  }
+
+  .meta-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+  }
+
+  .meta-card .label {
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+  }
+
+  .meta-card .value {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .meta-card .value.green { color: var(--accent-green); }
+  .meta-card .value.blue { color: var(--accent-blue); }
+  .meta-card .value.amber { color: var(--accent-amber); }
+
+  /* Log lines */
+  .log-section {
+    margin-top: 18px;
+  }
+
+  .log-section h3 {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+
+  .log-line {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    padding: 3px 0;
+    display: flex;
+    gap: 8px;
+  }
+
+  .log-time { color: var(--accent-green); min-width: 58px; }
+  .log-level { min-width: 50px; font-weight: 600; }
+  .log-level.info { color: var(--accent-blue); }
+  .log-level.warn { color: var(--accent-amber); }
+  .log-level.ok { color: var(--accent-green); }
+
+  /* ---- Keyboard hint ---- */
+  .kb-hint {
+    position: fixed;
+    bottom: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 14px;
+    font-size: 10px;
+    color: var(--text-muted);
+    background: rgba(17, 24, 39, 0.9);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 16px;
+    backdrop-filter: blur(8px);
+  }
+
+  .kb-hint kbd {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-family: inherit;
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+
+  /* Pulse animation for active ring segment */
+  @keyframes ringPulse {
+    0%, 100% { filter: drop-shadow(0 0 2px rgba(96,165,250,0.3)); }
+    50% { filter: drop-shadow(0 0 6px rgba(96,165,250,0.6)); }
+  }
+
+  .ring-svg { animation: ringPulse 3s ease-in-out infinite; }
+
+  /* Smooth content transition */
+  .content-area {
+    transition: opacity 0.25s ease;
+  }
+
+  .content-area.fading { opacity: 0.3; }
+</style>
+</head>
+<body>
+
+<!-- ============ Ring Area ============ -->
+<div class="ring-area">
+  <div class="ring-container">
+    <svg class="ring-svg" viewBox="0 0 160 160">
+      <defs>
+        <linearGradient id="grad-outer" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="var(--accent-green)" />
+          <stop offset="100%" stop-color="var(--accent-blue)" />
+        </linearGradient>
+        <linearGradient id="grad-mid" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="var(--accent-blue)" />
+          <stop offset="100%" stop-color="var(--accent-purple)" />
+        </linearGradient>
+        <linearGradient id="grad-inner" x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="var(--accent-cyan)" />
+          <stop offset="100%" stop-color="var(--accent-blue)" />
+        </linearGradient>
+      </defs>
+
+      <!-- Outer ring: pipeline overall -->
+      <circle class="ring-track" cx="80" cy="80" r="70" stroke-width="7" />
+      <circle id="ring-outer" class="ring-progress" cx="80" cy="80" r="70"
+              stroke-width="7" stroke="url(#grad-outer)"
+              stroke-dasharray="439.82" stroke-dashoffset="153.94" />
+
+      <!-- Middle ring: module -->
+      <circle class="ring-track" cx="80" cy="80" r="50" stroke-width="6" />
+      <circle id="ring-mid" class="ring-progress" cx="80" cy="80" r="50"
+              stroke-width="6" stroke="url(#grad-mid)"
+              stroke-dasharray="314.16" stroke-dashoffset="125.66" />
+
+      <!-- Inner ring: sub-step -->
+      <circle class="ring-track" cx="80" cy="80" r="30" stroke-width="5" />
+      <circle id="ring-inner" class="ring-progress" cx="80" cy="80" r="30"
+              stroke-width="5" stroke="url(#grad-inner)"
+              stroke-dasharray="188.50" stroke-dashoffset="75.40" />
+    </svg>
+
+    <div class="ring-center-text">
+      <div class="big" id="center-text">3/5</div>
+      <div class="small" id="center-sub">artifacts</div>
+    </div>
+  </div>
+
+  <!-- Ring legend -->
+  <div class="ring-labels">
+    <div class="ring-label">
+      <span class="swatch" style="background: linear-gradient(135deg, var(--accent-green), var(--accent-blue))"></span>
+      <span id="label-outer">Pipeline 65%</span>
+    </div>
+    <div class="ring-label">
+      <span class="swatch" style="background: linear-gradient(90deg, var(--accent-blue), var(--accent-purple))"></span>
+      <span id="label-mid">Invention 60%</span>
+    </div>
+    <div class="ring-label">
+      <span class="swatch" style="background: linear-gradient(90deg, var(--accent-cyan), var(--accent-blue))"></span>
+      <span id="label-inner">Artifacts 60%</span>
+    </div>
+  </div>
+
+  <!-- Module selector -->
+  <div class="module-selector" id="module-selector"></div>
+  <div class="module-name" id="module-name">Invention Loop</div>
+
+  <!-- Sub-module dots -->
+  <div class="sub-dot-row" id="sub-dots"></div>
+  <div class="sub-step-name" id="sub-step-name">Gen Artifacts</div>
+
+  <!-- Detail dots -->
+  <div class="detail-row-container" id="detail-container">
+    <div class="detail-label" id="detail-label">Artifacts</div>
+    <div class="detail-dot-row" id="detail-dots"></div>
+  </div>
+
+  <div class="divider"></div>
+</div>
+
+<!-- ============ Content ============ -->
+<div class="content-area" id="content-area"></div>
+
+<!-- Keyboard hint -->
+<div class="kb-hint">
+  <span><kbd>&larr;</kbd><kbd>&rarr;</kbd> modules</span>
+  <span><kbd>&uarr;</kbd><kbd>&darr;</kbd> sub-steps</span>
+  <span><kbd>Tab</kbd> detail</span>
+</div>
+
+<script>
+// ================================================================
+//  DATA MODEL
+// ================================================================
+// Helper to build a sub-step object concisely
+function S(name, status, progress, content, details) {
+  return { name, status, progress: progress, details: details || null, content };
+}
+function C(title, tag, body, meta, logs) {
+  return { title, tag, body, meta, logs: logs || [] };
+}
+function L(time, level, msg) { return { time, level, msg }; }
+function M(label, value, cls) { return { label, value, cls: cls || '' }; }
+
+const MODULES = [
+  {
+    id: 'seed', name: 'Seed Hypotheses', color: '#34d399', progress: 1.0, status: 'done',
+    subSteps: [
+      S('Literature Scan', 'done', 1.0, C('Literature Scan', 'done',
+        '<p>Scanned 247 papers across 3 domains (materials science, photonics, energy harvesting). Extracted 1,842 claims with citation provenance.</p><p>Knowledge graph: 312 nodes, 1,206 edges. Density: 0.78.</p>',
+        [M('Papers Scanned','247','green'), M('Claims Extracted','1,842','blue'), M('KG Nodes','312')],
+        [L('09:12:04','ok','arxiv_fetch completed  247 papers'),
+         L('09:14:31','ok','claim_extraction finished  1842 claims'),
+         L('09:15:02','ok','knowledge_graph built  312 nodes')])),
+      S('Generate Seeds', 'done', 1.0, C('Generate Seeds', 'done',
+        '<p>Generated 18 seed hypotheses via gap analysis on the knowledge graph. Each seed links to 3-8 supporting claims. Diversity: 0.82, gap coverage: 94%.</p>',
+        [M('Seeds Generated','18','green'), M('Diversity','0.82','blue'), M('Gap Coverage','94%','green')],
+        [L('09:16:14','ok','gap_analysis found 22 opportunity clusters'),
+         L('09:18:55','ok','seed_gen produced 18 hypotheses')])),
+      S('Filter & Rank', 'done', 1.0, C('Filter & Rank', 'done',
+        '<p>Ranked 18 seeds by novelty, feasibility, and impact. Top 6 selected for hypothesis refinement loop.</p>',
+        [M('Input Seeds','18'), M('Selected','6','green'), M('Top Score','0.91','blue')],
+        [L('09:20:02','ok','novelty_scorer completed  mean=0.74'),
+         L('09:20:18','ok','feasibility_scorer completed  mean=0.68'),
+         L('09:20:33','ok','ranking done  top-6 selected')]))
+    ]
+  },
+  {
+    id: 'hypo', name: 'Hypothesis Loop', color: '#60a5fa', progress: 1.0, status: 'done',
+    subSteps: [
+      S('Refine Hypotheses', 'done', 1.0, C('Refine Hypotheses', 'done',
+        '<p>Each of 6 hypotheses refined through 3 LLM critique-and-revise iterations. Convergence achieved for all 6.</p>',
+        [M('Hypotheses','6'), M('Iterations','3','blue'), M('Convergence','100%','green')],
+        [L('09:22:41','ok','hypo_refine iter=1  6/6 improved'),
+         L('09:25:09','ok','hypo_refine iter=2  6/6 converging'),
+         L('09:27:33','ok','hypo_refine iter=3  6/6 converged')])),
+      S('Review Hypotheses', 'done', 1.0, C('Review Hypotheses', 'done',
+        '<p>Multi-agent review panel assessed all 6 refined hypotheses. 4 passed review, 2 sent back. Final: 4 forwarded to invention loop.</p>',
+        [M('Reviewed','6'), M('Passed','4','green'), M('Rejected','2','amber')],
+        [L('09:29:15','ok','review_panel initialized  3 agents'),
+         L('09:31:44','info','hypo #3 flagged: weak falsifiability'),
+         L('09:31:52','info','hypo #5 flagged: overlap with prior work'),
+         L('09:32:10','ok','review_complete  4/6 passed')]))
+    ]
+  },
+  {
+    id: 'invention', name: 'Invention Loop', color: '#a78bfa', progress: 0.6, status: 'running',
+    subSteps: [
+      S('Gen Strategy', 'done', 1.0, C('Generate Strategy', 'done',
+        '<p>Generated invention strategies for all 4 hypotheses. Each includes experimental design, key variables, and expected outcomes.</p>',
+        [M('Strategies','4','green'), M('Avg Depth','3.2','blue'), M('Duration','4m 12s')],
+        [L('09:34:08','ok','strategy_gen hypo=1 complete'), L('09:35:22','ok','strategy_gen hypo=2 complete'),
+         L('09:36:41','ok','strategy_gen hypo=3 complete'), L('09:38:20','ok','strategy_gen hypo=4 complete')])),
+      S('Gen Plan', 'done', 1.0, C('Generate Plan', 'done',
+        '<p>Detailed research plans generated. Each covers methodology, resource requirements, and milestones.</p>',
+        [M('Plans','4','green'), M('Milestones','28','blue'), M('Duration','6m 05s')],
+        [L('09:40:15','ok','plan_gen all 4 plans complete  28 milestones')])),
+      S('Gen Paper Text', 'done', 1.0, C('Generate Paper Text', 'done',
+        '<p>Full paper drafts for all 4 inventions. Each includes abstract, introduction, methodology, results framework, and discussion.</p>',
+        [M('Papers','4','green'), M('Avg Words','4,218'), M('Citations','87','blue')],
+        [L('09:48:32','ok','paper_text_gen 4/4 drafts complete')])),
+      S('Review Paper', 'done', 1.0, C('Review Paper', 'done',
+        '<p>Peer-review simulation on all 4 papers. Scores: accept (2), minor revision (1), major revision (1). Top 2 advanced to artifacts.</p>',
+        [M('Accept','2','green'), M('Minor Rev','1','amber'), M('Major Rev','1','amber')],
+        [L('09:52:15','ok','review_sim complete  2 accept, 1 minor, 1 major')])),
+      S('Gen Artifacts', 'running', 0.6, C('Generate Artifacts', 'running',
+        '<p>Creating visualizations, demo scripts, and supplementary data for the top 2 papers. Currently generating the interactive demo script for Paper #1.</p><p>3 of 5 artifacts complete. Demo script compilation in progress.</p>',
+        [M('Artifacts','3/5','blue'), M('Figures','3','green'), M('Current','Demo','amber')],
+        [L('09:54:30','ok','fig_gen fig=1 architecture_diagram done'),
+         L('09:55:41','ok','fig_gen fig=2 performance_plot done'),
+         L('09:56:58','ok','fig_gen fig=3 comparison_chart done'),
+         L('09:57:12','info','demo_gen starting Python demo script'),
+         L('09:57:45','info','demo_gen compiling dependencies...')]),
+        [{ name: 'Fig 1 \u2014 Architecture', status: 'done' },
+         { name: 'Fig 2 \u2014 Performance', status: 'done' },
+         { name: 'Fig 3 \u2014 Comparison', status: 'done' },
+         { name: 'Demo Script', status: 'active' },
+         { name: 'Supp. Data', status: 'pending' }])
+    ]
+  },
+  {
+    id: 'paper', name: 'Paper Repo', color: '#fbbf24', progress: 0.0, status: 'pending',
+    subSteps: [
+      S('Compile LaTeX', 'pending', 0.0, C('Compile LaTeX', 'pending',
+        '<p>Waiting for artifact generation to complete. Will compile final LaTeX documents with embedded figures and supplementary materials.</p>',
+        [M('Status','Queued')])),
+      S('Gen Visualizations', 'pending', 0.0, C('Generate Visualizations', 'pending',
+        '<p>Final high-resolution visualizations for paper repository. Pending LaTeX compilation.</p>',
+        [M('Status','Queued')])),
+      S('Build Repository', 'pending', 0.0, C('Build Repository', 'pending',
+        '<p>Assemble final GitHub repository with paper, code, data, and documentation. Pending prior steps.</p>',
+        [M('Status','Queued')]))
+    ]
+  }
+];
+
+// ================================================================
+//  STATE
+// ================================================================
+let currentModuleIdx = 2;   // Invention Loop
+let currentSubIdx = 4;      // Gen Artifacts
+let currentDetailIdx = 3;   // Demo Script (active)
+let navLayer = 0;           // 0=module, 1=sub, 2=detail
+
+// ================================================================
+//  RING MATH
+// ================================================================
+function setRing(id, radius, fraction) {
+  const circ = 2 * Math.PI * radius;
+  const el = document.getElementById(id);
+  el.setAttribute('stroke-dasharray', circ.toFixed(2));
+  const offset = circ * (1 - Math.max(0, Math.min(1, fraction)));
+  el.setAttribute('stroke-dashoffset', offset.toFixed(2));
+}
+
+// ================================================================
+//  COMPUTE OVERALL PIPELINE PROGRESS
+// ================================================================
+function computeOverallProgress() {
+  let total = 0;
+  let done = 0;
+  MODULES.forEach(m => {
+    const w = m.subSteps.length;
+    total += w;
+    m.subSteps.forEach(s => { done += s.progress * 1; });
+  });
+  return total > 0 ? done / total : 0;
+}
+
+// ================================================================
+//  MODULE ICON BUILDER
+// ================================================================
+function buildModuleSelector() {
+  const container = document.getElementById('module-selector');
+  container.innerHTML = '';
+
+  MODULES.forEach((mod, i) => {
+    const div = document.createElement('div');
+    div.className = 'mod-icon' + (i === currentModuleIdx ? ' active' : '');
+    div.onclick = () => { currentModuleIdx = i; currentSubIdx = 0; currentDetailIdx = 0; navLayer = 0; render(); };
+
+    const r = 11;
+    const circ = 2 * Math.PI * r;
+    const offset = circ * (1 - mod.progress);
+
+    div.innerHTML = `
+      <svg viewBox="0 0 28 28">
+        <circle class="mod-ring" cx="14" cy="14" r="${r}" />
+        <circle class="mod-ring-progress" cx="14" cy="14" r="${r}"
+                stroke="${mod.color}" transform="rotate(-90 14 14)"
+                stroke-dasharray="${circ.toFixed(2)}"
+                stroke-dashoffset="${offset.toFixed(2)}" />
+        <rect class="mod-diamond" x="10" y="10" width="8" height="8"
+              rx="1" transform="rotate(45 14 14)"
+              fill="${mod.color}" />
+      </svg>
+    `;
+    container.appendChild(div);
+  });
+}
+
+// ================================================================
+//  SUB-STEP DOTS
+// ================================================================
+function buildSubDots() {
+  const container = document.getElementById('sub-dots');
+  container.innerHTML = '';
+
+  const mod = MODULES[currentModuleIdx];
+  mod.subSteps.forEach((s, i) => {
+    const dot = document.createElement('div');
+    let cls = 'sub-dot';
+    if (i === currentSubIdx) cls += ' active';
+    else if (s.status === 'done') cls += ' done';
+    else cls += ' pending';
+    dot.className = cls;
+    dot.onclick = () => { currentSubIdx = i; currentDetailIdx = 0; navLayer = 1; render(); };
+    container.appendChild(dot);
+  });
+}
+
+// ================================================================
+//  DETAIL DOTS
+// ================================================================
+function buildDetailDots() {
+  const container = document.getElementById('detail-container');
+  const dotRow = document.getElementById('detail-dots');
+  const label = document.getElementById('detail-label');
+
+  const sub = MODULES[currentModuleIdx].subSteps[currentSubIdx];
+  if (!sub.details || sub.details.length === 0) {
+    container.style.display = 'none';
+    return;
+  }
+
+  container.style.display = 'flex';
+  label.textContent = sub.name;
+  dotRow.innerHTML = '';
+
+  sub.details.forEach((d, i) => {
+    const dot = document.createElement('div');
+    let cls = 'detail-dot';
+    if (i === currentDetailIdx && navLayer === 2) cls += ' active';
+    else if (d.status === 'done') cls += ' done';
+    else if (d.status === 'active') cls += ' active';
+    else cls += ' pending';
+    dot.className = cls;
+    dot.title = d.name;
+    dot.onclick = () => { currentDetailIdx = i; navLayer = 2; render(); };
+    dotRow.appendChild(dot);
+  });
+}
+
+// ================================================================
+//  CONTENT RENDERER
+// ================================================================
+function buildContent() {
+  const area = document.getElementById('content-area');
+  const sub = MODULES[currentModuleIdx].subSteps[currentSubIdx];
+  const c = sub.content;
+
+  const tagClass = c.tag === 'done' ? 'tag-done' : c.tag === 'running' ? 'tag-running' : 'tag-pending';
+  const tagLabel = c.tag.charAt(0).toUpperCase() + c.tag.slice(1);
+
+  let detailInfo = '';
+  if (sub.details && sub.details.length > 0 && navLayer === 2) {
+    const d = sub.details[currentDetailIdx];
+    const dTag = d.status === 'done' ? 'tag-done' : d.status === 'active' ? 'tag-running' : 'tag-pending';
+    const dLabel = d.status === 'active' ? 'Running' : d.status.charAt(0).toUpperCase() + d.status.slice(1);
+    detailInfo = `
+      <div style="margin-top:14px; padding:10px 14px; background:var(--surface); border:1px solid var(--border); border-radius:8px;">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
+          <span style="font-size:12px; font-weight:600; color:var(--text);">${d.name}</span>
+          <span class="tag ${dTag}">${dLabel}</span>
+        </div>
+        <div style="font-size:11px; color:var(--text-dim);">
+          Artifact ${currentDetailIdx + 1} of ${sub.details.length}
+        </div>
+      </div>
+    `;
+  }
+
+  let metaHtml = '';
+  if (c.meta && c.meta.length > 0) {
+    metaHtml = '<div class="content-meta">' +
+      c.meta.map(m => `
+        <div class="meta-card">
+          <div class="label">${m.label}</div>
+          <div class="value ${m.cls}">${m.value}</div>
+        </div>
+      `).join('') +
+    '</div>';
+  }
+
+  let logsHtml = '';
+  if (c.logs && c.logs.length > 0) {
+    logsHtml = '<div class="log-section"><h3>Activity</h3>' +
+      c.logs.map(l => `
+        <div class="log-line">
+          <span class="log-time">${l.time}</span>
+          <span class="log-level ${l.level}">${l.level.toUpperCase()}</span>
+          <span>${l.msg}</span>
+        </div>
+      `).join('') +
+    '</div>';
+  }
+
+  area.innerHTML = `
+    <div class="content-header">
+      <h2>${c.title}</h2>
+      <span class="tag ${tagClass}">${tagLabel}</span>
+    </div>
+    <div class="content-body">${c.body}</div>
+    ${metaHtml}
+    ${detailInfo}
+    ${logsHtml}
+  `;
+}
+
+// ================================================================
+//  MASTER RENDER
+// ================================================================
+function render() {
+  const mod = MODULES[currentModuleIdx];
+  const sub = mod.subSteps[currentSubIdx];
+
+  // Clamp indices
+  if (currentSubIdx >= mod.subSteps.length) currentSubIdx = mod.subSteps.length - 1;
+  if (sub.details && currentDetailIdx >= sub.details.length) currentDetailIdx = sub.details.length - 1;
+
+  // Overall pipeline ring
+  const overallProg = computeOverallProgress();
+  setRing('ring-outer', 70, overallProg);
+  document.getElementById('label-outer').textContent =
+    `Pipeline ${Math.round(overallProg * 100)}%`;
+
+  // Module ring
+  setRing('ring-mid', 50, mod.progress);
+  document.getElementById('label-mid').textContent =
+    `${mod.name} ${Math.round(mod.progress * 100)}%`;
+
+  // Sub-step ring
+  setRing('ring-inner', 30, sub.progress);
+  document.getElementById('label-inner').textContent =
+    `${sub.name} ${Math.round(sub.progress * 100)}%`;
+
+  // Center text
+  if (sub.details && sub.details.length > 0) {
+    const doneCount = sub.details.filter(d => d.status === 'done').length;
+    document.getElementById('center-text').textContent =
+      `${doneCount}/${sub.details.length}`;
+    document.getElementById('center-sub').textContent = sub.name.toLowerCase();
+  } else {
+    document.getElementById('center-text').textContent =
+      `${Math.round(sub.progress * 100)}%`;
+    document.getElementById('center-sub').textContent = sub.name.toLowerCase();
+  }
+
+  // Module name
+  document.getElementById('module-name').textContent = mod.name;
+
+  // Sub-step name
+  document.getElementById('sub-step-name').textContent = sub.name;
+
+  // Build components
+  buildModuleSelector();
+  buildSubDots();
+  buildDetailDots();
+
+  // Content with fade
+  const area = document.getElementById('content-area');
+  area.classList.add('fading');
+  setTimeout(() => {
+    buildContent();
+    area.classList.remove('fading');
+  }, 120);
+}
+
+// ================================================================
+//  KEYBOARD NAVIGATION
+// ================================================================
+document.addEventListener('keydown', (e) => {
+  const mod = MODULES[currentModuleIdx];
+  const sub = mod.subSteps[currentSubIdx];
+
+  switch (e.key) {
+    case 'ArrowLeft':
+      e.preventDefault();
+      if (navLayer === 0) {
+        currentModuleIdx = (currentModuleIdx - 1 + MODULES.length) % MODULES.length;
+        currentSubIdx = 0;
+        currentDetailIdx = 0;
+      }
+      render();
+      break;
+
+    case 'ArrowRight':
+      e.preventDefault();
+      if (navLayer === 0) {
+        currentModuleIdx = (currentModuleIdx + 1) % MODULES.length;
+        currentSubIdx = 0;
+        currentDetailIdx = 0;
+      }
+      render();
+      break;
+
+    case 'ArrowUp':
+      e.preventDefault();
+      if (navLayer === 2 && sub.details) {
+        currentDetailIdx = (currentDetailIdx - 1 + sub.details.length) % sub.details.length;
+      } else if (navLayer <= 1) {
+        currentSubIdx = (currentSubIdx - 1 + mod.subSteps.length) % mod.subSteps.length;
+        currentDetailIdx = 0;
+        navLayer = 1;
+      }
+      render();
+      break;
+
+    case 'ArrowDown':
+      e.preventDefault();
+      if (navLayer === 2 && sub.details) {
+        currentDetailIdx = (currentDetailIdx + 1) % sub.details.length;
+      } else if (navLayer <= 1) {
+        currentSubIdx = (currentSubIdx + 1) % mod.subSteps.length;
+        currentDetailIdx = 0;
+        navLayer = 1;
+      }
+      render();
+      break;
+
+    case 'Tab':
+      e.preventDefault();
+      if (sub.details && sub.details.length > 0) {
+        navLayer = navLayer === 2 ? 1 : 2;
+      } else {
+        navLayer = navLayer === 0 ? 1 : 0;
+      }
+      render();
+      break;
+
+    case 'Escape':
+      e.preventDefault();
+      if (navLayer > 0) {
+        navLayer--;
+        render();
+      }
+      break;
+  }
+});
+
+// ================================================================
+//  INITIAL RENDER
+// ================================================================
+render();
+</script>
+</body>
+</html>

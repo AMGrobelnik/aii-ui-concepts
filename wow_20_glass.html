@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor - Stained Glass Window</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #08080e;
+    font-family: 'Inter', sans-serif;
+    width: 100vw; height: 100vh;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* --- Dust particles in light beams --- */
+  .dust-container {
+    position: fixed; inset: 0;
+    pointer-events: none; z-index: 20;
+    overflow: hidden;
+  }
+  .dust {
+    position: absolute;
+    width: 2px; height: 2px;
+    border-radius: 50%;
+    background: rgba(255, 248, 220, 0.6);
+    animation: dustFloat linear infinite;
+  }
+  @keyframes dustFloat {
+    0%   { transform: translateY(100vh) translateX(0); opacity: 0; }
+    10%  { opacity: 0.7; }
+    50%  { opacity: 0.3; }
+    90%  { opacity: 0.6; }
+    100% { transform: translateY(-20px) translateX(40px); opacity: 0; }
+  }
+
+  /* --- Light rays from illuminated panels --- */
+  .light-rays {
+    position: fixed; inset: 0;
+    pointer-events: none; z-index: 5;
+    overflow: hidden;
+  }
+  .ray {
+    position: absolute;
+    transform-origin: top center;
+    opacity: 0.08;
+    filter: blur(8px);
+  }
+  .ray-green {
+    background: linear-gradient(180deg, #4ade80 0%, transparent 100%);
+    width: 180px; height: 55vh;
+    top: 8%; left: 38%;
+    transform: rotate(-5deg);
+    animation: rayPulse 6s ease-in-out infinite;
+  }
+  .ray-purple {
+    background: linear-gradient(180deg, #a78bfa 0%, transparent 100%);
+    width: 140px; height: 60vh;
+    top: 20%; left: 22%;
+    transform: rotate(-12deg);
+    animation: rayPulse 7s ease-in-out infinite 1s;
+  }
+  .ray-blue {
+    background: linear-gradient(180deg, #60a5fa 0%, transparent 100%);
+    width: 220px; height: 65vh;
+    top: 18%; left: 40%;
+    transform: rotate(2deg);
+    animation: rayFlicker 3s ease-in-out infinite;
+  }
+  @keyframes rayPulse {
+    0%, 100% { opacity: 0.06; }
+    50%      { opacity: 0.12; }
+  }
+  @keyframes rayFlicker {
+    0%, 100% { opacity: 0.07; }
+    30%      { opacity: 0.10; }
+    50%      { opacity: 0.05; }
+    70%      { opacity: 0.11; }
+  }
+
+  /* --- Main SVG canvas --- */
+  .window-container {
+    position: relative;
+    width: min(60vh, 90vw);
+    height: min(92vh, 140vw);
+    z-index: 10;
+  }
+  .window-container svg {
+    width: 100%; height: 100%;
+    filter: drop-shadow(0 0 60px rgba(100, 140, 255, 0.08));
+  }
+
+  /* --- Glass glow filters --- */
+  .glow-green  { filter: url(#glowGreen); }
+  .glow-purple { filter: url(#glowPurple); }
+  .glow-blue   { filter: url(#glowBlue); }
+  .glow-orange { filter: url(#glowOrange); }
+
+  /* --- Active petal flicker --- */
+  .petal-active {
+    animation: petalFlicker 2.2s ease-in-out infinite;
+  }
+  @keyframes petalFlicker {
+    0%, 100% { opacity: 0.55; }
+    15%      { opacity: 0.75; }
+    35%      { opacity: 0.5; }
+    50%      { opacity: 0.85; }
+    65%      { opacity: 0.6; }
+    80%      { opacity: 0.78; }
+  }
+
+  /* --- Hover info overlays --- */
+  .glass-panel { cursor: pointer; transition: filter 0.3s; }
+  .glass-panel:hover { filter: brightness(1.15) saturate(1.1); }
+
+  .tooltip {
+    position: fixed;
+    pointer-events: none;
+    background: rgba(10, 10, 18, 0.92);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 8px;
+    padding: 10px 14px;
+    color: #e0e0e8;
+    font-size: 12px;
+    line-height: 1.5;
+    z-index: 100;
+    opacity: 0;
+    transition: opacity 0.2s;
+    max-width: 220px;
+    backdrop-filter: blur(12px);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  }
+  .tooltip.visible { opacity: 1; }
+  .tooltip .tt-title {
+    font-weight: 600;
+    font-size: 13px;
+    margin-bottom: 4px;
+  }
+  .tooltip .tt-status {
+    font-size: 11px;
+    opacity: 0.7;
+  }
+
+  /* --- Bottom plaque --- */
+  .plaque {
+    position: fixed;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 30;
+    background: linear-gradient(135deg, #1a1a24, #12121a);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 6px;
+    padding: 8px 24px;
+    color: rgba(220, 215, 200, 0.7);
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    font-weight: 300;
+    white-space: nowrap;
+  }
+
+  /* --- Ambient background glow on floor --- */
+  .floor-glow {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    height: 30vh;
+    background: radial-gradient(ellipse 80% 60% at 42% 100%, rgba(74, 222, 128, 0.04) 0%, transparent 50%),
+                radial-gradient(ellipse 60% 50% at 28% 100%, rgba(167, 139, 250, 0.03) 0%, transparent 50%),
+                radial-gradient(ellipse 90% 70% at 50% 100%, rgba(96, 165, 250, 0.04) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: 2;
+  }
+</style>
+</head>
+<body>
+
+<!-- Ambient floor glow -->
+<div class="floor-glow"></div>
+
+<!-- Light rays streaming through panels -->
+<div class="light-rays">
+  <div class="ray ray-green"></div>
+  <div class="ray ray-purple"></div>
+  <div class="ray ray-blue"></div>
+</div>
+
+<!-- Dust particles -->
+<div class="dust-container" id="dustContainer"></div>
+
+<!-- Tooltip -->
+<div class="tooltip" id="tooltip">
+  <div class="tt-title"></div>
+  <div class="tt-body"></div>
+  <div class="tt-status"></div>
+</div>
+
+<!-- Main Window SVG -->
+<div class="window-container">
+<svg viewBox="0 0 600 900" xmlns="http://www.w3.org/2000/svg">
+<defs>
+  <!-- Glass texture pattern -->
+  <filter id="glassTexture">
+    <feTurbulence type="fractalNoise" baseFrequency="0.03" numOctaves="3" result="noise"/>
+    <feColorMatrix type="saturate" values="0" in="noise" result="grayNoise"/>
+    <feBlend in="SourceGraphic" in2="grayNoise" mode="overlay" result="textured"/>
+    <feComposite in="textured" in2="SourceGraphic" operator="in"/>
+  </filter>
+
+  <!-- Glow filters for illuminated panels -->
+  <filter id="glowGreen" x="-30%" y="-30%" width="160%" height="160%">
+    <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur"/>
+    <feColorMatrix in="blur" type="matrix"
+      values="0 0 0 0 0.3  0 0 0 0 0.85  0 0 0 0 0.4  0 0 0 0.5 0" result="glow"/>
+    <feMerge><feMergeNode in="glow"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+  <filter id="glowPurple" x="-30%" y="-30%" width="160%" height="160%">
+    <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="blur"/>
+    <feColorMatrix in="blur" type="matrix"
+      values="0 0 0 0 0.55  0 0 0 0 0.35  0 0 0 0 0.85  0 0 0 0.45 0" result="glow"/>
+    <feMerge><feMergeNode in="glow"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+  <filter id="glowBlue" x="-30%" y="-30%" width="160%" height="160%">
+    <feGaussianBlur in="SourceGraphic" stdDeviation="7" result="blur"/>
+    <feColorMatrix in="blur" type="matrix"
+      values="0 0 0 0 0.25  0 0 0 0 0.5  0 0 0 0 0.9  0 0 0 0.5 0" result="glow"/>
+    <feMerge><feMergeNode in="glow"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+  <filter id="glowOrange" x="-30%" y="-30%" width="160%" height="160%">
+    <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur"/>
+    <feColorMatrix in="blur" type="matrix"
+      values="0 0 0 0 0.9  0 0 0 0 0.5  0 0 0 0 0.15  0 0 0 0.3 0" result="glow"/>
+    <feMerge><feMergeNode in="glow"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+
+  <!-- Inner glow for illuminated glass -->
+  <filter id="innerGlow">
+    <feGaussianBlur in="SourceAlpha" stdDeviation="8" result="blur"/>
+    <feComposite in="blur" in2="SourceAlpha" operator="in" result="innerBlur"/>
+    <feFlood flood-color="white" flood-opacity="0.15" result="white"/>
+    <feComposite in="white" in2="innerBlur" operator="in" result="glow"/>
+    <feMerge><feMergeNode in="SourceGraphic"/><feMergeNode in="glow"/></feMerge>
+  </filter>
+
+  <!-- Gradient definitions -->
+  <radialGradient id="greenGlass" cx="50%" cy="40%" r="60%">
+    <stop offset="0%" stop-color="#6ee7a0" stop-opacity="0.95"/>
+    <stop offset="40%" stop-color="#34d37a" stop-opacity="0.85"/>
+    <stop offset="100%" stop-color="#15803d" stop-opacity="0.7"/>
+  </radialGradient>
+  <radialGradient id="purpleGlass1" cx="50%" cy="30%" r="65%">
+    <stop offset="0%" stop-color="#c4b5fd" stop-opacity="0.7"/>
+    <stop offset="100%" stop-color="#6d28d9" stop-opacity="0.55"/>
+  </radialGradient>
+  <radialGradient id="purpleGlass2" cx="50%" cy="30%" r="65%">
+    <stop offset="0%" stop-color="#d8b4fe" stop-opacity="0.8"/>
+    <stop offset="100%" stop-color="#7c3aed" stop-opacity="0.65"/>
+  </radialGradient>
+  <radialGradient id="purpleGlass3" cx="50%" cy="30%" r="65%">
+    <stop offset="0%" stop-color="#e9d5ff" stop-opacity="0.92"/>
+    <stop offset="100%" stop-color="#8b5cf6" stop-opacity="0.75"/>
+  </radialGradient>
+  <radialGradient id="blueGlassLit" cx="50%" cy="50%" r="55%">
+    <stop offset="0%" stop-color="#93c5fd" stop-opacity="0.9"/>
+    <stop offset="50%" stop-color="#3b82f6" stop-opacity="0.8"/>
+    <stop offset="100%" stop-color="#1e40af" stop-opacity="0.65"/>
+  </radialGradient>
+  <radialGradient id="blueGlassActive" cx="50%" cy="50%" r="55%">
+    <stop offset="0%" stop-color="#bfdbfe" stop-opacity="0.8"/>
+    <stop offset="50%" stop-color="#60a5fa" stop-opacity="0.6"/>
+    <stop offset="100%" stop-color="#1d4ed8" stop-opacity="0.4"/>
+  </radialGradient>
+  <radialGradient id="blueGlassDark" cx="50%" cy="50%" r="55%">
+    <stop offset="0%" stop-color="#1e3a5f" stop-opacity="0.25"/>
+    <stop offset="100%" stop-color="#0c1929" stop-opacity="0.15"/>
+  </radialGradient>
+  <linearGradient id="orangeGlassDark" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0%" stop-color="#7c4a1a" stop-opacity="0.12"/>
+    <stop offset="100%" stop-color="#3d200a" stop-opacity="0.08"/>
+  </linearGradient>
+
+  <!-- Rosette center gradient -->
+  <radialGradient id="rosetteCenter" cx="50%" cy="50%" r="50%">
+    <stop offset="0%" stop-color="#dbeafe" stop-opacity="0.95"/>
+    <stop offset="100%" stop-color="#2563eb" stop-opacity="0.8"/>
+  </radialGradient>
+
+  <!-- Stone texture for the frame -->
+  <linearGradient id="stoneFrame" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#22222e"/>
+    <stop offset="50%" stop-color="#1a1a24"/>
+    <stop offset="100%" stop-color="#141420"/>
+  </linearGradient>
+
+  <!-- Clip paths for panels within the arch -->
+  <clipPath id="archClip">
+    <path d="M100,850 L100,350 Q100,80 300,80 Q500,80 500,350 L500,850 Z"/>
+  </clipPath>
+</defs>
+
+<!-- ============================================ -->
+<!--  GOTHIC ARCH FRAME (stone surround)          -->
+<!-- ============================================ -->
+<g id="frame">
+  <!-- Outer arch shape -->
+  <path d="M70,870 L70,340 Q70,50 300,50 Q530,50 530,340 L530,870 Z"
+        fill="none" stroke="#22222e" stroke-width="40"/>
+  <!-- Inner decorative border -->
+  <path d="M90,860 L90,345 Q90,70 300,70 Q510,70 510,345 L510,860 Z"
+        fill="none" stroke="#2a2a38" stroke-width="6"/>
+  <!-- Outermost trim -->
+  <path d="M58,876 L58,338 Q58,38 300,38 Q542,38 542,338 L542,876 Z"
+        fill="none" stroke="#1a1a24" stroke-width="8"/>
+
+  <!-- Decorative tracery arcs at top -->
+  <g stroke="#2a2a38" stroke-width="2" fill="none" opacity="0.5">
+    <path d="M180,180 Q240,100 300,160 Q360,100 420,180"/>
+    <path d="M200,200 Q250,140 300,185 Q350,140 400,200"/>
+    <circle cx="300" cy="140" r="18" opacity="0.3"/>
+  </g>
+
+  <!-- Small keystone at apex -->
+  <path d="M290,58 L300,48 L310,58 L310,72 L290,72 Z" fill="#2a2a38"/>
+</g>
+
+<!-- ============================================ -->
+<!--  LEADING (dark lines dividing panels)        -->
+<!-- ============================================ -->
+<g id="leading" stroke="#111118" stroke-width="3.5" fill="none" clip-path="url(#archClip)">
+  <!-- Horizontal dividers -->
+  <line x1="100" y1="280" x2="500" y2="280"/>  <!-- below seed panel -->
+  <line x1="100" y1="750" x2="500" y2="750"/>  <!-- above label stones -->
+
+  <!-- Vertical dividers -->
+  <line x1="200" y1="280" x2="200" y2="750"/>  <!-- left of center -->
+  <line x1="400" y1="280" x2="400" y2="750"/>  <!-- right of center -->
+
+  <!-- Sub-dividers in hypothesis panel -->
+  <line x1="100" y1="435" x2="200" y2="435"/>
+  <line x1="100" y1="590" x2="200" y2="590"/>
+
+  <!-- Sub-dividers in paper panel (3 sections) -->
+  <line x1="400" y1="435" x2="500" y2="435"/>
+  <line x1="400" y1="590" x2="500" y2="590"/>
+</g>
+
+<!-- ============================================ -->
+<!--  TOP PANEL — "SEED" (green, illuminated)     -->
+<!-- ============================================ -->
+<g id="seedPanel" class="glass-panel" data-panel="seed">
+  <clipPath id="seedClip">
+    <path d="M105,275 L105,345 Q105,85 300,85 Q495,85 495,345 L495,275 Z"/>
+  </clipPath>
+  <g clip-path="url(#seedClip)" class="glow-green" filter="url(#innerGlow)">
+    <!-- Base green glass -->
+    <rect x="100" y="80" width="400" height="200" fill="url(#greenGlass)" filter="url(#glassTexture)"/>
+
+    <!-- Abstract intersecting arcs (knowledge graph pattern) -->
+    <g stroke="#2dd672" stroke-width="1.5" fill="none" opacity="0.5">
+      <circle cx="220" cy="180" r="50"/>
+      <circle cx="300" cy="150" r="65"/>
+      <circle cx="380" cy="180" r="50"/>
+      <circle cx="260" cy="210" r="35"/>
+      <circle cx="340" cy="210" r="35"/>
+      <line x1="220" y1="180" x2="300" y2="150"/>
+      <line x1="300" y1="150" x2="380" y2="180"/>
+      <line x1="260" y1="210" x2="340" y2="210"/>
+      <line x1="220" y1="180" x2="260" y2="210"/>
+      <line x1="380" y1="180" x2="340" y2="210"/>
+    </g>
+    <!-- Small node dots -->
+    <g fill="#a7f3d0" opacity="0.8">
+      <circle cx="220" cy="180" r="4"/>
+      <circle cx="300" cy="150" r="5"/>
+      <circle cx="380" cy="180" r="4"/>
+      <circle cx="260" cy="210" r="3"/>
+      <circle cx="340" cy="210" r="3"/>
+    </g>
+    <!-- Light leak / bright center -->
+    <ellipse cx="300" cy="170" rx="120" ry="60" fill="white" opacity="0.06"/>
+  </g>
+</g>
+
+<!-- ============================================ -->
+<!--  LEFT PANEL — "HYPOTHESIS" (purple, 3 subs)  -->
+<!-- ============================================ -->
+<g id="hypoPanel" class="glass-panel" data-panel="hypothesis">
+  <g class="glow-purple" filter="url(#innerGlow)">
+    <!-- Sub-panel 1: iteration 1 (dimmest, score 6.2) -->
+    <rect x="104" y="284" width="93" height="148" fill="url(#purpleGlass1)" filter="url(#glassTexture)"/>
+    <g opacity="0.4" transform="translate(150,340)">
+      <!-- Abstract: question mark shape -->
+      <path d="M-12,-30 Q-12,-45 0,-45 Q12,-45 12,-30 Q12,-20 0,-15" stroke="#c4b5fd" stroke-width="1.5" fill="none"/>
+      <circle cx="0" cy="-5" r="2" fill="#c4b5fd"/>
+    </g>
+
+    <!-- Sub-panel 2: iteration 2 (medium, score 7.3) -->
+    <rect x="104" y="439" width="93" height="148" fill="url(#purpleGlass2)" filter="url(#glassTexture)"/>
+    <g opacity="0.55" transform="translate(150,500)">
+      <!-- Transitioning shape -->
+      <path d="M-12,-25 Q-12,-40 0,-40 Q8,-40 10,-30 Q12,-20 5,-12 L8,-5 L-2,-10 Q-12,-18 -12,-25Z" stroke="#d8b4fe" stroke-width="1.2" fill="none"/>
+      <circle cx="2" cy="2" r="3" fill="#d8b4fe" opacity="0.6"/>
+    </g>
+
+    <!-- Sub-panel 3: iteration 3 (brightest, score 8.4) -->
+    <rect x="104" y="594" width="93" height="152" fill="url(#purpleGlass3)" filter="url(#glassTexture)"/>
+    <g opacity="0.7" transform="translate(150,660)">
+      <!-- Lightbulb shape -->
+      <path d="M0,-30 Q-15,-25 -12,-10 Q-10,0 -6,5 L6,5 Q10,0 12,-10 Q15,-25 0,-30Z" stroke="#e9d5ff" stroke-width="1.3" fill="none"/>
+      <line x1="-5" y1="8" x2="5" y2="8" stroke="#e9d5ff" stroke-width="1"/>
+      <line x1="-4" y1="12" x2="4" y2="12" stroke="#e9d5ff" stroke-width="1"/>
+      <!-- Rays -->
+      <g stroke="#e9d5ff" stroke-width="0.8" opacity="0.5">
+        <line x1="0" y1="-35" x2="0" y2="-42"/>
+        <line x1="-18" y1="-18" x2="-24" y2="-22"/>
+        <line x1="18" y1="-18" x2="24" y2="-22"/>
+      </g>
+    </g>
+    <!-- Bright highlight on final sub-panel -->
+    <ellipse cx="150" cy="660" rx="35" ry="50" fill="white" opacity="0.06"/>
+  </g>
+</g>
+
+<!-- ============================================ -->
+<!--  CENTER PANEL — "INVENTION" (rosette window)  -->
+<!-- ============================================ -->
+<g id="inventionPanel" class="glass-panel" data-panel="invention">
+
+  <!-- Background fill for the center panel area -->
+  <rect x="204" y="284" width="192" height="462" fill="#0a0a14"/>
+
+  <!-- Rosette window (circular, centered) -->
+  <g transform="translate(300, 510)">
+    <!-- Outer ring -->
+    <circle cx="0" cy="0" r="88" fill="none" stroke="#111118" stroke-width="4"/>
+    <circle cx="0" cy="0" r="85" fill="#0d0d1a"/>
+
+    <!-- 6 petals arranged around center -->
+    <!-- Petal 1 (top) - COMPLETED -->
+    <g class="glow-blue" filter="url(#innerGlow)">
+      <path d="M0,-80 Q-25,-55 -20,-25 Q-10,-5 0,-12 Q10,-5 20,-25 Q25,-55 0,-80Z"
+            fill="url(#blueGlassLit)" filter="url(#glassTexture)"/>
+    </g>
+    <path d="M0,-80 Q-25,-55 -20,-25 Q-10,-5 0,-12 Q10,-5 20,-25 Q25,-55 0,-80Z"
+          fill="none" stroke="#111118" stroke-width="2"/>
+
+    <!-- Petal 2 (top-right) - COMPLETED -->
+    <g class="glow-blue" filter="url(#innerGlow)">
+      <path d="M70,-40 Q55,-55 28,-45 Q8,-35 10,-22 Q12,-10 28,0 Q55,5 70,-40Z"
+            fill="url(#blueGlassLit)" filter="url(#glassTexture)"/>
+    </g>
+    <path d="M70,-40 Q55,-55 28,-45 Q8,-35 10,-22 Q12,-10 28,0 Q55,5 70,-40Z"
+          fill="none" stroke="#111118" stroke-width="2"/>
+
+    <!-- Petal 3 (bottom-right) - COMPLETED -->
+    <g class="glow-blue" filter="url(#innerGlow)">
+      <path d="M70,40 Q55,55 28,45 Q8,35 10,22 Q12,10 28,0 Q55,-5 70,40Z"
+            fill="url(#blueGlassLit)" filter="url(#glassTexture)"/>
+    </g>
+    <path d="M70,40 Q55,55 28,45 Q8,35 10,22 Q12,10 28,0 Q55,-5 70,40Z"
+          fill="none" stroke="#111118" stroke-width="2"/>
+
+    <!-- Petal 4 (bottom) - ACTIVE / FLICKERING -->
+    <g class="petal-active" filter="url(#innerGlow)">
+      <path d="M0,80 Q-25,55 -20,25 Q-10,5 0,12 Q10,5 20,25 Q25,55 0,80Z"
+            fill="url(#blueGlassActive)" filter="url(#glassTexture)"/>
+    </g>
+    <path d="M0,80 Q-25,55 -20,25 Q-10,5 0,12 Q10,5 20,25 Q25,55 0,80Z"
+          fill="none" stroke="#111118" stroke-width="2"/>
+
+    <!-- Petal 5 (bottom-left) - DARK / PENDING -->
+    <path d="M-70,40 Q-55,55 -28,45 Q-8,35 -10,22 Q-12,10 -28,0 Q-55,-5 -70,40Z"
+          fill="url(#blueGlassDark)" stroke="#111118" stroke-width="2"/>
+
+    <!-- Petal 6 (top-left) - DARK / PENDING -->
+    <path d="M-70,-40 Q-55,-55 -28,-45 Q-8,-35 -10,-22 Q-12,-10 -28,0 Q-55,5 -70,-40Z"
+          fill="url(#blueGlassDark)" stroke="#111118" stroke-width="2"/>
+
+    <!-- Center jewel of the rosette -->
+    <circle cx="0" cy="0" r="14" fill="url(#rosetteCenter)" filter="url(#innerGlow)"/>
+    <circle cx="0" cy="0" r="14" fill="none" stroke="#111118" stroke-width="2"/>
+    <circle cx="0" cy="0" r="8" fill="white" opacity="0.12"/>
+
+    <!-- Thin decorative arcs between petals -->
+    <g stroke="#1a1a30" stroke-width="1" fill="none" opacity="0.5">
+      <circle cx="0" cy="0" r="45"/>
+      <circle cx="0" cy="0" r="65"/>
+    </g>
+  </g>
+
+  <!-- Small decorative triangular fills above/below rosette -->
+  <g fill="#0d0d1a" stroke="#111118" stroke-width="1.5">
+    <path d="M208,288 L300,380 L392,288 Z" fill="#080812"/>
+    <path d="M208,742 L300,640 L392,742 Z" fill="#080812"/>
+  </g>
+  <!-- Faint blue tint in surrounding area for lit panels -->
+  <rect x="208" y="288" width="184" height="458" fill="#1e3a5f" opacity="0.04"/>
+</g>
+
+<!-- ============================================ -->
+<!--  RIGHT PANEL — "PAPER" (orange, DARK)         -->
+<!-- ============================================ -->
+<g id="paperPanel" class="glass-panel" data-panel="paper">
+  <!-- Sub-panel 1 (top) -->
+  <rect x="404" y="284" width="92" height="148" fill="url(#orangeGlassDark)"/>
+  <rect x="404" y="284" width="92" height="148" fill="none" stroke="#2a1a0a" stroke-width="0.5" opacity="0.3"/>
+  <g opacity="0.12" transform="translate(450,345)">
+    <!-- Abstract: page shape -->
+    <rect x="-14" y="-25" width="28" height="36" rx="2" stroke="#8a5a2a" stroke-width="1" fill="none"/>
+    <line x1="-8" y1="-16" x2="8" y2="-16" stroke="#8a5a2a" stroke-width="0.7"/>
+    <line x1="-8" y1="-10" x2="8" y2="-10" stroke="#8a5a2a" stroke-width="0.7"/>
+    <line x1="-8" y1="-4" x2="5" y2="-4" stroke="#8a5a2a" stroke-width="0.7"/>
+  </g>
+
+  <!-- Sub-panel 2 (middle) -->
+  <rect x="404" y="439" width="92" height="148" fill="url(#orangeGlassDark)"/>
+  <rect x="404" y="439" width="92" height="148" fill="none" stroke="#2a1a0a" stroke-width="0.5" opacity="0.3"/>
+  <g opacity="0.12" transform="translate(450,505)">
+    <rect x="-16" y="-20" width="32" height="24" rx="1" stroke="#8a5a2a" stroke-width="1" fill="none"/>
+    <line x1="-16" y1="-8" x2="16" y2="-8" stroke="#8a5a2a" stroke-width="0.5"/>
+    <line x1="0" y1="-20" x2="0" y2="4" stroke="#8a5a2a" stroke-width="0.5"/>
+  </g>
+
+  <!-- Sub-panel 3 (bottom) -->
+  <rect x="404" y="594" width="92" height="152" fill="url(#orangeGlassDark)"/>
+  <rect x="404" y="594" width="92" height="152" fill="none" stroke="#2a1a0a" stroke-width="0.5" opacity="0.3"/>
+  <g opacity="0.1" transform="translate(450,665)">
+    <circle cx="0" cy="0" r="16" stroke="#8a5a2a" stroke-width="1" fill="none"/>
+    <path d="M-8,-8 L8,8 M8,-8 L-8,8" stroke="#8a5a2a" stroke-width="0.5"/>
+  </g>
+
+  <!-- Very faint orange edge glow to hint at future illumination -->
+  <g opacity="0.05">
+    <rect x="404" y="284" width="92" height="462" fill="none" stroke="#e8913a" stroke-width="1.5"/>
+  </g>
+</g>
+
+<!-- ============================================ -->
+<!--  LABEL STONES (module names at base)          -->
+<!-- ============================================ -->
+<g id="labels">
+  <!-- Stone background strip -->
+  <rect x="100" y="752" width="400" height="46" fill="#16161e"/>
+  <rect x="100" y="752" width="400" height="46" fill="none" stroke="#111118" stroke-width="2"/>
+
+  <!-- Vertical dividers matching panel positions -->
+  <line x1="200" y1="752" x2="200" y2="798" stroke="#111118" stroke-width="2"/>
+  <line x1="400" y1="752" x2="400" y2="798" stroke="#111118" stroke-width="2"/>
+
+  <!-- Labels -->
+  <text x="150" y="779" text-anchor="middle" fill="#8b8b98" font-family="Inter, sans-serif"
+        font-size="10" font-weight="500" letter-spacing="2">HYPOTHESIS</text>
+  <text x="300" y="779" text-anchor="middle" fill="#8b8b98" font-family="Inter, sans-serif"
+        font-size="10" font-weight="500" letter-spacing="2">INVENTION</text>
+  <text x="450" y="779" text-anchor="middle" fill="#8b8b98" font-family="Inter, sans-serif"
+        font-size="10" font-weight="500" letter-spacing="2">PAPER</text>
+
+  <!-- Seed label inside the arch top area -->
+  <text x="300" y="265" text-anchor="middle" fill="#8b8b98" font-family="Inter, sans-serif"
+        font-size="10" font-weight="500" letter-spacing="2">SEED</text>
+</g>
+
+<!-- ============================================ -->
+<!--  DECORATIVE TRACERY within arch               -->
+<!-- ============================================ -->
+<g id="tracery" stroke="#222230" stroke-width="1" fill="none" opacity="0.35" clip-path="url(#archClip)">
+  <!-- Small trefoil above seed panel -->
+  <circle cx="260" cy="112" r="10"/>
+  <circle cx="300" cy="100" r="10"/>
+  <circle cx="340" cy="112" r="10"/>
+
+  <!-- Decorative curves flanking the rosette -->
+  <path d="M210,420 Q240,460 210,510"/>
+  <path d="M390,420 Q360,460 390,510"/>
+  <path d="M210,600 Q240,560 210,510"/>
+  <path d="M390,600 Q360,560 390,510"/>
+</g>
+
+<!-- ============================================ -->
+<!--  BASE / SILL of the window                    -->
+<!-- ============================================ -->
+<g id="sill">
+  <rect x="70" y="850" width="460" height="30" fill="#1a1a24"/>
+  <rect x="70" y="850" width="460" height="30" fill="none" stroke="#22222e" stroke-width="2"/>
+  <line x1="70" y1="850" x2="530" y2="850" stroke="#2a2a38" stroke-width="1"/>
+</g>
+
+</svg>
+</div>
+
+<!-- Bottom plaque -->
+<div class="plaque">The AI Inventor Window &nbsp;&bull;&nbsp; ssl-low-resource-v3 &nbsp;&bull;&nbsp; In Progress</div>
+
+<script>
+// --- Dust particles ---
+(function spawnDust() {
+  const container = document.getElementById('dustContainer');
+  const count = 40;
+  for (let i = 0; i < count; i++) {
+    const d = document.createElement('div');
+    d.className = 'dust';
+    d.style.left = (15 + Math.random() * 70) + '%';
+    d.style.animationDuration = (8 + Math.random() * 14) + 's';
+    d.style.animationDelay = (Math.random() * 12) + 's';
+    d.style.width = d.style.height = (1 + Math.random() * 2.5) + 'px';
+    d.style.opacity = 0.2 + Math.random() * 0.5;
+    container.appendChild(d);
+  }
+})();
+
+// --- Panel hover tooltips ---
+const panels = {
+  seed: {
+    title: 'Seed Hypothesis',
+    body: 'Knowledge graph seeding complete. 847 nodes extracted from corpus.',
+    status: 'Completed'
+  },
+  hypothesis: {
+    title: 'Hypothesis Loop',
+    body: '3 iterations: 6.2 \u2192 7.3 \u2192 8.4 novelty score. Converged.',
+    status: 'Completed (3/3 iterations)'
+  },
+  invention: {
+    title: 'Invention Loop',
+    body: '6 artifacts: 3 complete, 1 generating (demo viz), 2 pending.',
+    status: 'In Progress (4/6 artifacts)'
+  },
+  paper: {
+    title: 'Paper Generation',
+    body: 'Full paper, figures, and repository. Awaiting invention loop.',
+    status: 'Pending'
+  }
+};
+
+const tooltip = document.getElementById('tooltip');
+
+document.querySelectorAll('.glass-panel').forEach(panel => {
+  panel.addEventListener('mouseenter', (e) => {
+    const key = panel.dataset.panel;
+    const info = panels[key];
+    if (!info) return;
+    tooltip.querySelector('.tt-title').textContent = info.title;
+    tooltip.querySelector('.tt-body').textContent = info.body;
+    tooltip.querySelector('.tt-status').textContent = info.status;
+    tooltip.classList.add('visible');
+  });
+
+  panel.addEventListener('mousemove', (e) => {
+    const x = e.clientX + 16;
+    const y = e.clientY + 16;
+    const maxX = window.innerWidth - 240;
+    const maxY = window.innerHeight - 100;
+    tooltip.style.left = Math.min(x, maxX) + 'px';
+    tooltip.style.top = Math.min(y, maxY) + 'px';
+  });
+
+  panel.addEventListener('mouseleave', () => {
+    tooltip.classList.remove('visible');
+  });
+});
+</script>
+</body>
+</html>

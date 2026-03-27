@@ -1,0 +1,1019 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Simple View (Ring Gauges + Diamond Markers)</title>
+<style>
+  /* ── Reset & Base ──────────────────────────────────────────────── */
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg:          #0e1016;
+    --bg-panel:    #12141e;
+    --bg-surface:  #181b28;
+    --bg-card:     #1c1f30;
+    --bg-hover:    #222540;
+    --border:      #1e2134;
+    --border-light:#2a2e44;
+    --text:        #c4c8d6;
+    --text-dim:    #5e6378;
+    --text-bright: #e6e9f2;
+    --text-muted:  #3e4258;
+
+    --green:       #22c55e;
+    --green-glow:  rgba(34,197,94,.45);
+    --green-dim:   rgba(34,197,94,.10);
+
+    --purple:      #a855f7;
+    --purple-glow: rgba(168,85,247,.45);
+    --purple-dim:  rgba(168,85,247,.10);
+
+    --blue:        #3b82f6;
+    --blue-glow:   rgba(59,130,246,.55);
+    --blue-dim:    rgba(59,130,246,.10);
+
+    --gray:        #3e4258;
+    --gray-dim:    rgba(62,66,88,.25);
+
+    --sans:  'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    --mono:  'SF Mono', 'Cascadia Code', 'JetBrains Mono', Consolas, monospace;
+    --radius: 8px;
+  }
+
+  html, body {
+    height: 100%; width: 100%;
+    font-family: var(--sans);
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg);
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+
+  /* ── Shell Layout ──────────────────────────────────────────────── */
+  #shell {
+    display: flex;
+    flex-direction: column;
+    height: 100%; width: 100%;
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 24px 20px 16px;
+    gap: 0;
+  }
+
+  /* ── Top Strip: Ring Gauges ────────────────────────────────────── */
+  .top-strip {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    padding: 16px 0 20px;
+    flex-shrink: 0;
+  }
+
+  .module-gauge {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    position: relative;
+    cursor: pointer;
+    transition: transform .2s ease;
+  }
+  .module-gauge:hover { transform: translateY(-2px); }
+
+  .gauge-wrapper {
+    position: relative;
+    width: 48px;
+    height: 48px;
+  }
+
+  .gauge-svg {
+    width: 48px;
+    height: 48px;
+    transform: rotate(-90deg);
+  }
+
+  .gauge-bg {
+    fill: none;
+    stroke: var(--gray);
+    stroke-width: 3;
+    opacity: 0.3;
+  }
+
+  .gauge-fill {
+    fill: none;
+    stroke-width: 3;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 1.2s cubic-bezier(.4, 0, .2, 1);
+  }
+
+  /* Per-module fill colors */
+  .module-seed .gauge-fill    { stroke: var(--green); }
+  .module-hypo .gauge-fill    { stroke: var(--purple); }
+  .module-invent .gauge-fill  { stroke: var(--blue); }
+  .module-paper .gauge-fill   { stroke: var(--gray); opacity: 0.3; }
+
+  /* Diamond marker — sits on the SVG overlay layer */
+  .diamond-marker {
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    transform: translate(-50%, -50%) rotate(45deg);
+    border-radius: 2px;
+    pointer-events: none;
+    z-index: 3;
+    transition: opacity .3s ease;
+  }
+
+  .module-seed .diamond-marker {
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green-glow), 0 0 16px var(--green-glow);
+  }
+  .module-hypo .diamond-marker {
+    background: var(--purple);
+    box-shadow: 0 0 8px var(--purple-glow), 0 0 16px var(--purple-glow);
+  }
+  .module-invent .diamond-marker {
+    background: var(--blue);
+    box-shadow: 0 0 12px var(--blue-glow), 0 0 28px var(--blue-glow), 0 0 48px var(--blue-glow);
+  }
+  .module-paper .diamond-marker {
+    display: none; /* no progress yet */
+  }
+
+  /* Active module: pulsing diamond halo */
+  .module-active .diamond-marker {
+    animation: diamondPulse 2s ease-in-out infinite;
+  }
+
+  @keyframes diamondPulse {
+    0%, 100% {
+      box-shadow: 0 0 10px var(--blue-glow), 0 0 24px var(--blue-glow), 0 0 44px rgba(59,130,246,.3);
+    }
+    50% {
+      box-shadow: 0 0 18px var(--blue-glow), 0 0 40px var(--blue-glow), 0 0 64px rgba(59,130,246,.45);
+    }
+  }
+
+  /* Center metric inside the ring */
+  .gauge-metric {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--mono);
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-bright);
+    z-index: 2;
+  }
+  .module-paper .gauge-metric {
+    color: var(--text-dim);
+    font-size: 14px;
+  }
+
+  /* Module label below ring */
+  .module-label {
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    transition: color .2s ease;
+  }
+  .module-active .module-label { color: var(--blue); }
+  .module-gauge.module-done .module-label { color: var(--text); }
+
+  /* Connector lines between gauges */
+  .gauge-connector {
+    width: 40px;
+    height: 1px;
+    background: var(--border-light);
+    flex-shrink: 0;
+    margin-top: -14px; /* align to ring vertical center */
+    position: relative;
+  }
+  .gauge-connector.done {
+    background: linear-gradient(90deg, var(--green), var(--purple));
+  }
+  .gauge-connector.half-done {
+    background: linear-gradient(90deg, var(--purple), var(--blue));
+  }
+  .gauge-connector.inactive {
+    background: var(--border);
+    opacity: 0.4;
+  }
+
+  /* ── Content Area ──────────────────────────────────────────────── */
+  .content-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    min-height: 0;
+  }
+
+  .content-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-surface);
+    flex-shrink: 0;
+  }
+
+  .content-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-bright);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .content-title .dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--blue);
+    box-shadow: 0 0 8px var(--blue-glow);
+    animation: dotBlink 2.5s ease-in-out infinite;
+  }
+
+  @keyframes dotBlink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .content-nav {
+    display: flex;
+    gap: 4px;
+  }
+
+  .nav-btn {
+    width: 28px; height: 28px;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 14px;
+    transition: all .15s ease;
+    user-select: none;
+  }
+  .nav-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text);
+    border-color: var(--border-light);
+  }
+  .nav-btn:active { transform: scale(0.95); }
+  .nav-btn.disabled {
+    opacity: 0.3;
+    pointer-events: none;
+  }
+
+  .content-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  /* ── Module Detail Cards ───────────────────────────────────────── */
+  .detail-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    display: none; /* shown by JS */
+    flex-direction: column;
+    gap: 14px;
+    animation: fadeSlideIn .3s ease forwards;
+  }
+  .detail-card.active { display: flex; }
+
+  @keyframes fadeSlideIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .detail-section-title {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+  }
+
+  .detail-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: 5px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .detail-row:last-child { border-bottom: none; }
+
+  .detail-key {
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .detail-val {
+    font-size: 12px;
+    font-family: var(--mono);
+    color: var(--text-bright);
+  }
+
+  /* Status badges */
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .status-badge.complete {
+    background: var(--green-dim);
+    color: var(--green);
+  }
+  .status-badge.running {
+    background: var(--blue-dim);
+    color: var(--blue);
+  }
+  .status-badge.pending {
+    background: var(--gray-dim);
+    color: var(--text-dim);
+  }
+
+  .status-dot {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+  }
+  .status-badge.complete .status-dot { background: var(--green); }
+  .status-badge.running  .status-dot { background: var(--blue); animation: dotBlink 2s infinite; }
+  .status-badge.pending  .status-dot { background: var(--text-muted); }
+
+  /* Hypothesis items list */
+  .hypo-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .hypo-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    transition: border-color .2s;
+  }
+  .hypo-item:hover { border-color: var(--border-light); }
+
+  .hypo-score {
+    font-family: var(--mono);
+    font-size: 14px;
+    font-weight: 700;
+    min-width: 32px;
+    text-align: center;
+    line-height: 1;
+    padding-top: 2px;
+  }
+  .hypo-score.high { color: var(--green); }
+  .hypo-score.mid  { color: var(--purple); }
+
+  .hypo-body {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .hypo-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-bright);
+    line-height: 1.35;
+  }
+  .hypo-desc {
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.4;
+  }
+
+  /* Invention progress sub-items */
+  .invent-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .invent-step {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+  }
+
+  .step-num {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    min-width: 20px;
+  }
+
+  .step-name {
+    flex: 1;
+    font-size: 12px;
+    color: var(--text);
+  }
+
+  .step-status {
+    font-size: 11px;
+    font-family: var(--mono);
+  }
+  .step-status.done { color: var(--green); }
+  .step-status.active { color: var(--blue); }
+  .step-status.wait { color: var(--text-muted); }
+
+  /* Paper placeholder */
+  .paper-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 10px;
+    padding: 40px;
+    color: var(--text-dim);
+  }
+  .paper-placeholder-icon {
+    width: 40px; height: 40px;
+    border: 2px dashed var(--border-light);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    color: var(--text-muted);
+  }
+  .paper-placeholder-text {
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+
+  /* ── Footer ────────────────────────────────────────────────────── */
+  .footer-strip {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 0 0;
+    flex-shrink: 0;
+  }
+
+  .footer-left {
+    font-size: 11px;
+    color: var(--text-dim);
+    font-family: var(--mono);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .footer-timer {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .footer-timer-dot {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: var(--blue);
+    animation: dotBlink 2s infinite;
+  }
+
+  .footer-right {
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 0.04em;
+  }
+
+  /* ── Progress bar inside invention card ────────────────────────── */
+  .progress-bar-track {
+    width: 100%;
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: var(--blue);
+    transition: width 1s cubic-bezier(.4, 0, .2, 1);
+  }
+
+  /* ── Glow effects on gauge wrappers ────────────────────────────── */
+  .module-active .gauge-wrapper::after {
+    content: '';
+    position: absolute;
+    inset: -6px;
+    border-radius: 50%;
+    background: radial-gradient(circle, var(--blue-glow) 0%, transparent 70%);
+    opacity: 0.15;
+    animation: ringGlow 3s ease-in-out infinite;
+    pointer-events: none;
+  }
+
+  @keyframes ringGlow {
+    0%, 100% { opacity: 0.12; }
+    50% { opacity: 0.22; }
+  }
+
+  /* Selected gauge highlight */
+  .module-gauge.selected .gauge-wrapper::before {
+    content: '';
+    position: absolute;
+    inset: -3px;
+    border-radius: 50%;
+    border: 1px solid currentColor;
+    opacity: 0.15;
+    pointer-events: none;
+  }
+  .module-seed.selected    { color: var(--green); }
+  .module-hypo.selected    { color: var(--purple); }
+  .module-invent.selected  { color: var(--blue); }
+  .module-paper.selected   { color: var(--gray); }
+
+  /* ── Log stream ────────────────────────────────────────────────── */
+  .log-stream {
+    margin-top: 4px;
+    padding: 10px 12px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    max-height: 120px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .log-line {
+    font-family: var(--mono);
+    font-size: 10px;
+    line-height: 1.5;
+    color: var(--text-dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .log-line .ts   { color: var(--green); opacity: 0.7; }
+  .log-line .lvl  { color: var(--blue); }
+  .log-line .func { color: var(--purple); opacity: 0.7; }
+
+  /* ── Diamond orbit animation ───────────────────────────────────── */
+  .diamond-orbit {
+    transition: all 1.5s cubic-bezier(.4, 0, .2, 1);
+  }
+</style>
+</head>
+<body>
+
+<div id="shell">
+
+  <!-- ── Top Strip: Ring Gauges with Diamonds ─────────────────── -->
+  <div class="top-strip">
+    <!-- Seed: 100% green -->
+    <div class="module-gauge module-seed module-done" data-module="seed" onclick="selectModule('seed')">
+      <div class="gauge-wrapper">
+        <svg class="gauge-svg" viewBox="0 0 48 48">
+          <circle class="gauge-bg" cx="24" cy="24" r="20"/>
+          <circle class="gauge-fill" cx="24" cy="24" r="20"
+                  stroke-dasharray="125.66" stroke-dashoffset="0"/>
+        </svg>
+        <div class="gauge-metric">&check;</div>
+        <div class="diamond-marker" id="diamond-seed"></div>
+      </div>
+      <span class="module-label">Seed</span>
+    </div>
+
+    <div class="gauge-connector done"></div>
+
+    <!-- Hypothesis: 100% purple -->
+    <div class="module-gauge module-hypo module-done" data-module="hypo" onclick="selectModule('hypo')">
+      <div class="gauge-wrapper">
+        <svg class="gauge-svg" viewBox="0 0 48 48">
+          <circle class="gauge-bg" cx="24" cy="24" r="20"/>
+          <circle class="gauge-fill" cx="24" cy="24" r="20"
+                  stroke-dasharray="125.66" stroke-dashoffset="0"/>
+        </svg>
+        <div class="gauge-metric">8.4</div>
+        <div class="diamond-marker" id="diamond-hypo"></div>
+      </div>
+      <span class="module-label">Hypothesis</span>
+    </div>
+
+    <div class="gauge-connector half-done"></div>
+
+    <!-- Invention: 60% blue, ACTIVE -->
+    <div class="module-gauge module-invent module-active selected" data-module="invent" onclick="selectModule('invent')">
+      <div class="gauge-wrapper">
+        <svg class="gauge-svg" viewBox="0 0 48 48">
+          <circle class="gauge-bg" cx="24" cy="24" r="20"/>
+          <circle class="gauge-fill" cx="24" cy="24" r="20" id="invent-arc"
+                  stroke-dasharray="125.66" stroke-dashoffset="50.26"/>
+        </svg>
+        <div class="gauge-metric">3/5</div>
+        <div class="diamond-marker diamond-orbit" id="diamond-invent"></div>
+      </div>
+      <span class="module-label">Invention</span>
+    </div>
+
+    <div class="gauge-connector inactive"></div>
+
+    <!-- Paper: 0% gray -->
+    <div class="module-gauge module-paper" data-module="paper" onclick="selectModule('paper')">
+      <div class="gauge-wrapper">
+        <svg class="gauge-svg" viewBox="0 0 48 48">
+          <circle class="gauge-bg" cx="24" cy="24" r="20"/>
+        </svg>
+        <div class="gauge-metric">&cir;</div>
+        <div class="diamond-marker" id="diamond-paper"></div>
+      </div>
+      <span class="module-label">Paper</span>
+    </div>
+  </div>
+
+  <!-- ── Content Area ─────────────────────────────────────────── -->
+  <div class="content-area">
+    <div class="content-header">
+      <div class="content-title">
+        <span class="dot"></span>
+        <span id="content-module-name">Invention Loop</span>
+      </div>
+      <div class="content-nav">
+        <div class="nav-btn" onclick="navPrev()" id="btn-prev">&larr;</div>
+        <div class="nav-btn" onclick="navNext()" id="btn-next">&rarr;</div>
+      </div>
+    </div>
+    <div class="content-body">
+
+      <!-- SEED detail card -->
+      <div class="detail-card" id="card-seed">
+        <div>
+          <div class="detail-section-title">Seed Configuration</div>
+          <div class="detail-row">
+            <span class="detail-key">Status</span>
+            <span class="status-badge complete"><span class="status-dot"></span>Complete</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-key">Knowledge Graph</span>
+            <span class="detail-val">147 nodes, 312 edges</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-key">Source Papers</span>
+            <span class="detail-val">23 papers</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-key">Domain</span>
+            <span class="detail-val">multi-agent systems</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-key">Duration</span>
+            <span class="detail-val">4m 12s</span>
+          </div>
+        </div>
+        <div class="log-stream">
+          <div class="log-line"><span class="ts">08:41:02</span> <span class="lvl">INFO </span> <span class="func">seed_hypo</span> | Knowledge graph built from 23 source papers</div>
+          <div class="log-line"><span class="ts">08:41:14</span> <span class="lvl">INFO </span> <span class="func">seed_hypo</span> | Extracted 147 concept nodes, 312 relational edges</div>
+          <div class="log-line"><span class="ts">08:41:18</span> <span class="lvl">INFO </span> <span class="func">seed_hypo</span> | Gap analysis complete: 8 research frontiers identified</div>
+          <div class="log-line"><span class="ts">08:45:14</span> <span class="lvl">INFO </span> <span class="func">seed_hypo</span> | Seed complete &mdash; generated 12 initial hypotheses</div>
+        </div>
+      </div>
+
+      <!-- HYPOTHESIS detail card -->
+      <div class="detail-card" id="card-hypo">
+        <div>
+          <div class="detail-section-title">Hypothesis Loop &mdash; Best Candidates</div>
+          <div class="detail-row">
+            <span class="detail-key">Status</span>
+            <span class="status-badge complete"><span class="status-dot"></span>Complete</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-key">Iterations</span>
+            <span class="detail-val">3 rounds</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-key">Avg. Score</span>
+            <span class="detail-val">8.4 / 10</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-key">Duration</span>
+            <span class="detail-val">11m 38s</span>
+          </div>
+        </div>
+        <div class="hypo-list">
+          <div class="hypo-item">
+            <div class="hypo-score high">9.1</div>
+            <div class="hypo-body">
+              <div class="hypo-title">Adaptive topology switching in multi-agent consensus networks</div>
+              <div class="hypo-desc">Agents dynamically reorganize communication graphs based on local entropy, achieving faster convergence than fixed topologies.</div>
+            </div>
+          </div>
+          <div class="hypo-item">
+            <div class="hypo-score high">8.7</div>
+            <div class="hypo-body">
+              <div class="hypo-title">Hierarchical reward shaping via inter-agent knowledge distillation</div>
+              <div class="hypo-desc">Senior agents compress learned policies into lightweight reward signals for junior agents, reducing sample complexity by ~40%.</div>
+            </div>
+          </div>
+          <div class="hypo-item">
+            <div class="hypo-score mid">7.4</div>
+            <div class="hypo-body">
+              <div class="hypo-title">Emergent role specialization through competitive task allocation</div>
+              <div class="hypo-desc">Auction-based task allocation naturally produces specialist agents without explicit role assignment.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- INVENTION detail card -->
+      <div class="detail-card active" id="card-invent">
+        <div>
+          <div class="detail-section-title">Invention Loop &mdash; Iteration 3 of 5</div>
+          <div class="detail-row">
+            <span class="detail-key">Status</span>
+            <span class="status-badge running"><span class="status-dot"></span>Running</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-key">Hypothesis</span>
+            <span class="detail-val">Adaptive topology switching</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-key">Elapsed</span>
+            <span class="detail-val" id="elapsed-timer">7m 24s</span>
+          </div>
+        </div>
+        <div class="progress-bar-track">
+          <div class="progress-bar-fill" style="width: 60%"></div>
+        </div>
+        <div>
+          <div class="detail-section-title">Sub-Steps</div>
+          <div class="invent-steps">
+            <div class="invent-step">
+              <span class="step-num">1</span>
+              <span class="step-name">Generate Strategy</span>
+              <span class="step-status done">&check; done</span>
+            </div>
+            <div class="invent-step">
+              <span class="step-num">2</span>
+              <span class="step-name">Generate Plan</span>
+              <span class="step-status done">&check; done</span>
+            </div>
+            <div class="invent-step">
+              <span class="step-num">3</span>
+              <span class="step-name">Generate Paper Text</span>
+              <span class="step-status active">&#9654; running</span>
+            </div>
+            <div class="invent-step">
+              <span class="step-num">4</span>
+              <span class="step-name">Review Paper</span>
+              <span class="step-status wait">&mdash;</span>
+            </div>
+            <div class="invent-step">
+              <span class="step-num">5</span>
+              <span class="step-name">Revise &amp; Finalize</span>
+              <span class="step-status wait">&mdash;</span>
+            </div>
+          </div>
+        </div>
+        <div class="log-stream">
+          <div class="log-line"><span class="ts">08:57:02</span> <span class="lvl">INFO </span> <span class="func">gen_strat</span> | Strategy generated: entropy-gated topology switch</div>
+          <div class="log-line"><span class="ts">08:59:31</span> <span class="lvl">INFO </span> <span class="func">gen_plan </span> | Plan: 6 sections, 3 experiments, 2 baselines</div>
+          <div class="log-line"><span class="ts">09:01:44</span> <span class="lvl">INFO </span> <span class="func">gen_text </span> | Writing section 1/6: Introduction</div>
+          <div class="log-line"><span class="ts">09:03:18</span> <span class="lvl">INFO </span> <span class="func">gen_text </span> | Writing section 2/6: Related Work</div>
+          <div class="log-line"><span class="ts">09:04:26</span> <span class="lvl">INFO </span> <span class="func">gen_text </span> | Writing section 3/6: Methodology ...</div>
+        </div>
+      </div>
+
+      <!-- PAPER detail card -->
+      <div class="detail-card" id="card-paper">
+        <div class="paper-placeholder">
+          <div class="paper-placeholder-icon">&middot;</div>
+          <div class="paper-placeholder-text">Paper generation will begin after the invention loop completes.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Footer Strip ─────────────────────────────────────────── -->
+  <div class="footer-strip">
+    <div class="footer-left">
+      <div class="footer-timer">
+        <div class="footer-timer-dot"></div>
+        <span id="total-timer">23m 14s</span>
+      </div>
+      <span style="color: var(--text-muted);">|</span>
+      <span>cost $1.27</span>
+      <span style="color: var(--text-muted);">|</span>
+      <span>tokens 482k</span>
+    </div>
+    <div class="footer-right">
+      AI Inventor v0.23
+    </div>
+  </div>
+
+</div>
+
+<script>
+  /* ── Diamond position calculator ──────────────────────────────── */
+  // Given a fraction (0..1), compute the (x, y) pixel position on a
+  // circle of radius 20 centered at (24, 24) in the SVG coordinate
+  // system (where 0 starts at 12 o'clock and goes clockwise).
+  // The SVG is rotated -90deg via CSS, so the arc starts at 3 o'clock
+  // in SVG space (which appears as 12 o'clock on screen).
+
+  const GAUGE_SIZE = 48;
+  const CX = 24, CY = 24, R = 20;
+
+  function diamondPos(fraction) {
+    // Angle in radians: 0 fraction = top (12 o'clock).
+    // In SVG (pre-CSS-rotation), the stroke starts at 3 o'clock (0 rad).
+    // CSS rotation(-90deg) shifts visual start to 12 o'clock.
+    // So angle in SCREEN space: fraction * 2PI clockwise from top.
+    const angle = fraction * 2 * Math.PI - Math.PI / 2; // -PI/2 = 12 o'clock
+    const x = CX + R * Math.cos(angle);
+    const y = CY + R * Math.sin(angle);
+    // Convert SVG coords (48x48 viewbox) to pixel coords
+    return { x: x, y: y };
+  }
+
+  function placeDiamond(id, fraction) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const pos = diamondPos(fraction);
+    // Percentage position within the 48x48 gauge-wrapper
+    el.style.left = (pos.x / GAUGE_SIZE * 100) + '%';
+    el.style.top  = (pos.y / GAUGE_SIZE * 100) + '%';
+  }
+
+  // Place static diamonds
+  placeDiamond('diamond-seed', 1.0);   // 100% = 12 o'clock
+  placeDiamond('diamond-hypo', 1.0);   // 100% = 12 o'clock
+
+  // Invention diamond at 60% (~216 degrees)
+  let inventProgress = 0.6;
+  placeDiamond('diamond-invent', inventProgress);
+
+  /* ── Slow orbit animation for active diamond ──────────────────── */
+  let orbitTarget = 0.6;
+  let orbitCurrent = 0.6;
+  let orbitDirection = 1;
+  const ORBIT_SPEED = 0.0003;
+  const ORBIT_RANGE = 0.015;
+
+  function animateOrbit() {
+    orbitCurrent += ORBIT_SPEED * orbitDirection;
+    if (orbitCurrent >= orbitTarget + ORBIT_RANGE) orbitDirection = -1;
+    if (orbitCurrent <= orbitTarget - ORBIT_RANGE) orbitDirection = 1;
+    placeDiamond('diamond-invent', orbitCurrent);
+    requestAnimationFrame(animateOrbit);
+  }
+  animateOrbit();
+
+  /* ── Module selection ─────────────────────────────────────────── */
+  const MODULES = ['seed', 'hypo', 'invent', 'paper'];
+  const MODULE_NAMES = {
+    seed:   'Seed Configuration',
+    hypo:   'Hypothesis Loop',
+    invent: 'Invention Loop',
+    paper:  'Paper Generation'
+  };
+
+  let currentIdx = 2; // start on invention
+
+  function selectModule(name) {
+    const idx = MODULES.indexOf(name);
+    if (idx < 0) return;
+    currentIdx = idx;
+    render();
+  }
+
+  function navPrev() {
+    if (currentIdx > 0) { currentIdx--; render(); }
+  }
+
+  function navNext() {
+    if (currentIdx < MODULES.length - 1) { currentIdx++; render(); }
+  }
+
+  function render() {
+    const mod = MODULES[currentIdx];
+
+    // Update selected gauge
+    document.querySelectorAll('.module-gauge').forEach(el => {
+      el.classList.toggle('selected', el.dataset.module === mod);
+    });
+
+    // Update content title
+    document.getElementById('content-module-name').textContent = MODULE_NAMES[mod];
+
+    // Show correct card
+    document.querySelectorAll('.detail-card').forEach(card => {
+      card.classList.remove('active');
+    });
+    const card = document.getElementById('card-' + mod);
+    if (card) {
+      card.classList.add('active');
+      // Re-trigger animation
+      card.style.animation = 'none';
+      card.offsetHeight; // force reflow
+      card.style.animation = '';
+    }
+
+    // Update nav button states
+    document.getElementById('btn-prev').classList.toggle('disabled', currentIdx === 0);
+    document.getElementById('btn-next').classList.toggle('disabled', currentIdx === MODULES.length - 1);
+
+    // Update dot color based on module
+    const dot = document.querySelector('.content-title .dot');
+    const colorMap = { seed: 'var(--green)', hypo: 'var(--purple)', invent: 'var(--blue)', paper: 'var(--gray)' };
+    dot.style.background = colorMap[mod];
+    dot.style.boxShadow = mod === 'paper' ? 'none' : `0 0 8px ${colorMap[mod]}`;
+    dot.style.animation = mod === 'paper' ? 'none' : 'dotBlink 2.5s ease-in-out infinite';
+  }
+
+  render();
+
+  /* ── Keyboard navigation ──────────────────────────────────────── */
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowLeft')  navPrev();
+    if (e.key === 'ArrowRight') navNext();
+    // Number keys 1-4
+    const num = parseInt(e.key);
+    if (num >= 1 && num <= 4) selectModule(MODULES[num - 1]);
+  });
+
+  /* ── Timer simulation ─────────────────────────────────────────── */
+  let totalSeconds = 23 * 60 + 14;
+  let elapsedSeconds = 7 * 60 + 24;
+
+  function formatTime(s) {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return m + 'm ' + (sec < 10 ? '0' : '') + sec + 's';
+  }
+
+  setInterval(() => {
+    totalSeconds++;
+    elapsedSeconds++;
+    document.getElementById('total-timer').textContent = formatTime(totalSeconds);
+    document.getElementById('elapsed-timer').textContent = formatTime(elapsedSeconds);
+  }, 1000);
+
+  /* ── Simulate progress increment (for demo) ───────────────────── */
+  // Every 30 seconds, nudge invention progress up slightly
+  setInterval(() => {
+    if (inventProgress < 0.95) {
+      inventProgress += 0.02;
+      orbitTarget = inventProgress;
+
+      // Update the SVG arc
+      const circumference = 125.66;
+      const offset = circumference * (1 - inventProgress);
+      document.getElementById('invent-arc').setAttribute('stroke-dashoffset', offset);
+
+      // Update the progress bar
+      document.querySelector('.progress-bar-fill').style.width = (inventProgress * 100) + '%';
+
+      // Update metric
+      const step = Math.min(5, Math.floor(inventProgress * 5) + 1);
+      document.querySelector('.module-invent .gauge-metric').textContent = step + '/5';
+    }
+  }, 30000);
+</script>
+
+</body>
+</html>

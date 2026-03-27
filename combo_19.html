@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Glow Beam Navigator</title>
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --surface: #12121a;
+    --border: #1e1e2e;
+    --text: #c8c8d4;
+    --text-dim: #6a6a7a;
+    --text-bright: #eeeef4;
+    --accent: #6e8eff;
+    --accent-glow: #4a6aff;
+    --beam-color: #5a7aff;
+    --beam-glow: rgba(90, 122, 255, 0.35);
+    --diamond-ring: #3a4a6a;
+    --diamond-active: #7a9aff;
+    --dot-inactive: #2a2a3a;
+    --dot-active: #6e8eff;
+    --dot-hover: #4a5a7a;
+    --row2-accent: #5ae0b0;
+    --row2-glow: rgba(90, 224, 176, 0.35);
+    --row3-accent: #e07a5a;
+    --row3-glow: rgba(224, 122, 90, 0.35);
+    --speed: 0.45s;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: 'SF Mono', 'Cascadia Code', 'JetBrains Mono', monospace;
+    min-height: 100vh; overflow-x: hidden;
+  }
+
+  /* ── Top strip ── */
+  .nav-strip {
+    position: sticky; top: 0; z-index: 100;
+    background: var(--bg); border-bottom: 1px solid var(--border);
+    padding: 0 0 12px 0; user-select: none;
+  }
+  .nav-strip::after {
+    content: ''; position: absolute; bottom: -20px; left: 0; right: 0;
+    height: 20px; background: linear-gradient(to bottom, var(--bg), transparent);
+    pointer-events: none;
+  }
+
+  /* ── Row containers ── */
+  .nav-row {
+    display: flex; justify-content: center; align-items: center;
+    position: relative; padding: 10px 20px; gap: 0;
+  }
+  .nav-row.row-1 { padding-top: 18px; padding-bottom: 6px; }
+  .nav-row.row-2 { padding-top: 4px; padding-bottom: 4px; }
+  .nav-row.row-3 { padding-top: 4px; padding-bottom: 8px; }
+  .row-label {
+    position: absolute; left: 16px; font-size: 9px;
+    letter-spacing: 1.5px; text-transform: uppercase;
+    color: var(--text-dim); opacity: 0.5;
+  }
+  .nav-row.focused::before {
+    content: ''; position: absolute; left: 0; right: 0; top: 0; bottom: 0;
+    border: 1px solid rgba(110, 142, 255, 0.12); border-radius: 4px;
+    pointer-events: none;
+  }
+
+  /* ── Diamond markers (Row 1) ── */
+  .diamond-item {
+    display: flex; flex-direction: column; align-items: center;
+    cursor: pointer; padding: 0 28px; position: relative;
+    transition: transform 0.2s ease;
+  }
+  .diamond-item:hover { transform: scale(1.06); }
+  .diamond-ring {
+    width: 36px; height: 36px; border: 2px solid var(--diamond-ring);
+    border-radius: 4px; transform: rotate(45deg);
+    display: flex; align-items: center; justify-content: center;
+    transition: border-color var(--speed) ease, box-shadow var(--speed) ease;
+  }
+  .diamond-inner {
+    width: 12px; height: 12px; background: var(--dot-inactive);
+    border-radius: 2px;
+    transition: background var(--speed) ease, box-shadow var(--speed) ease;
+  }
+  .diamond-item.active .diamond-ring {
+    border-color: var(--diamond-active);
+    box-shadow: 0 0 18px var(--beam-glow), 0 0 40px rgba(90, 122, 255, 0.15);
+  }
+  .diamond-item.active .diamond-inner {
+    background: var(--diamond-active); box-shadow: 0 0 10px var(--accent-glow);
+  }
+  .diamond-label {
+    margin-top: 10px; font-size: 10px; letter-spacing: 0.8px;
+    color: var(--text-dim); text-transform: uppercase;
+    transition: color var(--speed) ease; white-space: nowrap;
+  }
+  .diamond-item.active .diamond-label { color: var(--text-bright); }
+
+  /* ── Dot markers (Row 2 & 3) ── */
+  .dot-item {
+    display: flex; flex-direction: column; align-items: center;
+    cursor: pointer; padding: 0 14px; position: relative;
+    transition: transform 0.2s ease;
+  }
+  .dot-item:hover { transform: scale(1.12); }
+  .dot-circle {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--dot-inactive);
+    transition: background var(--speed) ease, box-shadow var(--speed) ease,
+                transform var(--speed) ease;
+  }
+  .dot-item:hover .dot-circle { background: var(--dot-hover); }
+  .nav-row.row-2 .dot-item.active .dot-circle {
+    background: var(--row2-accent); transform: scale(1.3);
+    box-shadow: 0 0 12px var(--row2-glow), 0 0 30px rgba(90, 224, 176, 0.12);
+  }
+  .nav-row.row-3 .dot-item.active .dot-circle {
+    background: var(--row3-accent); transform: scale(1.3);
+    box-shadow: 0 0 12px var(--row3-glow), 0 0 30px rgba(224, 122, 90, 0.12);
+  }
+  .dot-label {
+    margin-top: 6px; font-size: 8px; letter-spacing: 0.5px;
+    color: transparent; text-transform: uppercase;
+    transition: color var(--speed) ease; white-space: nowrap;
+    max-width: 60px; overflow: hidden; text-overflow: ellipsis;
+  }
+  .dot-item.active .dot-label { color: var(--text-dim); }
+
+  /* ── Glow beams ── */
+  .beam-layer {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 50;
+  }
+  .beam-line {
+    stroke: var(--beam-color); stroke-width: 2;
+    filter: url(#beam-glow-filter);
+    transition: x1 var(--speed) cubic-bezier(0.4,0,0.2,1),
+                y1 var(--speed) cubic-bezier(0.4,0,0.2,1),
+                x2 var(--speed) cubic-bezier(0.4,0,0.2,1),
+                y2 var(--speed) cubic-bezier(0.4,0,0.2,1),
+                opacity 0.3s ease;
+  }
+  .beam-line.top-beam { stroke: var(--accent); }
+  .beam-line.bot-beam { stroke: var(--row2-accent); }
+  .beam-pulse {
+    fill: none; stroke-width: 2; stroke-dasharray: 8 20; opacity: 0.6;
+  }
+  .beam-pulse.top-pulse {
+    stroke: #8aafff; animation: pulse-down 2.2s linear infinite;
+  }
+  .beam-pulse.bot-pulse {
+    stroke: #7af0c0; animation: pulse-down 2.2s linear infinite 0.5s;
+  }
+  @keyframes pulse-down {
+    0% { stroke-dashoffset: 28; }
+    100% { stroke-dashoffset: 0; }
+  }
+
+  /* Beam endpoint glow dots */
+  .beam-endpoint {
+    fill: var(--beam-color);
+    filter: url(#beam-glow-filter);
+    transition: cx var(--speed) cubic-bezier(0.4,0,0.2,1),
+                cy var(--speed) cubic-bezier(0.4,0,0.2,1);
+  }
+  .beam-endpoint.ep-mid { fill: var(--row2-accent); }
+
+  /* Active item subtle pulse animation */
+  .diamond-item.active .diamond-ring {
+    animation: diamondPulse 3s ease-in-out infinite;
+  }
+  @keyframes diamondPulse {
+    0%, 100% { box-shadow: 0 0 18px var(--beam-glow), 0 0 40px rgba(90,122,255,0.15); }
+    50% { box-shadow: 0 0 24px var(--beam-glow), 0 0 52px rgba(90,122,255,0.22); }
+  }
+  .nav-row.row-2 .dot-item.active .dot-circle {
+    animation: dotPulseGreen 3s ease-in-out infinite;
+  }
+  @keyframes dotPulseGreen {
+    0%, 100% { box-shadow: 0 0 12px var(--row2-glow), 0 0 30px rgba(90,224,176,0.12); }
+    50% { box-shadow: 0 0 18px var(--row2-glow), 0 0 40px rgba(90,224,176,0.20); }
+  }
+  .nav-row.row-3 .dot-item.active .dot-circle {
+    animation: dotPulseOrange 3s ease-in-out infinite;
+  }
+  @keyframes dotPulseOrange {
+    0%, 100% { box-shadow: 0 0 12px var(--row3-glow), 0 0 30px rgba(224,122,90,0.12); }
+    50% { box-shadow: 0 0 18px var(--row3-glow), 0 0 40px rgba(224,122,90,0.20); }
+  }
+
+  /* ── Content area ── */
+  .content-area { max-width: 800px; margin: 0 auto; padding: 32px 24px 60px; }
+  .content-panel {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 28px 32px;
+    animation: fadeIn 0.4s ease; min-height: 320px;
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .content-breadcrumb {
+    font-size: 10px; letter-spacing: 1px; text-transform: uppercase;
+    color: var(--text-dim); margin-bottom: 16px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .crumb-sep { color: #333; }
+  .crumb-mod { color: var(--accent); }
+  .crumb-sub { color: var(--row2-accent); }
+  .crumb-det { color: var(--row3-accent); }
+  .content-title {
+    font-size: 20px; font-weight: 600; color: var(--text-bright);
+    margin-bottom: 8px; letter-spacing: -0.3px;
+  }
+  .content-subtitle { font-size: 12px; color: var(--text-dim); margin-bottom: 20px; }
+  .content-body { font-size: 13px; line-height: 1.75; color: var(--text); }
+  .content-body p { margin-bottom: 12px; }
+  .content-body .mg {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 12px; margin: 16px 0;
+  }
+  .mc {
+    background: rgba(255,255,255,0.02); border: 1px solid var(--border);
+    border-radius: 6px; padding: 14px; text-align: center;
+  }
+  .mv { font-size: 22px; font-weight: 700; color: var(--text-bright); margin-bottom: 4px; }
+  .ml { font-size: 9px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-dim); }
+  .content-body code {
+    background: rgba(110,142,255,0.08); color: var(--accent);
+    padding: 2px 6px; border-radius: 3px; font-size: 12px;
+  }
+  .tr { display: flex; gap: 6px; flex-wrap: wrap; margin: 12px 0; }
+  .t {
+    font-size: 9px; letter-spacing: 0.8px; text-transform: uppercase;
+    padding: 3px 10px; border-radius: 10px; border: 1px solid var(--border);
+    color: var(--text-dim);
+  }
+  .t.b { border-color: rgba(110,142,255,0.3); color: var(--accent); }
+  .t.g { border-color: rgba(90,224,176,0.3); color: var(--row2-accent); }
+  .t.o { border-color: rgba(224,122,90,0.3); color: var(--row3-accent); }
+
+  /* ── Key hints ── */
+  .key-hints {
+    position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 16px; font-size: 10px; color: var(--text-dim);
+    background: rgba(10,10,15,0.9); border: 1px solid var(--border);
+    border-radius: 6px; padding: 8px 20px; backdrop-filter: blur(8px); z-index: 200;
+  }
+  .key-hints kbd {
+    display: inline-block; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 3px; padding: 1px 6px; font-size: 10px;
+    font-family: inherit; color: var(--text); margin-right: 4px;
+  }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute"><defs>
+  <filter id="beam-glow-filter" x="-50%" y="-50%" width="200%" height="200%">
+    <feGaussianBlur in="SourceGraphic" stdDeviation="8" result="blur"/>
+    <feColorMatrix in="blur" type="matrix"
+      values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1.5 0" result="glow"/>
+    <feMerge><feMergeNode in="glow"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+</defs></svg>
+
+<svg class="beam-layer" id="beamSvg">
+  <!-- Glow beams connecting active items across rows -->
+  <line class="beam-line top-beam" id="beamTop" x1="0" y1="0" x2="0" y2="0"/>
+  <line class="beam-line bot-beam" id="beamBot" x1="0" y1="0" x2="0" y2="0"/>
+  <!-- Animated pulses traveling along beam paths -->
+  <line class="beam-pulse top-pulse" id="pulseTop" x1="0" y1="0" x2="0" y2="0"/>
+  <line class="beam-pulse bot-pulse" id="pulseBot" x1="0" y1="0" x2="0" y2="0"/>
+  <!-- Endpoint glow markers at beam junctions -->
+  <circle class="beam-endpoint ep-mid" id="epMid" cx="0" cy="0" r="3"/>
+</svg>
+
+<div class="nav-strip" id="navStrip">
+  <div class="nav-row row-1" id="row1"><span class="row-label">Module</span></div>
+  <div class="nav-row row-2" id="row2"><span class="row-label">Step</span></div>
+  <div class="nav-row row-3" id="row3"><span class="row-label">Detail</span></div>
+</div>
+
+<div class="content-area">
+  <div class="content-panel" id="contentPanel"></div>
+</div>
+
+<div class="key-hints">
+  <span><kbd>&uarr;</kbd><kbd>&darr;</kbd> Row</span>
+  <span><kbd>&larr;</kbd><kbd>&rarr;</kbd> Item</span>
+  <span><kbd>1</kbd>-<kbd>4</kbd> Module</span>
+</div>
+
+<script>
+// Helper to build metric grid HTML
+function metrics(items) {
+  return '<div class="mg">' + items.map(([v,l]) =>
+    `<div class="mc"><div class="mv">${v}</div><div class="ml">${l}</div></div>`
+  ).join('') + '</div>';
+}
+function tags(items) {
+  return '<div class="tr">' + items.map(([cls,txt]) =>
+    `<span class="t ${cls}">${txt}</span>`
+  ).join('') + '</div>';
+}
+
+const DATA = [
+  { id: 'seed', label: 'Seed', subs: [
+    { id: 'kg_build', label: 'KG Build', details: [
+      { id: 'entity_ext', label: 'Entities', title: 'Entity Extraction',
+        subtitle: 'Mining structured entities from seed papers',
+        body: `<p>The entity extraction phase scans each seed paper to identify key
+          concepts, techniques, materials, and findings. These become nodes in
+          the invention knowledge graph, forming the foundation for all
+          downstream reasoning.</p>
+          ${metrics([['2,400+','Entities / run'],['12','Entity types'],['94%','Precision']])}
+          ${tags([['b','NER'],['b','Ontology'],['g','Active']])}
+          <p>Uses a two-pass approach: first <code>spaCy</code> NER for broad
+          coverage, then a targeted LLM pass that catches domain-specific terms
+          missed by the statistical model. The LLM pass uses few-shot examples
+          drawn from the seed paper's own vocabulary.</p>` },
+      { id: 'rel_ext', label: 'Relations', title: 'Relation Extraction',
+        subtitle: 'Discovering edges between entities',
+        body: `<p>Extracts directional relationships between entities:
+          <code>enables</code>, <code>inhibits</code>, <code>requires</code>,
+          <code>improves</code>, and more. Each relation carries a confidence
+          score and a provenance pointer back to the source sentence, enabling
+          downstream citation and traceability.</p>
+          <p>The relation vocabulary is extensible; new relation types discovered
+          during extraction are proposed to the user for approval before being
+          added to the ontology.</p>
+          ${tags([['b','Graph'],['o','Confidence-scored'],['b','Extensible']])}` },
+      { id: 'cluster', label: 'Cluster', title: 'Topic Clustering',
+        subtitle: 'Grouping entities into research themes',
+        body: `<p>Spectral clustering on the entity co-occurrence matrix partitions
+          the KG into thematic neighborhoods. Each cluster becomes a candidate
+          seed for hypothesis generation.</p>
+          ${metrics([['8-15','Clusters / run'],['0.72','Avg silhouette'],['~3s','Compute']])}
+          <p>Cluster boundaries are refined using a modularity optimization pass
+          that prevents overly broad or overly narrow groupings. The resulting
+          clusters are labeled with their most representative terms.</p>` },
+      { id: 'validate', label: 'Validate', title: 'KG Validation',
+        subtitle: 'Checking graph consistency and completeness',
+        body: `<p>Runs a suite of integrity checks on the constructed knowledge
+          graph: orphan node detection, cycle detection in causal chains,
+          and coverage analysis to ensure no major paper section was missed
+          during extraction.</p>
+          ${metrics([['<1%','Orphan rate'],['99.2%','Coverage'],['~2s','Check time']])}` },
+    ]},
+    { id: 'paper_ingest', label: 'Ingest', details: [
+      { id: 'pdf_parse', label: 'PDF Parse', title: 'PDF Parsing',
+        subtitle: 'Structured extraction from research papers',
+        body: `<p>Combines <code>PyMuPDF</code> for layout analysis with an LLM
+          post-processor that resolves table continuations, figure references,
+          and multi-column flows into a clean semantic stream.</p>
+          <p>Handles edge cases like rotated pages, embedded fonts, and
+          scanned-image PDFs (via OCR fallback). The parser outputs a
+          structured JSON representation of each page.</p>
+          ${tags([['b','PyMuPDF'],['g','Streaming'],['o','OCR fallback']])}` },
+      { id: 'chunk', label: 'Chunk', title: 'Semantic Chunking',
+        subtitle: 'Context-aware text segmentation',
+        body: `<p>Rather than fixed-size windows, chunks on paragraph boundaries
+          with configurable overlap, respecting section headers and list
+          structures. Each chunk retains metadata: section name, page number,
+          figure adjacency, and equation references.</p>
+          <p>Chunk size is adaptive: shorter for dense methodology sections,
+          longer for narrative introductions. This improves retrieval precision
+          in downstream steps.</p>` },
+      { id: 'embed', label: 'Embed', title: 'Embedding Generation',
+        subtitle: 'Dense vector representations for retrieval',
+        body: `<p>Each chunk is embedded using a domain-tuned model. Embeddings
+          are stored in a FAISS index for sub-millisecond nearest-neighbor
+          retrieval during hypothesis generation.</p>
+          ${metrics([['1536','Dimensions'],['IVF','Index type'],['&lt;2ms','Query time']])}
+          <p>The index is rebuilt incrementally as new papers are ingested,
+          avoiding full recomputation.</p>` },
+    ]},
+    { id: 'seed_select', label: 'Select', details: [
+      { id: 'diversity', label: 'Diversity', title: 'Diversity Sampling',
+        subtitle: 'Ensuring breadth in seed selection',
+        body: `<p>Uses determinantal point processes (DPPs) to select a maximally
+          diverse subset of seed papers. This prevents the pipeline from
+          fixating on a single sub-field and ensures cross-domain coverage.</p>
+          <p>The DPP kernel is constructed from pairwise embedding distances,
+          with a tuneable repulsion parameter that controls the diversity-
+          relevance tradeoff.</p>
+          ${tags([['b','DPP'],['g','Tunable'],['b','Embedding-based']])}` },
+      { id: 'relevance', label: 'Relevance', title: 'Relevance Scoring',
+        subtitle: 'Ranking papers by topical fit',
+        body: `<p>Each candidate paper receives a composite relevance score based
+          on keyword overlap, citation graph proximity, and embedding
+          similarity to the user's research question.</p>
+          ${metrics([['3','Score components'],['0.89','Avg precision'],['~1s','Per paper']])}
+          ${tags([['b','Composite'],['o','Weighted'],['g','Tunable']])}` },
+    ]},
+  ]},
+  { id: 'hypo', label: 'Hypothesize', subs: [
+    { id: 'gen_hypo', label: 'Generate', details: [
+      { id: 'cross_poll', label: 'Cross-poll', title: 'Cross-Pollination',
+        subtitle: 'Combining ideas from distant clusters',
+        body: `<p>The core creative step: entity cluster pairs from different
+          research domains are presented to the LLM with a structured prompt
+          that encourages novel combinations. Each generated hypothesis
+          includes a novelty self-assessment and feasibility rating.</p>
+          ${metrics([['50-80','Hypotheses / run'],['3.2','Avg novelty'],['~40s','Gen time']])}
+          <p>The prompt template includes negative examples (known-bad
+          combinations) to steer the model away from trivial or impossible
+          pairings.</p>` },
+      { id: 'gap_fill', label: 'Gap Fill', title: 'Gap Analysis',
+        subtitle: 'Identifying missing links in the KG',
+        body: `<p>Scans for structural holes: cluster pairs that <em>should</em>
+          be connected based on domain knowledge but lack explicit edges.
+          These gaps are prime targets for novel hypotheses, as they
+          represent unexplored territory in the research landscape.</p>
+          ${tags([['b','Structural'],['o','Gap detection'],['g','High value']])}` },
+      { id: 'analog', label: 'Analogy', title: 'Analogical Transfer',
+        subtitle: 'Mapping solutions across domains',
+        body: `<p>Searches for structural parallels: if domain A solved problem X
+          with technique T, and domain B has an analogous problem X', then
+          technique T (adapted) might apply. This engine produces the most
+          surprising and high-impact inventions.</p>
+          <p>Uses structure-mapping theory to formalize the analogy and score
+          its strength before presenting it as a hypothesis candidate.</p>
+          ${tags([['b','Structure mapping'],['o','High novelty']])}` },
+    ]},
+    { id: 'review_hypo', label: 'Review', details: [
+      { id: 'novelty_chk', label: 'Novelty', title: 'Novelty Assessment',
+        subtitle: 'Checking against existing literature',
+        body: `<p>Each hypothesis is compared against the full paper corpus using
+          semantic search. If a near-match is found, the hypothesis is flagged
+          as "incremental" rather than novel. The novelty score (1-5) directly
+          influences selection priority in the next stage.</p>
+          <p>Thresholds are calibrated per-domain: a 0.85 cosine similarity
+          in materials science may be novel, while the same score in NLP
+          likely indicates prior art.</p>` },
+      { id: 'feasibility', label: 'Feasible', title: 'Feasibility Check',
+        subtitle: 'Can this actually be built or tested?',
+        body: `<p>An LLM review pass evaluates each hypothesis for practical
+          feasibility: required resources, estimated timeline, key risks, and
+          dependency on unavailable technology.</p>
+          ${metrics([['62%','Pass rate'],['3','Risk factors'],['~8s','Per hypothesis']])}
+          <p>Hypotheses that fail feasibility are not discarded but archived
+          with their failure reasons for potential future revisiting.</p>` },
+      { id: 'consistency', label: 'Consist.', title: 'Consistency Verification',
+        subtitle: 'Logical coherence with known science',
+        body: `<p>Checks that hypotheses do not contradict established facts in
+          the knowledge graph. Uses a constraint-satisfaction approach over the
+          entity-relation network to detect logical conflicts.</p>
+          ${tags([['b','CSP'],['o','Contradiction detection'],['g','Automated']])}` },
+      { id: 'select_hypo', label: 'Select', title: 'Hypothesis Selection',
+        subtitle: 'Choosing the best candidates to develop',
+        body: `<p>Ranks hypotheses by a weighted combination of novelty,
+          feasibility, and consistency scores. The top-K are promoted to the
+          invention loop for full development into research papers.</p>
+          ${metrics([['Top-5','Default K'],['0.78','Avg quality'],['~1s','Ranking time']])}
+          ${tags([['g','Top-K'],['b','Pareto front']])}` },
+    ]},
+  ]},
+  { id: 'invent', label: 'Invent', subs: [
+    { id: 'gen_plan', label: 'Plan', details: [
+      { id: 'outline', label: 'Outline', title: 'Research Outline',
+        subtitle: 'Structuring the invention narrative',
+        body: `<p>Generates a detailed outline for the invention paper: abstract
+          skeleton, section headers, key arguments, and figure placeholders.
+          This provides the scaffold for all subsequent generation steps.</p>
+          <p>The outline is iteratively refined: the LLM proposes, a reviewer
+          pass checks for structural soundness, and gaps are filled before
+          text generation begins.</p>
+          ${tags([['b','Iterative'],['g','Structured']])}` },
+      { id: 'method', label: 'Method', title: 'Methodology Design',
+        subtitle: 'Defining the experimental approach',
+        body: `<p>Designs the methodology section: identifies independent and
+          dependent variables, proposes experimental setup, specifies
+          evaluation metrics, and outlines statistical tests. Fully grounded
+          in the hypothesis and feasibility analysis.</p>
+          ${metrics([['3-5','Variables'],['2-4','Baselines'],['5+','Metrics']])}
+          ${tags([['b','Variables'],['b','Controls'],['g','Metrics']])}` },
+    ]},
+    { id: 'gen_text', label: 'Draft', details: [
+      { id: 'abstract', label: 'Abstract', title: 'Abstract Generation',
+        subtitle: 'Concise summary of the invention',
+        body: `<p>Produces a structured abstract following the IMRAD format. The
+          abstract is generated last (despite appearing first in the paper) to
+          ensure it accurately reflects the full content. Word count is
+          constrained to venue requirements.</p>
+          ${metrics([['150-300','Words'],['IMRAD','Format'],['Last','Gen order']])}` },
+      { id: 'sections', label: 'Sections', title: 'Section Writing',
+        subtitle: 'Full-text generation per section',
+        body: `<p>Each section is generated with full context awareness: the
+          outline, adjacent sections, and relevant KG nodes are all present
+          in the prompt window. Cross-references between sections are
+          maintained throughout.</p>
+          ${metrics([['5-7','Sections'],['~4K','Words / paper'],['~90s','Draft time']])}
+          <p>Sections are generated in dependency order (methods before results,
+          results before discussion) to ensure factual consistency.</p>` },
+      { id: 'citations', label: 'Cite', title: 'Citation Integration',
+        subtitle: 'Grounding claims with references',
+        body: `<p>Every factual claim is traced back to its source in the knowledge
+          graph. Citations are inserted inline and formatted for the target
+          venue. Ungrounded claims are flagged for human review or removal.</p>
+          ${tags([['b','Inline'],['g','Auto-formatted'],['o','Flagged if ungrounded']])}` },
+    ]},
+    { id: 'review_paper', label: 'Review', details: [
+      { id: 'coherence', label: 'Cohere', title: 'Coherence Review',
+        subtitle: 'Does the paper tell a unified story?',
+        body: `<p>An LLM reviewer reads the full draft and scores it on narrative
+          coherence, argument flow, and conclusion support. Low-scoring
+          sections are flagged for targeted revision. The review generates
+          specific, actionable feedback rather than generic suggestions.</p>
+          ${metrics([['1-5','Score range'],['3.8','Avg score'],['~15s','Review time']])}` },
+      { id: 'accuracy', label: 'Accuracy', title: 'Factual Accuracy',
+        subtitle: 'Verifying claims against sources',
+        body: `<p>Cross-references every cited claim against the original source
+          text. Detects paraphrase drift, misattribution, and unsupported
+          generalizations. Claims that cannot be verified are escalated.</p>
+          ${tags([['o','Critical'],['b','Automated'],['g','Per-claim']])}` },
+      { id: 'revise', label: 'Revise', title: 'Revision Pass',
+        subtitle: 'Applying review feedback to the draft',
+        body: `<p>Takes the coherence and accuracy feedback and applies targeted
+          edits to the draft. Only modifies sections that were flagged,
+          preserving the rest. Tracks changes for human review.</p>
+          ${metrics([['2-3','Avg revisions'],['~30s','Per section'],['92%','Fix rate']])}` },
+    ]},
+  ]},
+  { id: 'publish', label: 'Publish', subs: [
+    { id: 'gen_viz', label: 'Figures', details: [
+      { id: 'diagrams', label: 'Diagrams', title: 'System Diagrams',
+        subtitle: 'Architectural and flow visualizations',
+        body: `<p>Generates publication-quality system diagrams using a code-based
+          approach: the LLM writes <code>matplotlib</code> or <code>tikz</code>
+          code, which is executed and rendered to SVG. Diagrams are
+          automatically positioned and labeled.</p>
+          ${tags([['b','matplotlib'],['b','tikz'],['g','SVG output']])}
+          <p>Failed renders are caught and retried with modified parameters,
+          ensuring robust output even for complex layouts.</p>` },
+      { id: 'charts', label: 'Charts', title: 'Data Charts',
+        subtitle: 'Quantitative result visualizations',
+        body: `<p>Produces bar charts, scatter plots, and line graphs from
+          simulated experimental data. Chart style, color palette, and font
+          sizes match the target venue's formatting guidelines.</p>
+          ${metrics([['6','Chart types'],['300dpi','Resolution'],['~5s','Per chart']])}` },
+      { id: 'tables', label: 'Tables', title: 'Result Tables',
+        subtitle: 'Structured comparison tables',
+        body: `<p>Generates LaTeX tables comparing the proposed method against
+          baselines. Includes statistical significance markers, best-result
+          highlighting, and proper column alignment.</p>
+          ${tags([['b','LaTeX'],['g','Auto-formatted'],['o','Significance']])}` },
+    ]},
+    { id: 'gen_paper', label: 'Compile', details: [
+      { id: 'latex', label: 'LaTeX', title: 'LaTeX Compilation',
+        subtitle: 'Assembling the final document',
+        body: `<p>All sections, figures, tables, and references are assembled into
+          a complete LaTeX document. The template is selected based on the
+          target venue. Cross-references and figure numbering are resolved
+          automatically.</p>
+          ${metrics([['8-12','Pages'],['15-30','References'],['4-6','Figures']])}` },
+      { id: 'pdf_out', label: 'PDF', title: 'PDF Rendering',
+        subtitle: 'Final output generation',
+        body: `<p>Compiles the LaTeX source to PDF with multiple passes for
+          cross-references, bibliography, and index generation. The final
+          artifact is a publication-ready research paper.</p>
+          ${tags([['g','Output'],['b','pdflatex'],['b','Multi-pass']])}` },
+    ]},
+    { id: 'artifacts', label: 'Artifacts', details: [
+      { id: 'repo', label: 'Repo', title: 'Code Repository',
+        subtitle: 'Accompanying implementation code',
+        body: `<p>Generates a structured code repository implementing the key
+          algorithms described in the paper. Includes README, requirements
+          file, example usage scripts, and inline documentation.</p>
+          <p>The repo structure follows community conventions for the target
+          language (Python: <code>src/</code> layout, Go: standard module).</p>
+          ${tags([['b','Structured'],['g','Documented'],['b','Tested']])}` },
+      { id: 'demo', label: 'Demo', title: 'Interactive Demo',
+        subtitle: 'Live demonstration artifacts',
+        body: `<p>Creates interactive HTML demonstrations that allow readers to
+          explore the invention's behavior with different parameters. These
+          are embedded in the supplementary materials or hosted standalone.</p>
+          ${metrics([['1-3','Demos / paper'],['HTML5','Format'],['~10s','Build time']])}
+          ${tags([['g','Interactive'],['b','HTML'],['o','Supplementary']])}` },
+    ]},
+  ]},
+];
+
+// ── State ──
+const state = { focusedRow: 0, moduleIdx: 0, subIdx: 0, detailIdx: 0 };
+const cur = {
+  mod:     () => DATA[state.moduleIdx],
+  subs:    () => cur.mod().subs,
+  sub:     () => cur.subs()[state.subIdx],
+  details: () => cur.sub().details,
+  detail:  () => cur.details()[state.detailIdx],
+};
+
+// ── Render rows ──
+function renderRow1() {
+  const row = document.getElementById('row1');
+  const lbl = row.querySelector('.row-label');
+  row.innerHTML = ''; row.appendChild(lbl);
+  DATA.forEach((mod, i) => {
+    const el = document.createElement('div');
+    el.className = 'diamond-item' + (i === state.moduleIdx ? ' active' : '');
+    el.innerHTML = `<div class="diamond-ring"><div class="diamond-inner"></div></div>
+      <div class="diamond-label">${mod.label}</div>`;
+    el.addEventListener('click', () => {
+      state.moduleIdx = i; state.subIdx = 0; state.detailIdx = 0;
+      state.focusedRow = 0; renderAll();
+    });
+    row.appendChild(el);
+  });
+}
+
+function renderDotRow(rowId, items, stateKey, focusRow) {
+  const row = document.getElementById(rowId);
+  const lbl = row.querySelector('.row-label');
+  row.innerHTML = ''; row.appendChild(lbl);
+  items.forEach((item, i) => {
+    const el = document.createElement('div');
+    el.className = 'dot-item' + (i === state[stateKey] ? ' active' : '');
+    el.innerHTML = `<div class="dot-circle"></div><div class="dot-label">${item.label}</div>`;
+    el.addEventListener('click', () => {
+      state[stateKey] = i;
+      if (stateKey === 'subIdx') state.detailIdx = 0;
+      state.focusedRow = focusRow; renderAll();
+    });
+    row.appendChild(el);
+  });
+}
+
+function renderContent() {
+  const panel = document.getElementById('contentPanel');
+  const mod = cur.mod(), sub = cur.sub(), det = cur.detail();
+  panel.innerHTML = `
+    <div class="content-breadcrumb">
+      <span class="crumb-mod">${mod.label}</span><span class="crumb-sep">/</span>
+      <span class="crumb-sub">${sub.label}</span><span class="crumb-sep">/</span>
+      <span class="crumb-det">${det.label}</span>
+    </div>
+    <div class="content-title">${det.title}</div>
+    <div class="content-subtitle">${det.subtitle}</div>
+    <div class="content-body">${det.body}</div>`;
+  panel.style.animation = 'none';
+  panel.offsetHeight;
+  panel.style.animation = '';
+}
+
+// ── Beam positioning ──
+function getCenter(el) {
+  const r = el.getBoundingClientRect();
+  return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+}
+
+function setLine(id, x1, y1, x2, y2) {
+  const el = document.getElementById(id);
+  el.setAttribute('x1', x1); el.setAttribute('y1', y1);
+  el.setAttribute('x2', x2); el.setAttribute('y2', y2);
+}
+
+function updateBeams() {
+  const r1 = document.querySelector('.row-1 .diamond-item.active');
+  const r2 = document.querySelector('.row-2 .dot-item.active');
+  const r3 = document.querySelector('.row-3 .dot-item.active');
+  if (!r1 || !r2 || !r3) return;
+
+  const p1 = getCenter(r1), p2 = getCenter(r2), p3 = getCenter(r3);
+  const b1 = r1.getBoundingClientRect(), b2 = r2.getBoundingClientRect();
+  const b3 = r3.getBoundingClientRect();
+
+  // Top beam: row1 active diamond -> row2 active dot
+  setLine('beamTop', p1.x, b1.bottom - 8, p2.x, b2.top + 2);
+  setLine('pulseTop', p1.x, b1.bottom - 8, p2.x, b2.top + 2);
+
+  // Bottom beam: row2 active dot -> row3 active dot
+  setLine('beamBot', p2.x, b2.bottom - 2, p3.x, b3.top + 2);
+  setLine('pulseBot', p2.x, b2.bottom - 2, p3.x, b3.top + 2);
+
+  // Midpoint glow marker at row2 junction
+  const epMid = document.getElementById('epMid');
+  epMid.setAttribute('cx', p2.x);
+  epMid.setAttribute('cy', p2.y);
+}
+
+// ── Render all ──
+function renderAll() {
+  renderRow1();
+  renderDotRow('row2', cur.subs(), 'subIdx', 1);
+  renderDotRow('row3', cur.details(), 'detailIdx', 2);
+  renderContent();
+  document.querySelectorAll('.nav-row').forEach((r, i) =>
+    r.classList.toggle('focused', i === state.focusedRow));
+  requestAnimationFrame(() => requestAnimationFrame(updateBeams));
+}
+
+// ── Keyboard ──
+document.addEventListener('keydown', (e) => {
+  let handled = true;
+  switch (e.key) {
+    case 'ArrowUp':   state.focusedRow = Math.max(0, state.focusedRow - 1); break;
+    case 'ArrowDown': state.focusedRow = Math.min(2, state.focusedRow + 1); break;
+    case 'ArrowLeft':  navLR(-1); break;
+    case 'ArrowRight': navLR(1); break;
+    case '1': case '2': case '3': case '4': {
+      const idx = parseInt(e.key) - 1;
+      if (idx < DATA.length) {
+        state.moduleIdx = idx; state.subIdx = 0; state.detailIdx = 0;
+        state.focusedRow = 0;
+      }
+      break;
+    }
+    default: handled = false;
+  }
+  if (handled) { e.preventDefault(); renderAll(); }
+});
+
+function navLR(dir) {
+  if (state.focusedRow === 0) {
+    state.moduleIdx = clamp(state.moduleIdx + dir, 0, DATA.length - 1);
+    state.subIdx = 0; state.detailIdx = 0;
+  } else if (state.focusedRow === 1) {
+    state.subIdx = clamp(state.subIdx + dir, 0, cur.subs().length - 1);
+    state.detailIdx = 0;
+  } else {
+    state.detailIdx = clamp(state.detailIdx + dir, 0, cur.details().length - 1);
+  }
+}
+
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+// ── Resize ──
+let rTimer;
+window.addEventListener('resize', () => { clearTimeout(rTimer); rTimer = setTimeout(updateBeams, 50); });
+
+// ── Init ──
+renderAll();
+</script>
+</body>
+</html>

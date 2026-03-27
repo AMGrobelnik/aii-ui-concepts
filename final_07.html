@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Animated Wave Strip</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #08080e;
+    --surface: #0e0e16;
+    --surface-hover: #141420;
+    --border: rgba(255,255,255,0.06);
+    --border-light: rgba(255,255,255,0.10);
+    --text: #e2e2ea;
+    --text-dim: #6e6e82;
+    --text-muted: #4a4a5e;
+    --seed-color: #34d399;
+    --hypo-color: #a78bfa;
+    --inv-color: #60a5fa;
+    --paper-color: #fbbf24;
+    --strip-height: 80px;
+    --tr: 280ms ease;
+  }
+
+  html, body {
+    height: 100%;
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body { display: flex; flex-direction: column; }
+
+  /* ── Wave Strip ── */
+  .wave-strip-wrapper { flex-shrink: 0; position: relative; z-index: 10; }
+  .wave-strip {
+    height: var(--strip-height); display: flex; position: relative;
+    background: var(--surface); border-bottom: 1px solid var(--border); overflow: hidden;
+  }
+  .wave-section {
+    flex: 1;
+    position: relative;
+    cursor: pointer;
+    overflow: hidden;
+    transition: filter var(--tr);
+  }
+
+  .wave-section:not(:last-child) {
+    border-right: 1px solid rgba(255,255,255,0.04);
+  }
+
+  .wave-section:hover { filter: brightness(1.15); }
+  .wave-section.active:hover { filter: brightness(1.08); }
+
+  .wave-section.active::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(
+      ellipse at center bottom,
+      var(--section-glow, transparent) 0%,
+      transparent 70%
+    );
+    z-index: 0;
+    animation: pulseGlow 3s ease-in-out infinite;
+  }
+
+  @keyframes pulseGlow {
+    0%, 100% { opacity: 0.3; }
+    50% { opacity: 0.6; }
+  }
+
+  /* ── Module Labels Below Strip ── */
+  .wave-labels {
+    display: flex;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    position: relative;
+    z-index: 10;
+  }
+
+  .wave-label {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 8px 0;
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color var(--tr);
+    user-select: none;
+  }
+  .wave-label:hover { color: var(--text-dim); }
+  .wave-label.completed { color: var(--text-dim); }
+  .wave-label.active { color: var(--text); font-weight: 600; }
+  .wave-label .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    transition: background var(--tr);
+  }
+  .wave-label.completed .dot { background: var(--label-color); }
+  .wave-label.active .dot {
+    background: var(--label-color);
+    box-shadow: 0 0 8px var(--label-glow);
+    animation: dotPulse 2s ease-in-out infinite;
+  }
+  @keyframes dotPulse {
+    0%, 100% { box-shadow: 0 0 6px var(--label-glow); }
+    50% { box-shadow: 0 0 14px var(--label-glow); }
+  }
+  /* ── Nav Hint Pill ── */
+  .nav-hint {
+    position: absolute;
+    bottom: -1px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+    padding: 3px 12px;
+    font-size: 10px;
+    color: var(--text-muted);
+    letter-spacing: 0.05em;
+    z-index: 11;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+
+  .nav-hint kbd {
+    display: inline-block;
+    padding: 1px 5px;
+    background: rgba(255,255,255,0.06);
+    border-radius: 3px;
+    font-family: inherit;
+    font-size: 10px;
+  }
+
+  .bubble-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 5;
+  }
+
+  /* ── Content Area ── */
+  .content-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 32px 40px 60px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255,255,255,0.08) transparent;
+  }
+
+  .content-area::-webkit-scrollbar { width: 6px; }
+  .content-area::-webkit-scrollbar-track { background: transparent; }
+  .content-area::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,0.08);
+    border-radius: 3px;
+  }
+
+  .content-header { max-width: 720px; margin: 0 auto 28px; }
+
+  .content-title {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .status-badge {
+    font-size: 11px;
+    font-weight: 500;
+    padding: 2px 10px;
+    border-radius: 20px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .status-badge.completed { background: rgba(52,211,153,0.12); color: var(--seed-color); }
+  .status-badge.active { background: rgba(96,165,250,0.12); color: var(--inv-color); }
+  .status-badge.pending { background: rgba(255,255,255,0.05); color: var(--text-muted); }
+
+  .content-iteration {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-bottom: 12px;
+  }
+
+  .content-summary {
+    font-size: 14px;
+    line-height: 1.65;
+    color: var(--text-dim);
+    max-width: 640px;
+  }
+
+  /* ── Progress bar ── */
+  .progress-bar-wrap {
+    max-width: 720px; margin: 0 auto 24px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .progress-track {
+    flex: 1; height: 3px; background: rgba(255,255,255,0.06);
+    border-radius: 2px; overflow: hidden;
+  }
+  .progress-fill { height: 100%; border-radius: 2px; transition: width 600ms ease; }
+  .progress-pct { font-size: 12px; font-weight: 600; color: var(--text-dim); min-width: 36px; text-align: right; }
+
+  /* ── Expandable Rows ── */
+  .rows-container {
+    max-width: 720px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .row {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    transition: all var(--tr);
+  }
+
+  .row:hover { background: var(--surface-hover); border-color: var(--border-light); }
+
+  .row-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .row-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+
+  .row-icon.done { background: rgba(52,211,153,0.10); color: var(--seed-color); }
+  .row-icon.running { background: rgba(96,165,250,0.10); color: var(--inv-color); }
+  .row-icon.pending { background: rgba(255,255,255,0.04); color: var(--text-muted); }
+
+  .row-label { flex: 1; font-size: 13px; font-weight: 500; }
+  .row-detail { font-size: 12px; color: var(--text-dim); }
+  .row-chevron { font-size: 11px; color: var(--text-muted); transition: transform var(--tr); }
+  .row.expanded .row-chevron { transform: rotate(90deg); }
+
+  .row-body {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 300ms ease, padding 300ms ease;
+  }
+
+  .row.expanded .row-body { max-height: 400px; padding: 0 18px 16px 58px; }
+  .row-body-text { font-size: 13px; line-height: 1.6; color: var(--text-dim); }
+
+  /* ── Sub-stage Items ── */
+  .substage-list {
+    max-width: 720px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .substage-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 18px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all var(--tr);
+  }
+
+  .substage-item:hover { background: var(--surface-hover); border-color: var(--border-light); }
+
+  .substage-icon {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    flex-shrink: 0;
+  }
+
+  .substage-icon.completed { background: rgba(52,211,153,0.12); color: var(--seed-color); }
+  .substage-icon.active { background: rgba(96,165,250,0.12); color: var(--inv-color); }
+  .substage-icon.pending { background: rgba(255,255,255,0.05); color: var(--text-muted); }
+
+  .substage-name { flex: 1; font-size: 13px; font-weight: 500; }
+  .substage-meta { font-size: 12px; color: var(--text-dim); }
+  .substage-arrow { font-size: 11px; color: var(--text-muted); }
+
+  /* ── Breadcrumb ── */
+  .breadcrumb {
+    max-width: 720px;
+    margin: 0 auto 18px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-muted);
+    opacity: 0;
+    height: 0;
+    overflow: hidden;
+    transition: opacity var(--tr), height var(--tr);
+  }
+  .breadcrumb.visible { opacity: 1; height: 20px; }
+  .breadcrumb span { cursor: pointer; transition: color var(--tr); }
+  .breadcrumb span:hover { color: var(--text-dim); }
+  .breadcrumb span.current { color: var(--text-dim); cursor: default; }
+  .breadcrumb .sep { color: var(--text-muted); opacity: 0.4; cursor: default; }
+
+  .fade-in { animation: fadeIn 280ms ease forwards; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+</style>
+</head>
+<body>
+
+<div class="wave-strip-wrapper">
+  <div class="wave-strip" id="waveStrip"></div>
+  <div class="wave-labels" id="waveLabels"></div>
+  <canvas class="bubble-canvas" id="bubbleCanvas"></canvas>
+  <div class="nav-hint"><kbd>&larr;</kbd><kbd>&rarr;</kbd> navigate</div>
+</div>
+<div class="content-area" id="contentArea"></div>
+
+<script>
+// ── Data ──
+const STAGES = [
+  { id: 'seed', label: 'Seed', status: 'completed', fillPct: 1.0,
+    color: '#34d399', glow: 'rgba(52,211,153,0.25)',
+    title: 'Seed Hypothesis', iteration: null, subtitle: 'Completed',
+    summary: 'Generated initial research hypotheses from the knowledge graph, identifying cross-domain connections between neural architecture search and multi-modal contrastive learning.',
+    progress: 1.0, subStages: null,
+    artifacts: [
+      { name: 'Knowledge Graph Embedding', detail: '4,218 nodes', status: 'done',
+        body: 'Constructed a comprehensive knowledge graph from 1,200+ recent papers spanning NAS and contrastive learning domains. Node embeddings computed via TransE with 256-dimensional representations.' },
+      { name: 'Cross-Domain Bridges', detail: '12 bridges found', status: 'done',
+        body: 'Identified 12 high-potential conceptual bridges between architecture search spaces and contrastive objective functions, ranked by novelty score.' },
+      { name: 'Hypothesis Candidates', detail: '8 candidates', status: 'done',
+        body: 'Produced 8 candidate hypotheses. Top candidate proposes using contrastive learning dynamics to guide architecture search, reducing search cost by an estimated 40%.' }
+    ] },
+  { id: 'hypothesis', label: 'Hypothesis', status: 'completed', fillPct: 1.0,
+    color: '#a78bfa', glow: 'rgba(167,139,250,0.25)',
+    title: 'Hypothesis Refinement', iteration: 'Loop 3 of 3', subtitle: 'Completed',
+    summary: 'Iteratively refined the seed hypothesis through adversarial review. The final hypothesis proposes Contrastive Architecture Distillation (CAD) \u2014 using contrastive loss landscapes to prune NAS search spaces.',
+    progress: 1.0, subStages: null,
+    artifacts: [
+      { name: 'Adversarial Review 1', detail: 'Score: 6.2/10', status: 'done',
+        body: 'Initial review flagged weak novelty claim and insufficient baseline comparison. Suggested tighter scope on search cost reduction.' },
+      { name: 'Adversarial Review 2', detail: 'Score: 7.8/10', status: 'done',
+        body: 'Revised hypothesis passed novelty check. Remaining concerns: scalability beyond CIFAR-scale datasets.' },
+      { name: 'Adversarial Review 3', detail: 'Score: 8.5/10', status: 'done',
+        body: 'Final review accepted. Hypothesis clearly articulates the CAD mechanism with testable predictions.' },
+      { name: 'Final Hypothesis', detail: 'Locked', status: 'done',
+        body: 'Contrastive Architecture Distillation (CAD): Train a lightweight contrastive probe on intermediate NAS candidates, using loss landscape geometry to eliminate unpromising architectures early.' }
+    ] },
+  { id: 'invention', label: 'Invention', status: 'active', fillPct: 0.6,
+    color: '#60a5fa', glow: 'rgba(96,165,250,0.25)',
+    title: 'Invention Loop', iteration: 'Iteration 2 of 3', subtitle: 'Generating artifacts',
+    summary: 'Building experimental evidence and paper sections for the CAD hypothesis. Currently generating computational artifacts and running ablation studies.',
+    progress: 0.6, artifacts: null,
+    subStages: [
+      { id: 'plan', label: 'Plan', status: 'completed', title: 'Experiment Plan', subtitle: 'Completed',
+        summary: 'Designed a 4-phase experiment: contrastive probe training, search space pruning evaluation, end-to-end NAS comparison, and scalability analysis.',
+        artifacts: [
+          { name: 'Experiment Design', detail: '4 phases', status: 'done', body: 'Phase 1: Train contrastive probes on CIFAR-10/100 NAS candidates. Phase 2: Measure pruning accuracy. Phase 3: Full NAS comparison against DARTS and ENAS. Phase 4: ImageNet-1k subset scale test.' },
+          { name: 'Compute Budget', detail: '48 GPU-hours', status: 'done', body: 'Estimated 48 A100 GPU-hours total across all four phases.' },
+          { name: 'Baseline Selection', detail: '5 baselines', status: 'done', body: 'Selected: Random Search, DARTS, ENAS, ProxylessNAS, and FairNAS.' }
+        ] },
+      { id: 'paper_text', label: 'Paper Text', status: 'completed', title: 'Paper Sections', subtitle: 'Completed',
+        summary: 'Drafted introduction, methodology, and preliminary results. The methodology details the contrastive probe architecture and loss-landscape coupling mechanism.',
+        artifacts: [
+          { name: 'Introduction', detail: '820 words', status: 'done', body: 'Motivates CAD by identifying the computational bottleneck in NAS and proposing contrastive loss geometry as a cheap proxy signal.' },
+          { name: 'Methodology', detail: '1,640 words', status: 'done', body: 'Details the CAD pipeline: probe architecture (2-layer MLP), contrastive objective (NT-Xent), pruning criterion (loss curvature threshold).' },
+          { name: 'Preliminary Results', detail: '940 words', status: 'done', body: 'Phase 1-2 results: contrastive probes achieve 0.89 rank correlation with final accuracy on CIFAR-10, enabling 60% search space reduction with <2% accuracy loss.' }
+        ] },
+      { id: 'artifacts', label: 'Artifacts', status: 'active', title: 'Computational Artifacts', subtitle: 'Running',
+        summary: 'Generating code demonstrations, trained model checkpoints, and evaluation scripts for reproducibility.',
+        artifacts: [
+          { name: 'Contrastive Probe Training', detail: 'acc: 0.891', status: 'done', body: 'Trained probe on 500 NAS candidates. Final contrastive alignment accuracy: 0.891.' },
+          { name: 'Search Space Pruning', detail: '2,400 candidates', status: 'done', body: 'Precision@60%: 0.94 \u2014 94% of retained architectures are in the true top-40%.' },
+          { name: 'NAS Comparison', detail: 'running\u2026', status: 'running', body: 'Running full NAS pipeline with CAD pruning against 5 baselines. Progress: 3/5 baselines completed.' },
+          { name: 'Ablation Study', detail: 'pending', status: 'pending', body: 'Will ablate: probe depth, contrastive temperature, pruning threshold, candidate pool size.' },
+          { name: 'Scalability Analysis', detail: 'pending', status: 'pending', body: 'Will evaluate CAD on ImageNet-1k 10% subset to test scalability claims.' }
+        ] },
+      { id: 'review', label: 'Review', status: 'pending', title: 'Paper Review', subtitle: 'Pending',
+        summary: 'Adversarial review will evaluate completeness, rigor, and novelty of the drafted paper.', artifacts: null },
+      { id: 'update', label: 'Update', status: 'pending', title: 'Hypothesis Update', subtitle: 'Pending',
+        summary: 'Will incorporate review feedback to refine methodology and results.', artifacts: null }
+    ] },
+  { id: 'paper', label: 'Paper', status: 'pending', fillPct: 0.0,
+    color: '#fbbf24', glow: 'rgba(251,191,36,0.25)',
+    title: 'Paper Repository', iteration: null, subtitle: 'Pending',
+    summary: 'Final paper compilation, visualization generation, and repository packaging will begin after the invention loop completes.',
+    progress: 0, subStages: null, artifacts: null }
+];
+
+// ── State ──
+let currentView = { level: 'stage', stageIdx: 2, subIdx: null };
+function getStage(i) { return STAGES[i]; }
+function getActiveIdx() { const i = STAGES.findIndex(s => s.status === 'active'); return i >= 0 ? i : 0; }
+
+function navigateTo(level, stageIdx, subIdx) {
+  currentView = { level, stageIdx, subIdx };
+  renderContent();
+  document.querySelectorAll('.wave-label').forEach((l, i) => l.classList.toggle('viewing', i === stageIdx));
+}
+
+// ── Hex to RGBA ──
+function h2rgba(hex, a) {
+  if (!hex.startsWith('#')) return hex;
+  const n = hex.length === 4;
+  const r = parseInt(n ? hex[1]+hex[1] : hex.slice(1,3), 16);
+  const g = parseInt(n ? hex[2]+hex[2] : hex.slice(3,5), 16);
+  const b = parseInt(n ? hex[3]+hex[3] : hex.slice(5,7), 16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+// ══════════════════ WAVE RENDERING ══════════════════
+const waveCanvases = [];
+let waveFrame = 0;
+
+function buildWaveStrip() {
+  const strip = document.getElementById('waveStrip');
+  strip.innerHTML = '';
+  STAGES.forEach((stage, i) => {
+    const sec = document.createElement('div');
+    sec.className = 'wave-section' + (stage.status === 'active' ? ' active' : '');
+    sec.style.setProperty('--section-glow', stage.glow);
+    sec.addEventListener('click', () => navigateTo(stage.subStages ? 'substages' : 'stage', i, null));
+    const cvs = document.createElement('canvas');
+    cvs.style.cssText = 'position:absolute;bottom:0;left:0;width:100%;height:100%';
+    sec.appendChild(cvs);
+    strip.appendChild(sec);
+    waveCanvases.push({ canvas: cvs, stage, section: sec });
+  });
+}
+
+function buildWaveLabels() {
+  const c = document.getElementById('waveLabels');
+  c.innerHTML = '';
+  STAGES.forEach((s, i) => {
+    const l = document.createElement('div');
+    l.className = 'wave-label ' + s.status;
+    l.style.setProperty('--label-color', s.color);
+    l.style.setProperty('--label-glow', s.glow);
+    l.innerHTML = `<span class="dot"></span>${s.label}`;
+    l.addEventListener('click', () => navigateTo(s.subStages ? 'substages' : 'stage', i, null));
+    c.appendChild(l);
+  });
+}
+
+function resizeCanvases() {
+  waveCanvases.forEach(wc => {
+    const r = wc.section.getBoundingClientRect();
+    wc.canvas.width = r.width * devicePixelRatio;
+    wc.canvas.height = r.height * devicePixelRatio;
+  });
+}
+
+function drawWaves() {
+  waveFrame++;
+  const t = waveFrame / 60;
+  const dpr = devicePixelRatio;
+  waveCanvases.forEach(wc => {
+    const ctx = wc.canvas.getContext('2d');
+    const w = wc.canvas.width, h = wc.canvas.height;
+    const fp = wc.stage.fillPct;
+    const isAct = wc.stage.status === 'active';
+    const isDone = wc.stage.status === 'completed';
+    ctx.clearRect(0, 0, w, h);
+    if (fp <= 0) return;
+
+    const fillH = h * fp, baseY = h - fillH;
+    const amp = (isAct ? 6 : isDone ? 2.5 : 1.5) * dpr;
+    const freq = isAct ? 0.008 : 0.005;
+    const spd = isAct ? 2.2 : 0.8;
+    const amp2 = amp * 0.5, freq2 = freq * 1.7, spd2 = spd * 0.6;
+    const col = wc.stage.color;
+
+    // Primary liquid body
+    const grad = ctx.createLinearGradient(0, baseY, 0, h);
+    grad.addColorStop(0, h2rgba(col, 0.35));
+    grad.addColorStop(0.4, h2rgba(col, 0.22));
+    grad.addColorStop(1, h2rgba(col, 0.08));
+    ctx.beginPath(); ctx.moveTo(0, h);
+    for (let x = 0; x <= w; x += 2) {
+      const y = baseY + Math.sin(x*freq + t*spd)*amp + Math.sin(x*freq2 + t*spd2 + 1.5)*amp2;
+      ctx.lineTo(x, y);
+    }
+    ctx.lineTo(w, h); ctx.closePath();
+    ctx.fillStyle = grad; ctx.fill();
+
+    // Shimmer overlay
+    const sg = ctx.createLinearGradient(0, baseY, 0, h);
+    sg.addColorStop(0, h2rgba(col, 0.15));
+    sg.addColorStop(0.5, h2rgba(col, 0.05));
+    sg.addColorStop(1, 'transparent');
+    ctx.beginPath(); ctx.moveTo(0, h);
+    for (let x = 0; x <= w; x += 2) {
+      const y = baseY + 3*dpr + Math.sin(x*freq*0.7 + t*spd*1.3 + 2)*amp*0.6
+                + Math.sin(x*freq2*0.8 + t*spd2*1.5 + 3)*amp2*0.4;
+      ctx.lineTo(x, y);
+    }
+    ctx.lineTo(w, h); ctx.closePath();
+    ctx.fillStyle = sg; ctx.fill();
+
+    // Surface highlight line
+    ctx.beginPath();
+    for (let x = 0; x <= w; x += 2) {
+      const y = baseY + Math.sin(x*freq + t*spd)*amp + Math.sin(x*freq2 + t*spd2 + 1.5)*amp2;
+      x === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.strokeStyle = h2rgba(col, isAct ? 0.5 : 0.25);
+    ctx.lineWidth = 1.5 * dpr; ctx.stroke();
+  });
+  requestAnimationFrame(drawWaves);
+}
+
+// ══════════════════ BUBBLES ══════════════════
+const bubbles = [];
+function initBubbleCanvas() {
+  const cvs = document.getElementById('bubbleCanvas');
+  const r = document.getElementById('waveStrip').getBoundingClientRect();
+  cvs.width = r.width * devicePixelRatio;
+  cvs.height = r.height * devicePixelRatio;
+  cvs.style.width = r.width + 'px';
+  cvs.style.height = r.height + 'px';
+}
+
+function drawBubbles() {
+  const cvs = document.getElementById('bubbleCanvas');
+  const ctx = cvs.getContext('2d');
+  ctx.clearRect(0, 0, cvs.width, cvs.height);
+  const dpr = devicePixelRatio;
+
+  // Spawn from active section
+  if (bubbles.length < 15 && Math.random() < 0.08) {
+    const ai = STAGES.findIndex(s => s.status === 'active');
+    if (ai >= 0) {
+      const secs = document.querySelectorAll('.wave-section');
+      const sr = secs[ai].getBoundingClientRect();
+      const wr = document.getElementById('waveStrip').getBoundingClientRect();
+      const surfY = (wr.height - wr.height * STAGES[ai].fillPct) * dpr;
+      bubbles.push({
+        x: ((sr.left - wr.left) + Math.random() * sr.width) * dpr,
+        y: surfY,
+        r: (1.5 + Math.random() * 2.5) * dpr,
+        speed: (0.3 + Math.random() * 0.5) * dpr,
+        wobble: Math.random() * Math.PI * 2,
+        ws: 0.02 + Math.random() * 0.03,
+        wa: (0.3 + Math.random() * 0.5) * dpr,
+        opacity: 0.3 + Math.random() * 0.4,
+        color: STAGES[ai].color
+      });
+    }
+  }
+
+  for (let i = bubbles.length - 1; i >= 0; i--) {
+    const b = bubbles[i];
+    b.y -= b.speed; b.wobble += b.ws; b.x += Math.sin(b.wobble) * b.wa;
+    const fade = Math.max(0, b.y / (cvs.height * 0.7));
+    const alpha = b.opacity * fade;
+    if (b.y < -10 || alpha < 0.01) { bubbles.splice(i, 1); continue; }
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+    ctx.fillStyle = h2rgba(b.color, alpha * 0.5); ctx.fill();
+    ctx.beginPath(); ctx.arc(b.x - b.r*0.3, b.y - b.r*0.3, b.r*0.35, 0, Math.PI * 2);
+    ctx.fillStyle = h2rgba('#ffffff', alpha * 0.3); ctx.fill();
+  }
+  requestAnimationFrame(drawBubbles);
+}
+
+// ══════════════════ CONTENT RENDERING ══════════════════
+function renderContent() {
+  const area = document.getElementById('contentArea');
+  area.scrollTop = 0;
+  const { level, stageIdx, subIdx } = currentView;
+  const stage = getStage(stageIdx);
+  if (level === 'substage-detail') renderSubDetail(area, stage, subIdx);
+  else if (level === 'substages') renderSubstages(area, stage);
+  else renderStageView(area, stage);
+}
+
+function renderStageView(area, stage) {
+  let h = `<div class="fade-in">`;
+  h += bcHtml();
+  h += `<div class="content-header">`;
+  h += `  <div class="content-title">
+            ${stage.title}
+            <span class="status-badge ${stage.status}">${stage.subtitle}</span>
+          </div>`;
+  if (stage.iteration) {
+    h += `<div class="content-iteration">${stage.iteration}</div>`;
+  }
+  h += `  <div class="content-summary">${stage.summary}</div>`;
+  h += `</div>`;
+
+  if (stage.progress > 0 && stage.progress < 1) {
+    h += progBar(stage.progress, stage.color);
+  }
+
+  if (stage.artifacts) {
+    h += `<div class="rows-container">`;
+    stage.artifacts.forEach((a, i) => { h += rowHtml(a, i); });
+    h += `</div>`;
+  }
+
+  if (stage.subStages) {
+    h += `<div class="substage-list">`;
+    stage.subStages.forEach((s, i) => { h += subHtml(s, i); });
+    h += `</div>`;
+  }
+
+  h += `</div>`;
+  area.innerHTML = h;
+  bindRows();
+  bindSubs();
+}
+
+function renderSubstages(area, stage) {
+  let h = `<div class="fade-in">`;
+  h += bcHtml();
+  h += `<div class="content-header">`;
+  h += `  <div class="content-title">
+            ${stage.title}
+            <span class="status-badge ${stage.status}">${stage.subtitle}</span>
+          </div>`;
+  if (stage.iteration) {
+    h += `<div class="content-iteration">${stage.iteration}</div>`;
+  }
+  h += `  <div class="content-summary">${stage.summary}</div>`;
+  h += `</div>`;
+
+  if (stage.progress > 0 && stage.progress < 1) {
+    h += progBar(stage.progress, stage.color);
+  }
+
+  if (stage.subStages) {
+    h += `<div class="substage-list">`;
+    stage.subStages.forEach((s, i) => { h += subHtml(s, i); });
+    h += `</div>`;
+  }
+
+  h += `</div>`;
+  area.innerHTML = h;
+  bindSubs();
+}
+
+function renderSubDetail(area, stage, si) {
+  const sub = stage.subStages[si];
+  let h = `<div class="fade-in">`;
+  h += bcHtml();
+  h += `<div class="content-header">`;
+  h += `  <div class="content-title">
+            ${sub.title}
+            <span class="status-badge ${sub.status}">${sub.subtitle}</span>
+          </div>`;
+  h += `  <div class="content-summary">${sub.summary}</div>`;
+  h += `</div>`;
+
+  if (sub.artifacts) {
+    h += `<div class="rows-container">`;
+    sub.artifacts.forEach((a, i) => { h += rowHtml(a, i); });
+    h += `</div>`;
+  }
+
+  h += `</div>`;
+  area.innerHTML = h;
+  bindRows();
+}
+
+// ── Breadcrumb ──
+function bcHtml() {
+  const { level, stageIdx, subIdx } = currentView;
+  const stage = getStage(stageIdx);
+  if (level === 'stage' && !stage.subStages) return '<div class="breadcrumb"></div>';
+  let parts = [{ label: 'Pipeline', act: `navigateTo('stage',${getActiveIdx()},null)` }];
+  if (level === 'substages' || level === 'substage-detail')
+    parts.push({ label: stage.label, act: `navigateTo('substages',${stageIdx},null)` });
+  if (level === 'substage-detail' && subIdx !== null)
+    parts.push({ label: stage.subStages[subIdx].label, act: null });
+  let h = '<div class="breadcrumb visible">';
+  parts.forEach((p, i) => {
+    h += (i < parts.length - 1 && p.act) ? `<span onclick="${p.act}">${p.label}</span>` : `<span class="current">${p.label}</span>`;
+    if (i < parts.length - 1) h += '<span class="sep">/</span>';
+  });
+  return h + '</div>';
+}
+
+function progBar(pct, col) {
+  const p = Math.round(pct * 100);
+  return `
+    <div class="progress-bar-wrap">
+      <div class="progress-track">
+        <div class="progress-fill" style="width:${p}%;background:${col}"></div>
+      </div>
+      <div class="progress-pct" style="color:${col}">${p}%</div>
+    </div>`;
+}
+
+function rowHtml(item, idx) {
+  const ic = item.status === 'done' ? 'done' : item.status === 'running' ? 'running' : 'pending';
+  const ch = item.status === 'done' ? '\u2713' : item.status === 'running' ? '\u25B6' : '\u25CB';
+  return `
+    <div class="row" data-idx="${idx}">
+      <div class="row-header">
+        <div class="row-icon ${ic}">${ch}</div>
+        <div class="row-label">${item.name}</div>
+        <div class="row-detail">${item.detail}</div>
+        <div class="row-chevron">\u25B8</div>
+      </div>
+      <div class="row-body">
+        <div class="row-body-text">${item.body || ''}</div>
+      </div>
+    </div>`;
+}
+
+function subHtml(sub, idx) {
+  const ch = sub.status === 'completed' ? '\u2713' : sub.status === 'active' ? '\u25B6' : '\u25CB';
+  return `
+    <div class="substage-item" data-sub="${idx}">
+      <div class="substage-icon ${sub.status}">${ch}</div>
+      <div class="substage-name">${sub.label}</div>
+      <div class="substage-meta">${sub.subtitle}</div>
+      <div class="substage-arrow">\u25B8</div>
+    </div>`;
+}
+
+function bindRows() {
+  document.querySelectorAll('.row .row-header').forEach(h => {
+    h.addEventListener('click', () => h.closest('.row').classList.toggle('expanded'));
+  });
+}
+function bindSubs() {
+  document.querySelectorAll('.substage-item').forEach(el => {
+    el.addEventListener('click', () => navigateTo('substage-detail', currentView.stageIdx, parseInt(el.dataset.sub)));
+  });
+}
+
+// ══════════════════ KEYBOARD NAV ══════════════════
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowLeft') { e.preventDefault(); navPrev(); }
+  else if (e.key === 'ArrowRight') { e.preventDefault(); navNext(); }
+  else if (e.key === 'Escape' || e.key === 'Backspace') { e.preventDefault(); navBack(); }
+});
+
+function navPrev() {
+  const { level, stageIdx, subIdx } = currentView;
+  if (level === 'stage' || level === 'substages') {
+    if (stageIdx > 0) { const p = STAGES[stageIdx-1]; navigateTo(p.subStages ? 'substages' : 'stage', stageIdx-1, null); }
+  } else if (level === 'substage-detail') {
+    if (subIdx > 0) navigateTo('substage-detail', stageIdx, subIdx-1);
+    else navigateTo('substages', stageIdx, null);
+  }
+}
+
+function navNext() {
+  const { level, stageIdx, subIdx } = currentView;
+  if (level === 'substages') {
+    const s = getStage(stageIdx);
+    if (s.subStages && s.subStages.length) { navigateTo('substage-detail', stageIdx, 0); return; }
+  }
+  if (level === 'stage' || level === 'substages') {
+    if (stageIdx < STAGES.length-1) { const n = STAGES[stageIdx+1]; navigateTo(n.subStages ? 'substages' : 'stage', stageIdx+1, null); }
+  } else if (level === 'substage-detail') {
+    const s = getStage(stageIdx);
+    if (subIdx < s.subStages.length-1) navigateTo('substage-detail', stageIdx, subIdx+1);
+    else if (stageIdx < STAGES.length-1) { const n = STAGES[stageIdx+1]; navigateTo(n.subStages ? 'substages' : 'stage', stageIdx+1, null); }
+  }
+}
+
+function navBack() {
+  const { level, stageIdx } = currentView;
+  if (level === 'substage-detail') navigateTo('substages', stageIdx, null);
+}
+
+// ══════════════════ INIT ══════════════════
+function init() {
+  buildWaveStrip(); buildWaveLabels(); resizeCanvases(); initBubbleCanvas();
+  const ai = getActiveIdx();
+  navigateTo(STAGES[ai].subStages ? 'substages' : 'stage', ai, null);
+  drawWaves(); drawBubbles();
+}
+window.addEventListener('resize', () => { resizeCanvases(); initBubbleCanvas(); });
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,862 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Stepper View</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0c0c14;
+    --surface: #13131f;
+    --surface-raised: #1a1a2a;
+    --surface-expanded: #141420;
+    --border: #252540;
+    --text: #e0e0f0;
+    --text-dim: #7878a0;
+    --text-muted: #50506a;
+    --green: #34d399;
+    --green-dim: #1a4a38;
+    --blue: #6090ff;
+    --blue-dim: #1a2a50;
+    --purple: #a78bfa;
+    --orange: #f59e0b;
+    --red: #ef4444;
+    --cyan: #22d3ee;
+    --anim: 300ms ease;
+  }
+
+  html, body {
+    height: 100%; background: var(--bg); color: var(--text);
+    font-family: 'Inter', system-ui, sans-serif; font-size: 14px;
+    line-height: 1.5; overflow: hidden;
+  }
+
+  body { display: flex; flex-direction: column; }
+
+  /* ── STEPPER BAR (LEVEL 1) ─────────────────────────────── */
+  .stepper-bar {
+    position: sticky; top: 0; z-index: 100;
+    height: 80px; min-height: 80px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    padding: 0 48px; gap: 0;
+    user-select: none;
+  }
+
+  .step-wrapper {
+    display: flex; align-items: center; flex: 1;
+    max-width: 260px;
+  }
+  .step-wrapper:last-child { flex: 0 0 auto; }
+
+  .step {
+    display: flex; flex-direction: column; align-items: center;
+    cursor: pointer; position: relative; z-index: 2;
+    transition: transform var(--anim);
+  }
+  .step:hover { transform: scale(1.05); }
+  .step.active .step-circle { box-shadow: 0 0 0 4px rgba(96,144,255,0.25); }
+
+  .step-circle {
+    width: 36px; height: 36px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 600; font-size: 14px;
+    transition: all var(--anim);
+    border: 2px solid var(--border);
+    background: var(--bg); color: var(--text-dim);
+  }
+  .step.completed .step-circle {
+    background: var(--green); border-color: var(--green);
+    color: #000; font-size: 16px;
+  }
+  .step.active .step-circle {
+    background: var(--blue); border-color: var(--blue);
+    color: #fff; animation: pulse-ring 2s ease infinite;
+  }
+  .step.pending .step-circle {
+    background: transparent; border-color: var(--border); color: var(--text-muted);
+  }
+
+  @keyframes pulse-ring {
+    0%, 100% { box-shadow: 0 0 0 4px rgba(96,144,255,0.25); }
+    50%      { box-shadow: 0 0 0 8px rgba(96,144,255,0.10); }
+  }
+
+  .step-label {
+    margin-top: 6px; font-size: 11px; font-weight: 500;
+    color: var(--text-dim); white-space: nowrap;
+    transition: color var(--anim);
+  }
+  .step.active .step-label  { color: var(--blue); font-weight: 600; }
+  .step.completed .step-label { color: var(--green); }
+
+  .step-line {
+    flex: 1; height: 3px; background: var(--border);
+    border-radius: 2px; position: relative;
+    margin: 0 -4px; margin-bottom: 18px;
+  }
+  .step-line .fill {
+    position: absolute; top: 0; left: 0; height: 100%;
+    border-radius: 2px; transition: width 600ms ease;
+  }
+  .step-line.done .fill   { width: 100%; background: var(--green); }
+  .step-line.partial .fill { width: 50%;  background: var(--blue); }
+  .step-line.none .fill    { width: 0; }
+
+  /* ── CONTENT AREA (LEVEL 2) ────────────────────────────── */
+  .content-area {
+    flex: 1; overflow-y: auto; padding: 28px 40px 20px;
+    scroll-behavior: smooth;
+  }
+  .content-area::-webkit-scrollbar { width: 6px; }
+  .content-area::-webkit-scrollbar-track { background: transparent; }
+  .content-area::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .module-view { display: none; animation: fadeSlide 350ms ease; }
+  .module-view.visible { display: block; }
+
+  @keyframes fadeSlide {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .module-title {
+    font-size: 18px; font-weight: 600; margin-bottom: 20px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .module-title .badge {
+    font-size: 11px; font-weight: 500; padding: 2px 10px;
+    border-radius: 10px; background: var(--green-dim); color: var(--green);
+  }
+  .module-title .badge.running {
+    background: var(--blue-dim); color: var(--blue);
+  }
+
+  /* ── Seed Hypothesis — mini flow ───────────────────────── */
+  .seed-flow {
+    display: flex; align-items: center; gap: 0;
+    padding: 20px 0; flex-wrap: wrap;
+  }
+  .seed-card {
+    background: var(--surface-raised); border-radius: 10px;
+    padding: 18px 22px; display: flex; align-items: center; gap: 14px;
+    border: 1px solid var(--border); min-width: 200px;
+  }
+  .seed-card .icon {
+    width: 38px; height: 38px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; flex-shrink: 0;
+  }
+  .seed-card .icon.mine   { background: #1e293b; }
+  .seed-card .icon.kg     { background: #1a2040; }
+  .seed-card .icon.gap    { background: #2a1a1a; }
+  .seed-card .icon.select { background: #1a2a1a; }
+  .seed-card .label { font-size: 12px; color: var(--text-dim); }
+  .seed-card .value { font-size: 16px; font-weight: 600; }
+  .seed-arrow {
+    font-size: 18px; color: var(--text-muted); padding: 0 10px;
+    flex-shrink: 0;
+  }
+
+  /* ── Hypothesis Loop ───────────────────────────────────── */
+  .hypo-iterations { display: flex; flex-direction: column; gap: 16px; }
+
+  .hypo-iter {
+    display: flex; align-items: stretch; gap: 0;
+  }
+  .hypo-iter-label {
+    writing-mode: vertical-lr; text-orientation: mixed;
+    transform: rotate(180deg);
+    font-size: 11px; font-weight: 600; color: var(--text-muted);
+    padding: 8px 6px; display: flex; align-items: center;
+    letter-spacing: 1px; text-transform: uppercase;
+  }
+  .hypo-pair {
+    display: flex; align-items: center; gap: 0; flex: 1;
+  }
+  .hypo-card {
+    background: var(--surface-raised); border-radius: 10px;
+    padding: 16px 20px; flex: 1;
+    border: 1px solid var(--border); cursor: pointer;
+    transition: all var(--anim); position: relative;
+    border-left: 3px solid var(--purple);
+  }
+  .hypo-card:hover { border-color: var(--purple); background: #1e1e30; }
+  .hypo-card .card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .hypo-card .card-title { font-weight: 600; font-size: 13px; }
+  .hypo-card .card-status { font-size: 11px; padding: 2px 8px; border-radius: 8px; }
+  .hypo-card .card-status.done { background: var(--green-dim); color: var(--green); }
+  .hypo-card .card-meta { font-size: 12px; color: var(--text-dim); display: flex; gap: 14px; }
+  .hypo-arrow { font-size: 18px; color: var(--text-muted); padding: 0 12px; flex-shrink: 0; align-self: center; }
+  .hypo-inter-arrow {
+    text-align: center; color: var(--text-muted); font-size: 12px;
+    padding: 4px 0 4px 30px; display: flex; align-items: center; gap: 6px;
+  }
+  .hypo-inter-arrow::before { content: ''; display: block; width: 1px; height: 12px; background: var(--border); margin: 0 auto; }
+
+  .score-bar-wrap { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .score-bar { height: 6px; border-radius: 3px; background: var(--purple); transition: width 600ms ease; }
+  .score-val { font-size: 13px; font-weight: 600; color: var(--purple); min-width: 28px; }
+
+  /* ── Invention Loop ────────────────────────────────────── */
+  .iter-tabs {
+    display: flex; gap: 4px; margin-bottom: 20px;
+    background: var(--surface); border-radius: 8px; padding: 4px;
+    width: fit-content;
+  }
+  .iter-tab {
+    padding: 8px 20px; border-radius: 6px; cursor: pointer;
+    font-size: 13px; font-weight: 500; color: var(--text-dim);
+    transition: all var(--anim); border: none; background: none;
+  }
+  .iter-tab:hover { color: var(--text); background: var(--surface-raised); }
+  .iter-tab.active { background: var(--blue); color: #fff; font-weight: 600; }
+
+  .substep-flow {
+    display: flex; align-items: flex-start; gap: 0;
+    padding: 10px 0; overflow-x: auto;
+  }
+  .substep-card {
+    background: var(--surface-raised); border-radius: 10px;
+    padding: 16px 18px; min-width: 150px; max-width: 180px;
+    border: 1px solid var(--border); cursor: pointer;
+    transition: all var(--anim); position: relative;
+    border-left: 3px solid var(--border);
+  }
+  .substep-card.completed { border-left-color: var(--green); }
+  .substep-card.running   { border-left-color: var(--blue); min-width: 190px; max-width: 210px; box-shadow: 0 0 20px rgba(96,144,255,0.08); }
+  .substep-card.pending   { opacity: 0.5; }
+  .substep-card:hover     { background: #1e1e30; opacity: 1; }
+  .substep-card .ss-icon  {
+    font-size: 16px; margin-bottom: 8px;
+  }
+  .substep-card .ss-name  { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
+  .substep-card .ss-meta  { font-size: 11px; color: var(--text-dim); }
+  .substep-card .ss-progress {
+    margin-top: 8px; height: 4px; background: var(--border);
+    border-radius: 2px; overflow: hidden;
+  }
+  .substep-card .ss-progress .bar { height: 100%; border-radius: 2px; transition: width 600ms ease; }
+  .substep-card.completed .ss-progress .bar { width: 100%; background: var(--green); }
+  .substep-card.running   .ss-progress .bar { background: var(--blue); }
+
+  .substep-arrow { font-size: 16px; color: var(--text-muted); padding: 30px 8px 0; flex-shrink: 0; }
+
+  /* ── Expandable Summary (LEVEL 3) ──────────────────────── */
+  .expand-panel {
+    max-height: 0; overflow: hidden;
+    transition: max-height 350ms ease, padding 350ms ease, opacity 300ms ease;
+    opacity: 0; background: var(--surface-expanded);
+    border-radius: 0 0 10px 10px; margin-top: -2px;
+    border: 1px solid var(--border); border-top: none;
+  }
+  .expand-panel.open {
+    max-height: 600px; opacity: 1; padding: 16px 20px;
+  }
+  .expand-panel .ep-row {
+    display: flex; align-items: center; gap: 10px;
+    padding: 6px 0; font-size: 13px;
+  }
+  .expand-panel .ep-status-bar {
+    display: flex; gap: 16px; padding: 8px 14px;
+    background: rgba(255,255,255,0.03); border-radius: 8px;
+    margin-bottom: 12px; font-size: 13px; color: var(--text-dim);
+  }
+  .expand-panel .ep-status-bar span { color: var(--text); font-weight: 500; }
+  .collapse-btn {
+    display: inline-flex; align-items: center; gap: 4px;
+    margin-top: 10px; font-size: 11px; color: var(--text-muted);
+    cursor: pointer; background: none; border: none;
+    padding: 4px 10px; border-radius: 4px;
+    transition: all var(--anim);
+  }
+  .collapse-btn:hover { color: var(--text); background: rgba(255,255,255,0.05); }
+
+  .artifact-row {
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.03);
+    font-size: 13px;
+  }
+  .artifact-row:last-of-type { border-bottom: none; }
+  .artifact-row .a-icon { flex-shrink: 0; width: 18px; text-align: center; }
+  .artifact-row .a-name { font-weight: 500; min-width: 200px; }
+  .artifact-row .a-detail { color: var(--text-dim); flex: 1; }
+  .artifact-row .a-timing { color: var(--text-muted); font-size: 12px; white-space: nowrap; }
+  .artifact-row .a-cost   { color: var(--orange); font-size: 12px; white-space: nowrap; min-width: 50px; text-align: right; }
+
+  .critique-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 0; font-size: 13px;
+  }
+  .critique-row .severity {
+    font-size: 10px; font-weight: 600; padding: 2px 8px;
+    border-radius: 4px; text-transform: uppercase; flex-shrink: 0;
+  }
+  .critique-row .severity.major { background: rgba(239,68,68,0.15); color: var(--red); }
+  .critique-row .severity.minor { background: rgba(245,158,11,0.15); color: var(--orange); }
+
+  /* ── Paper & Repo — vertical list ──────────────────────── */
+  .paper-steps { display: flex; flex-direction: column; gap: 0; }
+  .paper-step {
+    display: flex; align-items: center; gap: 14px;
+    padding: 16px 20px; background: var(--surface-raised);
+    border: 1px solid var(--border); border-left: 3px solid var(--border);
+    cursor: pointer; transition: all var(--anim);
+  }
+  .paper-step:first-child { border-radius: 10px 10px 0 0; }
+  .paper-step:last-child  { border-radius: 0 0 10px 10px; }
+  .paper-step:hover { background: #1e1e30; }
+  .paper-step .ps-circle {
+    width: 28px; height: 28px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; border: 2px solid var(--border);
+    background: transparent; color: var(--text-muted); flex-shrink: 0;
+  }
+  .paper-step .ps-name { font-weight: 500; flex: 1; }
+  .paper-step .ps-meta { font-size: 12px; color: var(--text-muted); }
+  .paper-step + .paper-step { border-top: none; }
+  .paper-vline {
+    width: 2px; height: 12px; background: var(--border);
+    margin-left: 33px;
+  }
+
+  /* ── STATS BAR ─────────────────────────────────────────── */
+  .stats-bar {
+    height: 38px; min-height: 38px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    gap: 32px; font-size: 12px; color: var(--text-dim);
+    padding: 0 24px; user-select: none;
+  }
+  .stats-bar .stat { display: flex; align-items: center; gap: 6px; }
+  .stats-bar .stat-val { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .stats-bar .stat-label { color: var(--text-muted); }
+
+  /* ── Utility ───────────────────────────────────────────── */
+  .tag-green  { color: var(--green); }
+  .tag-blue   { color: var(--blue); }
+  .tag-orange { color: var(--orange); }
+  .tag-red    { color: var(--red); }
+  .tag-dim    { color: var(--text-muted); }
+</style>
+</head>
+<body>
+
+<!-- ═══ LEVEL 1: STEPPER BAR ═══ -->
+<div class="stepper-bar" id="stepperBar"></div>
+
+<!-- ═══ LEVEL 2 + 3: CONTENT AREA ═══ -->
+<div class="content-area" id="contentArea">
+
+  <!-- Module 1: Seed Hypothesis -->
+  <div class="module-view" id="module-0">
+    <div class="module-title">Seed Hypothesis <span class="badge">Completed</span></div>
+    <div class="seed-flow">
+      <div class="seed-card"><div class="icon mine">&#128218;</div><div><div class="label">Papers Mined</div><div class="value">847</div></div></div>
+      <div class="seed-arrow">&#10132;</div>
+      <div class="seed-card"><div class="icon kg">&#128300;</div><div><div class="label">KG Triples</div><div class="value">2,341</div></div></div>
+      <div class="seed-arrow">&#10132;</div>
+      <div class="seed-card"><div class="icon gap">&#128269;</div><div><div class="label">Gaps Found</div><div class="value">12</div></div></div>
+      <div class="seed-arrow">&#10132;</div>
+      <div class="seed-card"><div class="icon select">&#127919;</div><div><div class="label">Seeds Selected</div><div class="value">5</div></div></div>
+    </div>
+  </div>
+
+  <!-- Module 2: Hypothesis Loop -->
+  <div class="module-view" id="module-1">
+    <div class="module-title">Hypothesis Loop <span class="badge">Completed</span></div>
+    <div class="hypo-iterations" id="hypoIterations"></div>
+  </div>
+
+  <!-- Module 3: Invention Loop -->
+  <div class="module-view visible" id="module-2">
+    <div class="module-title">Invention Loop <span class="badge running">Running</span></div>
+    <div class="iter-tabs" id="iterTabs"></div>
+    <div id="iterContent"></div>
+  </div>
+
+  <!-- Module 4: Paper & Repo -->
+  <div class="module-view" id="module-3">
+    <div class="module-title">Paper &amp; Repo <span class="badge" style="background:rgba(120,120,160,0.15);color:var(--text-muted)">Pending</span></div>
+    <div class="paper-steps" id="paperSteps"></div>
+  </div>
+</div>
+
+<!-- ═══ STATS BAR ═══ -->
+<div class="stats-bar">
+  <div class="stat"><span class="stat-label">Run</span> <span class="stat-val">ssl-low-resource-v3</span></div>
+  <div class="stat"><span class="stat-label">Time</span> <span class="stat-val" id="statTime">02:34:17</span></div>
+  <div class="stat"><span class="stat-label">Cost</span> <span class="stat-val tag-orange">$12.47</span></div>
+  <div class="stat"><span class="stat-label">Tokens</span> <span class="stat-val">847K / 234K</span></div>
+</div>
+
+<script>
+/* ──────────────────────────────────────────────────────────────
+   DATA
+   ────────────────────────────────────────────────────────────── */
+const STEPS = [
+  { name: 'Seed Hypothesis', status: 'completed' },
+  { name: 'Hypothesis Loop', status: 'completed' },
+  { name: 'Invention Loop',  status: 'active'    },
+  { name: 'Paper & Repo',    status: 'pending'   },
+];
+
+const HYPO_ITERS = [
+  { gen: { title: 'Gen Hypo', time: '6m 12s', score: 6.2 }, review: { title: 'Review', time: '3m 45s', verdict: 'Revise' }},
+  { gen: { title: 'Gen Hypo', time: '5m 48s', score: 7.8 }, review: { title: 'Review', time: '4m 02s', verdict: 'Revise' }},
+  { gen: { title: 'Gen Hypo', time: '4m 33s', score: 8.4 }, review: { title: 'Review', time: '3m 10s', verdict: 'Accept' }},
+];
+
+const INV_ITERS = [
+  {
+    label: 'Iter 1', status: 'completed',
+    steps: [
+      { name: 'gen_strat', status: 'completed', time: '3m 22s', cost: '$1.08' },
+      { name: 'gen_plan',  status: 'completed', time: '4m 11s', cost: '$1.44' },
+      { name: 'gen_art',   status: 'completed', time: '14m 05s', cost: '$4.87', detail: '5/5 artifacts' },
+      { name: 'gen_paper', status: 'completed', time: '8m 32s', cost: '$2.91' },
+      { name: 'review',    status: 'completed', time: '5m 18s', cost: '$1.62', score: '6.8' },
+      { name: 'upd_hypo',  status: 'completed', time: '2m 14s', cost: '$0.72' },
+    ],
+  },
+  {
+    label: 'Iter 2', status: 'active',
+    steps: [
+      { name: 'gen_strat', status: 'completed', time: '2m 58s', cost: '$0.96' },
+      { name: 'gen_plan',  status: 'completed', time: '3m 47s', cost: '$1.31' },
+      { name: 'gen_art',   status: 'running',   time: '12m 08s', cost: '$5.41', detail: '3/5 artifacts' },
+      { name: 'gen_paper', status: 'pending',   time: '---', cost: '---' },
+      { name: 'review',    status: 'pending',   time: '---', cost: '---' },
+      { name: 'upd_hypo',  status: 'pending',   time: '---', cost: '---' },
+    ],
+  },
+  {
+    label: 'Iter 3', status: 'pending',
+    steps: [
+      { name: 'gen_strat', status: 'pending', time: '---', cost: '---' },
+      { name: 'gen_plan',  status: 'pending', time: '---', cost: '---' },
+      { name: 'gen_art',   status: 'pending', time: '---', cost: '---' },
+      { name: 'gen_paper', status: 'pending', time: '---', cost: '---' },
+      { name: 'review',    status: 'pending', time: '---', cost: '---' },
+      { name: 'upd_hypo',  status: 'pending', time: '---', cost: '---' },
+    ],
+  },
+];
+
+const ARTIFACTS_ITER2 = [
+  { icon: '\u2713', cls: 'tag-green',  name: 'Contrastive Baseline',     detail: 'acc: 0.847 vs baseline 0.721 (+17.5%)', time: '4m 32s', cost: '$2.14' },
+  { icon: '\u2713', cls: 'tag-green',  name: 'Multilingual Pairs Dataset', detail: '2,400 examples, 12 languages',          time: '3m 15s', cost: '$1.02' },
+  { icon: '\u2713', cls: 'tag-green',  name: 'Convergence Proof',         detail: 'Verified in Lean 4, 3 lemmas',           time: '2m 41s', cost: '$0.89' },
+  { icon: '\u25B6', cls: 'tag-blue',   name: 'Ablation Study',            detail: 'Running...',                              time: '1m 20s', cost: '$1.36' },
+  { icon: '\u25CB', cls: 'tag-dim',    name: 'Cross-lingual Evaluation',  detail: 'Pending',                                 time: '---',    cost: '---'   },
+];
+
+const REVIEW_ITER1 = {
+  score: '6.8 / 10', confidence: '3 / 5',
+  critiques: [
+    { text: 'Missing ablation study',      severity: 'major' },
+    { text: 'Weak baseline comparison',     severity: 'major' },
+    { text: 'Abstract too long',            severity: 'minor' },
+  ],
+  actions: ['Add ablation across 3 axes', 'Include 2 additional baselines (SimCLR, MoCo)', 'Trim abstract to 150 words'],
+};
+
+const PAPER_STEPS = [
+  { name: 'Initialize Repo',            meta: '' },
+  { name: 'Generate Demos + Viz',       meta: '' },
+  { name: 'Deploy Source',              meta: '' },
+  { name: 'Generate Full Paper',        meta: '' },
+  { name: 'Deploy Paper',              meta: '' },
+];
+
+/* ──────────────────────────────────────────────────────────────
+   STEPPER BAR
+   ────────────────────────────────────────────────────────────── */
+let activeModuleIdx = 2; // Invention Loop is active by default
+
+function renderStepper() {
+  const bar = document.getElementById('stepperBar');
+  bar.innerHTML = '';
+  STEPS.forEach((s, i) => {
+    // Step node
+    const step = document.createElement('div');
+    step.className = `step ${s.status}`;
+    step.dataset.idx = i;
+
+    const circle = document.createElement('div');
+    circle.className = 'step-circle';
+    circle.textContent = s.status === 'completed' ? '\u2713' : (i + 1);
+
+    const label = document.createElement('div');
+    label.className = 'step-label';
+    label.textContent = s.name;
+
+    step.appendChild(circle);
+    step.appendChild(label);
+    step.addEventListener('click', () => selectModule(i));
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'step-wrapper';
+    wrapper.appendChild(step);
+
+    // Line after step (except last)
+    if (i < STEPS.length - 1) {
+      const line = document.createElement('div');
+      line.className = 'step-line';
+      const fill = document.createElement('div');
+      fill.className = 'fill';
+
+      // Determine fill state
+      if (STEPS[i].status === 'completed' && STEPS[i + 1].status === 'completed') {
+        line.classList.add('done');
+      } else if (STEPS[i].status === 'completed' && STEPS[i + 1].status === 'active') {
+        line.classList.add('partial');
+      } else {
+        line.classList.add('none');
+      }
+      line.appendChild(fill);
+      wrapper.appendChild(line);
+    }
+
+    bar.appendChild(wrapper);
+  });
+  highlightStep(activeModuleIdx);
+}
+
+function highlightStep(idx) {
+  document.querySelectorAll('.step').forEach((el, i) => {
+    el.classList.toggle('selected', i === idx);
+    // Add a subtle underline indicator for selected
+    el.style.filter = (i === idx) ? 'brightness(1.15)' : '';
+  });
+}
+
+function selectModule(idx) {
+  activeModuleIdx = idx;
+  highlightStep(idx);
+  document.querySelectorAll('.module-view').forEach((el, i) => {
+    if (i === idx) {
+      el.classList.add('visible');
+      el.style.animation = 'none';
+      // Force reflow to restart animation
+      void el.offsetWidth;
+      el.style.animation = '';
+    } else {
+      el.classList.remove('visible');
+    }
+  });
+}
+
+/* ──────────────────────────────────────────────────────────────
+   HYPOTHESIS LOOP
+   ────────────────────────────────────────────────────────────── */
+function renderHypoLoop() {
+  const container = document.getElementById('hypoIterations');
+  container.innerHTML = '';
+  const maxScore = 10;
+
+  HYPO_ITERS.forEach((iter, i) => {
+    if (i > 0) {
+      const interArrow = document.createElement('div');
+      interArrow.className = 'hypo-inter-arrow';
+      interArrow.innerHTML = '<span style="transform:rotate(90deg);display:inline-block">&#10132;</span> Feedback fed to next iteration';
+      container.appendChild(interArrow);
+    }
+
+    const row = document.createElement('div');
+    row.className = 'hypo-iter';
+
+    const label = document.createElement('div');
+    label.className = 'hypo-iter-label';
+    label.textContent = `Iter ${i + 1}`;
+
+    const pair = document.createElement('div');
+    pair.className = 'hypo-pair';
+
+    // Gen card
+    const genWrap = document.createElement('div');
+    genWrap.style.cssText = 'flex:1;display:flex;flex-direction:column;';
+    const genCard = document.createElement('div');
+    genCard.className = 'hypo-card';
+    genCard.innerHTML = `
+      <div class="card-head">
+        <div class="card-title">${iter.gen.title}</div>
+        <div class="card-status done">\u2713 Done</div>
+      </div>
+      <div class="card-meta"><span>${iter.gen.time}</span></div>
+      <div class="score-bar-wrap">
+        <div class="score-bar" style="width:${(iter.gen.score / maxScore) * 100}%;height:6px;min-width:20px"></div>
+        <div class="score-val">${iter.gen.score}</div>
+      </div>
+    `;
+    genWrap.appendChild(genCard);
+
+    // Gen expand panel
+    const genPanel = createExpandPanel(`gen-hypo-${i}`, `
+      <div class="ep-status-bar">
+        <span>Score: ${iter.gen.score} / 10</span> | Time: ${iter.gen.time}
+      </div>
+      <div style="font-size:13px;color:var(--text-dim)">
+        Generated hypothesis focusing on self-supervised learning for low-resource languages.
+        ${i === 0 ? 'Initial formulation targeting contrastive pre-training with multilingual transfer.' : ''}
+        ${i === 1 ? 'Refined hypothesis incorporating reviewer feedback on ablation and baselines.' : ''}
+        ${i === 2 ? 'Final hypothesis with strengthened experimental design and formal convergence guarantees.' : ''}
+      </div>
+    `);
+    genCard.addEventListener('click', () => togglePanel(genPanel));
+    genWrap.appendChild(genPanel);
+    pair.appendChild(genWrap);
+
+    // Arrow
+    const arrow = document.createElement('div');
+    arrow.className = 'hypo-arrow';
+    arrow.textContent = '\u2192';
+    pair.appendChild(arrow);
+
+    // Review card
+    const revWrap = document.createElement('div');
+    revWrap.style.cssText = 'flex:1;display:flex;flex-direction:column;';
+    const revCard = document.createElement('div');
+    revCard.className = 'hypo-card';
+    revCard.style.borderLeftColor = iter.review.verdict === 'Accept' ? 'var(--green)' : 'var(--orange)';
+    revCard.innerHTML = `
+      <div class="card-head">
+        <div class="card-title">${iter.review.title}</div>
+        <div class="card-status done">${iter.review.verdict}</div>
+      </div>
+      <div class="card-meta"><span>${iter.review.time}</span></div>
+    `;
+    revWrap.appendChild(revCard);
+
+    // Review expand panel
+    const revPanel = createExpandPanel(`rev-hypo-${i}`, `
+      <div class="ep-status-bar">
+        <span>Verdict: ${iter.review.verdict}</span> | Time: ${iter.review.time}
+      </div>
+      <div style="font-size:13px;color:var(--text-dim)">
+        ${iter.review.verdict === 'Accept'
+          ? 'Hypothesis accepted. Strong experimental design, clear novelty, adequate baselines.'
+          : 'Hypothesis requires revision. Key concerns flagged for next iteration.'
+        }
+      </div>
+    `);
+    revCard.addEventListener('click', () => togglePanel(revPanel));
+    revWrap.appendChild(revPanel);
+    pair.appendChild(revWrap);
+
+    row.appendChild(label);
+    row.appendChild(pair);
+    container.appendChild(row);
+  });
+}
+
+/* ──────────────────────────────────────────────────────────────
+   INVENTION LOOP
+   ────────────────────────────────────────────────────────────── */
+let activeIterIdx = 1; // Iter 2 is active
+
+function renderIterTabs() {
+  const tabs = document.getElementById('iterTabs');
+  tabs.innerHTML = '';
+  INV_ITERS.forEach((iter, i) => {
+    const btn = document.createElement('button');
+    btn.className = `iter-tab${i === activeIterIdx ? ' active' : ''}`;
+    const icon = iter.status === 'completed' ? ' \u2713' : iter.status === 'active' ? ' \u25B6' : ' \u25CB';
+    btn.textContent = iter.label + icon;
+    btn.addEventListener('click', () => { activeIterIdx = i; renderIterTabs(); renderIterContent(); });
+    tabs.appendChild(btn);
+  });
+}
+
+function renderIterContent() {
+  const container = document.getElementById('iterContent');
+  container.innerHTML = '';
+
+  const iter = INV_ITERS[activeIterIdx];
+  const flow = document.createElement('div');
+  flow.className = 'substep-flow';
+
+  iter.steps.forEach((step, i) => {
+    if (i > 0) {
+      const arrow = document.createElement('div');
+      arrow.className = 'substep-arrow';
+      arrow.textContent = '\u2192';
+      flow.appendChild(arrow);
+    }
+
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'display:flex;flex-direction:column;';
+
+    const card = document.createElement('div');
+    const statusCls = step.status === 'completed' ? 'completed' : step.status === 'running' ? 'running' : 'pending';
+    card.className = `substep-card ${statusCls}`;
+
+    const icon = step.status === 'completed' ? '\u2713' : step.status === 'running' ? '\u25B6' : '\u25CB';
+    const iconCls = step.status === 'completed' ? 'tag-green' : step.status === 'running' ? 'tag-blue' : 'tag-dim';
+
+    card.innerHTML = `
+      <div class="ss-icon ${iconCls}">${icon}</div>
+      <div class="ss-name">${step.name}</div>
+      <div class="ss-meta">${step.time} &middot; ${step.cost}</div>
+      ${step.detail ? `<div class="ss-meta" style="margin-top:2px">${step.detail}</div>` : ''}
+      <div class="ss-progress"><div class="bar" style="width:${step.status === 'completed' ? 100 : step.status === 'running' ? 60 : 0}%"></div></div>
+    `;
+
+    wrap.appendChild(card);
+
+    // Create expand panel for cards that have detail data
+    const panelContent = getSubstepExpandContent(activeIterIdx, i, step);
+    if (panelContent) {
+      const panel = createExpandPanel(`inv-${activeIterIdx}-${i}`, panelContent);
+      card.addEventListener('click', () => togglePanel(panel));
+      wrap.appendChild(panel);
+    }
+
+    flow.appendChild(wrap);
+  });
+
+  container.appendChild(flow);
+}
+
+function getSubstepExpandContent(iterIdx, stepIdx, step) {
+  // gen_art on Iter 2 (active)
+  if (iterIdx === 1 && stepIdx === 2) {
+    let rows = ARTIFACTS_ITER2.map(a => `
+      <div class="artifact-row">
+        <div class="a-icon ${a.cls}">${a.icon}</div>
+        <div class="a-name">${a.name}</div>
+        <div class="a-detail">${a.detail}</div>
+        <div class="a-timing">${a.time}</div>
+        <div class="a-cost">${a.cost}</div>
+      </div>
+    `).join('');
+    return `
+      <div class="ep-status-bar">
+        <span>3/5 artifacts complete</span> | 12m 08s | <span class="tag-orange">$5.41</span>
+      </div>
+      ${rows}
+    `;
+  }
+
+  // review on Iter 1
+  if (iterIdx === 0 && stepIdx === 4) {
+    const critRows = REVIEW_ITER1.critiques.map(c => `
+      <div class="critique-row">
+        <div class="severity ${c.severity}">${c.severity}</div>
+        <div>${c.text}</div>
+      </div>
+    `).join('');
+    const actionRows = REVIEW_ITER1.actions.map(a => `
+      <div style="padding:3px 0;font-size:13px;color:var(--text-dim)">&#8226; ${a}</div>
+    `).join('');
+    return `
+      <div class="ep-status-bar">
+        <span>Score: ${REVIEW_ITER1.score}</span> | Confidence: <span>${REVIEW_ITER1.confidence}</span>
+      </div>
+      <div style="margin-bottom:8px;font-size:12px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px">Critiques</div>
+      ${critRows}
+      <div style="margin:10px 0 6px;font-size:12px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.5px">Suggested Actions</div>
+      ${actionRows}
+    `;
+  }
+
+  // gen_art on Iter 1 (completed)
+  if (iterIdx === 0 && stepIdx === 2) {
+    return `
+      <div class="ep-status-bar">
+        <span>5/5 artifacts complete</span> | 14m 05s | <span class="tag-orange">$4.87</span>
+      </div>
+      <div style="font-size:13px;color:var(--text-dim)">
+        All artifacts generated successfully. Includes contrastive baseline, dataset,
+        convergence proof, ablation study, and cross-lingual evaluation.
+      </div>
+    `;
+  }
+
+  // Generic for any completed step
+  if (step.status === 'completed') {
+    return `
+      <div class="ep-status-bar">
+        <span>Completed</span> | ${step.time} | <span class="tag-orange">${step.cost}</span>
+      </div>
+      <div style="font-size:13px;color:var(--text-dim)">Step completed successfully.</div>
+    `;
+  }
+
+  // Running steps (gen_art Iter 2 is handled above, but just in case)
+  if (step.status === 'running') {
+    return `
+      <div class="ep-status-bar">
+        <span>In Progress</span> | ${step.time} | <span class="tag-orange">${step.cost}</span>
+      </div>
+      <div style="font-size:13px;color:var(--text-dim)">Step is currently running...</div>
+    `;
+  }
+
+  return null; // Pending steps get no panel
+}
+
+/* ──────────────────────────────────────────────────────────────
+   PAPER & REPO
+   ────────────────────────────────────────────────────────────── */
+function renderPaperSteps() {
+  const container = document.getElementById('paperSteps');
+  container.innerHTML = '';
+  PAPER_STEPS.forEach((s, i) => {
+    const step = document.createElement('div');
+    step.className = 'paper-step';
+    step.innerHTML = `
+      <div class="ps-circle">${i + 1}</div>
+      <div class="ps-name">${s.name}</div>
+      <div class="ps-meta">Pending</div>
+    `;
+    container.appendChild(step);
+  });
+}
+
+/* ──────────────────────────────────────────────────────────────
+   EXPAND PANEL HELPERS
+   ────────────────────────────────────────────────────────────── */
+function createExpandPanel(id, content) {
+  const panel = document.createElement('div');
+  panel.className = 'expand-panel';
+  panel.dataset.panelId = id;
+  panel.innerHTML = content + `<button class="collapse-btn" onclick="event.stopPropagation(); togglePanel(this.parentElement)">\u25B2 Collapse</button>`;
+  return panel;
+}
+
+function togglePanel(panel) {
+  if (!panel) return;
+  panel.classList.toggle('open');
+}
+
+/* ──────────────────────────────────────────────────────────────
+   STATS TIMER (cosmetic)
+   ────────────────────────────────────────────────────────────── */
+let baseSeconds = 2 * 3600 + 34 * 60 + 17;
+function tickTimer() {
+  baseSeconds++;
+  const h = String(Math.floor(baseSeconds / 3600)).padStart(2, '0');
+  const m = String(Math.floor((baseSeconds % 3600) / 60)).padStart(2, '0');
+  const s = String(baseSeconds % 60).padStart(2, '0');
+  document.getElementById('statTime').textContent = `${h}:${m}:${s}`;
+}
+
+/* ──────────────────────────────────────────────────────────────
+   INIT
+   ────────────────────────────────────────────────────────────── */
+renderStepper();
+renderHypoLoop();
+renderIterTabs();
+renderIterContent();
+renderPaperSteps();
+setInterval(tickTimer, 1000);
+</script>
+</body>
+</html>

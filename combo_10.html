@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Segmented Progress Bar + Dot Rows</title>
+<style>
+  :root {
+    --bg: #0e1117; --surface: #161b22; --surface-2: #1c2333;
+    --border: #2a3040; --text: #e0e6ed; --text-dim: #7a8599; --text-muted: #4a5568;
+    --seed-color: #34d399; --seed-glow: rgba(52,211,153,0.35);
+    --hypo-color: #a78bfa; --hypo-glow: rgba(167,139,250,0.35);
+    --inv-color: #60a5fa;  --inv-glow: rgba(96,165,250,0.35);
+    --paper-color: #f472b6; --paper-glow: rgba(244,114,182,0.35);
+    --bar-height: 32px; --marker-size: 28px; --dot-size: 14px; --dot-size-sm: 10px;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    min-height: 100vh; overflow-x: hidden;
+  }
+  .nav-shell {
+    position: sticky; top: 0; z-index: 100; background: var(--bg);
+    border-bottom: 1px solid var(--border); padding: 20px 32px 16px;
+  }
+  .bar-container { position: relative; width: 100%; height: var(--bar-height); user-select: none; }
+  .bar-track {
+    position: absolute; top: 0; left: 0; right: 0; height: var(--bar-height);
+    background: var(--surface-2); border-radius: 8px; overflow: hidden;
+    display: flex; border: 1px solid var(--border); cursor: pointer;
+  }
+  .bar-segment {
+    position: relative; height: 100%; display: flex; align-items: center;
+    justify-content: center; transition: filter 0.2s; overflow: hidden;
+  }
+  .bar-segment:hover { filter: brightness(1.15); }
+  .bar-segment.selected { filter: brightness(1.25); }
+  .bar-segment + .bar-segment { border-left: 1px solid rgba(0,0,0,0.3); }
+  .bar-segment .fill {
+    position: absolute; top: 0; left: 0; height: 100%; transition: width 0.6s ease;
+  }
+  .bar-segment .label {
+    position: relative; z-index: 2; font-size: 12px; font-weight: 600;
+    letter-spacing: 0.5px; text-transform: uppercase;
+    color: rgba(255,255,255,0.85); text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+    white-space: nowrap; pointer-events: none;
+  }
+  .bar-segment .pct {
+    position: relative; z-index: 2; font-size: 10px; font-weight: 500;
+    color: rgba(255,255,255,0.6); margin-left: 6px; pointer-events: none;
+  }
+  .bar-segment.active .fill::after {
+    content: ''; position: absolute; top: 0; right: -2px; width: 6px; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4));
+    animation: pulse-edge 1.8s ease-in-out infinite;
+  }
+  @keyframes pulse-edge { 0%,100% { opacity: 0.3; } 50% { opacity: 1; } }
+  .bar-segment .unfilled {
+    position: absolute; top: 0; right: 0; height: 100%;
+    background: repeating-linear-gradient(90deg,
+      rgba(255,255,255,0.03) 0px, rgba(255,255,255,0.03) 4px,
+      transparent 4px, transparent 8px);
+  }
+  .markers-layer {
+    position: absolute; top: 0; left: 0; right: 0;
+    height: var(--bar-height); pointer-events: none;
+  }
+  .marker {
+    position: absolute; top: 50%; transform: translate(-50%,-50%);
+    width: var(--marker-size); height: var(--marker-size);
+    pointer-events: auto; cursor: pointer; z-index: 10;
+  }
+  .marker .ring {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    border-radius: 50%; border: 2.5px solid; background: var(--bg);
+    transition: transform 0.25s, box-shadow 0.25s;
+  }
+  .marker:hover .ring { transform: scale(1.15); }
+  .marker .diamond {
+    position: absolute; top: 50%; left: 50%; width: 10px; height: 10px;
+    transform: translate(-50%,-50%) rotate(45deg);
+    transition: transform 0.25s, background 0.25s;
+  }
+  .marker:hover .diamond { transform: translate(-50%,-50%) rotate(45deg) scale(1.2); }
+  .marker.glow .ring { box-shadow: 0 0 10px var(--glow-color); }
+  .segment-indicator {
+    position: absolute; bottom: -6px; height: 3px; border-radius: 2px;
+    transition: left 0.35s ease, width 0.35s ease, background 0.35s ease; z-index: 5;
+  }
+  .dot-rows { margin-top: 18px; }
+  .dot-row { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; min-height: 24px; }
+  .dot-row-label {
+    font-size: 11px; font-weight: 600; letter-spacing: 0.4px; text-transform: uppercase;
+    color: var(--text-dim); width: 100px; flex-shrink: 0; text-align: right; padding-right: 10px;
+  }
+  .dot-row-dots { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .dot {
+    width: var(--dot-size); height: var(--dot-size); border-radius: 50%;
+    border: 2px solid; background: transparent; cursor: pointer;
+    transition: all 0.2s; position: relative;
+  }
+  .dot.completed { background: var(--dot-color); border-color: var(--dot-color); }
+  .dot.active {
+    border-color: var(--dot-color);
+    animation: dot-pulse 2s ease-in-out infinite; box-shadow: 0 0 8px var(--dot-glow);
+  }
+  .dot.pending { border-color: var(--text-muted); opacity: 0.5; }
+  .dot.selected-dot { transform: scale(1.35); box-shadow: 0 0 12px var(--dot-glow); }
+  .dot:hover { transform: scale(1.3); }
+  .dot .dot-tooltip {
+    position: absolute; bottom: calc(100% + 8px); left: 50%;
+    transform: translateX(-50%); background: var(--surface-2);
+    border: 1px solid var(--border); border-radius: 6px; padding: 5px 10px;
+    font-size: 11px; color: var(--text); white-space: nowrap;
+    opacity: 0; pointer-events: none; transition: opacity 0.15s; z-index: 20;
+  }
+  .dot:hover .dot-tooltip { opacity: 1; }
+  @keyframes dot-pulse { 0%,100% { box-shadow: 0 0 4px var(--dot-glow); } 50% { box-shadow: 0 0 14px var(--dot-glow); } }
+  .detail-dots .dot { width: var(--dot-size-sm); height: var(--dot-size-sm); }
+  .content-area { padding: 28px 32px; max-width: 960px; margin: 0 auto; animation: fadeUp 0.35s ease; }
+  @keyframes fadeUp { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+  .content-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 28px; margin-bottom: 20px; transition: border-color 0.3s;
+  }
+  .content-card:hover { border-color: var(--text-muted); }
+  .card-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+  .card-icon {
+    width: 36px; height: 36px; border-radius: 8px; display: flex;
+    align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0;
+  }
+  .card-title { font-size: 18px; font-weight: 700; color: var(--text); }
+  .card-subtitle { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+  .card-body { font-size: 14px; line-height: 1.7; color: var(--text-dim); }
+  .card-body p { margin-bottom: 12px; }
+  .status-badge {
+    display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600;
+    padding: 4px 10px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.3px;
+  }
+  .status-badge.complete { background: rgba(52,211,153,0.15); color: var(--seed-color); }
+  .status-badge.running  { background: rgba(96,165,250,0.15); color: var(--inv-color); }
+  .status-badge.pending  { background: rgba(255,255,255,0.06); color: var(--text-muted); }
+  .status-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .status-badge.running .status-dot { animation: blink 1.4s ease-in-out infinite; }
+  @keyframes blink { 0%,100% { opacity:1; } 50% { opacity:0.3; } }
+  .metrics-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(160px,1fr));
+    gap: 12px; margin-top: 16px;
+  }
+  .metric-tile {
+    background: var(--surface-2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px; text-align: center;
+  }
+  .metric-value { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+  .metric-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.3px; }
+  .kb-hint {
+    position: fixed; bottom: 16px; right: 24px; display: flex;
+    gap: 8px; align-items: center; font-size: 11px; color: var(--text-muted);
+  }
+  .kb-key {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 24px; height: 22px; padding: 0 6px; border: 1px solid var(--border);
+    border-radius: 4px; background: var(--surface); font-size: 10px;
+    font-weight: 600; color: var(--text-dim);
+  }
+</style>
+</head>
+<body>
+<div class="nav-shell" id="navShell">
+  <div class="bar-container" id="barContainer">
+    <div class="bar-track" id="barTrack"></div>
+    <div class="markers-layer" id="markersLayer"></div>
+    <div class="segment-indicator" id="segIndicator"></div>
+  </div>
+  <div class="dot-rows" id="dotRows">
+    <div class="dot-row" id="subModuleRow">
+      <div class="dot-row-label">Modules</div>
+      <div class="dot-row-dots" id="subModuleDots"></div>
+    </div>
+    <div class="dot-row detail-dots" id="detailRow">
+      <div class="dot-row-label">Details</div>
+      <div class="dot-row-dots" id="detailDots"></div>
+    </div>
+  </div>
+</div>
+<div class="content-area" id="contentArea"></div>
+<div class="kb-hint">
+  <span class="kb-key">&larr;</span><span class="kb-key">&rarr;</span>
+  <span>segments</span>
+  <span style="margin-left:8px" class="kb-key">&uarr;</span><span class="kb-key">&darr;</span>
+  <span>modules</span>
+  <span style="margin-left:8px" class="kb-key">Tab</span>
+  <span>details</span>
+</div>
+
+<script>
+/* ── Helper: build a sub-module object ── */
+function M(name, status, details, content) { return { name, status, details, content }; }
+function D(name, status) { return { name, status }; }
+function C(title, subtitle, body, metrics) { return { title, subtitle, body, metrics }; }
+function V(value, label) { return { value, label }; }
+
+const SEGMENTS = [
+  { id:'seed', label:'Seed', width:15, progress:100, color:'#34d399',
+    glow:'rgba(52,211,153,0.35)', icon:'\u{1F331}',
+    subModules: [
+      M('Knowledge Graph','completed',
+        [D('Parse corpus','completed'), D('Entity extraction','completed'),
+         D('Relation linking','completed'), D('Graph validation','completed')],
+        C('Knowledge Graph Construction','Entity-relation extraction from source corpus',
+          '<p>Parsed 1,247 papers from the source corpus. Extracted 8,432 entities and 14,891 relations using a multi-pass NER + relation extraction pipeline.</p><p>Graph density: 0.0042. Largest connected component covers 94% of nodes. Average path length: 3.2 hops.</p>',
+          [V('1,247','Papers'), V('8,432','Entities'), V('14.9K','Relations'), V('3.2','Avg Path')])),
+      M('Topic Clustering','completed',
+        [D('Embedding generation','completed'), D('HDBSCAN clustering','completed'), D('Label assignment','completed')],
+        C('Topic Clustering','Unsupervised topic discovery via embeddings',
+          '<p>Generated 768-dim embeddings for all entities. HDBSCAN identified 42 clusters with a noise ratio of 7.3%.</p><p>Top clusters: materials science, optimization algorithms, neural architectures, protein folding, quantum computing interfaces.</p>',
+          [V('42','Clusters'), V('7.3%','Noise'), V('768','Dimensions'), V('0.81','Silhouette')])),
+      M('Seed Selection','completed',
+        [D('Score candidates','completed'), D('Diversity filter','completed')],
+        C('Seed Selection','Final seed hypothesis candidates',
+          '<p>Scored 312 candidate seeds using a novelty-feasibility composite metric. Applied diversity filtering across all 42 topic clusters.</p><p>Selected 24 seeds for the hypothesis loop. Average novelty: 0.73, feasibility: 0.68.</p>',
+          [V('312','Candidates'), V('24','Selected'), V('0.73','Novelty'), V('0.68','Feasibility')]))
+    ]
+  },
+  { id:'hypo', label:'Hypothesis', width:25, progress:100, color:'#a78bfa',
+    glow:'rgba(167,139,250,0.35)', icon:'\u{1F9EA}',
+    subModules: [
+      M('Generate Hypotheses','completed',
+        [D('Template expansion','completed'), D('LLM generation','completed'),
+         D('Deduplication','completed'), D('Format validation','completed')],
+        C('Hypothesis Generation','LLM-driven hypothesis expansion from seeds',
+          '<p>Expanded 24 seeds into 168 raw hypotheses using template-guided LLM generation. After deduplication (cosine > 0.92), 141 unique hypotheses remained.</p><p>Each hypothesis includes: problem statement, proposed mechanism, expected outcome, and testability criteria.</p>',
+          [V('168','Generated'), V('141','Unique'), V('0.92','Dedup'), V('7.0x','Expansion')])),
+      M('Review Hypotheses','completed',
+        [D('Novelty check','completed'), D('Feasibility check','completed'),
+         D('Significance check','completed'), D('Scoring aggregation','completed'), D('Threshold filtering','completed')],
+        C('Hypothesis Review','Multi-criteria evaluation and filtering',
+          '<p>Reviewed 141 hypotheses across novelty, feasibility, and significance axes. Each axis scored 0-10 by an ensemble of 3 reviewer agents.</p><p>Applied threshold filtering (composite >= 7.0). 48 passed. Inter-reviewer agreement (Krippendorff alpha): 0.74.</p>',
+          [V('141','Reviewed'), V('48','Passed'), V('7.0','Threshold'), V('0.74','Agreement')])),
+      M('Select Top Hypotheses','completed',
+        [D('Rank by composite','completed'), D('Diversity re-rank','completed'), D('Final selection','completed')],
+        C('Top Hypothesis Selection','Final ranking with diversity constraints',
+          '<p>Ranked 48 passing hypotheses by composite score, then applied diversity re-ranking to avoid cluster concentration. Selected 12 hypotheses spanning 9 topic clusters.</p><p>Top hypothesis: "Hierarchical attention routing for sparse MoE" (composite: 9.2).</p>',
+          [V('48','Candidates'), V('12','Selected'), V('9','Clusters'), V('9.2','Top Score')]))
+    ]
+  },
+  { id:'invention', label:'Invention', width:40, progress:60, color:'#60a5fa',
+    glow:'rgba(96,165,250,0.35)', icon:'\u{1F527}',
+    subModules: [
+      M('Strategy Gen','completed',
+        [D('Approach enumeration','completed'), D('Resource estimation','completed'), D('Strategy selection','completed')],
+        C('Strategy Generation','Mapping hypotheses to execution strategies',
+          '<p>Generated 3-5 candidate strategies per hypothesis (42 total). Each includes method outline, estimated compute cost, and risk assessment.</p><p>Selected optimal strategies via Pareto frontier on (quality, cost). Average compute: 4.2 GPU-hours per hypothesis.</p>',
+          [V('42','Strategies'), V('4.2h','Avg Compute'), V('12','Hypotheses'), V('3.5x','Per Hypo')])),
+      M('Plan Generation','completed',
+        [D('Step decomposition','completed'), D('Dependency graph','completed'),
+         D('Validation rules','completed'), D('Plan review','completed')],
+        C('Plan Generation','Detailed execution plans with dependency tracking',
+          '<p>Decomposed each strategy into 8-15 atomic steps. Built dependency DAGs with parallel execution opportunities. Average parallelism factor: 2.3x.</p><p>Generated validation rules for each step output. 144 total steps across 12 plans.</p>',
+          [V('144','Steps'), V('12','Plans'), V('2.3x','Parallelism'), V('100%','Validated')])),
+      M('Paper Text Gen','active',
+        [D('Abstract drafting','completed'), D('Introduction','completed'),
+         D('Methods section','active'), D('Results section','pending'),
+         D('Discussion','pending'), D('Conclusion','pending')],
+        C('Paper Text Generation','Section-by-section academic paper drafting',
+          '<p>Currently drafting the Methods section for hypothesis #4 ("Hierarchical attention routing"). Abstract and Introduction are finalized.</p><p>Using structured prompting with citation-aware generation. Target: 8-12 pages per paper. Currently at 4.5 pages.</p>',
+          [V('2/6','Sections'), V('4.5','Pages'), V('#4','Current'), V('67%','Token Use')])),
+      M('Paper Review','pending',
+        [D('Clarity review','pending'), D('Technical accuracy','pending'),
+         D('Citation check','pending'), D('Revision generation','pending')],
+        C('Paper Review','Multi-agent review and revision cycle',
+          '<p>Pending. Will apply a 3-reviewer ensemble to evaluate clarity, technical accuracy, and citation completeness. Targets minimum composite review score of 7.5.</p><p>Expected 1-2 revision rounds per paper based on historical data.</p>',
+          [V('---','Reviews'), V('7.5','Target'), V('1-2','Rounds'), V('---','Score')]))
+    ]
+  },
+  { id:'paper', label:'Paper', width:20, progress:0, color:'#f472b6',
+    glow:'rgba(244,114,182,0.35)', icon:'\u{1F4C4}',
+    subModules: [
+      M('Artifact Demos','pending',
+        [D('Code generation','pending'), D('Demo notebooks','pending'), D('Reproducibility check','pending')],
+        C('Artifact Demo Generation','Executable code demos and notebooks',
+          '<p>Pending. Will generate Python demo scripts and Jupyter notebooks that reproduce key results from each paper. Includes data loading, model instantiation, and evaluation harness.</p>',
+          [V('---','Demos'), V('---','Notebooks'), V('---','Tests'), V('---','Coverage')])),
+      M('Visualizations','pending',
+        [D('Figure generation','pending'), D('Table formatting','pending'), D('Layout integration','pending')],
+        C('Visualization Generation','Figures, tables, and diagrams',
+          '<p>Pending. Will generate publication-quality figures (matplotlib/plotly), formatted result tables, and architecture diagrams for each paper.</p>',
+          [V('---','Figures'), V('---','Tables'), V('---','Diagrams'), V('---','Quality')])),
+      M('Full Paper Assembly','pending',
+        [D('LaTeX compilation','pending'), D('Bibliography','pending'), D('Final proof','pending')],
+        C('Full Paper Assembly','Final compilation and formatting',
+          '<p>Pending. Will assemble all sections, figures, and tables into a camera-ready LaTeX document. Includes bibliography generation, cross-reference checking, and formatting validation.</p>',
+          [V('---','Papers'), V('---','Pages'), V('---','Citations'), V('---','Status')]))
+    ]
+  }
+];
+
+let selectedSegment = 2, selectedModule = 2, selectedDetail = 2;
+
+function renderBar() {
+  const track = document.getElementById('barTrack');
+  track.innerHTML = '';
+  SEGMENTS.forEach((seg, i) => {
+    const el = document.createElement('div');
+    el.className = 'bar-segment' + (i === selectedSegment ? ' selected' : '')
+      + (seg.progress > 0 && seg.progress < 100 ? ' active' : '');
+    el.style.width = seg.width + '%';
+    el.dataset.index = i;
+    const fill = document.createElement('div');
+    fill.className = 'fill';
+    fill.style.width = seg.progress + '%';
+    fill.style.background = seg.progress === 100
+      ? seg.color : `linear-gradient(90deg, ${seg.color}, ${seg.color}dd)`;
+    el.appendChild(fill);
+    if (seg.progress < 100) {
+      const uf = document.createElement('div');
+      uf.className = 'unfilled'; uf.style.width = (100 - seg.progress) + '%';
+      el.appendChild(uf);
+    }
+    const lbl = document.createElement('span');
+    lbl.className = 'label'; lbl.textContent = seg.label;
+    el.appendChild(lbl);
+    if (seg.progress > 0 && seg.progress < 100) {
+      const pct = document.createElement('span');
+      pct.className = 'pct'; pct.textContent = seg.progress + '%';
+      el.appendChild(pct);
+    }
+    el.addEventListener('click', () => selectSegment(i));
+    track.appendChild(el);
+  });
+  renderMarkers();
+  renderSegmentIndicator();
+}
+
+function renderMarkers() {
+  const layer = document.getElementById('markersLayer');
+  layer.innerHTML = '';
+  let cum = 0;
+  for (let i = 0; i < SEGMENTS.length - 1; i++) {
+    cum += SEGMENTS[i].width;
+    const m = document.createElement('div');
+    m.className = 'marker';
+    const right = SEGMENTS[i + 1], left = SEGMENTS[i];
+    const mc = left.progress === 100 ? right.color : left.color;
+    const mg = left.progress === 100 ? right.glow : left.glow;
+    if (left.progress === 100) {
+      m.classList.add('glow');
+      m.style.setProperty('--glow-color', mg);
+    }
+    m.style.left = cum + '%';
+    const ring = document.createElement('div');
+    ring.className = 'ring'; ring.style.borderColor = mc;
+    m.appendChild(ring);
+    const dia = document.createElement('div');
+    dia.className = 'diamond'; dia.style.background = mc;
+    m.appendChild(dia);
+    m.addEventListener('click', () => selectSegment(i + 1));
+    layer.appendChild(m);
+  }
+}
+
+function renderSegmentIndicator() {
+  const ind = document.getElementById('segIndicator');
+  const seg = SEGMENTS[selectedSegment];
+  let left = 0;
+  for (let i = 0; i < selectedSegment; i++) left += SEGMENTS[i].width;
+  ind.style.left = left + '%';
+  ind.style.width = seg.width + '%';
+  ind.style.background = seg.color;
+}
+
+function makeDots(container, items, isSm) {
+  container.innerHTML = '';
+  const seg = SEGMENTS[selectedSegment];
+  items.forEach((item, i) => {
+    const dot = document.createElement('div');
+    dot.className = 'dot ' + item.status;
+    dot.style.setProperty('--dot-color', seg.color);
+    dot.style.setProperty('--dot-glow', seg.glow);
+    if (i === item._selIdx) dot.classList.add('selected-dot');
+    const tip = document.createElement('div');
+    tip.className = 'dot-tooltip'; tip.textContent = item.name;
+    dot.appendChild(tip);
+    dot.addEventListener('click', () => item._onClick(i));
+    container.appendChild(dot);
+  });
+}
+
+function renderSubModuleDots() {
+  const seg = SEGMENTS[selectedSegment];
+  const items = seg.subModules.map((m, i) =>
+    ({ ...m, _selIdx: selectedModule, _onClick: selectModule }));
+  // manual: set _selIdx per item
+  items.forEach((it, i) => { it._selIdx = (i === selectedModule) ? i : -1; });
+  const container = document.getElementById('subModuleDots');
+  container.innerHTML = '';
+  seg.subModules.forEach((mod, i) => {
+    const dot = document.createElement('div');
+    dot.className = 'dot ' + mod.status;
+    dot.style.setProperty('--dot-color', seg.color);
+    dot.style.setProperty('--dot-glow', seg.glow);
+    if (i === selectedModule) dot.classList.add('selected-dot');
+    const tip = document.createElement('div');
+    tip.className = 'dot-tooltip'; tip.textContent = mod.name;
+    dot.appendChild(tip);
+    dot.addEventListener('click', () => selectModule(i));
+    container.appendChild(dot);
+  });
+}
+
+function renderDetailDots() {
+  const seg = SEGMENTS[selectedSegment];
+  const mod = seg.subModules[selectedModule];
+  const container = document.getElementById('detailDots');
+  container.innerHTML = '';
+  if (!mod || !mod.details) return;
+  mod.details.forEach((det, i) => {
+    const dot = document.createElement('div');
+    dot.className = 'dot ' + det.status;
+    dot.style.setProperty('--dot-color', seg.color);
+    dot.style.setProperty('--dot-glow', seg.glow);
+    if (i === selectedDetail) dot.classList.add('selected-dot');
+    const tip = document.createElement('div');
+    tip.className = 'dot-tooltip'; tip.textContent = det.name;
+    dot.appendChild(tip);
+    dot.addEventListener('click', () => selectDetail(i));
+    container.appendChild(dot);
+  });
+}
+
+function renderContent() {
+  const area = document.getElementById('contentArea');
+  const seg = SEGMENTS[selectedSegment];
+  const mod = seg.subModules[selectedModule];
+  if (!mod) { area.innerHTML = ''; return; }
+  const c = mod.content;
+  const sc = mod.status === 'completed' ? 'complete' : mod.status === 'active' ? 'running' : 'pending';
+  const sl = mod.status === 'completed' ? 'Complete' : mod.status === 'active' ? 'Running' : 'Pending';
+  let detName = '';
+  if (mod.details && mod.details[selectedDetail]) detName = mod.details[selectedDetail].name;
+  const detStatus = mod.details && mod.details[selectedDetail] ? mod.details[selectedDetail].status : '';
+  area.innerHTML = `
+    <div class="content-card" style="border-left:3px solid ${seg.color}">
+      <div class="card-header">
+        <div class="card-icon" style="background:${seg.glow}">${seg.icon}</div>
+        <div>
+          <div class="card-title">${c.title}</div>
+          <div class="card-subtitle">${c.subtitle}</div>
+        </div>
+        <div style="margin-left:auto">
+          <span class="status-badge ${sc}"><span class="status-dot"></span>${sl}</span>
+        </div>
+      </div>
+      <div class="card-body">${c.body}</div>
+      ${detName ? `<div style="margin-top:12px;padding:10px 14px;background:var(--surface-2);border-radius:8px;border:1px solid var(--border)">
+        <span style="font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.3px;font-weight:600">Current Detail:</span>
+        <span style="font-size:13px;color:${seg.color};margin-left:8px;font-weight:600">${detName}</span>
+        <span style="font-size:11px;color:var(--text-muted);margin-left:8px">(${detStatus})</span>
+      </div>` : ''}
+      <div class="metrics-grid">
+        ${c.metrics.map(m => `<div class="metric-tile">
+          <div class="metric-value" style="color:${seg.color}">${m.value}</div>
+          <div class="metric-label">${m.label}</div>
+        </div>`).join('')}
+      </div>
+    </div>
+    <div class="content-card">
+      <div class="card-header"><div class="card-title" style="font-size:15px">Pipeline Position</div></div>
+      <div class="card-body"><p style="margin:0">
+        <strong>Segment:</strong> ${seg.label} (${seg.progress}% complete)
+        &middot; <strong>Module:</strong> ${mod.name}
+        &middot; <strong>Sub-modules:</strong> ${seg.subModules.length}
+      </p></div>
+    </div>`;
+  area.style.animation = 'none';
+  area.offsetHeight;
+  area.style.animation = '';
+}
+
+function selectSegment(i) {
+  if (i < 0 || i >= SEGMENTS.length) return;
+  selectedSegment = i; selectedModule = 0; selectedDetail = 0;
+  renderAll();
+}
+function selectModule(i) {
+  const seg = SEGMENTS[selectedSegment];
+  if (i < 0 || i >= seg.subModules.length) return;
+  selectedModule = i; selectedDetail = 0;
+  renderSubModuleDots(); renderDetailDots(); renderContent();
+}
+function selectDetail(i) {
+  const mod = SEGMENTS[selectedSegment].subModules[selectedModule];
+  if (!mod || !mod.details || i < 0 || i >= mod.details.length) return;
+  selectedDetail = i;
+  renderDetailDots(); renderContent();
+}
+function renderAll() {
+  renderBar(); renderSubModuleDots(); renderDetailDots(); renderContent();
+}
+
+document.addEventListener('keydown', (e) => {
+  const seg = SEGMENTS[selectedSegment];
+  const mod = seg.subModules[selectedModule];
+  switch (e.key) {
+    case 'ArrowLeft':  e.preventDefault(); selectSegment(selectedSegment - 1); break;
+    case 'ArrowRight': e.preventDefault(); selectSegment(selectedSegment + 1); break;
+    case 'ArrowUp':    e.preventDefault(); if (selectedModule > 0) selectModule(selectedModule - 1); break;
+    case 'ArrowDown':  e.preventDefault(); if (selectedModule < seg.subModules.length - 1) selectModule(selectedModule + 1); break;
+    case 'Tab':
+      e.preventDefault();
+      if (mod && mod.details) {
+        e.shiftKey
+          ? selectDetail(Math.max(0, selectedDetail - 1))
+          : selectDetail(Math.min(mod.details.length - 1, selectedDetail + 1));
+      }
+      break;
+  }
+});
+
+renderAll();
+</script>
+</body>
+</html>

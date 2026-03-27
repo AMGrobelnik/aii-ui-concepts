@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Advanced Dashboard</title>
+<style>
+  /* ── Reset & Base ──────────────────────────────────────────────── */
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg:          #0f1117;
+    --bg-panel:    #141620;
+    --bg-surface:  #1a1d2e;
+    --bg-hover:    #1e2130;
+    --bg-active:   #242840;
+    --border:      #1e2130;
+    --border-light:#2a2e42;
+    --text:        #c9cdd8;
+    --text-dim:    #6b7084;
+    --text-bright: #e4e7ef;
+    --accent:      #3b82f6;
+    --accent-dim:  #2563eb;
+    --accent-bg:   rgba(59,130,246,.08);
+    --green:       #22c55e;
+    --green-dim:   rgba(34,197,94,.12);
+    --yellow:      #eab308;
+    --yellow-dim:  rgba(234,179,8,.10);
+    --red:         #ef4444;
+    --gray:        #6b7280;
+    --mono:        'SF Mono', 'Cascadia Code', 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+    --sans:        'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    --radius:      6px;
+    --radius-sm:   4px;
+  }
+  html, body {
+    height: 100%; width: 100%;
+    font-family: var(--sans);
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg);
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+
+  /* ── Shell Layout ──────────────────────────────────────────────── */
+  #shell {
+    display: flex; flex-direction: column;
+    height: 100%; width: 100%;
+  }
+  #workspace {
+    display: flex; flex: 1; min-height: 0;
+  }
+
+  /* ── Panel Chrome ──────────────────────────────────────────────── */
+  .panel {
+    background: var(--bg-panel);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    min-width: 0; min-height: 0;
+  }
+  .panel:last-child { border-right: none; }
+  .panel-header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 0 12px; height: 36px; min-height: 36px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-surface);
+    user-select: none;
+  }
+  .panel-header .grip {
+    display: flex; gap: 2px; opacity: .25; cursor: grab;
+  }
+  .grip-dot {
+    width: 3px; height: 3px; border-radius: 50%;
+    background: var(--text);
+  }
+  .grip-col { display: flex; flex-direction: column; gap: 2px; }
+  .panel-title {
+    font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .06em;
+    color: var(--text-dim);
+  }
+  .panel-body { flex: 1; overflow-y: auto; padding: 0; }
+  .panel-collapse-btn {
+    margin-left: auto; background: none; border: none;
+    color: var(--text-dim); cursor: pointer; font-size: 14px;
+    padding: 2px 4px; border-radius: var(--radius-sm);
+    line-height: 1;
+  }
+  .panel-collapse-btn:hover { background: var(--bg-hover); color: var(--text); }
+
+  /* ── Left Sidebar ──────────────────────────────────────────────── */
+  #left-sidebar {
+    width: 250px; min-width: 250px;
+    transition: width .2s, min-width .2s, opacity .15s;
+  }
+  #left-sidebar.collapsed {
+    width: 0; min-width: 0; overflow: hidden; opacity: 0;
+    border-right: none;
+  }
+
+  /* Run list */
+  .run-list { padding: 6px 0; }
+  .run-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 14px; cursor: pointer;
+    font-size: 12px; border-left: 2px solid transparent;
+    transition: background .1s;
+  }
+  .run-item:hover { background: var(--bg-hover); }
+  .run-item.active {
+    background: var(--accent-bg);
+    border-left-color: var(--accent);
+    color: var(--text-bright);
+  }
+  .run-dot {
+    width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+  }
+  .run-dot.running { background: var(--accent); box-shadow: 0 0 6px var(--accent); animation: pulse 2s infinite; }
+  .run-dot.complete { background: var(--green); }
+  .run-dot.stopped  { background: var(--gray); }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: .45; }
+  }
+  .run-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--mono); font-size: 11.5px; }
+  .run-section-label {
+    padding: 10px 14px 4px;
+    font-size: 10px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .08em;
+    color: var(--text-dim); border-top: 1px solid var(--border);
+  }
+
+  /* Pipeline tree */
+  .tree { padding: 4px 0 12px; font-family: var(--mono); font-size: 11.5px; line-height: 1.1; }
+  .tree-node {
+    display: flex; align-items: flex-start; gap: 5px;
+    padding: 3px 0 3px 14px; cursor: pointer;
+    border-radius: 0; transition: background .1s;
+  }
+  .tree-node:hover { background: var(--bg-hover); }
+  .tree-node.active-node { background: var(--accent-bg); color: var(--accent); }
+  .tree-icon { flex-shrink: 0; width: 14px; text-align: center; font-size: 10px; line-height: 18px; }
+  .tree-icon.done { color: var(--green); }
+  .tree-icon.running { color: var(--accent); }
+  .tree-icon.pending { color: var(--text-dim); }
+  .tree-icon.expand { color: var(--text-dim); font-size: 8px; }
+  .tree-label { white-space: nowrap; padding: 1px 0; line-height: 18px; }
+  .tree-children { padding-left: 16px; }
+  .tree-badge {
+    font-size: 9px; padding: 1px 5px; border-radius: 8px;
+    margin-left: 4px; line-height: 18px; display: inline-block; vertical-align: middle;
+  }
+  .tree-badge.running-badge { background: var(--accent-bg); color: var(--accent); }
+
+  /* ── Center Panel ──────────────────────────────────────────────── */
+  #center-panel { flex: 1; }
+
+  /* Tabs */
+  .tab-bar {
+    display: flex; gap: 0; border-bottom: 1px solid var(--border);
+    background: var(--bg-surface); padding: 0 8px;
+    min-height: 34px; align-items: stretch;
+  }
+  .tab {
+    padding: 0 14px; font-size: 12px; font-weight: 500;
+    color: var(--text-dim); cursor: pointer;
+    border-bottom: 2px solid transparent;
+    display: flex; align-items: center; gap: 6px;
+    transition: color .15s, border-color .15s;
+    user-select: none;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--text-bright); border-bottom-color: var(--accent); }
+  .tab-count {
+    font-size: 10px; padding: 1px 6px;
+    border-radius: 8px; background: var(--bg-hover);
+    color: var(--text-dim); font-weight: 600;
+  }
+  .tab.active .tab-count { background: var(--accent-bg); color: var(--accent); }
+
+  /* Artifacts table */
+  .artifact-table-wrap { padding: 12px 16px; }
+  .artifact-table {
+    width: 100%; border-collapse: collapse;
+    font-size: 12px;
+  }
+  .artifact-table thead th {
+    text-align: left; padding: 8px 10px;
+    font-size: 10px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .06em;
+    color: var(--text-dim); border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; background: var(--bg-panel);
+    white-space: nowrap;
+  }
+  .artifact-table tbody tr {
+    border-bottom: 1px solid var(--border);
+    cursor: pointer; transition: background .1s;
+  }
+  .artifact-table tbody tr:hover { background: var(--bg-hover); }
+  .artifact-table tbody tr.expanded { background: var(--bg-active); }
+  .artifact-table td {
+    padding: 10px 10px; vertical-align: middle;
+    white-space: nowrap;
+  }
+  .artifact-id { font-family: var(--mono); font-size: 11px; color: var(--text-dim); }
+  .artifact-type-badge {
+    display: inline-block; font-size: 10px; font-weight: 600;
+    padding: 2px 8px; border-radius: 4px;
+    text-transform: uppercase; letter-spacing: .04em;
+  }
+  .type-experiment  { background: rgba(139,92,246,.12); color: #a78bfa; }
+  .type-dataset     { background: rgba(236,172,65,.10); color: #f59e0b; }
+  .type-evaluation  { background: rgba(6,182,212,.10);  color: #22d3ee; }
+  .type-proof       { background: rgba(34,197,94,.10);  color: #4ade80; }
+  .artifact-title { font-weight: 500; color: var(--text-bright); }
+  .status-pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 11px; padding: 2px 8px; border-radius: 10px;
+  }
+  .status-complete { background: var(--green-dim); color: var(--green); }
+  .status-running  { background: var(--accent-bg); color: var(--accent); }
+  .status-pending  { background: rgba(107,112,132,.10); color: var(--text-dim); }
+  .status-icon { font-size: 10px; }
+  .iter-badge {
+    font-family: var(--mono); font-size: 10px;
+    padding: 2px 6px; border-radius: 4px;
+    background: var(--bg-hover); color: var(--text-dim);
+  }
+  .metric-val { font-family: var(--mono); font-size: 11px; color: var(--text); }
+  .metric-val.empty { color: var(--text-dim); }
+
+  /* Expanded detail row */
+  .detail-row td { padding: 0 !important; }
+  .detail-content {
+    padding: 12px 16px 16px 42px;
+    font-size: 12px; line-height: 1.6;
+    border-left: 2px solid var(--accent);
+    margin-left: 10px;
+    display: none;
+  }
+  .detail-content.open { display: block; }
+  .detail-content .detail-grid {
+    display: grid; grid-template-columns: 110px 1fr;
+    gap: 4px 12px; margin-bottom: 10px;
+  }
+  .detail-label { color: var(--text-dim); font-weight: 500; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+  .detail-value { color: var(--text); font-family: var(--mono); font-size: 11.5px; }
+  .detail-log {
+    background: var(--bg); border-radius: var(--radius-sm);
+    padding: 10px 12px; font-family: var(--mono); font-size: 11px;
+    color: var(--text-dim); line-height: 1.7; margin-top: 6px;
+    max-height: 100px; overflow-y: auto; white-space: pre-wrap;
+  }
+  .detail-log .log-ts { color: var(--green); }
+  .detail-log .log-info { color: var(--accent); }
+
+  /* ── Right Sidebar ─────────────────────────────────────────────── */
+  #right-sidebar {
+    width: 350px; min-width: 350px;
+    border-left: 1px solid var(--border); border-right: none;
+    transition: width .2s, min-width .2s, opacity .15s;
+  }
+  #right-sidebar.collapsed {
+    width: 0; min-width: 0; overflow: hidden; opacity: 0;
+    border-left: none;
+  }
+  .feedback-body { padding: 14px; display: flex; flex-direction: column; gap: 16px; }
+
+  /* Sections */
+  .ctrl-section {
+    background: var(--bg-surface); border-radius: var(--radius);
+    padding: 12px; border: 1px solid var(--border);
+  }
+  .ctrl-section-title {
+    font-size: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .08em;
+    color: var(--text-dim); margin-bottom: 10px;
+  }
+
+  /* Toggle */
+  .mode-toggle {
+    display: flex; border-radius: var(--radius); overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .mode-option {
+    flex: 1; padding: 7px 0; text-align: center;
+    font-size: 11px; font-weight: 600; cursor: pointer;
+    background: transparent; color: var(--text-dim);
+    transition: background .15s, color .15s;
+    border: none; outline: none;
+  }
+  .mode-option.active {
+    background: var(--accent); color: #fff;
+  }
+  .mode-option:not(.active):hover { background: var(--bg-hover); color: var(--text); }
+
+  /* Step indicator */
+  .step-indicator {
+    font-family: var(--mono); font-size: 11px;
+    color: var(--accent); padding: 8px 10px;
+    background: var(--accent-bg); border-radius: var(--radius-sm);
+    border-left: 2px solid var(--accent);
+    margin-top: 4px;
+  }
+  .step-indicator .breadcrumb { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .step-indicator .sep { color: var(--text-dim); }
+
+  /* Feedback area */
+  .feedback-area {
+    width: 100%; min-height: 80px; max-height: 160px;
+    resize: vertical; padding: 10px 12px;
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); color: var(--text);
+    font-family: var(--sans); font-size: 12px;
+    line-height: 1.5; outline: none;
+    transition: border-color .15s;
+  }
+  .feedback-area::placeholder { color: var(--text-dim); }
+  .feedback-area:focus { border-color: var(--accent); }
+  .btn-row { display: flex; gap: 6px; }
+  .btn {
+    flex: 1; padding: 7px 0; border-radius: var(--radius-sm);
+    border: 1px solid var(--border); background: var(--bg-surface);
+    color: var(--text); font-size: 11px; font-weight: 600;
+    cursor: pointer; transition: background .15s, border-color .15s;
+    text-align: center;
+  }
+  .btn:hover { background: var(--bg-hover); border-color: var(--border-light); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { background: var(--accent-dim); }
+  .btn.danger { color: var(--red); }
+  .btn.danger:hover { background: rgba(239,68,68,.08); border-color: rgba(239,68,68,.25); }
+
+  /* Checkpoint */
+  .checkpoint-select {
+    width: 100%; padding: 7px 10px;
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); color: var(--text);
+    font-family: var(--mono); font-size: 11px;
+    outline: none; cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%236b7084'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+  }
+  .checkpoint-select:focus { border-color: var(--accent); }
+  .checkpoint-select option { background: var(--bg-panel); color: var(--text); }
+  .checkpoint-warn {
+    font-size: 10.5px; color: var(--yellow);
+    display: flex; align-items: flex-start; gap: 5px;
+    margin-top: 8px; line-height: 1.4;
+    padding: 7px 9px; background: var(--yellow-dim);
+    border-radius: var(--radius-sm);
+  }
+  .checkpoint-warn-icon { flex-shrink: 0; font-size: 12px; }
+
+  /* ── Bottom Bar ────────────────────────────────────────────────── */
+  #bottom-bar {
+    height: 40px; min-height: 40px;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 16px;
+    background: var(--bg-surface);
+    border-top: 1px solid var(--border);
+    font-size: 11.5px; font-family: var(--mono);
+    color: var(--text-dim); gap: 12px;
+    user-select: none;
+  }
+  .stats { display: flex; align-items: center; gap: 4px; flex-wrap: nowrap; }
+  .stat-sep { margin: 0 6px; color: var(--border-light); }
+  .stat-label { color: var(--text-dim); }
+  .stat-value { color: var(--text); font-weight: 500; }
+  .stat-value.accent { color: var(--accent); }
+  .stat-value.green  { color: var(--green); }
+  .view-toggle {
+    display: flex; align-items: center; gap: 6px;
+    padding: 4px 12px; border-radius: var(--radius-sm);
+    background: var(--bg-hover); border: 1px solid var(--border);
+    color: var(--text-dim); font-size: 11px;
+    cursor: pointer; font-family: var(--sans); font-weight: 500;
+    transition: background .15s, color .15s;
+    white-space: nowrap;
+  }
+  .view-toggle:hover { background: var(--bg-active); color: var(--text); }
+  .view-toggle-icon { font-size: 13px; }
+
+  /* ── Utility ───────────────────────────────────────────────────── */
+  .divider { height: 1px; background: var(--border); margin: 2px 0; }
+  .gap-8 { gap: 8px; }
+</style>
+</head>
+<body>
+
+<div id="shell">
+  <!-- ════════════════ WORKSPACE ════════════════ -->
+  <div id="workspace">
+
+    <!-- ──── LEFT SIDEBAR ──── -->
+    <div id="left-sidebar" class="panel">
+      <div class="panel-header">
+        <div class="grip"><div class="grip-col"><div class="grip-dot"></div><div class="grip-dot"></div><div class="grip-dot"></div></div><div class="grip-col"><div class="grip-dot"></div><div class="grip-dot"></div><div class="grip-dot"></div></div></div>
+        <span class="panel-title">Runs</span>
+        <button class="panel-collapse-btn" onclick="togglePanel('left-sidebar')" title="Collapse">&#x2190;</button>
+      </div>
+      <div class="panel-body">
+        <!-- Run List -->
+        <div class="run-list">
+          <div class="run-item active" onclick="selectRun(this)">
+            <span class="run-dot running"></span>
+            <span class="run-name">ssl-low-resource-v3</span>
+          </div>
+          <div class="run-item" onclick="selectRun(this)">
+            <span class="run-dot complete"></span>
+            <span class="run-name">graph-neural-ode-v2</span>
+          </div>
+          <div class="run-item" onclick="selectRun(this)">
+            <span class="run-dot complete"></span>
+            <span class="run-name">quantum-error-correction</span>
+          </div>
+          <div class="run-item" onclick="selectRun(this)">
+            <span class="run-dot stopped"></span>
+            <span class="run-name">federated-nlp</span>
+          </div>
+          <div class="run-item" onclick="selectRun(this)">
+            <span class="run-dot complete"></span>
+            <span class="run-name">bio-protein-folding</span>
+          </div>
+        </div>
+
+        <!-- Pipeline tree label -->
+        <div class="run-section-label">Pipeline</div>
+
+        <!-- Pipeline tree -->
+        <div class="tree" id="pipeline-tree"></div>
+      </div>
+    </div>
+
+    <!-- ──── CENTER PANEL ──── -->
+    <div id="center-panel" class="panel" style="border-right:1px solid var(--border);">
+      <div class="tab-bar">
+        <div class="tab" onclick="selectTab(this,'hypothesis')">Hypothesis</div>
+        <div class="tab active" onclick="selectTab(this,'artifacts')">Artifacts <span class="tab-count">5</span></div>
+        <div class="tab" onclick="selectTab(this,'paper')">Paper Draft</div>
+        <div class="tab" onclick="selectTab(this,'reviews')">Reviews <span class="tab-count">3</span></div>
+        <div class="tab" onclick="selectTab(this,'logs')">Logs</div>
+      </div>
+      <div class="panel-body" id="center-body">
+        <!-- Artifacts Table -->
+        <div class="artifact-table-wrap">
+          <table class="artifact-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Type</th>
+                <th>Title</th>
+                <th>Status</th>
+                <th>Iter</th>
+                <th>Metrics</th>
+              </tr>
+            </thead>
+            <tbody id="artifact-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ──── RIGHT SIDEBAR ──── -->
+    <div id="right-sidebar" class="panel">
+      <div class="panel-header">
+        <div class="grip"><div class="grip-col"><div class="grip-dot"></div><div class="grip-dot"></div><div class="grip-dot"></div></div><div class="grip-col"><div class="grip-dot"></div><div class="grip-dot"></div><div class="grip-dot"></div></div></div>
+        <span class="panel-title">Feedback &amp; Control</span>
+        <button class="panel-collapse-btn" onclick="togglePanel('right-sidebar')" title="Collapse">&#x2192;</button>
+      </div>
+      <div class="panel-body">
+        <div class="feedback-body">
+
+          <!-- Execution mode -->
+          <div class="ctrl-section">
+            <div class="ctrl-section-title">Execution Mode</div>
+            <div class="mode-toggle">
+              <button class="mode-option active" onclick="setMode(this)">Autonomous</button>
+              <button class="mode-option" onclick="setMode(this)">Step-by-Step</button>
+            </div>
+          </div>
+
+          <!-- Current step -->
+          <div class="ctrl-section">
+            <div class="ctrl-section-title">Current Step</div>
+            <div class="step-indicator">
+              <div class="breadcrumb">
+                <span>Invention Loop</span><span class="sep">&rsaquo;</span>
+                <span>Iter 2</span><span class="sep">&rsaquo;</span>
+                <span>Gen Artifacts</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Feedback -->
+          <div class="ctrl-section">
+            <div class="ctrl-section-title">Operator Feedback</div>
+            <textarea class="feedback-area" placeholder="Add feedback for this step..."></textarea>
+            <div class="btn-row" style="margin-top:8px;">
+              <button class="btn primary">Submit Feedback</button>
+              <button class="btn">Pause</button>
+              <button class="btn danger">Skip Step</button>
+            </div>
+          </div>
+
+          <!-- Checkpoint -->
+          <div class="ctrl-section">
+            <div class="ctrl-section-title">Checkpoint Rewind</div>
+            <select class="checkpoint-select">
+              <option value="" disabled>Rewind to checkpoint...</option>
+              <option>Seed Hypothesis (complete)</option>
+              <option>Hypothesis Loop &gt; Iteration 1</option>
+              <option>Hypothesis Loop &gt; Iteration 2</option>
+              <option>Hypothesis Loop &gt; Iteration 3</option>
+              <option>Invention Loop &gt; Iter 1 (complete)</option>
+              <option selected>Invention Loop &gt; Iter 2 &gt; Gen Strategy</option>
+              <option>Invention Loop &gt; Iter 2 &gt; Gen Plan</option>
+            </select>
+            <div style="margin-top:8px;">
+              <button class="btn" style="width:100%;">Re-run from here</button>
+            </div>
+            <div class="checkpoint-warn">
+              <span class="checkpoint-warn-icon">&#9888;</span>
+              <span>This will discard results after the selected checkpoint</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /workspace -->
+
+  <!-- ════════════════ BOTTOM BAR ════════════════ -->
+  <div id="bottom-bar">
+    <div class="stats">
+      <span class="stat-label">Runtime:</span>&nbsp;<span class="stat-value" id="runtime">02:34:17</span>
+      <span class="stat-sep">|</span>
+      <span class="stat-label">Cost:</span>&nbsp;<span class="stat-value green">$12.47</span>
+      <span class="stat-sep">|</span>
+      <span class="stat-label">Tokens:</span>&nbsp;<span class="stat-value">847K in</span>&nbsp;/&nbsp;<span class="stat-value">234K out</span>
+      <span class="stat-sep">|</span>
+      <span class="stat-label">Artifacts:</span>&nbsp;<span class="stat-value accent">3/5</span>
+      <span class="stat-sep">|</span>
+      <span class="stat-label">Iteration:</span>&nbsp;<span class="stat-value accent">2/3</span>
+    </div>
+    <button class="view-toggle">
+      <span class="view-toggle-icon">&#x25A3;</span> View Simple
+    </button>
+  </div>
+
+</div><!-- /shell -->
+
+<script>
+// ── Mock Data ──────────────────────────────────────────────────────
+const ARTIFACTS = [
+  {
+    id: 'art_001', type: 'Experiment', typeClass: 'type-experiment',
+    title: 'Baseline comparison', status: 'complete', iter: 1,
+    metric: 'acc: 0.847',
+    detail: {
+      description: 'Comparison of supervised baselines (mBERT, XLM-R) against the proposed self-supervised pre-training on 6 low-resource languages.',
+      model: 'xlm-roberta-base',
+      runtime: '00:47:32',
+      log: '<span class="log-ts">14:02:31</span> <span class="log-info">INFO</span>  Starting baseline comparison run\n<span class="log-ts">14:02:33</span> <span class="log-info">INFO</span>  Loading multilingual pairs (2400 examples)\n<span class="log-ts">14:49:58</span> <span class="log-info">INFO</span>  Evaluation complete — accuracy 0.847, F1 0.831'
+    }
+  },
+  {
+    id: 'art_002', type: 'Dataset', typeClass: 'type-dataset',
+    title: 'Multilingual pairs', status: 'complete', iter: 1,
+    metric: '2400 examples',
+    detail: {
+      description: 'Curated parallel sentence pairs across 6 low-resource languages (Yoruba, Swahili, Tamil, Khmer, Lao, Mongolian) with quality filtering.',
+      model: '—',
+      runtime: '00:12:08',
+      log: '<span class="log-ts">13:50:14</span> <span class="log-info">INFO</span>  Fetching parallel corpora from OPUS\n<span class="log-ts">13:58:20</span> <span class="log-info">INFO</span>  Quality filter: 3102 -> 2400 pairs retained\n<span class="log-ts">14:02:22</span> <span class="log-info">INFO</span>  Dataset saved to artifacts/multilingual_pairs.jsonl'
+    }
+  },
+  {
+    id: 'art_003', type: 'Experiment', typeClass: 'type-experiment',
+    title: 'Contrastive pre-train', status: 'running', iter: 2,
+    metric: null,
+    detail: {
+      description: 'Self-supervised contrastive learning with cross-lingual alignment using the proposed SimCLR-style objective over multilingual sentence embeddings.',
+      model: 'custom-ssl-v3',
+      runtime: '00:23:41 (running)',
+      log: '<span class="log-ts">15:10:36</span> <span class="log-info">INFO</span>  Initializing contrastive pre-training\n<span class="log-ts">15:10:38</span> <span class="log-info">INFO</span>  Epoch 1/10 — loss: 2.341\n<span class="log-ts">15:22:14</span> <span class="log-info">INFO</span>  Epoch 5/10 — loss: 0.847\n<span class="log-ts">15:34:17</span> <span class="log-info">INFO</span>  Epoch 8/10 — loss: 0.412 (running)'
+    }
+  },
+  {
+    id: 'art_004', type: 'Evaluation', typeClass: 'type-evaluation',
+    title: 'XTREME benchmark', status: 'pending', iter: 2,
+    metric: null,
+    detail: {
+      description: 'Full evaluation on XTREME cross-lingual benchmark suite (POS, NER, QA, sentence retrieval) for the 6 target languages.',
+      model: '—',
+      runtime: '—',
+      log: '(not started)'
+    }
+  },
+  {
+    id: 'art_005', type: 'Proof', typeClass: 'type-proof',
+    title: 'Convergence bound', status: 'complete', iter: 1,
+    metric: 'verified',
+    detail: {
+      description: 'Formal proof that the proposed contrastive objective converges to a stationary point under the assumed data distribution with O(1/sqrt(T)) rate.',
+      model: '—',
+      runtime: '00:08:44',
+      log: '<span class="log-ts">14:55:02</span> <span class="log-info">INFO</span>  Generating proof sketch via structured reasoning\n<span class="log-ts">14:59:30</span> <span class="log-info">INFO</span>  Verifying Lipschitz continuity assumption\n<span class="log-ts">15:03:46</span> <span class="log-info">INFO</span>  Proof complete — convergence bound verified'
+    }
+  }
+];
+
+// ── Pipeline Tree Data ─────────────────────────────────────────────
+const TREE = {
+  label: 'ssl-low-resource-v3', expanded: true, icon: 'expand', children: [
+    { label: 'Seed Hypothesis', icon: 'done' },
+    { label: 'Hypothesis Loop', icon: 'done', expanded: true, children: [
+      { label: 'Iteration 1', icon: 'done' },
+      { label: 'Iteration 2', icon: 'done' },
+      { label: 'Iteration 3', icon: 'done' },
+    ]},
+    { label: 'Invention Loop', icon: 'running', expanded: true, children: [
+      { label: 'Iteration 1', icon: 'done' },
+      { label: 'Iteration 2', icon: 'running', expanded: true, active: false, children: [
+        { label: 'Gen Strategy', icon: 'done' },
+        { label: 'Gen Plan', icon: 'done' },
+        { label: 'Gen Artifacts', icon: 'running', badge: '3/5', active: true },
+        { label: 'Gen Paper Text', icon: 'pending' },
+        { label: 'Review Paper', icon: 'pending' },
+        { label: 'Update Hypothesis', icon: 'pending' },
+      ]},
+      { label: 'Iteration 3', icon: 'pending' },
+    ]},
+    { label: 'Paper & Repo', icon: 'pending' },
+  ]
+};
+
+// ── Render Pipeline Tree ───────────────────────────────────────────
+function renderTree(node, container) {
+  const el = document.createElement('div');
+  const row = document.createElement('div');
+  row.className = 'tree-node' + (node.active ? ' active-node' : '');
+
+  const iconEl = document.createElement('span');
+  iconEl.className = 'tree-icon ' + node.icon;
+  if (node.children) {
+    iconEl.className += ' expand';
+    iconEl.textContent = node.expanded ? '\u25BC' : '\u25B6';
+  } else {
+    const icons = { done: '\u2713', running: '\u25B6', pending: '\u25CB' };
+    iconEl.textContent = icons[node.icon] || '\u25CB';
+  }
+  row.appendChild(iconEl);
+
+  const lbl = document.createElement('span');
+  lbl.className = 'tree-label';
+  lbl.textContent = node.label;
+  row.appendChild(lbl);
+
+  if (node.badge) {
+    const badge = document.createElement('span');
+    badge.className = 'tree-badge running-badge';
+    badge.textContent = node.badge;
+    row.appendChild(badge);
+  }
+
+  if (node.children) {
+    row.addEventListener('click', function(e) {
+      e.stopPropagation();
+      node.expanded = !node.expanded;
+      document.getElementById('pipeline-tree').innerHTML = '';
+      renderTree(TREE, document.getElementById('pipeline-tree'));
+    });
+  }
+
+  el.appendChild(row);
+
+  if (node.children && node.expanded) {
+    const childContainer = document.createElement('div');
+    childContainer.className = 'tree-children';
+    node.children.forEach(function(child) { renderTree(child, childContainer); });
+    el.appendChild(childContainer);
+  }
+
+  container.appendChild(el);
+}
+
+// ── Render Artifacts Table ─────────────────────────────────────────
+function renderArtifacts() {
+  const tbody = document.getElementById('artifact-tbody');
+  tbody.innerHTML = '';
+  ARTIFACTS.forEach(function(a, idx) {
+    // Main row
+    const tr = document.createElement('tr');
+    tr.setAttribute('data-idx', idx);
+
+    const statusMap = {
+      complete: '<span class="status-pill status-complete"><span class="status-icon">\u2713</span> Complete</span>',
+      running:  '<span class="status-pill status-running"><span class="status-icon">\u21BB</span> Running</span>',
+      pending:  '<span class="status-pill status-pending"><span class="status-icon">\u25CB</span> Pending</span>'
+    };
+
+    tr.innerHTML =
+      '<td class="artifact-id">' + a.id + '</td>' +
+      '<td><span class="artifact-type-badge ' + a.typeClass + '">' + a.type + '</span></td>' +
+      '<td class="artifact-title">' + a.title + '</td>' +
+      '<td>' + statusMap[a.status] + '</td>' +
+      '<td><span class="iter-badge">' + a.iter + '</span></td>' +
+      '<td class="metric-val' + (a.metric ? '' : ' empty') + '">' + (a.metric || '\u2014') + '</td>';
+
+    tr.addEventListener('click', function() { toggleDetail(idx); });
+    tbody.appendChild(tr);
+
+    // Detail row
+    const detailTr = document.createElement('tr');
+    detailTr.className = 'detail-row';
+    detailTr.id = 'detail-' + idx;
+    detailTr.innerHTML =
+      '<td colspan="6">' +
+        '<div class="detail-content" id="detail-content-' + idx + '">' +
+          '<div class="detail-grid">' +
+            '<span class="detail-label">Description</span><span class="detail-value" style="white-space:normal;font-family:var(--sans);">' + a.detail.description + '</span>' +
+            '<span class="detail-label">Model</span><span class="detail-value">' + a.detail.model + '</span>' +
+            '<span class="detail-label">Runtime</span><span class="detail-value">' + a.detail.runtime + '</span>' +
+          '</div>' +
+          '<div class="detail-log">' + a.detail.log + '</div>' +
+        '</div>' +
+      '</td>';
+    tbody.appendChild(detailTr);
+  });
+}
+
+function toggleDetail(idx) {
+  var content = document.getElementById('detail-content-' + idx);
+  var mainRow = document.querySelector('tr[data-idx="' + idx + '"]');
+  var isOpen = content.classList.contains('open');
+
+  // Close all
+  document.querySelectorAll('.detail-content').forEach(function(el) { el.classList.remove('open'); });
+  document.querySelectorAll('.artifact-table tbody tr[data-idx]').forEach(function(el) { el.classList.remove('expanded'); });
+
+  if (!isOpen) {
+    content.classList.add('open');
+    mainRow.classList.add('expanded');
+  }
+}
+
+// ── Tab switching ──────────────────────────────────────────────────
+function selectTab(el, name) {
+  document.querySelectorAll('.tab-bar .tab').forEach(function(t) { t.classList.remove('active'); });
+  el.classList.add('active');
+}
+
+// ── Run selection ──────────────────────────────────────────────────
+function selectRun(el) {
+  document.querySelectorAll('.run-item').forEach(function(r) { r.classList.remove('active'); });
+  el.classList.add('active');
+}
+
+// ── Panel collapse ─────────────────────────────────────────────────
+function togglePanel(id) {
+  document.getElementById(id).classList.toggle('collapsed');
+}
+
+// ── Mode toggle ────────────────────────────────────────────────────
+function setMode(el) {
+  el.parentElement.querySelectorAll('.mode-option').forEach(function(o) { o.classList.remove('active'); });
+  el.classList.add('active');
+}
+
+// ── Runtime ticker ─────────────────────────────────────────────────
+(function() {
+  var base = (2*3600 + 34*60 + 17);
+  setInterval(function() {
+    base++;
+    var h = String(Math.floor(base/3600)).padStart(2,'0');
+    var m = String(Math.floor((base%3600)/60)).padStart(2,'0');
+    var s = String(base%60).padStart(2,'0');
+    document.getElementById('runtime').textContent = h + ':' + m + ':' + s;
+  }, 1000);
+})();
+
+// ── Init ───────────────────────────────────────────────────────────
+renderTree(TREE, document.getElementById('pipeline-tree'));
+renderArtifacts();
+</script>
+</body>
+</html>

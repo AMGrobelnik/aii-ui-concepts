@@ -1,0 +1,1138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor - Artifact Inspector</title>
+<style>
+  /* ── Reset & Base ──────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg-base:       #1b1e2b;
+    --bg-surface:    #232736;
+    --bg-raised:     #2a2f40;
+    --bg-overlay:    #313750;
+    --border:        #3a3f55;
+    --border-active: #5568d4;
+    --text-primary:  #d8dce8;
+    --text-secondary:#8b92a8;
+    --text-muted:    #5d6378;
+    --accent:        #6c7ee1;
+    --accent-hover:  #8190f0;
+    --green:         #4ade80;
+    --green-dim:     #2d6b48;
+    --red:           #f87171;
+    --red-dim:       #7c3030;
+    --yellow:        #fbbf24;
+    --cyan:          #22d3ee;
+    --orange:        #fb923c;
+    --mono:          'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+    --sans:          'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    --sidebar-collapsed: 52px;
+    --right-panel:   300px;
+    --header-h:      46px;
+    --bottom-h:      32px;
+    --tab-h:         38px;
+  }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg-base);
+    color: var(--text-primary);
+    font-size: 13px;
+    line-height: 1.5;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Top Header Bar ────────────────────────────────────── */
+  .top-header {
+    height: var(--header-h);
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 14px;
+    flex-shrink: 0;
+  }
+  .top-header .logo {
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--accent);
+    letter-spacing: -0.3px;
+    white-space: nowrap;
+  }
+  .top-header .logo span { color: var(--text-muted); font-weight: 400; }
+  .top-header .breadcrumb {
+    color: var(--text-secondary);
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .top-header .breadcrumb .sep { color: var(--text-muted); }
+  .top-header .breadcrumb .current { color: var(--text-primary); font-weight: 500; }
+  .top-header .spacer { flex: 1; }
+  .top-header .hdr-btn {
+    background: none; border: none; color: var(--text-secondary);
+    cursor: pointer; padding: 4px 8px; border-radius: 4px; font-size: 12px;
+  }
+  .top-header .hdr-btn:hover { background: var(--bg-overlay); color: var(--text-primary); }
+
+  /* ── Main Layout ───────────────────────────────────────── */
+  .main-layout {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+  }
+
+  /* ── Left Sidebar (Collapsed) ──────────────────────────── */
+  .left-sidebar {
+    width: var(--sidebar-collapsed);
+    background: var(--bg-surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding-top: 8px;
+    gap: 2px;
+    flex-shrink: 0;
+  }
+  .sidebar-icon {
+    width: 36px; height: 36px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 6px; cursor: pointer;
+    color: var(--text-muted); font-size: 16px;
+    position: relative;
+    transition: background 0.15s, color 0.15s;
+  }
+  .sidebar-icon:hover { background: var(--bg-overlay); color: var(--text-secondary); }
+  .sidebar-icon.active { color: var(--accent); background: rgba(108,126,225,0.1); }
+  .sidebar-icon .badge {
+    position: absolute; top: 3px; right: 3px;
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--green); border: 2px solid var(--bg-surface);
+  }
+  .sidebar-icon .tooltip {
+    display: none; position: absolute; left: 46px; top: 50%;
+    transform: translateY(-50%);
+    background: var(--bg-overlay); color: var(--text-primary);
+    padding: 4px 10px; border-radius: 4px; font-size: 11px;
+    white-space: nowrap; z-index: 100;
+    border: 1px solid var(--border);
+  }
+  .sidebar-icon:hover .tooltip { display: block; }
+  .sidebar-sep {
+    width: 24px; height: 1px; background: var(--border); margin: 6px 0;
+  }
+
+  /* ── Center Panel ──────────────────────────────────────── */
+  .center-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-width: 0;
+  }
+
+  /* Artifact Header */
+  .artifact-header {
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+  }
+  .artifact-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+  }
+  .artifact-badges {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 10px; border-radius: 4px;
+    font-size: 11px; font-weight: 500;
+    white-space: nowrap;
+  }
+  .badge-success { background: rgba(74,222,128,0.12); color: var(--green); border: 1px solid rgba(74,222,128,0.2); }
+  .badge-info    { background: rgba(108,126,225,0.12); color: var(--accent); border: 1px solid rgba(108,126,225,0.2); }
+  .badge-neutral { background: rgba(139,146,168,0.1); color: var(--text-secondary); border: 1px solid rgba(139,146,168,0.15); }
+  .badge .dot { width: 6px; height: 6px; border-radius: 50%; }
+  .badge-success .dot { background: var(--green); }
+
+  /* Tab Row */
+  .tab-row {
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    padding: 0 20px;
+    gap: 0;
+    flex-shrink: 0;
+  }
+  .tab-btn {
+    padding: 8px 18px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+  }
+  .tab-btn:hover { color: var(--text-primary); }
+  .tab-btn.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  /* Tab Content Area */
+  .tab-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+  }
+  .tab-content::-webkit-scrollbar { width: 8px; }
+  .tab-content::-webkit-scrollbar-track { background: transparent; }
+  .tab-content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  .tab-content::-webkit-scrollbar-thumb:hover { background: var(--bg-overlay); }
+
+  .tab-pane { display: none; }
+  .tab-pane.active { display: block; }
+
+  /* Section Headings */
+  .section-heading {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    margin-bottom: 10px;
+  }
+  .section-heading:not(:first-child) { margin-top: 24px; }
+
+  /* ── Key Metrics Table ─────────────────────────────────── */
+  .metrics-card {
+    background: var(--bg-raised);
+    border: 1px solid var(--border-active);
+    border-radius: 6px;
+    overflow: hidden;
+    margin-bottom: 4px;
+    box-shadow: 0 0 20px rgba(108,126,225,0.06);
+  }
+  .metrics-card .card-header {
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(108,126,225,0.06);
+    border-bottom: 1px solid var(--border);
+  }
+  .metrics-card .card-header .icon { color: var(--accent); font-size: 14px; }
+  .metrics-card .card-header span {
+    font-size: 12px; font-weight: 600; color: var(--text-primary);
+  }
+
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  .data-table th {
+    text-align: left;
+    padding: 8px 14px;
+    color: var(--text-muted);
+    font-weight: 500;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(0,0,0,0.12);
+  }
+  .data-table td {
+    padding: 8px 14px;
+    border-bottom: 1px solid rgba(58,63,85,0.5);
+    color: var(--text-primary);
+  }
+  .data-table tr:last-child td { border-bottom: none; }
+  .data-table tr:hover td { background: rgba(108,126,225,0.04); }
+
+  .val-positive { color: var(--green); font-weight: 600; }
+  .val-negative { color: var(--red); font-weight: 600; }
+  .val-metric   { color: var(--cyan); font-weight: 600; }
+  .val-baseline { color: var(--text-secondary); }
+
+  /* ── Results Preview (Grid/Code Block) ─────────────────── */
+  .results-preview {
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .preview-header {
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(0,0,0,0.15);
+    border-bottom: 1px solid var(--border);
+  }
+  .preview-header .dataset-name {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-primary);
+  }
+  .preview-header .dataset-name .muted { color: var(--text-muted); }
+  .preview-header .count {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .grid-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  .grid-table th {
+    text-align: left;
+    padding: 7px 14px;
+    color: var(--text-muted);
+    font-weight: 500;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(0,0,0,0.08);
+    position: sticky;
+    top: 0;
+  }
+  .grid-table td {
+    padding: 6px 14px;
+    border-bottom: 1px solid rgba(58,63,85,0.35);
+    color: var(--text-primary);
+  }
+  .grid-table tr:last-child td { border-bottom: none; }
+  .grid-table tr:hover td { background: rgba(108,126,225,0.04); }
+  .grid-table .cell-correct { color: var(--green); }
+  .grid-table .cell-wrong   { color: var(--red); }
+  .grid-table .cell-input   { color: var(--yellow); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .grid-table .cell-output  { color: var(--text-secondary); }
+
+  .preview-footer {
+    padding: 8px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-top: 1px solid var(--border);
+    background: rgba(0,0,0,0.1);
+  }
+  .preview-footer .showing {
+    font-size: 11px; color: var(--text-muted);
+  }
+  .link-btn {
+    font-size: 11px; color: var(--accent);
+    text-decoration: none; cursor: pointer;
+    background: none; border: none; font-family: var(--sans);
+  }
+  .link-btn:hover { color: var(--accent-hover); text-decoration: underline; }
+
+  /* ── Dependencies ──────────────────────────────────────── */
+  .deps-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .dep-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    font-size: 12px;
+  }
+  .dep-row .dep-label {
+    color: var(--text-muted);
+    font-size: 11px;
+    min-width: 80px;
+  }
+  .dep-row .dep-id {
+    font-family: var(--mono);
+    color: var(--accent);
+    cursor: pointer;
+    font-size: 12px;
+  }
+  .dep-row .dep-id:hover { text-decoration: underline; }
+  .dep-row .dep-desc {
+    color: var(--text-secondary);
+    font-size: 12px;
+  }
+  .dep-row .arrow {
+    color: var(--text-muted);
+    font-size: 10px;
+  }
+
+  /* ── Code Tab ──────────────────────────────────────────── */
+  .code-block {
+    background: #181b27;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .code-block-header {
+    padding: 8px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(0,0,0,0.2);
+    border-bottom: 1px solid var(--border);
+  }
+  .code-block-header .filename {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+  .code-block-header .copy-btn {
+    background: var(--bg-overlay); border: 1px solid var(--border);
+    color: var(--text-secondary); padding: 3px 10px; border-radius: 4px;
+    font-size: 11px; cursor: pointer; font-family: var(--sans);
+  }
+  .code-block-header .copy-btn:hover { background: var(--border); color: var(--text-primary); }
+  .code-content {
+    padding: 14px 16px;
+    font-family: var(--mono);
+    font-size: 12px;
+    line-height: 1.65;
+    color: var(--text-primary);
+    overflow-x: auto;
+    white-space: pre;
+    tab-size: 4;
+  }
+  .code-content .kw  { color: #c792ea; }
+  .code-content .fn  { color: #82aaff; }
+  .code-content .str { color: #c3e88d; }
+  .code-content .cmt { color: #546e7a; font-style: italic; }
+  .code-content .num { color: #f78c6c; }
+  .code-content .op  { color: #89ddff; }
+  .code-content .dec { color: #ffcb6b; }
+  .code-content .ln  {
+    display: inline-block;
+    width: 32px;
+    text-align: right;
+    margin-right: 16px;
+    color: var(--text-muted);
+    user-select: none;
+    opacity: 0.5;
+  }
+
+  /* ── Plan Tab ──────────────────────────────────────────── */
+  .plan-step {
+    display: flex;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid rgba(58,63,85,0.4);
+  }
+  .plan-step:last-child { border-bottom: none; }
+  .plan-step-num {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: var(--bg-overlay);
+    border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 600; color: var(--text-secondary);
+    flex-shrink: 0;
+  }
+  .plan-step.done .plan-step-num {
+    background: rgba(74,222,128,0.12);
+    border-color: rgba(74,222,128,0.3);
+    color: var(--green);
+  }
+  .plan-step-body h4 {
+    font-size: 13px; font-weight: 500; color: var(--text-primary);
+    margin-bottom: 3px;
+  }
+  .plan-step-body p {
+    font-size: 12px; color: var(--text-secondary); line-height: 1.5;
+  }
+
+  /* ── Logs Tab ──────────────────────────────────────────── */
+  .log-line {
+    font-family: var(--mono);
+    font-size: 11.5px;
+    padding: 2px 0;
+    line-height: 1.6;
+    display: flex;
+    gap: 8px;
+  }
+  .log-ts   { color: var(--green); min-width: 72px; opacity: 0.7; }
+  .log-lvl  { min-width: 44px; font-weight: 600; }
+  .log-lvl.info  { color: var(--accent); }
+  .log-lvl.debug { color: var(--text-muted); }
+  .log-lvl.warn  { color: var(--yellow); }
+  .log-lvl.ok    { color: var(--green); }
+  .log-src  { color: var(--cyan); min-width: 120px; opacity: 0.7; }
+  .log-msg  { color: var(--text-primary); }
+
+  /* ── Right Panel ───────────────────────────────────────── */
+  .right-panel {
+    width: var(--right-panel);
+    background: var(--bg-surface);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    overflow-y: auto;
+  }
+  .right-panel::-webkit-scrollbar { width: 6px; }
+  .right-panel::-webkit-scrollbar-track { background: transparent; }
+  .right-panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  .rp-section {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .rp-section:last-child { border-bottom: none; }
+  .rp-heading {
+    font-size: 10px; font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    margin-bottom: 10px;
+  }
+
+  .action-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px 12px;
+    border-radius: 5px;
+    border: 1px solid var(--border);
+    background: var(--bg-raised);
+    color: var(--text-primary);
+    font-size: 12px;
+    font-family: var(--sans);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+    margin-bottom: 6px;
+  }
+  .action-btn:last-child { margin-bottom: 0; }
+  .action-btn:hover { background: var(--bg-overlay); border-color: var(--text-muted); }
+  .action-btn .btn-icon {
+    width: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .action-btn.primary {
+    background: rgba(108,126,225,0.15);
+    border-color: rgba(108,126,225,0.3);
+    color: var(--accent);
+  }
+  .action-btn.primary:hover {
+    background: rgba(108,126,225,0.25);
+  }
+  .action-btn.warn {
+    border-color: rgba(251,146,60,0.25);
+    color: var(--orange);
+  }
+  .action-btn.warn:hover {
+    background: rgba(251,146,60,0.08);
+  }
+
+  /* Download dropdown */
+  .dropdown-wrap { position: relative; }
+  .dropdown-menu {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    margin-top: 4px;
+    background: var(--bg-overlay);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    overflow: hidden;
+    z-index: 50;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  }
+  .dropdown-menu.open { display: block; }
+  .dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 12px;
+    font-size: 12px;
+    font-family: var(--mono);
+    color: var(--text-secondary);
+    cursor: pointer;
+    border: none;
+    background: none;
+    width: 100%;
+    text-align: left;
+  }
+  .dropdown-item:hover {
+    background: rgba(108,126,225,0.1);
+    color: var(--text-primary);
+  }
+  .dropdown-item .file-icon { color: var(--text-muted); font-size: 11px; }
+
+  /* Feedback */
+  .feedback-area {
+    width: 100%;
+    min-height: 72px;
+    padding: 8px 10px;
+    background: var(--bg-raised);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    color: var(--text-primary);
+    font-family: var(--sans);
+    font-size: 12px;
+    resize: vertical;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .feedback-area::placeholder { color: var(--text-muted); }
+  .feedback-area:focus { border-color: var(--accent); }
+
+  .submit-btn {
+    padding: 7px 16px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    border-radius: 5px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    font-family: var(--sans);
+    margin-top: 8px;
+    transition: background 0.15s;
+  }
+  .submit-btn:hover { background: var(--accent-hover); }
+
+  /* Metadata */
+  .meta-grid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 4px 12px;
+    font-size: 12px;
+  }
+  .meta-key { color: var(--text-muted); }
+  .meta-val { color: var(--text-secondary); font-family: var(--mono); font-size: 11px; }
+  .meta-val.highlight { color: var(--text-primary); }
+
+  /* ── Bottom Bar ────────────────────────────────────────── */
+  .bottom-bar {
+    height: var(--bottom-h);
+    background: var(--bg-surface);
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 20px;
+    flex-shrink: 0;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  .bottom-bar .stat {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .bottom-bar .stat .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+  }
+  .bottom-bar .stat .dot.green  { background: var(--green); }
+  .bottom-bar .stat .dot.yellow { background: var(--yellow); }
+  .bottom-bar .stat .dot.red    { background: var(--red); }
+  .bottom-bar .spacer { flex: 1; }
+
+  /* ── SVG icons inline ──────────────────────────────────── */
+  .icon-svg { width: 16px; height: 16px; fill: currentColor; flex-shrink: 0; }
+  .icon-svg.sm { width: 14px; height: 14px; }
+
+  /* ── Utilities ─────────────────────────────────────────── */
+  .mt-8  { margin-top: 8px; }
+  .mt-12 { margin-top: 12px; }
+  .mb-6  { margin-bottom: 6px; }
+  .flex-between { display: flex; justify-content: space-between; align-items: center; }
+</style>
+</head>
+<body>
+
+<!-- ═══ Top Header ═══════════════════════════════════════ -->
+<div class="top-header">
+  <div class="logo">AI Inventor <span>v3.2</span></div>
+  <div class="breadcrumb">
+    <span>Pipeline</span>
+    <span class="sep">/</span>
+    <span>Invention Loop</span>
+    <span class="sep">/</span>
+    <span>Artifacts</span>
+    <span class="sep">/</span>
+    <span class="current">art_001</span>
+  </div>
+  <div class="spacer"></div>
+  <button class="hdr-btn" title="Toggle right panel" onclick="toggleRightPanel()">
+    <svg class="icon-svg" viewBox="0 0 16 16"><path d="M2 2h12a1 1 0 011 1v10a1 1 0 01-1 1H2a1 1 0 01-1-1V3a1 1 0 011-1zm0 1v10h8V3H2zm9 0v10h3V3h-3z" fill-rule="evenodd"/></svg>
+  </button>
+  <button class="hdr-btn" title="Settings">
+    <svg class="icon-svg" viewBox="0 0 16 16"><path d="M8 10a2 2 0 110-4 2 2 0 010 4zm6.32-1.906l-.003-.01a1 1 0 01.22-1.058l.767-.775a.5.5 0 00.04-.66l-.96-1.322a.5.5 0 00-.627-.18l-.99.445a1 1 0 01-1.05-.128l-.01-.008a1 1 0 01-.38-.95l.15-1.08a.5.5 0 00-.37-.546l-1.57-.417a.5.5 0 00-.588.272l-.47.987a1 1 0 01-.893.574h-.012a1 1 0 01-.893-.575l-.47-.986a.5.5 0 00-.588-.272L3.68 2.02a.5.5 0 00-.37.545l.15 1.08a1 1 0 01-.38.95l-.01.01a1 1 0 01-1.05.127l-.99-.445a.5.5 0 00-.627.18L.44 5.79a.5.5 0 00.04.66l.767.775a1 1 0 01.22 1.058l-.003.01a1 1 0 01-.74.693l-1.07.213a.5.5 0 00-.404.49v1.572a.5.5 0 00.404.491l1.07.214a1 1 0 01.74.692l.003.01a1 1 0 01-.22 1.06l-.767.774a.5.5 0 00-.04.66l.96 1.322a.5.5 0 00.627.18l.99-.445a1 1 0 011.05.128l.01.008a1 1 0 01.38.95l-.15 1.08a.5.5 0 00.37.546l1.57.417a.5.5 0 00.588-.272l.47-.987a1 1 0 01.893-.574h.012a1 1 0 01.893.575l.47.986a.5.5 0 00.588.272l1.57-.418a.5.5 0 00.37-.545l-.15-1.08a1 1 0 01.38-.95l.01-.01a1 1 0 011.05-.127l.99.445a.5.5 0 00.627-.18l.96-1.322a.5.5 0 00-.04-.66l-.767-.775a1 1 0 01-.22-1.058l.003-.01a1 1 0 01.74-.693l1.07-.213a.5.5 0 00.404-.49V8.1a.5.5 0 00-.404-.491l-1.07-.214a1 1 0 01-.74-.692z" fill-rule="evenodd"/></svg>
+  </button>
+</div>
+
+<div class="main-layout">
+
+  <!-- ═══ Left Sidebar (Collapsed) ═══════════════════════ -->
+  <div class="left-sidebar">
+    <div class="sidebar-icon" title="Pipeline">
+      <svg class="icon-svg" viewBox="0 0 16 16"><path d="M1 3.5A1.5 1.5 0 012.5 2h11A1.5 1.5 0 0115 3.5v1A1.5 1.5 0 0113.5 6h-11A1.5 1.5 0 011 4.5v-1zm0 5A1.5 1.5 0 012.5 7h11A1.5 1.5 0 0115 8.5v1A1.5 1.5 0 0113.5 11h-11A1.5 1.5 0 011 9.5v-1zm0 5A1.5 1.5 0 012.5 12h11a1.5 1.5 0 011.5 1.5v.5a.5.5 0 01-.5.5h-12a.5.5 0 01-.5-.5v-.5z"/></svg>
+      <span class="tooltip">Pipeline Steps</span>
+    </div>
+    <div class="sidebar-icon" title="Hypotheses">
+      <svg class="icon-svg" viewBox="0 0 16 16"><path d="M8 1a.5.5 0 01.5.5v2.032a5.002 5.002 0 014.468 4.468H15a.5.5 0 010 1h-2.032a5.002 5.002 0 01-4.468 4.468V15.5a.5.5 0 01-1 0v-2.032A5.002 5.002 0 013.032 9H1a.5.5 0 010-1h2.032A5.002 5.002 0 017.5 3.532V1.5A.5.5 0 018 1zm0 4a3 3 0 100 6 3 3 0 000-6z"/></svg>
+      <span class="tooltip">Hypotheses</span>
+    </div>
+    <div class="sidebar-icon active" title="Artifacts">
+      <svg class="icon-svg" viewBox="0 0 16 16"><path d="M1.5 0A1.5 1.5 0 000 1.5v2A1.5 1.5 0 001.5 5h2A1.5 1.5 0 005 3.5v-2A1.5 1.5 0 003.5 0h-2zm0 6A1.5 1.5 0 000 7.5v2A1.5 1.5 0 001.5 11h2A1.5 1.5 0 005 9.5v-2A1.5 1.5 0 003.5 6h-2zm6-6A1.5 1.5 0 006 1.5v2A1.5 1.5 0 007.5 5h2A1.5 1.5 0 0011 3.5v-2A1.5 1.5 0 009.5 0h-2zm0 6A1.5 1.5 0 006 7.5v2A1.5 1.5 0 007.5 11h2A1.5 1.5 0 0011 9.5v-2A1.5 1.5 0 009.5 6h-2zm5.5 0A1.5 1.5 0 0012 7.5v2a1.5 1.5 0 001.5 1.5h1a.5.5 0 00.5-.5v-4a.5.5 0 00-.5-.5h-1zM12 1.5A1.5 1.5 0 0113.5 0h1a.5.5 0 01.5.5v4a.5.5 0 01-.5.5h-1A1.5 1.5 0 0112 3.5v-2z"/></svg>
+      <span class="badge" style="position:absolute;top:2px;right:2px;padding:0;width:7px;height:7px;min-width:0;background:var(--green);border-radius:50%;border:2px solid var(--bg-surface);"></span>
+      <span class="tooltip">Artifacts</span>
+    </div>
+    <div class="sidebar-icon" title="Papers">
+      <svg class="icon-svg" viewBox="0 0 16 16"><path d="M4 0a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V4.5L9.5 0H4zm5.5 0v3a1.5 1.5 0 001.5 1.5h3L9.5 0zM4.5 7a.5.5 0 000 1h7a.5.5 0 000-1h-7zm0 2a.5.5 0 000 1h7a.5.5 0 000-1h-7zm0 2a.5.5 0 000 1h4a.5.5 0 000-1h-4z"/></svg>
+      <span class="tooltip">Papers</span>
+    </div>
+    <div class="sidebar-sep"></div>
+    <div class="sidebar-icon" title="Telemetry">
+      <svg class="icon-svg" viewBox="0 0 16 16"><path d="M0 13.5a.5.5 0 01.5-.5h15a.5.5 0 010 1H.5a.5.5 0 01-.5-.5zM2 3a1 1 0 011-1h1a1 1 0 011 1v8a1 1 0 01-1 1H3a1 1 0 01-1-1V3zm4 2a1 1 0 011-1h1a1 1 0 011 1v6a1 1 0 01-1 1H7a1 1 0 01-1-1V5zm4-3a1 1 0 011-1h1a1 1 0 011 1v9a1 1 0 01-1 1h-1a1 1 0 01-1-1V2z"/></svg>
+      <span class="tooltip">Telemetry</span>
+    </div>
+    <div class="sidebar-icon" title="Cost Tracker">
+      <svg class="icon-svg" viewBox="0 0 16 16"><path d="M8 0a8 8 0 100 16A8 8 0 008 0zm-.5 3a.5.5 0 011 0v.5h1a.5.5 0 010 1h-2.5a1 1 0 100 2h2a2 2 0 110 4h-.5v.5a.5.5 0 01-1 0V11h-1a.5.5 0 010-1h2.5a1 1 0 100-2h-2a2 2 0 110-4h.5V3z"/></svg>
+      <span class="tooltip">Cost Tracker</span>
+    </div>
+  </div>
+
+  <!-- ═══ Center Panel ═══════════════════════════════════ -->
+  <div class="center-panel">
+    <!-- Artifact Header -->
+    <div class="artifact-header">
+      <div class="artifact-title">Experiment: Baseline Comparison</div>
+      <div class="artifact-badges">
+        <span class="badge badge-success"><span class="dot"></span> Complete</span>
+        <span class="badge badge-info">Iteration 1</span>
+        <span class="badge badge-neutral" style="font-family:var(--mono);">art_001</span>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tab-row">
+      <button class="tab-btn active" data-tab="results">Results</button>
+      <button class="tab-btn" data-tab="code">Code</button>
+      <button class="tab-btn" data-tab="plan">Plan</button>
+      <button class="tab-btn" data-tab="logs">Logs</button>
+    </div>
+
+    <!-- Tab Content -->
+    <div class="tab-content">
+
+      <!-- ── Results Tab ─────────────────────────────── -->
+      <div class="tab-pane active" id="tab-results">
+        <div class="section-heading">Key Metrics</div>
+        <div class="metrics-card">
+          <div class="card-header">
+            <span class="icon">
+              <svg class="icon-svg sm" viewBox="0 0 16 16"><path d="M0 13.5a.5.5 0 01.5-.5h15a.5.5 0 010 1H.5a.5.5 0 01-.5-.5zM2 3a1 1 0 011-1h1a1 1 0 011 1v8a1 1 0 01-1 1H3a1 1 0 01-1-1V3zm4 2a1 1 0 011-1h1a1 1 0 011 1v6a1 1 0 01-1 1H7a1 1 0 01-1-1V5zm4-3a1 1 0 011-1h1a1 1 0 011 1v9a1 1 0 01-1 1h-1a1 1 0 01-1-1V2z"/></svg>
+            </span>
+            <span>Performance vs. Baseline</span>
+          </div>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Metric</th>
+                <th>Value</th>
+                <th>Baseline</th>
+                <th>Delta</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Accuracy</td>
+                <td class="val-metric">0.847</td>
+                <td class="val-baseline">0.721</td>
+                <td class="val-positive">+17.5%</td>
+              </tr>
+              <tr>
+                <td>F1 Score</td>
+                <td class="val-metric">0.823</td>
+                <td class="val-baseline">0.698</td>
+                <td class="val-positive">+17.9%</td>
+              </tr>
+              <tr>
+                <td>Zero-shot Acc</td>
+                <td class="val-metric">0.634</td>
+                <td class="val-baseline">0.412</td>
+                <td class="val-positive">+53.9%</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="section-heading">Results Preview</div>
+        <div class="results-preview">
+          <div class="preview-header">
+            <div class="dataset-name">multilingual-pairs-v2 <span class="muted">(preview)</span></div>
+            <span class="count">5 of 2,400 examples</span>
+          </div>
+          <table class="grid-table">
+            <thead>
+              <tr>
+                <th style="width:36px">#</th>
+                <th>Input</th>
+                <th>Expected</th>
+                <th>Predicted</th>
+                <th style="width:64px">Result</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td style="color:var(--text-muted)">1</td>
+                <td class="cell-input">"Die Katze sitzt auf der Matte"</td>
+                <td class="cell-output">"cat"</td>
+                <td>"cat"</td>
+                <td class="cell-correct">&#10003;</td>
+              </tr>
+              <tr>
+                <td style="color:var(--text-muted)">2</td>
+                <td class="cell-input">"Le chat dort sur le canape"</td>
+                <td class="cell-output">"cat"</td>
+                <td>"cat"</td>
+                <td class="cell-correct">&#10003;</td>
+              </tr>
+              <tr>
+                <td style="color:var(--text-muted)">3</td>
+                <td class="cell-input">"&#29483;&#12399;&#22806;&#12395;&#12356;&#12414;&#12377;"</td>
+                <td class="cell-output">"cat"</td>
+                <td style="color:var(--red)">"dog"</td>
+                <td class="cell-wrong">&#10007;</td>
+              </tr>
+              <tr>
+                <td style="color:var(--text-muted)">4</td>
+                <td class="cell-input">"El gato negro es muy bonito"</td>
+                <td class="cell-output">"cat"</td>
+                <td>"cat"</td>
+                <td class="cell-correct">&#10003;</td>
+              </tr>
+              <tr>
+                <td style="color:var(--text-muted)">5</td>
+                <td class="cell-input">"&#1050;&#1086;&#1090; &#1089;&#1087;&#1080;&#1090; &#1085;&#1072; &#1082;&#1088;&#1086;&#1074;&#1072;&#1090;&#1080;"</td>
+                <td class="cell-output">"cat"</td>
+                <td>"cat"</td>
+                <td class="cell-correct">&#10003;</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="preview-footer">
+            <span class="showing">Showing 5 of 2,400 examples</span>
+            <button class="link-btn" onclick="alert('Full dataset view would open here')">View Full Dataset &rarr;</button>
+          </div>
+        </div>
+
+        <div class="section-heading">Dependencies</div>
+        <div class="deps-list">
+          <div class="dep-row">
+            <span class="dep-label">Depends on</span>
+            <span class="arrow">&rarr;</span>
+            <span class="dep-id" onclick="alert('Navigate to art_002')">art_002</span>
+            <span class="dep-desc">Multilingual Pairs Dataset</span>
+          </div>
+          <div class="dep-row">
+            <span class="dep-label">Used by</span>
+            <span class="arrow">&larr;</span>
+            <span class="dep-id" onclick="alert('Navigate to paper_text_iter1')">paper_text_iter1</span>
+            <span class="dep-desc">,</span>
+            <span class="dep-id" onclick="alert('Navigate to paper_text_iter2')">paper_text_iter2</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Code Tab ────────────────────────────────── -->
+      <div class="tab-pane" id="tab-code">
+        <div class="section-heading">Source &mdash; method.py</div>
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="filename">method.py</span>
+            <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+          </div>
+          <div class="code-content"><span class="ln"> 1</span><span class="kw">import</span> json
+<span class="ln"> 2</span><span class="kw">from</span> pathlib <span class="kw">import</span> Path
+<span class="ln"> 3</span><span class="kw">from</span> typing <span class="kw">import</span> Optional
+<span class="ln"> 4</span>
+<span class="ln"> 5</span><span class="kw">import</span> numpy <span class="kw">as</span> np
+<span class="ln"> 6</span><span class="kw">from</span> sentence_transformers <span class="kw">import</span> SentenceTransformer
+<span class="ln"> 7</span>
+<span class="ln"> 8</span>
+<span class="ln"> 9</span><span class="kw">class</span> <span class="fn">MultilingualAligner</span>:
+<span class="ln">10</span>    <span class="str">"""Aligns multilingual embeddings via contrastive</span>
+<span class="ln">11</span><span class="str">    rotation with language-adaptive anchoring."""</span>
+<span class="ln">12</span>
+<span class="ln">13</span>    <span class="kw">def</span> <span class="fn">__init__</span>(self, <span class="op">*</span>, model_name: str <span class="op">=</span> <span class="str">"all-MiniLM-L6-v2"</span>):
+<span class="ln">14</span>        self.encoder <span class="op">=</span> SentenceTransformer(model_name)
+<span class="ln">15</span>        self.rotation_matrix: Optional[np.ndarray] <span class="op">=</span> <span class="kw">None</span>
+<span class="ln">16</span>
+<span class="ln">17</span>    <span class="kw">def</span> <span class="fn">fit</span>(self, pairs: list[tuple[str, str]]) <span class="op">-></span> <span class="str">"MultilingualAligner"</span>:
+<span class="ln">18</span>        <span class="cmt"># Encode source and target pairs</span>
+<span class="ln">19</span>        src <span class="op">=</span> self.encoder.encode([p[<span class="num">0</span>] <span class="kw">for</span> p <span class="kw">in</span> pairs])
+<span class="ln">20</span>        tgt <span class="op">=</span> self.encoder.encode([p[<span class="num">1</span>] <span class="kw">for</span> p <span class="kw">in</span> pairs])
+<span class="ln">21</span>
+<span class="ln">22</span>        <span class="cmt"># Procrustes alignment</span>
+<span class="ln">23</span>        U, _, Vt <span class="op">=</span> np.linalg.svd(tgt.T <span class="op">@</span> src)
+<span class="ln">24</span>        self.rotation_matrix <span class="op">=</span> U <span class="op">@</span> Vt
+<span class="ln">25</span>        <span class="kw">return</span> self
+<span class="ln">26</span>
+<span class="ln">27</span>    <span class="kw">def</span> <span class="fn">predict</span>(self, text: str) <span class="op">-></span> np.ndarray:
+<span class="ln">28</span>        emb <span class="op">=</span> self.encoder.encode([text])
+<span class="ln">29</span>        <span class="kw">return</span> (emb <span class="op">@</span> self.rotation_matrix.T)[<span class="num">0</span>]</div>
+        </div>
+      </div>
+
+      <!-- ── Plan Tab ────────────────────────────────── -->
+      <div class="tab-pane" id="tab-plan">
+        <div class="section-heading">Execution Plan</div>
+        <div class="plan-step done">
+          <div class="plan-step-num">&#10003;</div>
+          <div class="plan-step-body">
+            <h4>Load dataset</h4>
+            <p>Load multilingual-pairs-v2 from artifact art_002. Validate schema and sample 2,400 test pairs.</p>
+          </div>
+        </div>
+        <div class="plan-step done">
+          <div class="plan-step-num">&#10003;</div>
+          <div class="plan-step-body">
+            <h4>Fit alignment model</h4>
+            <p>Train MultilingualAligner on 10,000 training pairs using contrastive rotation with Procrustes alignment.</p>
+          </div>
+        </div>
+        <div class="plan-step done">
+          <div class="plan-step-num">&#10003;</div>
+          <div class="plan-step-body">
+            <h4>Run evaluation</h4>
+            <p>Evaluate on held-out test set. Compute accuracy, F1, and zero-shot accuracy across all language pairs.</p>
+          </div>
+        </div>
+        <div class="plan-step done">
+          <div class="plan-step-num">&#10003;</div>
+          <div class="plan-step-body">
+            <h4>Compare to baseline</h4>
+            <p>Run identical evaluation with vanilla embedding model (no alignment). Compute deltas and statistical significance.</p>
+          </div>
+        </div>
+        <div class="plan-step done">
+          <div class="plan-step-num">&#10003;</div>
+          <div class="plan-step-body">
+            <h4>Serialize results</h4>
+            <p>Write full_method_out.json (all predictions) and mini_method_out.json (5-example preview) to artifact output directory.</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Logs Tab ────────────────────────────────── -->
+      <div class="tab-pane" id="tab-logs">
+        <div class="section-heading">Execution Log</div>
+        <div class="log-line"><span class="log-ts">14:23:07</span><span class="log-lvl info">INFO</span><span class="log-src">artifact_runner</span><span class="log-msg">Starting artifact art_001: Baseline Comparison</span></div>
+        <div class="log-line"><span class="log-ts">14:23:07</span><span class="log-lvl debug">DEBUG</span><span class="log-src">artifact_runner</span><span class="log-msg">Resolving dependencies: [art_002]</span></div>
+        <div class="log-line"><span class="log-ts">14:23:08</span><span class="log-lvl info">INFO</span><span class="log-src">dataset_loader</span><span class="log-msg">Loading multilingual-pairs-v2 (2,400 test pairs)</span></div>
+        <div class="log-line"><span class="log-ts">14:23:12</span><span class="log-lvl info">INFO</span><span class="log-src">aligner</span><span class="log-msg">Fitting MultilingualAligner on 10,000 training pairs</span></div>
+        <div class="log-line"><span class="log-ts">14:24:38</span><span class="log-lvl debug">DEBUG</span><span class="log-src">aligner</span><span class="log-msg">SVD convergence: 14 iterations, residual=2.3e-07</span></div>
+        <div class="log-line"><span class="log-ts">14:24:39</span><span class="log-lvl ok">OK</span><span class="log-src">aligner</span><span class="log-msg">Rotation matrix fitted (384x384)</span></div>
+        <div class="log-line"><span class="log-ts">14:24:40</span><span class="log-lvl info">INFO</span><span class="log-src">evaluator</span><span class="log-msg">Running evaluation on test set...</span></div>
+        <div class="log-line"><span class="log-ts">14:26:15</span><span class="log-lvl info">INFO</span><span class="log-src">evaluator</span><span class="log-msg">Evaluation complete. Accuracy=0.847, F1=0.823</span></div>
+        <div class="log-line"><span class="log-ts">14:26:16</span><span class="log-lvl info">INFO</span><span class="log-src">evaluator</span><span class="log-msg">Running baseline evaluation (no alignment)...</span></div>
+        <div class="log-line"><span class="log-ts">14:27:22</span><span class="log-lvl info">INFO</span><span class="log-src">evaluator</span><span class="log-msg">Baseline complete. Accuracy=0.721, F1=0.698</span></div>
+        <div class="log-line"><span class="log-ts">14:27:23</span><span class="log-lvl info">INFO</span><span class="log-src">serializer</span><span class="log-msg">Writing full_method_out.json (2,400 rows, 1.8 MB)</span></div>
+        <div class="log-line"><span class="log-ts">14:27:24</span><span class="log-lvl info">INFO</span><span class="log-src">serializer</span><span class="log-msg">Writing mini_method_out.json (5 rows)</span></div>
+        <div class="log-line"><span class="log-ts">14:27:39</span><span class="log-lvl ok">OK</span><span class="log-src">artifact_runner</span><span class="log-msg">Artifact art_001 complete. Runtime: 4m 32s. Cost: $2.14</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ Right Panel ════════════════════════════════════ -->
+  <div class="right-panel" id="rightPanel">
+    <div class="rp-section">
+      <div class="rp-heading">Actions</div>
+      <button class="action-btn primary" onclick="alert('Opening in Colab...')">
+        <span class="btn-icon">
+          <svg class="icon-svg sm" viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8s3.58 8 8 8 8-3.58 8-8-3.58-8-8-8zm3.54 11.15l-3.18-2.31a.5.5 0 01-.2-.4V4a.5.5 0 011 0v4.2l2.98 2.16a.5.5 0 11-.6.79z"/></svg>
+        </span>
+        Open in Colab
+      </button>
+      <button class="action-btn" onclick="alert('Opening on GitHub...')">
+        <span class="btn-icon">
+          <svg class="icon-svg sm" viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        </span>
+        View on GitHub
+      </button>
+
+      <div class="dropdown-wrap">
+        <button class="action-btn" onclick="toggleDropdown(this)">
+          <span class="btn-icon">
+            <svg class="icon-svg sm" viewBox="0 0 16 16"><path d="M.5 9.9a.5.5 0 01.5.5v2.5a1 1 0 001 1h12a1 1 0 001-1v-2.5a.5.5 0 011 0v2.5a2 2 0 01-2 2H2a2 2 0 01-2-2v-2.5a.5.5 0 01.5-.5z"/><path d="M7.646 11.854a.5.5 0 00.708 0l3-3a.5.5 0 00-.708-.708L8.5 10.293V1.5a.5.5 0 00-1 0v8.793L5.354 8.146a.5.5 0 10-.708.708l3 3z"/></svg>
+          </span>
+          Download Files
+          <span style="margin-left:auto;color:var(--text-muted);font-size:10px">&#9660;</span>
+        </button>
+        <div class="dropdown-menu" id="downloadDropdown">
+          <button class="dropdown-item" onclick="alert('Downloading method.py')">
+            <span class="file-icon">&#128196;</span> method.py
+          </button>
+          <button class="dropdown-item" onclick="alert('Downloading full_method_out.json')">
+            <span class="file-icon">&#128196;</span> full_method_out.json
+          </button>
+          <button class="dropdown-item" onclick="alert('Downloading mini_method_out.json')">
+            <span class="file-icon">&#128196;</span> mini_method_out.json
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="rp-section">
+      <button class="action-btn warn" onclick="alert('Re-running artifact art_001...')">
+        <span class="btn-icon">
+          <svg class="icon-svg sm" viewBox="0 0 16 16"><path d="M8 3a5 5 0 104.546 2.914.5.5 0 01.908-.418A6 6 0 118 2v1z"/><path d="M8 4.466V.534a.25.25 0 01.41-.192l2.36 1.966a.25.25 0 010 .384L8.41 4.658A.25.25 0 018 4.466z"/></svg>
+        </span>
+        Re-run this Artifact
+      </button>
+    </div>
+
+    <div class="rp-section">
+      <div class="rp-heading">Feedback</div>
+      <textarea class="feedback-area" placeholder="Notes or feedback on this artifact..."></textarea>
+      <button class="submit-btn" onclick="submitFeedback()">Submit</button>
+    </div>
+
+    <div class="rp-section">
+      <div class="rp-heading">Metadata</div>
+      <div class="meta-grid">
+        <span class="meta-key">Created</span>
+        <span class="meta-val highlight">2024-03-15 14:23:07</span>
+        <span class="meta-key">Runtime</span>
+        <span class="meta-val">4m 32s</span>
+        <span class="meta-key">Cost</span>
+        <span class="meta-val highlight">$2.14</span>
+        <span class="meta-key">Model</span>
+        <span class="meta-val">claude-opus-4-20250514</span>
+        <span class="meta-key">Compute</span>
+        <span class="meta-val">cpu_heavy (RunPod)</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ═══ Bottom Bar ══════════════════════════════════════ -->
+<div class="bottom-bar">
+  <div class="stat"><span class="dot green"></span> Pipeline: Running</div>
+  <div class="stat"><span class="dot green"></span> Artifacts: 7/12 complete</div>
+  <div class="stat"><span class="dot yellow"></span> 3 pending</div>
+  <div class="stat"><span class="dot red"></span> 2 failed</div>
+  <div class="spacer"></div>
+  <span>Iteration 1 of 3</span>
+  <span style="color:var(--text-muted)">|</span>
+  <span>Session cost: $14.87</span>
+  <span style="color:var(--text-muted)">|</span>
+  <span>Uptime: 23m 41s</span>
+</div>
+
+<script>
+/* ── Tab switching ───────────────────────────────────────── */
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+  });
+});
+
+/* ── Download dropdown ───────────────────────────────────── */
+function toggleDropdown(btn) {
+  const menu = btn.parentElement.querySelector('.dropdown-menu');
+  menu.classList.toggle('open');
+}
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.dropdown-wrap')) {
+    document.querySelectorAll('.dropdown-menu').forEach(m => m.classList.remove('open'));
+  }
+});
+
+/* ── Right panel toggle ──────────────────────────────────── */
+function toggleRightPanel() {
+  const panel = document.getElementById('rightPanel');
+  if (panel.style.display === 'none') {
+    panel.style.display = 'flex';
+  } else {
+    panel.style.display = 'none';
+  }
+}
+
+/* ── Code copy ───────────────────────────────────────────── */
+function copyCode(btn) {
+  const block = btn.closest('.code-block');
+  const code = block.querySelector('.code-content').innerText;
+  // Strip line numbers
+  const clean = code.split('\n').map(line => line.replace(/^\s*\d+\s{2}/, '')).join('\n');
+  navigator.clipboard.writeText(clean).then(() => {
+    const original = btn.textContent;
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = original; }, 1500);
+  });
+}
+
+/* ── Feedback submit ─────────────────────────────────────── */
+function submitFeedback() {
+  const textarea = document.querySelector('.feedback-area');
+  if (textarea.value.trim()) {
+    const btn = document.querySelector('.submit-btn');
+    const original = btn.textContent;
+    btn.textContent = 'Submitted';
+    btn.style.background = '#2d6b48';
+    textarea.value = '';
+    setTimeout(() => {
+      btn.textContent = original;
+      btn.style.background = '';
+    }, 2000);
+  }
+}
+
+/* ── Bottom bar uptime counter ───────────────────────────── */
+(function() {
+  let seconds = 23 * 60 + 41;
+  const uptimeEl = document.querySelector('.bottom-bar').lastElementChild;
+  setInterval(() => {
+    seconds++;
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    uptimeEl.textContent = 'Uptime: ' + m + 'm ' + String(s).padStart(2, '0') + 's';
+  }, 1000);
+})();
+</script>
+</body>
+</html>

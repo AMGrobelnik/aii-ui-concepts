@@ -1,0 +1,1599 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Glassmorphism Pipeline</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  /* Slate palette */
+  --slate-950: #020617;
+  --slate-900: #0f172a;
+  --slate-800: #1e293b;
+  --slate-700: #334155;
+  --slate-600: #475569;
+  --slate-500: #64748b;
+  --slate-400: #94a3b8;
+  --slate-300: #cbd5e1;
+  --slate-200: #e2e8f0;
+  --slate-100: #f1f5f9;
+
+  /* Module accent colors */
+  --c-seed: #22c55e;
+  --c-seed-dim: rgba(34, 197, 94, 0.15);
+  --c-seed-glow: rgba(34, 197, 94, 0.35);
+  --c-hypo: #a78bfa;
+  --c-hypo-dim: rgba(167, 139, 250, 0.15);
+  --c-hypo-glow: rgba(167, 139, 250, 0.35);
+  --c-invent: #3b82f6;
+  --c-invent-dim: rgba(59, 130, 246, 0.15);
+  --c-invent-glow: rgba(59, 130, 246, 0.35);
+  --c-paper: #f59e0b;
+  --c-paper-dim: rgba(245, 158, 11, 0.15);
+  --c-paper-glow: rgba(245, 158, 11, 0.35);
+
+  /* Glassmorphism tokens */
+  --glass-bg: rgba(15, 23, 42, 0.45);
+  --glass-border: rgba(148, 163, 184, 0.12);
+  --glass-shine: rgba(255, 255, 255, 0.06);
+  --glass-blur: 16px;
+
+  /* Shared tokens */
+  --radius: 14px;
+  --radius-sm: 10px;
+  --transition-smooth: 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+html {
+  font-size: 14px;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  background: var(--slate-950);
+  color: var(--slate-300);
+  line-height: 1.5;
+  overflow: hidden;
+  height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Particle Canvas ── */
+#particleCanvas {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* ── Background Mesh Gradient ── */
+.bg-mesh {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.bg-mesh .orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(100px);
+  opacity: 0.12;
+  animation: orbFloat 20s ease-in-out infinite;
+}
+
+.bg-mesh .orb-1 { width: 600px; height: 600px; background: var(--c-seed); top: -10%; left: -5%; }
+.bg-mesh .orb-2 { width: 500px; height: 500px; background: var(--c-hypo); top: 30%; right: -10%; animation-delay: -7s; }
+.bg-mesh .orb-3 { width: 550px; height: 550px; background: var(--c-invent); bottom: -15%; left: 25%; animation-delay: -14s; }
+.bg-mesh .orb-4 { width: 400px; height: 400px; background: var(--c-paper); top: 60%; right: 20%; animation-delay: -3s; opacity: 0.08; }
+
+@keyframes orbFloat {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25%  { transform: translate(30px, -20px) scale(1.05); }
+  50%  { transform: translate(-20px, 30px) scale(0.95); }
+  75%  { transform: translate(15px, 15px) scale(1.02); }
+}
+
+/* Noise texture overlay for frosted glass */
+.bg-noise {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none; opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-repeat: repeat; background-size: 256px 256px;
+}
+
+/* ── Layout Shell ── */
+.shell {
+  display: flex;
+  height: 100vh;
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Sidebar (glass panel) ── */
+.sidebar {
+  width: 260px;
+  min-width: 260px;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-right: 1px solid var(--glass-border);
+  display: flex;
+  flex-direction: column;
+  z-index: 10;
+  position: relative;
+}
+
+/* Sidebar frosted edge highlight */
+.sidebar::after {
+  content: ''; position: absolute; top: 0; right: 0; bottom: 0; width: 1px; pointer-events: none;
+  background: linear-gradient(180deg, transparent 0%, rgba(255,255,255,0.06) 20%, rgba(255,255,255,0.03) 50%, rgba(255,255,255,0.06) 80%, transparent 100%);
+}
+
+.sidebar-header {
+  height: 56px;
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  gap: 12px;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.sidebar-logo {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--c-invent), var(--c-hypo));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+  box-shadow: 0 0 16px rgba(59, 130, 246, 0.3);
+  position: relative;
+}
+
+/* Logo inner shine */
+.sidebar-logo::after {
+  content: ''; position: absolute; inset: 0; border-radius: 8px; pointer-events: none;
+  background: linear-gradient(135deg, rgba(255,255,255,0.2) 0%, transparent 50%);
+}
+
+.sidebar-brand {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--slate-100);
+  letter-spacing: -0.3px;
+}
+
+.sidebar-run-info {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.run-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--slate-500);
+  margin-bottom: 8px;
+}
+
+.run-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--slate-200);
+  line-height: 1.4;
+  margin-bottom: 10px;
+}
+
+.run-meta {
+  display: flex;
+  gap: 16px;
+  font-size: 11px;
+  color: var(--slate-500);
+}
+
+.run-meta span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Sidebar progress ring */
+.sidebar-ring-wrap {
+  padding: 24px 20px; display: flex; flex-direction: column; align-items: center;
+  border-bottom: 1px solid var(--glass-border);
+}
+.ring-container { position: relative; width: 110px; height: 110px; }
+.ring-svg { width: 110px; height: 110px; transform: rotate(-90deg); }
+.ring-bg { fill: none; stroke: rgba(148,163,184,0.08); stroke-width: 6; }
+.ring-fill {
+  fill: none; stroke: url(#ringGrad); stroke-width: 6; stroke-linecap: round;
+  stroke-dasharray: 295; stroke-dashoffset: 103;
+  transition: stroke-dashoffset 1.2s cubic-bezier(0.4,0,0.2,1);
+}
+.ring-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.ring-pct { font-size: 26px; font-weight: 700; color: var(--slate-100); line-height: 1; }
+.ring-label { font-size: 10px; color: var(--slate-500); margin-top: 2px; }
+.ring-glow-halo {
+  position: absolute; inset: -8px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(59,130,246,0.12) 0%, transparent 70%);
+  animation: haloBreath 3s ease-in-out infinite;
+}
+@keyframes haloBreath {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.05); }
+}
+
+/* Sidebar nav */
+.sidebar-nav { flex: 1; overflow-y: auto; padding: 12px 12px 20px; }
+.nav-section { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; color: var(--slate-600); padding: 8px 8px 4px; }
+.nav-item {
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+  border-radius: var(--radius-sm); cursor: pointer; transition: background 0.2s, color 0.2s;
+  font-size: 12.5px; color: var(--slate-400); position: relative;
+}
+.nav-item:hover { background: rgba(148,163,184,0.06); color: var(--slate-200); }
+.nav-item.active { background: rgba(148,163,184,0.08); color: var(--slate-100); }
+.nav-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.nav-dot.done { background: var(--c-seed); box-shadow: 0 0 6px var(--c-seed-glow); }
+.nav-dot.running { background: var(--c-invent); box-shadow: 0 0 6px var(--c-invent-glow); animation: dotPulse 2s ease-in-out infinite; }
+.nav-dot.pending { background: var(--slate-700); }
+@keyframes dotPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.4); } }
+.nav-item-label { flex: 1; }
+.nav-check { font-size: 11px; color: var(--c-seed); opacity: 0.7; }
+
+/* ── Main Area ── */
+.main-area { flex: 1; display: flex; flex-direction: column; min-width: 0; position: relative; }
+.topbar {
+  height: 52px; display: flex; align-items: center; padding: 0 28px; gap: 16px;
+  border-bottom: 1px solid var(--glass-border);
+  background: rgba(15,23,42,0.35); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); z-index: 5;
+}
+.topbar-title { font-size: 14px; font-weight: 600; color: var(--slate-100); }
+.topbar-breadcrumb { font-size: 12px; color: var(--slate-500); }
+.topbar-right { margin-left: auto; display: flex; align-items: center; gap: 18px; }
+.topbar-stat { font-size: 11px; color: var(--slate-500); display: flex; align-items: center; gap: 5px; }
+.topbar-stat .dot { width: 5px; height: 5px; border-radius: 50%; }
+.live-dot {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--c-seed);
+  box-shadow: 0 0 8px var(--c-seed-glow); animation: liveBlink 1.5s ease-in-out infinite;
+}
+@keyframes liveBlink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+/* ── Content Scroll ── */
+.content { flex: 1; overflow-y: auto; padding: 28px; position: relative; }
+.content::-webkit-scrollbar { width: 6px; }
+.content::-webkit-scrollbar-track { background: transparent; }
+.content::-webkit-scrollbar-thumb { background: var(--slate-700); border-radius: 3px; }
+
+/* ── Tree Container ── */
+.pipeline-tree { position: relative; max-width: 820px; }
+
+/* ── Tree Trunk ── */
+.tree-trunk {
+  position: absolute; left: 18px; top: 0; bottom: 0; width: 2px; opacity: 0.25; z-index: 0;
+  background: linear-gradient(180deg,
+    var(--c-seed) 0%, var(--c-seed) 22%,
+    var(--c-hypo) 22%, var(--c-hypo) 48%,
+    var(--c-invent) 48%, var(--c-invent) 75%,
+    var(--c-paper) 75%, var(--c-paper) 100%);
+}
+.tree-trunk::after {
+  content: ''; position: absolute; left: -1px; top: 0; width: 4px; height: 40px;
+  border-radius: 2px; background: linear-gradient(180deg, transparent, var(--c-invent), transparent);
+  animation: trunkFlow 4s linear infinite; filter: blur(1px);
+}
+@keyframes trunkFlow {
+  0% { top: -40px; opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { top: 100%; opacity: 0; }
+}
+
+/* ── Module Group ── */
+.module-group { position: relative; margin-bottom: 8px; }
+.module-group:last-child { margin-bottom: 0; }
+
+/* ── Module Card (STRONG GLASSMORPHISM) ───────────────────── */
+.module-card {
+  position: relative;
+  margin-left: 42px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all var(--transition-smooth);
+  overflow: hidden;
+  z-index: 2;
+}
+
+/* Primary glass background -- backdrop-blur 16px, rgba bg */
+.module-card .glass-bg {
+  position: absolute;
+  inset: 0;
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  z-index: 0;
+  transition: border-color 0.3s ease, background 0.3s ease;
+}
+
+/* Glass shine -- specular highlight that follows mouse */
+.module-card .glass-shine {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius);
+  pointer-events: none;
+  z-index: 1;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.08) 0%,
+    rgba(255, 255, 255, 0.02) 40%,
+    transparent 60%
+  );
+  transition: background 0.15s ease;
+}
+
+/* Top edge frosted highlight (glass refraction effect) */
+.module-card .glass-bg::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.08) 30%,
+    rgba(255, 255, 255, 0.12) 50%,
+    rgba(255, 255, 255, 0.08) 70%,
+    transparent 100%
+  );
+  border-radius: 1px;
+}
+
+/* Color accent strip on left edge */
+.module-card .accent-strip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  border-radius: var(--radius) 0 0 var(--radius);
+  z-index: 3;
+}
+
+.module-card[data-module="seed"] .accent-strip { background: var(--c-seed); }
+.module-card[data-module="hypo"] .accent-strip { background: var(--c-hypo); }
+.module-card[data-module="invent"] .accent-strip { background: var(--c-invent); }
+.module-card[data-module="paper"] .accent-strip { background: var(--c-paper); }
+
+/* ── Halo Glow (colored glow behind active card) ── */
+.module-card .halo {
+  position: absolute;
+  inset: -14px;
+  border-radius: calc(var(--radius) + 14px);
+  opacity: 0;
+  transition: opacity 0.5s ease;
+  z-index: -1;
+  filter: blur(22px);
+}
+
+.module-card[data-module="seed"] .halo { background: var(--c-seed-glow); }
+.module-card[data-module="hypo"] .halo { background: var(--c-hypo-glow); }
+.module-card[data-module="invent"] .halo { background: var(--c-invent-glow); }
+.module-card[data-module="paper"] .halo { background: var(--c-paper-glow); }
+
+.module-card.active .halo {
+  opacity: 0.5;
+  animation: haloGlow 3s ease-in-out infinite;
+}
+
+@keyframes haloGlow {
+  0%, 100% { opacity: 0.35; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.03); }
+}
+
+/* ── Inner glow ring on active cards ── */
+.module-card .inner-glow {
+  position: absolute; inset: 0; border-radius: var(--radius);
+  pointer-events: none; z-index: 1; opacity: 0; transition: opacity 0.4s ease;
+}
+.module-card.active .inner-glow { opacity: 1; }
+.module-card[data-module="seed"] .inner-glow { box-shadow: inset 0 0 30px rgba(34,197,94,0.06), inset 0 1px 0 rgba(34,197,94,0.1); }
+.module-card[data-module="hypo"] .inner-glow { box-shadow: inset 0 0 30px rgba(167,139,250,0.06), inset 0 1px 0 rgba(167,139,250,0.1); }
+.module-card[data-module="invent"] .inner-glow { box-shadow: inset 0 0 30px rgba(59,130,246,0.06), inset 0 1px 0 rgba(59,130,246,0.1); }
+.module-card[data-module="paper"] .inner-glow { box-shadow: inset 0 0 30px rgba(245,158,11,0.06), inset 0 1px 0 rgba(245,158,11,0.1); }
+
+/* Hover & active states */
+.module-card:hover {
+  transform: translateY(-1px);
+}
+
+.module-card:hover .glass-bg {
+  border-color: rgba(148, 163, 184, 0.2);
+}
+
+.module-card.active .glass-bg {
+  border-color: rgba(148, 163, 184, 0.18);
+  background: rgba(15, 23, 42, 0.55);
+}
+
+/* ── Shimmer sweep on active cards ── */
+.module-card .shimmer {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius);
+  pointer-events: none;
+  z-index: 2;
+  opacity: 0;
+  background: linear-gradient(
+    110deg,
+    transparent 25%,
+    rgba(255, 255, 255, 0.04) 45%,
+    rgba(255, 255, 255, 0.08) 50%,
+    rgba(255, 255, 255, 0.04) 55%,
+    transparent 75%
+  );
+  background-size: 250% 100%;
+  animation: shimmerSweep 4s ease-in-out infinite;
+}
+
+.module-card.active .shimmer { opacity: 1; }
+
+@keyframes shimmerSweep {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── Card Inner Content ── */
+.card-inner {
+  position: relative;
+  z-index: 2;
+  padding: 14px 18px;
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.card-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  flex-shrink: 0;
+  position: relative;
+}
+
+/* Glass shine on icon */
+.card-icon::after {
+  content: ''; position: absolute; inset: 0; border-radius: 8px; pointer-events: none;
+  background: linear-gradient(135deg, rgba(255,255,255,0.1) 0%, transparent 60%);
+}
+
+.module-card[data-module="seed"] .card-icon { background: var(--c-seed-dim); }
+.module-card[data-module="hypo"] .card-icon { background: var(--c-hypo-dim); }
+.module-card[data-module="invent"] .card-icon { background: var(--c-invent-dim); }
+.module-card[data-module="paper"] .card-icon { background: var(--c-paper-dim); }
+
+.card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--slate-100);
+  flex: 1;
+}
+
+.card-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 6px;
+  letter-spacing: 0.3px;
+}
+
+.badge-done {
+  background: var(--c-seed-dim);
+  color: var(--c-seed);
+}
+
+.badge-running {
+  background: var(--c-invent-dim);
+  color: var(--c-invent);
+  animation: badgePulse 2s ease-in-out infinite;
+}
+
+.badge-pending {
+  background: rgba(100, 116, 139, 0.12);
+  color: var(--slate-500);
+}
+
+@keyframes badgePulse {
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 1; background: rgba(59, 130, 246, 0.22); }
+}
+
+/* ── Collapse Toggle Button ── */
+.collapse-toggle {
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  border: none;
+  background: rgba(148, 163, 184, 0.06);
+  color: var(--slate-400);
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+.collapse-toggle:hover {
+  background: rgba(148, 163, 184, 0.12);
+  color: var(--slate-200);
+}
+
+.collapse-toggle.collapsed {
+  transform: rotate(-90deg);
+}
+
+/* ── Card Body (collapsible region) ── */
+.card-body {
+  overflow: hidden;
+  transition: max-height 0.4s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.3s ease;
+  max-height: 500px;
+  opacity: 1;
+}
+
+.card-body.collapsed {
+  max-height: 0;
+  opacity: 0;
+}
+
+/* ── Progress Bar ── */
+.card-progress {
+  margin-top: 10px;
+  height: 3px;
+  background: rgba(148, 163, 184, 0.08);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+
+/* Animated glow on progress bar fill */
+.progress-fill::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: -2px;
+  bottom: -2px;
+  width: 20px;
+  border-radius: 2px;
+  filter: blur(3px);
+}
+
+.module-card[data-module="seed"] .progress-fill { background: linear-gradient(90deg, var(--c-seed), rgba(34,197,94,0.5)); }
+.module-card[data-module="seed"] .progress-fill::after { background: var(--c-seed); }
+.module-card[data-module="hypo"] .progress-fill { background: linear-gradient(90deg, var(--c-hypo), rgba(167,139,250,0.5)); }
+.module-card[data-module="hypo"] .progress-fill::after { background: var(--c-hypo); }
+.module-card[data-module="invent"] .progress-fill { background: linear-gradient(90deg, var(--c-invent), rgba(59,130,246,0.5)); }
+.module-card[data-module="invent"] .progress-fill::after { background: var(--c-invent); }
+.module-card[data-module="paper"] .progress-fill { background: linear-gradient(90deg, var(--c-paper), rgba(245,158,11,0.5)); }
+.module-card[data-module="paper"] .progress-fill::after { background: var(--c-paper); }
+
+/* ── Step List ── */
+.step-list {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.step-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  font-size: 12px;
+  color: var(--slate-400);
+  transition: color 0.3s ease;
+}
+
+.step-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: all 0.3s ease;
+}
+
+.step-dot.done { background: var(--c-seed); }
+.step-dot.running {
+  background: var(--c-invent);
+  animation: dotPulse 2s ease-in-out infinite;
+  box-shadow: 0 0 4px var(--c-invent-glow);
+}
+.step-dot.pending { background: var(--slate-700); }
+
+.step-label { flex: 1; }
+
+.step-row.done .step-label {
+  color: var(--slate-500);
+  text-decoration: line-through;
+  text-decoration-color: var(--slate-700);
+}
+
+.step-time {
+  font-size: 10px;
+  color: var(--slate-600);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Tree Node Dots (colored per module) ── */
+.tree-node-dot {
+  position: absolute;
+  left: 14px;
+  top: 22px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  z-index: 3;
+  border: 2px solid var(--slate-950);
+  transition: box-shadow 0.3s ease;
+}
+
+.module-group[data-module="seed"] .tree-node-dot { background: var(--c-seed); box-shadow: 0 0 8px var(--c-seed-glow); }
+.module-group[data-module="hypo"] .tree-node-dot { background: var(--c-hypo); box-shadow: 0 0 8px var(--c-hypo-glow); }
+.module-group[data-module="invent"] .tree-node-dot { background: var(--c-invent); box-shadow: 0 0 8px var(--c-invent-glow); }
+.module-group[data-module="paper"] .tree-node-dot { background: var(--c-paper); box-shadow: 0 0 8px var(--c-paper-glow); }
+
+/* ── Tree Branch Lines (colored per module) ── */
+.tree-branch {
+  position: absolute;
+  left: 19px;
+  top: 27px;
+  width: 23px;
+  height: 2px;
+  z-index: 1;
+}
+
+.module-group[data-module="seed"] .tree-branch { background: var(--c-seed); opacity: 0.35; }
+.module-group[data-module="hypo"] .tree-branch { background: var(--c-hypo); opacity: 0.35; }
+.module-group[data-module="invent"] .tree-branch { background: var(--c-invent); opacity: 0.35; }
+.module-group[data-module="paper"] .tree-branch { background: var(--c-paper); opacity: 0.35; }
+
+/* ── Completed Card States ── */
+.module-card.completed {
+  opacity: 0.7;
+}
+
+.module-card.completed:hover {
+  opacity: 0.85;
+}
+
+.module-card.completed-collapsed .card-inner {
+  padding: 10px 18px;
+}
+
+/* ── Entrance Animations (staggered fade-slide) ── */
+.module-group {
+  opacity: 0;
+  transform: translateY(16px);
+  animation: fadeSlideIn 0.5s ease forwards;
+}
+
+.module-group:nth-child(1) { animation-delay: 0.10s; }
+.module-group:nth-child(2) { animation-delay: 0.20s; }
+.module-group:nth-child(3) { animation-delay: 0.35s; }
+.module-group:nth-child(4) { animation-delay: 0.50s; }
+.module-group:nth-child(5) { animation-delay: 0.60s; }
+.module-group:nth-child(6) { animation-delay: 0.70s; }
+.module-group:nth-child(7) { animation-delay: 0.80s; }
+
+@keyframes fadeSlideIn {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── Detail Panel (glass sidebar) ── */
+.detail-panel {
+  width: 360px;
+  min-width: 360px;
+  border-left: 1px solid var(--glass-border);
+  background: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  display: flex;
+  flex-direction: column;
+  z-index: 5;
+  position: relative;
+}
+
+/* Detail panel frosted edge highlight */
+.detail-panel::before {
+  content: ''; position: absolute; top: 0; left: 0; bottom: 0; width: 1px; pointer-events: none;
+  background: linear-gradient(180deg, transparent 0%, rgba(255,255,255,0.05) 20%, rgba(255,255,255,0.03) 50%, rgba(255,255,255,0.05) 80%, transparent 100%);
+}
+
+.detail-header {
+  height: 52px;
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  gap: 10px;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.detail-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--slate-100);
+}
+
+.detail-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.detail-body::-webkit-scrollbar { width: 4px; }
+.detail-body::-webkit-scrollbar-thumb {
+  background: var(--slate-700);
+  border-radius: 2px;
+}
+
+.detail-section {
+  margin-bottom: 20px;
+}
+
+.detail-section-title {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--slate-600);
+  margin-bottom: 10px;
+}
+
+/* Detail glass cards (glassmorphism in panel) */
+.detail-card {
+  position: relative;
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  margin-bottom: 8px;
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+  overflow: hidden;
+}
+
+/* Glass shine on detail cards */
+.detail-card::before {
+  content: ''; position: absolute; inset: 0; border-radius: var(--radius-sm); pointer-events: none;
+  background: linear-gradient(135deg, rgba(255,255,255,0.04) 0%, transparent 50%);
+}
+/* Top frosted edge on detail cards */
+.detail-card::after {
+  content: ''; position: absolute; top: 0; left: 15%; right: 15%; height: 1px; pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent);
+}
+
+.detail-card-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--slate-200);
+  margin-bottom: 6px;
+}
+
+.detail-card-text {
+  font-size: 11.5px;
+  color: var(--slate-400);
+  line-height: 1.6;
+}
+
+.tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.tag {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: rgba(148, 163, 184, 0.08);
+  color: var(--slate-400);
+  border: 1px solid rgba(148, 163, 184, 0.06);
+}
+
+/* Log list */
+.log-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.log-line {
+  display: flex;
+  gap: 8px;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.log-time {
+  color: var(--slate-600);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+  min-width: 50px;
+}
+
+.log-msg { color: var(--slate-400); }
+.log-msg.success { color: var(--c-seed); }
+.log-msg.info { color: var(--c-invent); }
+
+/* Metrics grid */
+.metrics-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.metric-box {
+  text-align: center;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  background: rgba(15, 23, 42, 0.5);
+  border: 1px solid var(--glass-border);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Glass shine on metric boxes */
+.metric-box::before {
+  content: ''; position: absolute; inset: 0; border-radius: var(--radius-sm); pointer-events: none;
+  background: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, transparent 50%);
+}
+
+.metric-val {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--slate-100);
+  line-height: 1;
+}
+
+.metric-label {
+  font-size: 10px;
+  color: var(--slate-500);
+  margin-top: 4px;
+}
+
+/* Sidebar ticker */
+.sidebar-ticker {
+  padding: 12px 16px; border-top: 1px solid var(--glass-border);
+  font-size: 10px; color: var(--slate-500); display: flex; flex-direction: column; gap: 6px;
+}
+.ticker-line { display: flex; align-items: center; gap: 6px; opacity: 0; animation: tickerIn 0.4s ease forwards; }
+.ticker-line:nth-child(1) { animation-delay: 0.3s; }
+.ticker-line:nth-child(2) { animation-delay: 0.6s; }
+.ticker-line:nth-child(3) { animation-delay: 0.9s; }
+@keyframes tickerIn { to { opacity: 1; } }
+.ticker-dot { width: 4px; height: 4px; border-radius: 50%; flex-shrink: 0; }
+
+@media (max-width: 1100px) { .detail-panel { display: none; } }
+@media (max-width: 800px) { .sidebar { width: 200px; min-width: 200px; } }
+</style>
+</head>
+<body>
+
+<!-- Background mesh gradient orbs -->
+<div class="bg-mesh">
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+  <div class="orb orb-3"></div>
+  <div class="orb orb-4"></div>
+</div>
+
+<!-- Noise texture overlay for frosted glass -->
+<div class="bg-noise"></div>
+
+<!-- Particle canvas -->
+<canvas id="particleCanvas"></canvas>
+
+<!-- SVG Defs -->
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="var(--c-seed)" />
+      <stop offset="50%" stop-color="var(--c-invent)" />
+      <stop offset="100%" stop-color="var(--c-hypo)" />
+    </linearGradient>
+  </defs>
+</svg>
+
+<div class="shell">
+  <!-- ======== SIDEBAR ======== -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-logo">AI</div>
+      <span class="sidebar-brand">AI Inventor</span>
+    </div>
+    <div class="sidebar-run-info">
+      <div class="run-label">Current Run</div>
+      <div class="run-title">Photocatalytic CO2 Reduction via Perovskite Heterostructures</div>
+      <div class="run-meta">
+        <span>Run #247</span>
+        <span>3h 42m</span>
+      </div>
+    </div>
+    <div class="sidebar-ring-wrap">
+      <div class="ring-container">
+        <div class="ring-glow-halo"></div>
+        <svg class="ring-svg" viewBox="0 0 110 110">
+          <circle class="ring-bg" cx="55" cy="55" r="47" />
+          <circle class="ring-fill" cx="55" cy="55" r="47" />
+        </svg>
+        <div class="ring-center">
+          <span class="ring-pct">65%</span>
+          <span class="ring-label">Pipeline</span>
+        </div>
+      </div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-section">Modules</div>
+      <div class="nav-item" data-target="seed">
+        <span class="nav-dot done"></span>
+        <span class="nav-item-label">Seed Hypotheses</span>
+        <span class="nav-check">&#10003;</span>
+      </div>
+      <div class="nav-item" data-target="hypo-gen">
+        <span class="nav-dot done"></span>
+        <span class="nav-item-label">Generate Hypothesis</span>
+        <span class="nav-check">&#10003;</span>
+      </div>
+      <div class="nav-item active" data-target="hypo-review">
+        <span class="nav-dot running"></span>
+        <span class="nav-item-label">Review Hypothesis</span>
+      </div>
+      <div class="nav-item" data-target="gen-strat">
+        <span class="nav-dot pending"></span>
+        <span class="nav-item-label">Generate Strategy</span>
+      </div>
+      <div class="nav-item" data-target="gen-plan">
+        <span class="nav-dot pending"></span>
+        <span class="nav-item-label">Generate Plan</span>
+      </div>
+      <div class="nav-item" data-target="gen-paper">
+        <span class="nav-dot pending"></span>
+        <span class="nav-item-label">Generate Paper</span>
+      </div>
+      <div class="nav-item" data-target="gen-repo">
+        <span class="nav-dot pending"></span>
+        <span class="nav-item-label">Paper Repository</span>
+      </div>
+    </nav>
+    <div class="sidebar-ticker">
+      <div class="ticker-line">
+        <span class="ticker-dot" style="background:var(--c-invent)"></span>
+        <span>Reviewing hypothesis feasibility...</span>
+      </div>
+      <div class="ticker-line">
+        <span class="ticker-dot" style="background:var(--c-seed)"></span>
+        <span>Seed hypotheses completed (12/12)</span>
+      </div>
+      <div class="ticker-line">
+        <span class="ticker-dot" style="background:var(--c-hypo)"></span>
+        <span>3 hypotheses generated, 1 selected</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ======== MAIN AREA ======== -->
+  <div class="main-area">
+    <div class="topbar">
+      <span class="topbar-title">Pipeline Execution</span>
+      <span class="topbar-breadcrumb">/ Hypothesis Loop / Review</span>
+      <div class="topbar-right">
+        <div class="topbar-stat">
+          <span class="dot" style="background:var(--c-seed);width:5px;height:5px;border-radius:50%"></span>
+          4 done
+        </div>
+        <div class="topbar-stat">
+          <span class="dot" style="background:var(--c-invent);width:5px;height:5px;border-radius:50%"></span>
+          1 running
+        </div>
+        <div class="topbar-stat">
+          <span class="dot" style="background:var(--slate-600);width:5px;height:5px;border-radius:50%"></span>
+          5 pending
+        </div>
+        <div class="live-dot" title="Live"></div>
+      </div>
+    </div>
+
+    <div class="content" id="contentScroll">
+      <div class="pipeline-tree">
+        <div class="tree-trunk"></div>
+
+        <!-- MODULE 1: Seed Hypotheses (COMPLETED / COLLAPSED) -->
+        <div class="module-group" data-module="seed">
+          <div class="tree-node-dot"></div>
+          <div class="tree-branch"></div>
+          <div class="module-card completed completed-collapsed" data-module="seed" data-card="seed">
+            <div class="halo"></div>
+            <div class="glass-bg"></div>
+            <div class="glass-shine"></div>
+            <div class="shimmer"></div>
+            <div class="inner-glow"></div>
+            <div class="accent-strip"></div>
+            <div class="card-inner">
+              <div class="card-head">
+                <div class="card-icon">&#127793;</div>
+                <span class="card-title">Seed Hypotheses</span>
+                <span class="card-badge badge-done">DONE</span>
+                <button class="collapse-toggle collapsed" onclick="toggleCollapse(this)" aria-label="Toggle">&#9660;</button>
+              </div>
+              <div class="card-body collapsed">
+                <div class="card-progress"><div class="progress-fill" style="width:100%"></div></div>
+                <div class="step-list">
+                  <div class="step-row done"><span class="step-dot done"></span><span class="step-label">Load knowledge graph</span><span class="step-time">0.8s</span></div>
+                  <div class="step-row done"><span class="step-dot done"></span><span class="step-label">Extract research gaps</span><span class="step-time">4.2s</span></div>
+                  <div class="step-row done"><span class="step-dot done"></span><span class="step-label">Generate seed hypotheses (12)</span><span class="step-time">18.6s</span></div>
+                  <div class="step-row done"><span class="step-dot done"></span><span class="step-label">Rank by novelty score</span><span class="step-time">2.1s</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- MODULE 2: Generate Hypothesis (COMPLETED / COLLAPSED) -->
+        <div class="module-group" data-module="hypo">
+          <div class="tree-node-dot"></div>
+          <div class="tree-branch"></div>
+          <div class="module-card completed completed-collapsed" data-module="hypo" data-card="hypo-gen">
+            <div class="halo"></div>
+            <div class="glass-bg"></div>
+            <div class="glass-shine"></div>
+            <div class="shimmer"></div>
+            <div class="inner-glow"></div>
+            <div class="accent-strip"></div>
+            <div class="card-inner">
+              <div class="card-head">
+                <div class="card-icon">&#128161;</div>
+                <span class="card-title">Generate Hypothesis</span>
+                <span class="card-badge badge-done">DONE</span>
+                <button class="collapse-toggle collapsed" onclick="toggleCollapse(this)" aria-label="Toggle">&#9660;</button>
+              </div>
+              <div class="card-body collapsed">
+                <div class="card-progress"><div class="progress-fill" style="width:100%"></div></div>
+                <div class="step-list">
+                  <div class="step-row done"><span class="step-dot done"></span><span class="step-label">Select top seed candidates</span><span class="step-time">1.2s</span></div>
+                  <div class="step-row done"><span class="step-dot done"></span><span class="step-label">Literature cross-reference</span><span class="step-time">12.4s</span></div>
+                  <div class="step-row done"><span class="step-dot done"></span><span class="step-label">Formulate hypothesis text</span><span class="step-time">8.7s</span></div>
+                  <div class="step-row done"><span class="step-dot done"></span><span class="step-label">Assess novelty score</span><span class="step-time">3.3s</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- MODULE 3: Review Hypothesis (ACTIVE / EXPANDED) -->
+        <div class="module-group" data-module="hypo">
+          <div class="tree-node-dot"></div>
+          <div class="tree-branch"></div>
+          <div class="module-card active" data-module="hypo" data-card="hypo-review">
+            <div class="halo"></div>
+            <div class="glass-bg"></div>
+            <div class="glass-shine"></div>
+            <div class="shimmer"></div>
+            <div class="inner-glow"></div>
+            <div class="accent-strip"></div>
+            <div class="card-inner">
+              <div class="card-head">
+                <div class="card-icon">&#128269;</div>
+                <span class="card-title">Review Hypothesis</span>
+                <span class="card-badge badge-running">RUNNING</span>
+                <button class="collapse-toggle" onclick="toggleCollapse(this)" aria-label="Toggle">&#9660;</button>
+              </div>
+              <div class="card-body">
+                <div class="card-progress"><div class="progress-fill" style="width:58%"></div></div>
+                <div class="step-list">
+                  <div class="step-row done"><span class="step-dot done"></span><span class="step-label">Parse hypothesis structure</span><span class="step-time">1.4s</span></div>
+                  <div class="step-row done"><span class="step-dot done"></span><span class="step-label">Check logical consistency</span><span class="step-time">6.8s</span></div>
+                  <div class="step-row"><span class="step-dot running"></span><span class="step-label">Evaluate experimental feasibility</span><span class="step-time">--</span></div>
+                  <div class="step-row"><span class="step-dot pending"></span><span class="step-label">Assess novelty vs. prior art</span><span class="step-time">--</span></div>
+                  <div class="step-row"><span class="step-dot pending"></span><span class="step-label">Generate review verdict</span><span class="step-time">--</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- MODULE 4: Generate Strategy (PENDING) -->
+        <div class="module-group" data-module="invent">
+          <div class="tree-node-dot"></div>
+          <div class="tree-branch"></div>
+          <div class="module-card" data-module="invent" data-card="gen-strat">
+            <div class="halo"></div>
+            <div class="glass-bg"></div>
+            <div class="glass-shine"></div>
+            <div class="shimmer"></div>
+            <div class="inner-glow"></div>
+            <div class="accent-strip"></div>
+            <div class="card-inner">
+              <div class="card-head">
+                <div class="card-icon">&#128736;</div>
+                <span class="card-title">Generate Strategy</span>
+                <span class="card-badge badge-pending">PENDING</span>
+                <button class="collapse-toggle" onclick="toggleCollapse(this)" aria-label="Toggle">&#9660;</button>
+              </div>
+              <div class="card-body">
+                <div class="step-list">
+                  <div class="step-row"><span class="step-dot pending"></span><span class="step-label">Identify methodology options</span></div>
+                  <div class="step-row"><span class="step-dot pending"></span><span class="step-label">Rank strategies by feasibility</span></div>
+                  <div class="step-row"><span class="step-dot pending"></span><span class="step-label">Select optimal approach</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- MODULE 5: Generate Plan (PENDING) -->
+        <div class="module-group" data-module="invent">
+          <div class="tree-node-dot"></div>
+          <div class="tree-branch"></div>
+          <div class="module-card" data-module="invent" data-card="gen-plan">
+            <div class="halo"></div>
+            <div class="glass-bg"></div>
+            <div class="glass-shine"></div>
+            <div class="shimmer"></div>
+            <div class="inner-glow"></div>
+            <div class="accent-strip"></div>
+            <div class="card-inner">
+              <div class="card-head">
+                <div class="card-icon">&#128203;</div>
+                <span class="card-title">Generate Plan</span>
+                <span class="card-badge badge-pending">PENDING</span>
+                <button class="collapse-toggle" onclick="toggleCollapse(this)" aria-label="Toggle">&#9660;</button>
+              </div>
+              <div class="card-body">
+                <div class="step-list">
+                  <div class="step-row"><span class="step-dot pending"></span><span class="step-label">Draft experimental outline</span></div>
+                  <div class="step-row"><span class="step-dot pending"></span><span class="step-label">Define evaluation criteria</span></div>
+                  <div class="step-row"><span class="step-dot pending"></span><span class="step-label">Estimate resource requirements</span></div>
+                  <div class="step-row"><span class="step-dot pending"></span><span class="step-label">Finalize plan document</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- MODULE 6: Generate Paper (PENDING) -->
+        <div class="module-group" data-module="paper">
+          <div class="tree-node-dot"></div>
+          <div class="tree-branch"></div>
+          <div class="module-card" data-module="paper" data-card="gen-paper">
+            <div class="halo"></div>
+            <div class="glass-bg"></div>
+            <div class="glass-shine"></div>
+            <div class="shimmer"></div>
+            <div class="inner-glow"></div>
+            <div class="accent-strip"></div>
+            <div class="card-inner">
+              <div class="card-head">
+                <div class="card-icon">&#128196;</div>
+                <span class="card-title">Generate Paper Text</span>
+                <span class="card-badge badge-pending">PENDING</span>
+                <button class="collapse-toggle" onclick="toggleCollapse(this)" aria-label="Toggle">&#9660;</button>
+              </div>
+              <div class="card-body">
+                <div class="step-list">
+                  <div class="step-row"><span class="step-dot pending"></span><span class="step-label">Draft abstract & introduction</span></div>
+                  <div class="step-row"><span class="step-dot pending"></span><span class="step-label">Write methodology section</span></div>
+                  <div class="step-row"><span class="step-dot pending"></span><span class="step-label">Generate results narrative</span></div>
+                  <div class="step-row"><span class="step-dot pending"></span><span class="step-label">Compile conclusions</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- MODULE 7: Paper Repository (PENDING) -->
+        <div class="module-group" data-module="paper">
+          <div class="tree-node-dot"></div>
+          <div class="tree-branch"></div>
+          <div class="module-card" data-module="paper" data-card="gen-repo">
+            <div class="halo"></div>
+            <div class="glass-bg"></div>
+            <div class="glass-shine"></div>
+            <div class="shimmer"></div>
+            <div class="inner-glow"></div>
+            <div class="accent-strip"></div>
+            <div class="card-inner">
+              <div class="card-head">
+                <div class="card-icon">&#128230;</div>
+                <span class="card-title">Paper Repository</span>
+                <span class="card-badge badge-pending">PENDING</span>
+                <button class="collapse-toggle" onclick="toggleCollapse(this)" aria-label="Toggle">&#9660;</button>
+              </div>
+              <div class="card-body">
+                <div class="step-list">
+                  <div class="step-row"><span class="step-dot pending"></span><span class="step-label">Generate artifact demos</span></div>
+                  <div class="step-row"><span class="step-dot pending"></span><span class="step-label">Create visualizations</span></div>
+                  <div class="step-row"><span class="step-dot pending"></span><span class="step-label">Compile full paper PDF</span></div>
+                  <div class="step-row"><span class="step-dot pending"></span><span class="step-label">Build repository structure</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== DETAIL PANEL ======== -->
+  <aside class="detail-panel">
+    <div class="detail-header">
+      <span style="font-size:14px">&#128269;</span>
+      <span class="detail-title">Review Hypothesis</span>
+      <span class="card-badge badge-running" style="margin-left:auto">RUNNING</span>
+    </div>
+    <div class="detail-body">
+      <!-- Hypothesis under review -->
+      <div class="detail-section">
+        <div class="detail-section-title">Hypothesis Under Review</div>
+        <div class="detail-card">
+          <div class="detail-card-title">CsPbBr3/TiO2 Heterojunction for CO2 Photoreduction</div>
+          <div class="detail-card-text">
+            A halide perovskite CsPbBr3 quantum dot / TiO2 nanotube heterojunction can
+            achieve selective CO2-to-CH4 conversion at >85% selectivity under visible light
+            via type-II band alignment that separates photogenerated carriers across the
+            interface, suppressing recombination by 3x compared to bare TiO2.
+          </div>
+          <div class="tag-row">
+            <span class="tag">photocatalysis</span>
+            <span class="tag">perovskite</span>
+            <span class="tag">CO2 reduction</span>
+            <span class="tag">heterojunction</span>
+          </div>
+        </div>
+      </div>
+      <!-- Review scores -->
+      <div class="detail-section">
+        <div class="detail-section-title">Review Scores</div>
+        <div class="metrics-row">
+          <div class="metric-box">
+            <div class="metric-val" style="color:var(--c-seed)">8.4</div>
+            <div class="metric-label">Novelty</div>
+          </div>
+          <div class="metric-box">
+            <div class="metric-val" style="color:var(--c-invent)">7.1</div>
+            <div class="metric-label">Feasibility</div>
+          </div>
+          <div class="metric-box">
+            <div class="metric-val" style="color:var(--c-hypo)">9.2</div>
+            <div class="metric-label">Significance</div>
+          </div>
+          <div class="metric-box">
+            <div class="metric-val" style="color:var(--c-paper)">6.8</div>
+            <div class="metric-label">Clarity</div>
+          </div>
+        </div>
+      </div>
+      <!-- Activity log -->
+      <div class="detail-section">
+        <div class="detail-section-title">Activity Log</div>
+        <div class="log-list">
+          <div class="log-line"><span class="log-time">14:22:08</span><span class="log-msg success">Logical consistency check passed</span></div>
+          <div class="log-line"><span class="log-time">14:22:14</span><span class="log-msg success">No contradictions with prior art found</span></div>
+          <div class="log-line"><span class="log-time">14:22:15</span><span class="log-msg info">Evaluating experimental feasibility...</span></div>
+          <div class="log-line"><span class="log-time">14:22:18</span><span class="log-msg">Checking synthesis pathway viability</span></div>
+          <div class="log-line"><span class="log-time">14:22:22</span><span class="log-msg">Cross-referencing equipment constraints</span></div>
+        </div>
+      </div>
+      <!-- Reviewer notes -->
+      <div class="detail-section">
+        <div class="detail-section-title">Reviewer Notes</div>
+        <div class="detail-card">
+          <div class="detail-card-text">
+            The proposed type-II band alignment between CsPbBr3 QDs and TiO2 nanotubes is
+            well-supported by recent DFT calculations. The 85% selectivity claim requires
+            careful justification -- current benchmarks for similar systems reach ~70%.
+            Recommending additional control experiments in the plan phase.
+          </div>
+        </div>
+      </div>
+      <!-- Prior art -->
+      <div class="detail-section">
+        <div class="detail-section-title">Related Prior Art</div>
+        <div class="detail-card">
+          <div class="detail-card-title">Xu et al. (2023) -- ACS Nano</div>
+          <div class="detail-card-text">
+            CsPbBr3/g-C3N4 Z-scheme for CO2 reduction. Achieved 72% CH4 selectivity.
+            Different support material but similar QD strategy.
+          </div>
+        </div>
+        <div class="detail-card">
+          <div class="detail-card-title">Chen et al. (2024) -- Nature Catalysis</div>
+          <div class="detail-card-text">
+            TiO2 nanotube arrays with molecular co-catalysts. 91% selectivity for CO
+            (not CH4). Demonstrates NT morphology advantage for carrier transport.
+          </div>
+        </div>
+      </div>
+      <!-- Resource usage -->
+      <div class="detail-section">
+        <div class="detail-section-title">Resource Usage</div>
+        <div class="metrics-row">
+          <div class="metric-box">
+            <div class="metric-val" style="color:var(--slate-200)">$2.41</div>
+            <div class="metric-label">Step Cost</div>
+          </div>
+          <div class="metric-box">
+            <div class="metric-val" style="color:var(--slate-200)">$8.73</div>
+            <div class="metric-label">Total Cost</div>
+          </div>
+          <div class="metric-box">
+            <div class="metric-val" style="color:var(--slate-200)">42k</div>
+            <div class="metric-label">Tokens In</div>
+          </div>
+          <div class="metric-box">
+            <div class="metric-val" style="color:var(--slate-200)">8.1k</div>
+            <div class="metric-label">Tokens Out</div>
+          </div>
+        </div>
+      </div>
+      <!-- Iteration info -->
+      <div class="detail-section">
+        <div class="detail-section-title">Iteration Details</div>
+        <div class="detail-card">
+          <div class="detail-card-text">
+            Hypothesis Loop iteration 2 of max 3. Previous iteration scored 6.1
+            overall -- below the 7.0 threshold. Current iteration shows improved
+            specificity in the mechanism description and better alignment with
+            available experimental techniques.
+          </div>
+        </div>
+      </div>
+    </div>
+  </aside>
+</div>
+
+<script>
+/* ================================================================
+   1. PARTICLE SYSTEM
+   ================================================================ */
+(function initParticles() {
+  const canvas = document.getElementById('particleCanvas');
+  const ctx = canvas.getContext('2d');
+  let W, H;
+  const particles = [];
+  const COUNT = 60;
+  const COLORS = [
+    { r:34, g:197, b:94 }, { r:167, g:139, b:250 },
+    { r:59, g:130, b:246 }, { r:245, g:158, b:11 }
+  ];
+
+  function resize() { W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; }
+  window.addEventListener('resize', resize);
+  resize();
+
+  class Particle {
+    constructor() { this.reset(); }
+    reset() {
+      const c = COLORS[Math.floor(Math.random() * COLORS.length)];
+      this.x = Math.random() * W; this.y = Math.random() * H;
+      this.r = Math.random() * 1.8 + 0.4;
+      this.vx = (Math.random() - 0.5) * 0.25;
+      this.vy = (Math.random() - 0.5) * 0.15 - 0.1;
+      this.alpha = Math.random() * 0.35 + 0.05;
+      this.targetAlpha = this.alpha; this.color = c;
+      this.life = Math.random() * 400 + 200; this.age = 0;
+      this.drift = Math.random() * Math.PI * 2;
+      this.driftSpeed = Math.random() * 0.003 + 0.001;
+      this.driftAmp = Math.random() * 0.4 + 0.1;
+    }
+    update() {
+      this.age++; this.drift += this.driftSpeed;
+      this.x += this.vx + Math.sin(this.drift) * this.driftAmp;
+      this.y += this.vy;
+      const lr = this.age / this.life;
+      if (lr < 0.1) this.alpha = this.targetAlpha * (lr / 0.1);
+      else if (lr > 0.85) this.alpha = this.targetAlpha * ((1 - lr) / 0.15);
+      if (this.age > this.life || this.x < -10 || this.x > W + 10 || this.y < -10 || this.y > H + 10) {
+        this.reset(); this.y = H + 5;
+      }
+    }
+    draw() {
+      const { r, g, b } = this.color;
+      ctx.beginPath(); ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${r},${g},${b},${this.alpha})`; ctx.fill();
+      if (this.r > 1) {
+        ctx.beginPath(); ctx.arc(this.x, this.y, this.r * 3, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${r},${g},${b},${this.alpha * 0.15})`; ctx.fill();
+      }
+    }
+  }
+
+  for (let i = 0; i < COUNT; i++) {
+    const p = new Particle(); p.age = Math.floor(Math.random() * p.life); particles.push(p);
+  }
+
+  function animate() {
+    ctx.clearRect(0, 0, W, H);
+    for (let i = 0; i < particles.length; i++) {
+      for (let j = i + 1; j < particles.length; j++) {
+        const dx = particles[i].x - particles[j].x, dy = particles[i].y - particles[j].y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < 120) {
+          ctx.beginPath(); ctx.moveTo(particles[i].x, particles[i].y);
+          ctx.lineTo(particles[j].x, particles[j].y);
+          ctx.strokeStyle = `rgba(148,163,184,${(1 - dist / 120) * 0.06})`;
+          ctx.lineWidth = 0.5; ctx.stroke();
+        }
+      }
+    }
+    particles.forEach(p => { p.update(); p.draw(); });
+    requestAnimationFrame(animate);
+  }
+  animate();
+})();
+
+/* ================================================================
+   2. COLLAPSE / EXPAND
+   ================================================================ */
+function toggleCollapse(btn) {
+  const cardInner = btn.closest('.card-inner');
+  const body = cardInner.querySelector('.card-body');
+  const card = btn.closest('.module-card');
+  btn.classList.toggle('collapsed');
+  body.classList.toggle('collapsed');
+  if (body.classList.contains('collapsed')) card.classList.add('completed-collapsed');
+  else card.classList.remove('completed-collapsed');
+}
+
+/* ================================================================
+   3. NAV CLICK -> SCROLL
+   ================================================================ */
+document.querySelectorAll('.nav-item').forEach(item => {
+  item.addEventListener('click', () => {
+    const target = item.dataset.target;
+    const card = document.querySelector(`[data-card="${target}"]`);
+    if (!card) return;
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    item.classList.add('active');
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const halo = card.querySelector('.halo');
+    if (halo) {
+      halo.style.opacity = '0.8'; halo.style.transition = 'opacity 0.3s ease';
+      setTimeout(() => { halo.style.opacity = ''; halo.style.transition = ''; }, 800);
+    }
+  });
+});
+
+/* ================================================================
+   4. SIMULATED PROGRESS
+   ================================================================ */
+(function simulateProgress() {
+  const activeCard = document.querySelector('.module-card.active');
+  if (!activeCard) return;
+  const progressFill = activeCard.querySelector('.progress-fill');
+  const steps = activeCard.querySelectorAll('.step-row');
+  let currentProgress = 58, currentStep = 2;
+
+  function tick() {
+    currentProgress += Math.random() * 2 + 0.5;
+    if (currentProgress > 95) currentProgress = 95;
+    if (progressFill) progressFill.style.width = currentProgress + '%';
+    if (currentProgress > 72 && currentStep === 2) {
+      completeStep(steps[currentStep]); currentStep = 3; activateStep(steps[currentStep]);
+    }
+    if (currentProgress < 95) setTimeout(tick, 2000 + Math.random() * 3000);
+  }
+  function completeStep(el) {
+    if (!el) return;
+    el.querySelector('.step-dot').classList.remove('running');
+    el.querySelector('.step-dot').classList.add('done');
+    el.classList.add('done');
+    const t = el.querySelector('.step-time');
+    if (t) t.textContent = (Math.random() * 8 + 2).toFixed(1) + 's';
+  }
+  function activateStep(el) {
+    if (!el) return;
+    el.querySelector('.step-dot').classList.remove('pending');
+    el.querySelector('.step-dot').classList.add('running');
+  }
+  setTimeout(tick, 3000);
+})();
+
+/* ================================================================
+   5. CARD CLICK FEEDBACK
+   ================================================================ */
+document.querySelectorAll('.module-card').forEach(card => {
+  card.addEventListener('click', (e) => {
+    if (e.target.closest('.collapse-toggle')) return;
+    card.style.transform = 'scale(0.985)';
+    setTimeout(() => { card.style.transform = ''; }, 150);
+  });
+});
+
+/* ================================================================
+   6. SCROLL-DRIVEN TRUNK OPACITY
+   ================================================================ */
+const contentEl = document.getElementById('contentScroll');
+if (contentEl) {
+  contentEl.addEventListener('scroll', () => {
+    const trunk = document.querySelector('.tree-trunk');
+    if (!trunk) return;
+    const r = contentEl.scrollTop / (contentEl.scrollHeight - contentEl.clientHeight || 1);
+    trunk.style.opacity = 0.2 + r * 0.15;
+  });
+}
+
+/* ================================================================
+   7. RING COUNT-UP
+   ================================================================ */
+(function animateRingPct() {
+  const pctEl = document.querySelector('.ring-pct');
+  if (!pctEl) return;
+  let cur = 0; const target = 65;
+  const step = () => {
+    cur++; if (cur > target) cur = target;
+    pctEl.textContent = cur + '%';
+    if (cur < target) requestAnimationFrame(step);
+  };
+  setTimeout(step, 600);
+})();
+
+/* ================================================================
+   8. GLASS HOVER TILT + DYNAMIC SHINE
+   ================================================================ */
+document.querySelectorAll('.module-card').forEach(card => {
+  card.addEventListener('mousemove', (e) => {
+    const rect = card.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width;
+    const y = (e.clientY - rect.top) / rect.height;
+    const tiltX = (y - 0.5) * 2, tiltY = (x - 0.5) * -2;
+    card.style.transform = `perspective(600px) rotateX(${tiltX}deg) rotateY(${tiltY}deg) translateY(-1px)`;
+    const shine = card.querySelector('.glass-shine');
+    if (shine) {
+      shine.style.background = `radial-gradient(circle at ${x*100}% ${y*100}%, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0.03) 40%, transparent 70%)`;
+    }
+  });
+  card.addEventListener('mouseleave', () => {
+    card.style.transform = '';
+    const shine = card.querySelector('.glass-shine');
+    if (shine) shine.style.background = 'linear-gradient(135deg, rgba(255,255,255,0.08) 0%, rgba(255,255,255,0.02) 40%, transparent 60%)';
+  });
+});
+</script>
+</body>
+</html>

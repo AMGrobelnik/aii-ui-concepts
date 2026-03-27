@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Pipeline Monitor</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #0a0a0f;
+    color: #e2e2e8;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Stage Path (top dots) ── */
+  .stage-path {
+    position: fixed;
+    top: 48px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    align-items: center;
+    gap: 0;
+    z-index: 10;
+  }
+
+  .stage-node {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+    position: relative;
+  }
+
+  .stage-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #1a1a24;
+    border: 2px solid #333;
+    transition: all 0.4s ease;
+    position: relative;
+    z-index: 2;
+  }
+
+  .stage-dot.done {
+    background: #22c55e;
+    border-color: #22c55e;
+    box-shadow: 0 0 6px rgba(34, 197, 94, 0.3);
+  }
+
+  .stage-dot.active {
+    width: 16px;
+    height: 16px;
+    background: #3b82f6;
+    border-color: #3b82f6;
+    box-shadow: 0 0 12px rgba(59, 130, 246, 0.5);
+    animation: pulse-dot 2.5s ease-in-out infinite;
+  }
+
+  .stage-dot.pending {
+    background: #1a1a24;
+    border-color: #2a2a36;
+  }
+
+  @keyframes pulse-dot {
+    0%, 100% { box-shadow: 0 0 8px rgba(59, 130, 246, 0.4); }
+    50% { box-shadow: 0 0 18px rgba(59, 130, 246, 0.7); }
+  }
+
+  .stage-line {
+    width: 48px;
+    height: 2px;
+    background: #2a2a36;
+    position: relative;
+    z-index: 1;
+  }
+
+  .stage-line.done { background: #22c55e; }
+  .stage-line.active {
+    background: linear-gradient(90deg, #22c55e, #3b82f6);
+  }
+
+  .stage-label {
+    position: absolute;
+    top: 28px;
+    font-size: 11px;
+    color: #555;
+    white-space: nowrap;
+    opacity: 0;
+    transform: translateY(-4px);
+    transition: all 0.25s ease;
+    pointer-events: none;
+  }
+
+  .stage-node:hover .stage-label {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .stage-node.selected .stage-label {
+    opacity: 1;
+    transform: translateY(0);
+    color: #888;
+  }
+
+  /* ── Center Card ── */
+  .card-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+  }
+
+  .center-card {
+    width: 100%;
+    max-width: 500px;
+    background: rgba(255, 255, 255, 0.04);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 16px;
+    padding: 32px;
+    cursor: pointer;
+    transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .center-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 16px;
+    padding: 1px;
+    background: linear-gradient(135deg, rgba(255,255,255,0.08), rgba(255,255,255,0.01));
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+
+  .center-card:hover {
+    border-color: rgba(59, 130, 246, 0.15);
+    background: rgba(255, 255, 255, 0.055);
+    transform: translateY(-1px);
+  }
+
+  .center-card.expanded {
+    max-width: 540px;
+  }
+
+  .card-content {
+    animation: fade-in 0.35s ease;
+  }
+
+  @keyframes fade-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .card-title {
+    font-size: 24px;
+    font-weight: 600;
+    color: #f0f0f5;
+    margin-bottom: 6px;
+    line-height: 1.2;
+  }
+
+  .card-subtitle {
+    font-size: 14px;
+    color: #666;
+    margin-bottom: 20px;
+    line-height: 1.4;
+  }
+
+  .progress-bar {
+    width: 100%;
+    height: 3px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 2px;
+    margin-bottom: 18px;
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    background: #3b82f6;
+    border-radius: 2px;
+    transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
+  }
+
+  .progress-fill::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: 0;
+    width: 20px;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3));
+    animation: shimmer 2s ease-in-out infinite;
+  }
+
+  @keyframes shimmer {
+    0%, 100% { opacity: 0; }
+    50% { opacity: 1; }
+  }
+
+  .progress-fill.complete::after { display: none; }
+
+  .card-summary {
+    font-size: 14px;
+    color: #999;
+    line-height: 1.6;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .card-summary.short { -webkit-line-clamp: 2; }
+
+  /* ── Artifact list inside card ── */
+  .artifact-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .artifact-item {
+    font-size: 13.5px;
+    line-height: 1.5;
+    color: #888;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .artifact-item .icon {
+    flex-shrink: 0;
+    width: 16px;
+    text-align: center;
+    margin-top: 1px;
+  }
+
+  .artifact-item.done .icon { color: #22c55e; }
+  .artifact-item.running .icon { color: #3b82f6; }
+  .artifact-item.pending .icon { color: #333; }
+
+  .artifact-item .text { color: #999; }
+  .artifact-item.done .text { color: #aaa; }
+  .artifact-item.running .text { color: #c0c0cc; }
+  .artifact-item.pending .text { color: #555; }
+
+  .artifact-detail {
+    color: #666;
+    margin-left: 4px;
+  }
+
+  /* ── Sub-stage pills ── */
+  .pills-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: 540px;
+    opacity: 0;
+    transform: translateY(12px);
+    transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    pointer-events: none;
+    height: 0;
+    overflow: visible;
+  }
+
+  .pills-row.visible {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+    height: auto;
+  }
+
+  .pill {
+    height: 32px;
+    padding: 0 14px;
+    border-radius: 16px;
+    font-size: 12.5px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.03);
+    color: #666;
+    white-space: nowrap;
+  }
+
+  .pill:hover {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.1);
+    color: #aaa;
+  }
+
+  .pill.done {
+    color: #6ee7a0;
+    border-color: rgba(34, 197, 94, 0.15);
+  }
+  .pill.done:hover { background: rgba(34, 197, 94, 0.08); }
+
+  .pill.active {
+    color: #93bbfc;
+    border-color: rgba(59, 130, 246, 0.25);
+    background: rgba(59, 130, 246, 0.08);
+  }
+
+  .pill.selected {
+    border-color: rgba(59, 130, 246, 0.4);
+    background: rgba(59, 130, 246, 0.12);
+    color: #a8ccff;
+  }
+
+  .pill.pending {
+    color: #444;
+    border-color: rgba(255, 255, 255, 0.03);
+  }
+
+  .pill .status-icon { font-size: 10px; }
+
+  /* ── Footer stats ── */
+  .footer-stats {
+    font-size: 12px;
+    color: #3a3a48;
+    letter-spacing: 0.3px;
+    margin-top: 8px;
+    transition: color 0.3s ease;
+  }
+
+  /* ── Back hint ── */
+  .back-hint {
+    position: fixed;
+    bottom: 32px;
+    font-size: 11px;
+    color: #2a2a36;
+    transition: all 0.3s ease;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .back-hint.visible {
+    opacity: 1;
+    color: #444;
+  }
+</style>
+</head>
+<body>
+
+<!-- Stage Path -->
+<nav class="stage-path" id="stagePath"></nav>
+
+<!-- Center Card + Pills -->
+<div class="card-container">
+  <div class="center-card" id="centerCard">
+    <div class="card-content" id="cardContent"></div>
+  </div>
+
+  <div class="pills-row" id="pillsRow"></div>
+
+  <div class="footer-stats" id="footerStats"></div>
+</div>
+
+<div class="back-hint" id="backHint">click stage dots to navigate</div>
+
+<script>
+// ── Data Model ──
+const stages = [
+  {
+    id: 'seed',
+    label: 'Seed',
+    status: 'done',
+    title: 'Seed Hypotheses',
+    subtitle: 'Complete \u2014 8m 12s \u2014 $1.83',
+    progress: 100,
+    summary: 'Mined 847 papers from OpenAlex, built knowledge graph with 2,341 triples. Identified 12 research gaps across computational linguistics. Selected 5 seed topics.',
+    footer: '08:12 \u2022 $1.83',
+    pills: null
+  },
+  {
+    id: 'hypothesis',
+    label: 'Hypothesis',
+    status: 'done',
+    title: 'Hypothesis Refinement',
+    subtitle: 'Complete \u2014 14m 33s \u2014 $3.21',
+    progress: 100,
+    summary: 'Refined hypothesis over 3 iterations of generation and adversarial review. Score improved from 6.2 to 8.4/10. Final: \u201cCross-lingual Contrastive Pre-training with Synthetic Code-Switching for Low-Resource Transfer\u201d',
+    footer: '14:33 \u2022 $3.21',
+    pills: null
+  },
+  {
+    id: 'invention',
+    label: 'Invention',
+    status: 'active',
+    title: 'Invention Loop',
+    subtitle: 'Iteration 2 of 3 \u2014 Generating Artifacts',
+    progress: 60,
+    summary: '3 of 5 research artifacts complete. Running ablation study to validate contrastive pre-training improvements.',
+    footer: '02:34:17 \u2022 $12.47',
+    drillSummary: 'Building on hypothesis scored 8.4/10. Generated strategies focused on contrastive alignment. 5 artifact plans created. Currently executing artifacts \u2014 baseline shows 17.5% improvement over prior work.',
+    pills: [
+      {
+        id: 'strategy', label: 'Strategy', icon: '\u2713', status: 'done',
+        title: 'Generate Strategy',
+        subtitle: 'Complete \u2014 1m 45s \u2014 $0.52',
+        progress: 100,
+        summary: 'Generated 3 strategic directions for research. Selected: contrastive alignment with code-switching augmentation. Added ablation experiments to address reviewer feedback about missing comparisons.'
+      },
+      {
+        id: 'plan', label: 'Plan', icon: '\u2713', status: 'done',
+        title: 'Generate Plan',
+        subtitle: 'Complete \u2014 2m 10s \u2014 $0.78',
+        progress: 100,
+        summary: 'Produced detailed execution plan with 5 artifacts: contrastive baseline, multilingual pair generation, convergence proof, ablation study, and cross-lingual evaluation benchmark.'
+      },
+      {
+        id: 'artifacts', label: 'Artifacts', icon: '\u25b6', status: 'active',
+        title: 'Generate Artifacts',
+        subtitle: '3 of 5 complete \u2014 12m 08s \u2014 $5.41',
+        progress: 60,
+        items: [
+          { text: 'Contrastive Baseline', detail: 'acc: 0.847 (+17.5%)', status: 'done' },
+          { text: 'Multilingual Pairs', detail: '2,400 examples, 12 langs', status: 'done' },
+          { text: 'Convergence Proof', detail: 'verified in Lean 4', status: 'done' },
+          { text: 'Ablation Study', detail: 'running\u2026 1m 20s', status: 'running' },
+          { text: 'Cross-lingual Eval', detail: 'pending', status: 'pending' }
+        ]
+      },
+      {
+        id: 'paper', label: 'Paper', icon: '\u25cb', status: 'pending',
+        title: 'Generate Paper',
+        subtitle: 'Pending',
+        progress: 0,
+        summary: 'Will compile artifacts and analysis into a structured research paper with abstract, methodology, results, and discussion sections.'
+      },
+      {
+        id: 'review', label: 'Review', icon: '\u25cb', status: 'pending',
+        title: 'Review Paper',
+        subtitle: 'Pending',
+        progress: 0,
+        summary: 'Adversarial review pass to identify weaknesses, missing citations, and logical gaps before final revision.'
+      },
+      {
+        id: 'update', label: 'Update', icon: '\u25cb', status: 'pending',
+        title: 'Update & Revise',
+        subtitle: 'Pending',
+        progress: 0,
+        summary: 'Address review feedback and produce the final iteration of the paper and supporting artifacts.'
+      }
+    ]
+  },
+  {
+    id: 'paper_repo',
+    label: 'Paper Repo',
+    status: 'pending',
+    title: 'Generate Paper Repository',
+    subtitle: 'Pending',
+    progress: 0,
+    summary: 'Will generate the final paper PDF, code repository, visualizations, and supplementary materials.',
+    footer: '\u2014',
+    pills: null
+  }
+];
+
+// ── State ──
+let currentStage = 2;       // index into stages[]
+let drillLevel = 0;         // 0 = top, 1 = module pills, 2 = pill detail
+let selectedPill = null;    // index into pills[]
+
+// ── DOM Refs ──
+const stagePath = document.getElementById('stagePath');
+const centerCard = document.getElementById('centerCard');
+const cardContent = document.getElementById('cardContent');
+const pillsRow = document.getElementById('pillsRow');
+const footerStats = document.getElementById('footerStats');
+const backHint = document.getElementById('backHint');
+
+// ── Render Stage Path ──
+function renderStagePath() {
+  stagePath.innerHTML = '';
+  stages.forEach((s, i) => {
+    const node = document.createElement('div');
+    node.className = 'stage-node' + (i === currentStage ? ' selected' : '');
+
+    const dot = document.createElement('div');
+    dot.className = 'stage-dot ' + s.status;
+
+    const label = document.createElement('div');
+    label.className = 'stage-label';
+    label.textContent = s.label;
+
+    node.appendChild(dot);
+    node.appendChild(label);
+    node.addEventListener('click', () => navigateToStage(i));
+
+    stagePath.appendChild(node);
+
+    if (i < stages.length - 1) {
+      const line = document.createElement('div');
+      line.className = 'stage-line';
+      if (stages[i].status === 'done' && stages[i + 1].status === 'done') {
+        line.classList.add('done');
+      } else if (stages[i].status === 'done' && stages[i + 1].status === 'active') {
+        line.classList.add('active');
+      }
+      stagePath.appendChild(line);
+    }
+  });
+}
+
+// ── Render Card Content ──
+function renderCard() {
+  const stage = stages[currentStage];
+
+  // Reset animation
+  cardContent.style.animation = 'none';
+  cardContent.offsetHeight; // reflow
+  cardContent.style.animation = '';
+
+  if (drillLevel === 0) {
+    // Top-level view: just the stage summary
+    centerCard.classList.remove('expanded');
+    cardContent.innerHTML = buildCardHTML(
+      stage.title,
+      stage.subtitle,
+      stage.progress,
+      stage.summary,
+      true
+    );
+    pillsRow.classList.remove('visible');
+    footerStats.textContent = stage.footer;
+    backHint.classList.remove('visible');
+
+  } else if (drillLevel === 1) {
+    // Module-level: show pills + module summary
+    centerCard.classList.add('expanded');
+    const summary = stage.drillSummary || stage.summary;
+    cardContent.innerHTML = buildCardHTML(
+      stage.title,
+      stage.subtitle,
+      stage.progress,
+      summary,
+      false
+    );
+    renderPills(stage.pills);
+    pillsRow.classList.add('visible');
+    footerStats.textContent = stage.footer;
+    backHint.classList.add('visible');
+
+  } else if (drillLevel === 2 && selectedPill !== null) {
+    // Pill detail
+    centerCard.classList.add('expanded');
+    const pill = stage.pills[selectedPill];
+    if (pill.items) {
+      cardContent.innerHTML = buildArtifactCardHTML(pill);
+    } else {
+      cardContent.innerHTML = buildCardHTML(
+        pill.title,
+        pill.subtitle,
+        pill.progress,
+        pill.summary,
+        false
+      );
+    }
+    highlightPill(selectedPill);
+    footerStats.textContent = stage.footer;
+    backHint.classList.add('visible');
+  }
+}
+
+function buildCardHTML(title, subtitle, progress, summary, shortSummary) {
+  const clampClass = shortSummary ? ' short' : '';
+  const completeClass = progress === 100 ? ' complete' : '';
+  return `
+    <h2 class="card-title">${esc(title)}</h2>
+    <p class="card-subtitle">${esc(subtitle)}</p>
+    <div class="progress-bar">
+      <div class="progress-fill${completeClass}" style="width:${progress}%"></div>
+    </div>
+    <p class="card-summary${clampClass}">${esc(summary)}</p>
+  `;
+}
+
+function buildArtifactCardHTML(pill) {
+  const completeClass = pill.progress === 100 ? ' complete' : '';
+  const icons = { done: '\u2713', running: '\u25b6', pending: '\u25cb' };
+  let listHTML = '<ul class="artifact-list">';
+  pill.items.forEach(item => {
+    listHTML += `
+      <li class="artifact-item ${item.status}">
+        <span class="icon">${icons[item.status]}</span>
+        <span class="text">${esc(item.text)} <span class="artifact-detail">\u2014 ${esc(item.detail)}</span></span>
+      </li>`;
+  });
+  listHTML += '</ul>';
+
+  return `
+    <h2 class="card-title">${esc(pill.title)}</h2>
+    <p class="card-subtitle">${esc(pill.subtitle)}</p>
+    <div class="progress-bar">
+      <div class="progress-fill${completeClass}" style="width:${pill.progress}%"></div>
+    </div>
+    ${listHTML}
+  `;
+}
+
+// ── Render Pills ──
+function renderPills(pills) {
+  if (!pills) { pillsRow.innerHTML = ''; return; }
+  pillsRow.innerHTML = '';
+  pills.forEach((p, i) => {
+    const pill = document.createElement('div');
+    pill.className = 'pill ' + p.status;
+    pill.innerHTML = `<span class="status-icon">${esc(p.icon)}</span> ${esc(p.label)}`;
+    pill.addEventListener('click', (e) => {
+      e.stopPropagation();
+      selectPill(i);
+    });
+    pillsRow.appendChild(pill);
+  });
+}
+
+function highlightPill(idx) {
+  const pills = pillsRow.querySelectorAll('.pill');
+  pills.forEach((p, i) => {
+    p.classList.toggle('selected', i === idx);
+  });
+}
+
+// ── Navigation ──
+function navigateToStage(idx) {
+  currentStage = idx;
+  drillLevel = 0;
+  selectedPill = null;
+  renderStagePath();
+  renderCard();
+}
+
+function drillDown() {
+  const stage = stages[currentStage];
+  if (drillLevel === 0 && stage.pills) {
+    drillLevel = 1;
+    selectedPill = null;
+    renderCard();
+  }
+}
+
+function selectPill(idx) {
+  if (drillLevel >= 1) {
+    drillLevel = 2;
+    selectedPill = idx;
+    renderCard();
+  }
+}
+
+// ── Card click handler ──
+centerCard.addEventListener('click', () => {
+  if (drillLevel === 0) {
+    drillDown();
+  } else if (drillLevel === 2) {
+    // Click card body => back to module level
+    drillLevel = 1;
+    selectedPill = null;
+    renderCard();
+  }
+});
+
+// ── Escape to go back ──
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    if (drillLevel === 2) {
+      drillLevel = 1;
+      selectedPill = null;
+      renderCard();
+    } else if (drillLevel === 1) {
+      drillLevel = 0;
+      selectedPill = null;
+      renderCard();
+    }
+  }
+});
+
+// ── Utility ──
+function esc(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+// ── Init ──
+renderStagePath();
+renderCard();
+</script>
+</body>
+</html>

@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Flowing Gradient Bar</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* ── Reset & Base ──────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #0e1117;
+    --surface:   #161b22;
+    --surface-2: #1c2230;
+    --border:    #2a3140;
+    --text:      #e2e8f0;
+    --text-dim:  #8b95a5;
+    --text-muted:#5a6478;
+
+    --seed-a:    #34d399; --seed-b:    #10b981;
+    --hypo-a:    #a78bfa; --hypo-b:    #8b5cf6;
+    --inv-a:     #60a5fa; --inv-b:     #3b82f6;
+    --paper-a:   #f59e0b; --paper-b:   #d97706;
+
+    --bar-h:     42px;
+    --bar-radius:21px;
+    --strip-h:   80px;
+  }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Top Strip ─────────────────────────────────────────────── */
+  .top-strip {
+    width: 100%;
+    height: var(--strip-h);
+    background: linear-gradient(180deg, #131720 0%, var(--bg) 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 32px;
+    border-bottom: 1px solid var(--border);
+    position: relative;
+  }
+
+  /* ── Gradient Bar Container ────────────────────────────────── */
+  .bar-wrap {
+    width: 100%;
+    max-width: 860px;
+    height: var(--bar-h);
+    display: flex;
+    position: relative;
+    border-radius: var(--bar-radius);
+    overflow: hidden;
+    background: var(--surface);
+    border: 1px solid var(--border);
+  }
+
+  /* Each segment */
+  .bar-seg {
+    position: relative;
+    height: 100%;
+    overflow: hidden;
+    cursor: pointer;
+    transition: opacity 0.3s;
+  }
+  .bar-seg:not(.seg-active):hover { opacity: 0.85; }
+
+  /* Proportional widths: Seed 12%, Hypo 22%, Invention 40%, Paper 26% */
+  .bar-seg[data-mod="seed"]      { width: 12%; }
+  .bar-seg[data-mod="hypothesis"]{ width: 22%; }
+  .bar-seg[data-mod="invention"] { width: 40%; }
+  .bar-seg[data-mod="paper"]     { width: 26%; }
+
+  /* Gradient fills */
+  .bar-fill {
+    position: absolute;
+    top: 0; left: 0;
+    height: 100%;
+    transition: width 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .bar-seg[data-mod="seed"] .bar-fill {
+    width: 100%;
+    background: linear-gradient(90deg, var(--seed-a), var(--seed-b));
+  }
+  .bar-seg[data-mod="hypothesis"] .bar-fill {
+    width: 100%;
+    background: linear-gradient(90deg, var(--hypo-a), var(--hypo-b));
+  }
+  .bar-seg[data-mod="invention"] .bar-fill {
+    width: 60%;
+    background: linear-gradient(90deg, var(--inv-a), var(--inv-b));
+  }
+  .bar-seg[data-mod="paper"] .bar-fill {
+    width: 0%;
+    background: linear-gradient(90deg, var(--paper-a), var(--paper-b));
+  }
+
+  /* Segment dividers */
+  .bar-seg + .bar-seg::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 6px; bottom: 6px;
+    width: 1px;
+    background: rgba(255,255,255,0.08);
+    z-index: 4;
+  }
+
+  /* Segment labels */
+  .bar-label {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.85);
+    z-index: 5;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.5);
+    pointer-events: none;
+    user-select: none;
+  }
+  .bar-seg[data-mod="paper"] .bar-label {
+    color: var(--text-muted);
+    text-shadow: none;
+  }
+
+  /* ── Sparkle / Shimmer Edge ────────────────────────────────── */
+  .sparkle-edge {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    width: 28px;
+    z-index: 3;
+    pointer-events: none;
+    overflow: visible;
+  }
+  /* Position it at the fill edge of invention (60% of segment) */
+  .bar-seg[data-mod="invention"] .sparkle-edge {
+    left: calc(60% - 14px);
+  }
+
+  /* Shimmer glow behind particles */
+  .sparkle-edge::before {
+    content: '';
+    position: absolute;
+    top: -4px; bottom: -4px;
+    left: 6px;
+    width: 16px;
+    background: radial-gradient(ellipse at center, rgba(96,165,250,0.6) 0%, transparent 70%);
+    animation: shimmerPulse 2s ease-in-out infinite;
+  }
+
+  @keyframes shimmerPulse {
+    0%, 100% { opacity: 0.5; transform: scaleY(0.8); }
+    50%      { opacity: 1;   transform: scaleY(1.2); }
+  }
+
+  /* Canvas for sparkle particles */
+  .sparkle-canvas {
+    position: absolute;
+    top: -20px;
+    left: -10px;
+    width: 48px;
+    height: calc(100% + 40px);
+    z-index: 6;
+    pointer-events: none;
+  }
+
+  /* Active segment indicator (bottom glow line) */
+  .bar-seg.seg-active::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 10%; right: 10%;
+    height: 3px;
+    border-radius: 3px 3px 0 0;
+    z-index: 5;
+    animation: glowIn 0.4s ease;
+  }
+  .bar-seg.seg-active[data-mod="seed"]::after       { background: var(--seed-a);  box-shadow: 0 0 12px var(--seed-a); }
+  .bar-seg.seg-active[data-mod="hypothesis"]::after  { background: var(--hypo-a);  box-shadow: 0 0 12px var(--hypo-a); }
+  .bar-seg.seg-active[data-mod="invention"]::after   { background: var(--inv-a);   box-shadow: 0 0 12px var(--inv-a); }
+  .bar-seg.seg-active[data-mod="paper"]::after       { background: var(--paper-a); box-shadow: 0 0 12px var(--paper-a); }
+
+  @keyframes glowIn {
+    from { opacity: 0; transform: scaleX(0.3); }
+    to   { opacity: 1; transform: scaleX(1); }
+  }
+
+  /* ── Module Tabs ───────────────────────────────────────────── */
+  .tab-row {
+    display: flex;
+    justify-content: center;
+    gap: 4px;
+    padding: 12px 24px 0;
+    max-width: 700px;
+    margin: 0 auto;
+  }
+
+  .tab-btn {
+    flex: 1;
+    max-width: 160px;
+    padding: 8px 0;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-dim);
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    transition: color 0.25s, border-color 0.25s;
+    font-family: inherit;
+  }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active {
+    color: var(--text);
+    font-weight: 600;
+  }
+  .tab-btn.active[data-mod="seed"]       { border-bottom-color: var(--seed-a); }
+  .tab-btn.active[data-mod="hypothesis"] { border-bottom-color: var(--hypo-a); }
+  .tab-btn.active[data-mod="invention"]  { border-bottom-color: var(--inv-a); }
+  .tab-btn.active[data-mod="paper"]      { border-bottom-color: var(--paper-a); }
+
+  /* ── Content Area ──────────────────────────────────────────── */
+  .content {
+    max-width: 700px;
+    margin: 0 auto;
+    padding: 24px 24px 48px;
+  }
+
+  /* Module header */
+  .mod-header {
+    margin-bottom: 20px;
+  }
+  .mod-title {
+    font-size: 22px;
+    font-weight: 700;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .mod-title .dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+  }
+  .mod-iter {
+    font-size: 13px;
+    color: var(--text-dim);
+    font-weight: 400;
+    margin-bottom: 10px;
+  }
+  .mod-summary {
+    font-size: 14px;
+    line-height: 1.65;
+    color: var(--text-dim);
+  }
+
+  /* Sub-stages list */
+  .stages {
+    margin-top: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .stage-row {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    transition: border-color 0.25s;
+  }
+  .stage-row:hover { border-color: #3a4455; }
+  .stage-row.expanded { border-color: #3a4455; }
+
+  .stage-header {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    cursor: pointer;
+    gap: 10px;
+    user-select: none;
+  }
+
+  .stage-icon {
+    width: 24px; height: 24px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+  .stage-icon.done     { background: rgba(52,211,153,0.15); color: var(--seed-a); }
+  .stage-icon.active   { background: rgba(96,165,250,0.15); color: var(--inv-a); }
+  .stage-icon.pending  { background: rgba(90,100,120,0.15); color: var(--text-muted); }
+
+  .stage-name {
+    flex: 1;
+    font-size: 14px;
+    font-weight: 500;
+  }
+  .stage-status {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-weight: 400;
+  }
+  .stage-status.done   { color: var(--seed-a); }
+  .stage-status.active { color: var(--inv-a); }
+
+  .stage-chevron {
+    color: var(--text-muted);
+    font-size: 11px;
+    transition: transform 0.25s;
+  }
+  .stage-row.expanded .stage-chevron { transform: rotate(90deg); }
+
+  .stage-detail {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+                padding 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .stage-row.expanded .stage-detail {
+    max-height: 400px;
+  }
+
+  .stage-detail-inner {
+    padding: 0 16px 14px 50px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-dim);
+  }
+  .stage-detail-inner p { margin-bottom: 6px; }
+  .stage-detail-inner .detail-label {
+    font-weight: 600;
+    color: var(--text);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    margin-bottom: 4px;
+  }
+  .stage-detail-inner .metric-row {
+    display: flex;
+    gap: 24px;
+    margin-top: 6px;
+  }
+  .stage-detail-inner .metric {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .stage-detail-inner .metric span {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  /* Footer */
+  .mod-footer {
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  .mod-footer .val {
+    color: var(--text-dim);
+    font-weight: 500;
+  }
+
+  /* ── Nav hint ──────────────────────────────────────────────── */
+  .nav-hint {
+    position: fixed;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 16px;
+    font-size: 12px;
+    color: var(--text-muted);
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    z-index: 20;
+  }
+  .nav-hint kbd {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 11px;
+    font-family: inherit;
+    color: var(--text-dim);
+  }
+
+  /* ── Transition wrapper ────────────────────────────────────── */
+  .content-transition {
+    animation: fadeSlideIn 0.35s ease;
+  }
+  @keyframes fadeSlideIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── Responsive ────────────────────────────────────────────── */
+  @media (max-width: 640px) {
+    .bar-wrap { border-radius: 12px; }
+    .bar-label { font-size: 9px; letter-spacing: 0.3px; }
+    .content { padding: 16px 16px 48px; }
+    .mod-title { font-size: 18px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Top Strip -->
+<div class="top-strip">
+  <div class="bar-wrap" id="barWrap">
+    <div class="bar-seg seg-active" data-mod="seed">
+      <div class="bar-fill"></div>
+      <div class="bar-label">Seed</div>
+    </div>
+    <div class="bar-seg" data-mod="hypothesis">
+      <div class="bar-fill"></div>
+      <div class="bar-label">Hypothesis</div>
+    </div>
+    <div class="bar-seg" data-mod="invention">
+      <div class="bar-fill"></div>
+      <div class="bar-label">Invention</div>
+      <div class="sparkle-edge">
+        <canvas class="sparkle-canvas" id="sparkleCanvas"></canvas>
+      </div>
+    </div>
+    <div class="bar-seg" data-mod="paper">
+      <div class="bar-fill"></div>
+      <div class="bar-label">Paper</div>
+    </div>
+  </div>
+</div>
+
+<!-- Module Tabs -->
+<div class="tab-row" id="tabRow">
+  <button class="tab-btn" data-mod="seed">Seed</button>
+  <button class="tab-btn" data-mod="hypothesis">Hypothesis</button>
+  <button class="tab-btn active" data-mod="invention">Invention</button>
+  <button class="tab-btn" data-mod="paper">Paper</button>
+</div>
+
+<!-- Content -->
+<div class="content" id="contentArea"></div>
+
+<!-- Navigation hint -->
+<div class="nav-hint">
+  <kbd>&larr;</kbd> <kbd>&rarr;</kbd> navigate modules
+</div>
+
+<script>
+// ── Mock Data ──────────────────────────────────────────────────
+const MODULES = ['seed', 'hypothesis', 'invention', 'paper'];
+let currentIdx = 2; // start on Invention
+
+const DATA = {
+  seed: {
+    title: 'Seed Hypotheses',
+    iter: 'Complete',
+    dot: '#34d399',
+    summary: 'Knowledge-graph seeding for ssl-low-resource-v3 produced 12 candidate hypotheses from 47 papers. Filtered to 8 viable seeds after novelty and feasibility checks.',
+    stages: [
+      { name: 'Paper Ingestion', status: 'done', detail: {
+        text: 'Processed 47 papers from Semantic Scholar and arXiv. Extracted key claims, methods, and results into structured nodes.',
+        metrics: [
+          { label: 'Papers', value: '47' },
+          { label: 'Nodes', value: '312' },
+          { label: 'Edges', value: '1,084' },
+        ]
+      }},
+      { name: 'KG Construction', status: 'done', detail: {
+        text: 'Built invention knowledge graph linking SSL techniques, low-resource constraints, and evaluation benchmarks. Identified 5 underexplored subgraphs.',
+        metrics: [
+          { label: 'Subgraphs', value: '5' },
+          { label: 'Density', value: '0.23' },
+        ]
+      }},
+      { name: 'Seed Generation', status: 'done', detail: {
+        text: 'Generated 12 seed hypotheses by traversing sparse regions. Scored by novelty (cosine distance from prior work) and feasibility (resource requirements).',
+        metrics: [
+          { label: 'Seeds', value: '12' },
+          { label: 'Viable', value: '8' },
+        ]
+      }},
+    ],
+    time: '4m 32s',
+    cost: '$0.87',
+  },
+
+  hypothesis: {
+    title: 'Hypothesis Loop',
+    iter: 'Iteration 3 of 3 — Converged',
+    dot: '#a78bfa',
+    summary: 'Iterative refinement converged on a contrastive-distillation hypothesis for low-resource SSL. Final review score 8.4/10 with strong novelty and feasibility marks.',
+    stages: [
+      { name: 'Generate Hypotheses', status: 'done', detail: {
+        text: 'Expanded 8 seeds into 16 full hypotheses with experimental predictions, expected baselines, and ablation targets.',
+        metrics: [
+          { label: 'Generated', value: '16' },
+          { label: 'Avg score', value: '6.9' },
+        ]
+      }},
+      { name: 'Review Hypotheses', status: 'done', detail: {
+        text: 'Multi-criteria review assessing novelty, feasibility, clarity, and expected impact. Top hypothesis: contrastive distillation with curriculum pseudo-labels.',
+        metrics: [
+          { label: 'Top score', value: '8.4 / 10' },
+          { label: 'Criteria', value: '4' },
+        ]
+      }},
+      { name: 'Refine & Converge', status: 'done', detail: {
+        text: 'Three refinement iterations. Addressed reviewer concerns about compute budget and evaluation protocol. Score improved from 7.1 to 8.4.',
+        metrics: [
+          { label: 'Iterations', value: '3' },
+          { label: 'Delta', value: '+1.3' },
+        ]
+      }},
+    ],
+    time: '11m 18s',
+    cost: '$3.42',
+  },
+
+  invention: {
+    title: 'Invention Loop',
+    iter: 'Iteration 2 of 3 — 3/5 artifacts generated',
+    dot: '#60a5fa',
+    summary: 'Building experimental artifacts for the contrastive-distillation approach on ssl-low-resource-v3. Plan complete, paper text drafted, currently generating visualizations and code demos.',
+    stages: [
+      { name: 'Generate Strategy', status: 'done', detail: {
+        text: 'Selected experimental strategy: train a student model with contrastive distillation loss under a curriculum schedule. Baseline: standard fine-tuning on 1% labeled data.',
+        metrics: [
+          { label: 'Strategies', value: '3' },
+          { label: 'Selected', value: '#2' },
+        ]
+      }},
+      { name: 'Generate Plan', status: 'done', detail: {
+        text: 'Detailed 5-artifact plan: (1) architecture diagram, (2) training curves, (3) ablation table, (4) t-SNE embeddings, (5) pseudo-label quality plot.',
+        metrics: [
+          { label: 'Artifacts', value: '5' },
+          { label: 'Est. cost', value: '$1.20' },
+        ]
+      }},
+      { name: 'Generate Paper Text', status: 'active', detail: {
+        text: 'Drafting sections: Introduction, Method (contrastive distillation + curriculum), Experiments setup. Results and Discussion pending artifact completion.',
+        metrics: [
+          { label: 'Sections', value: '3 / 5' },
+          { label: 'Words', value: '~2,400' },
+        ]
+      }},
+      { name: 'Generate Visualizations', status: 'pending', detail: {
+        text: 'Queued: architecture diagram (TikZ), training curves (matplotlib), t-SNE embedding plot. Waiting on paper text completion.',
+        metrics: [
+          { label: 'Queued', value: '3' },
+        ]
+      }},
+      { name: 'Review & Iterate', status: 'pending', detail: {
+        text: 'Will assess coherence between text and artifacts, check citation accuracy, and verify experimental claims match generated figures.',
+        metrics: []
+      }},
+    ],
+    time: '18m 45s',
+    cost: '$6.14',
+  },
+
+  paper: {
+    title: 'Paper Generation',
+    iter: 'Waiting — blocked on Invention Loop',
+    dot: '#5a6478',
+    summary: 'Final paper assembly, LaTeX compilation, and repository packaging. Will begin once the invention loop converges and all artifacts are approved.',
+    stages: [
+      { name: 'Assemble Full Paper', status: 'pending', detail: {
+        text: 'Combine all generated sections, figures, and tables into a complete LaTeX document following the target venue template.',
+        metrics: []
+      }},
+      { name: 'Generate Visualizations', status: 'pending', detail: {
+        text: 'Produce publication-quality figures: vector diagrams, camera-ready plots with consistent styling and proper captions.',
+        metrics: []
+      }},
+      { name: 'Build Repository', status: 'pending', detail: {
+        text: 'Package code, configs, and reproduction scripts into a clean GitHub repository with README and requirements.',
+        metrics: []
+      }},
+    ],
+    time: '—',
+    cost: '—',
+  },
+};
+
+// ── Render ──────────────────────────────────────────────────────
+function render(modKey) {
+  const d = DATA[modKey];
+  const area = document.getElementById('contentArea');
+
+  let stagesHTML = '';
+  d.stages.forEach((s, i) => {
+    const isExpanded = s.status === 'active' || (d.stages.every(x => x.status === 'done') && i === d.stages.length - 1);
+    const iconClass = s.status;
+    const iconChar = s.status === 'done' ? '&#10003;' : s.status === 'active' ? '&#9679;' : '&#8226;';
+    const statusLabel = s.status === 'done' ? 'Complete' : s.status === 'active' ? 'Running' : 'Pending';
+    const statusClass = s.status;
+
+    let metricsHTML = '';
+    if (s.detail.metrics.length) {
+      metricsHTML = '<div class="metric-row">' +
+        s.detail.metrics.map(m => `<div class="metric">${m.label}: <span>${m.value}</span></div>`).join('') +
+        '</div>';
+    }
+
+    stagesHTML += `
+      <div class="stage-row ${isExpanded ? 'expanded' : ''}" data-idx="${i}">
+        <div class="stage-header" onclick="toggleStage(this)">
+          <div class="stage-icon ${iconClass}">${iconChar}</div>
+          <div class="stage-name">${s.name}</div>
+          <div class="stage-status ${statusClass}">${statusLabel}</div>
+          <div class="stage-chevron">&#9656;</div>
+        </div>
+        <div class="stage-detail">
+          <div class="stage-detail-inner">
+            <p>${s.detail.text}</p>
+            ${metricsHTML}
+          </div>
+        </div>
+      </div>`;
+  });
+
+  area.innerHTML = `
+    <div class="content-transition">
+      <div class="mod-header">
+        <div class="mod-title">
+          <span class="dot" style="background:${d.dot}"></span>
+          ${d.title}
+        </div>
+        <div class="mod-iter">${d.iter}</div>
+        <div class="mod-summary">${d.summary}</div>
+      </div>
+      <div class="stages">${stagesHTML}</div>
+      <div class="mod-footer">
+        <div>Elapsed: <span class="val">${d.time}</span></div>
+        <div>Cost: <span class="val">${d.cost}</span></div>
+      </div>
+    </div>`;
+}
+
+function toggleStage(header) {
+  const row = header.parentElement;
+  row.classList.toggle('expanded');
+}
+
+// ── Tab / Bar selection ────────────────────────────────────────
+function selectModule(idx) {
+  if (idx < 0 || idx >= MODULES.length) return;
+  currentIdx = idx;
+  const modKey = MODULES[idx];
+
+  // Update bar segments
+  document.querySelectorAll('.bar-seg').forEach(seg => {
+    seg.classList.toggle('seg-active', seg.dataset.mod === modKey);
+  });
+
+  // Update tabs
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mod === modKey);
+  });
+
+  render(modKey);
+}
+
+// Click handlers for bar segments and tabs
+document.querySelectorAll('.bar-seg').forEach(seg => {
+  seg.addEventListener('click', () => {
+    selectModule(MODULES.indexOf(seg.dataset.mod));
+  });
+});
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    selectModule(MODULES.indexOf(btn.dataset.mod));
+  });
+});
+
+// Arrow key navigation
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowLeft')  { selectModule(currentIdx - 1); e.preventDefault(); }
+  if (e.key === 'ArrowRight') { selectModule(currentIdx + 1); e.preventDefault(); }
+});
+
+// ── Sparkle Particle System ────────────────────────────────────
+const canvas = document.getElementById('sparkleCanvas');
+const ctx = canvas.getContext('2d');
+let particles = [];
+let animFrame;
+
+function resizeCanvas() {
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * window.devicePixelRatio;
+  canvas.height = rect.height * window.devicePixelRatio;
+  ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+}
+
+class Particle {
+  constructor(cw, ch) {
+    this.reset(cw, ch);
+  }
+  reset(cw, ch) {
+    // Spawn along the vertical center band
+    this.x = 18 + (Math.random() - 0.5) * 10;
+    this.y = 20 + Math.random() * (ch - 40);
+    this.r = 1.2 + Math.random() * 2;
+    this.alpha = 0;
+    this.maxAlpha = 0.5 + Math.random() * 0.5;
+    this.life = 0;
+    this.maxLife = 40 + Math.random() * 60;
+    this.vx = (Math.random() - 0.5) * 0.6;
+    this.vy = -0.3 - Math.random() * 0.8;
+    this.hue = 200 + Math.random() * 30; // blue range
+  }
+  update(cw, ch) {
+    this.life++;
+    const progress = this.life / this.maxLife;
+    if (progress < 0.2) {
+      this.alpha = this.maxAlpha * (progress / 0.2);
+    } else if (progress > 0.7) {
+      this.alpha = this.maxAlpha * (1 - (progress - 0.7) / 0.3);
+    } else {
+      this.alpha = this.maxAlpha;
+    }
+    this.x += this.vx;
+    this.y += this.vy;
+    if (this.life >= this.maxLife) this.reset(cw, ch);
+  }
+  draw(ctx) {
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.r, 0, Math.PI * 2);
+    ctx.fillStyle = `hsla(${this.hue}, 85%, 72%, ${this.alpha})`;
+    ctx.fill();
+    // Outer glow
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.r * 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = `hsla(${this.hue}, 85%, 72%, ${this.alpha * 0.2})`;
+    ctx.fill();
+  }
+}
+
+function initParticles() {
+  resizeCanvas();
+  const displayW = canvas.getBoundingClientRect().width;
+  const displayH = canvas.getBoundingClientRect().height;
+  particles = [];
+  for (let i = 0; i < 18; i++) {
+    const p = new Particle(displayW, displayH);
+    p.life = Math.floor(Math.random() * p.maxLife); // stagger
+    particles.push(p);
+  }
+}
+
+function animateParticles() {
+  const displayW = canvas.getBoundingClientRect().width;
+  const displayH = canvas.getBoundingClientRect().height;
+  ctx.clearRect(0, 0, displayW, displayH);
+  particles.forEach(p => {
+    p.update(displayW, displayH);
+    p.draw(ctx);
+  });
+  animFrame = requestAnimationFrame(animateParticles);
+}
+
+// Start particles
+initParticles();
+animateParticles();
+window.addEventListener('resize', () => {
+  cancelAnimationFrame(animFrame);
+  initParticles();
+  animateParticles();
+});
+
+// ── Initial render ─────────────────────────────────────────────
+render('invention');
+</script>
+</body>
+</html>

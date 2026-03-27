@@ -1,0 +1,1064 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AII Pipeline Monitor</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+  :root{
+    /* Slate palette */
+    --bg:#0f1219;
+    --surface:#171c26;
+    --surface-raised:#1c2230;
+    --border:#252d3b;
+    --border-light:#2e3a4d;
+    --text:#cdd5e0;
+    --text-dim:#7c879a;
+    --text-muted:#4e5768;
+    --text-bright:#eaf0f8;
+
+    /* Accents */
+    --blue:#5e81ac;
+    --blue-bright:#81a1c1;
+    --blue-glow:rgba(94,129,172,.35);
+    --green:#a3be8c;
+    --green-glow:rgba(163,190,140,.3);
+    --amber:#ebcb8b;
+    --amber-glow:rgba(235,203,139,.3);
+    --red:#bf616a;
+    --red-glow:rgba(191,97,106,.3);
+    --purple:#b48ead;
+    --purple-glow:rgba(180,142,173,.3);
+    --cyan:#88c0d0;
+    --cyan-glow:rgba(136,192,208,.35);
+
+    --sidebar-w:232px;
+  }
+
+  html{
+    font-family:'Inter',system-ui,-apple-system,sans-serif;
+    font-size:13px;
+    color:var(--text);
+    background:var(--bg);
+  }
+  body{display:flex;min-height:100vh;overflow:hidden}
+
+  /* ══════════════════════════════════════════════
+     SIDEBAR
+     ══════════════════════════════════════════════ */
+  .sidebar{
+    width:var(--sidebar-w);min-width:var(--sidebar-w);height:100vh;
+    position:sticky;top:0;display:flex;flex-direction:column;
+    background:var(--surface);border-right:1px solid var(--border);
+    overflow-y:auto;overflow-x:hidden;padding:20px 14px;
+    scrollbar-width:thin;scrollbar-color:var(--border) transparent;
+  }
+  .sidebar::-webkit-scrollbar{width:5px}
+  .sidebar::-webkit-scrollbar-track{background:transparent}
+  .sidebar::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+  /* ── Progress Ring ── */
+  .ring-wrap{display:flex;justify-content:center;margin-bottom:22px}
+  .ring-container{position:relative;width:104px;height:104px}
+  .ring-svg{width:100%;height:100%;transform:rotate(-90deg)}
+  .ring-bg{fill:none;stroke:var(--border);stroke-width:5.5}
+  .ring-fg{fill:none;stroke:url(#ringGrad);stroke-width:5.5;stroke-linecap:round;
+    stroke-dasharray:264;stroke-dashoffset:92.4;transition:stroke-dashoffset .6s ease}
+  .ring-glow{fill:none;stroke:url(#ringGrad);stroke-width:11;stroke-linecap:round;
+    stroke-dasharray:264;stroke-dashoffset:92.4;opacity:.22;filter:blur(5px)}
+  .ring-endpoint{r:4.5;fill:var(--cyan);filter:drop-shadow(0 0 5px var(--cyan))}
+  @keyframes ep-pulse{0%,100%{opacity:.65}50%{opacity:1}}
+  .ring-endpoint{animation:ep-pulse 2.2s ease-in-out infinite}
+  .ring-label{position:absolute;inset:0;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;pointer-events:none}
+  .ring-pct{font-size:23px;font-weight:700;letter-spacing:-.5px;color:var(--text-bright)}
+  .ring-sub{font-size:9px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.9px;margin-top:2px}
+
+  /* ── Module Card ── */
+  .mod-card{
+    background:var(--bg);border:1px solid var(--border);border-radius:8px;
+    padding:12px 12px 10px;margin-bottom:4px;cursor:pointer;
+    border-left:3px solid var(--text-muted);transition:all .2s ease;
+    position:relative;
+  }
+  .mod-card:hover{border-color:var(--border-light);border-left-color:inherit}
+  .mod-card.active{
+    border-left-color:var(--blue)!important;
+    animation:card-glow 2.5s ease-in-out infinite;
+  }
+  @keyframes card-glow{
+    0%,100%{box-shadow:0 0 6px var(--blue-glow),inset 0 0 4px rgba(94,129,172,.06)}
+    50%{box-shadow:0 0 18px var(--blue-glow),inset 0 0 8px rgba(94,129,172,.1)}
+  }
+  .mod-card[data-color="green"]{border-left-color:var(--green)}
+  .mod-card[data-color="blue"]{border-left-color:var(--blue)}
+  .mod-card[data-color="amber"]{border-left-color:var(--amber)}
+  .mod-card[data-color="purple"]{border-left-color:var(--purple)}
+  .mod-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+  .mod-name{font-weight:600;font-size:12px;letter-spacing:.2px}
+  .badge{font-size:9px;padding:2px 8px;border-radius:10px;font-weight:600;text-transform:uppercase;letter-spacing:.4px}
+  .badge-done{background:rgba(163,190,140,.12);color:var(--green)}
+  .badge-running{background:rgba(136,192,208,.14);color:var(--cyan)}
+  .badge-pending{background:rgba(78,87,104,.14);color:var(--text-muted)}
+  .badge-error{background:rgba(191,97,106,.12);color:var(--red)}
+  .mod-metric{font-size:10px;color:var(--text-dim);margin-bottom:6px}
+  .mod-metric b{color:var(--text);font-weight:600}
+  .mod-bar-wrap{height:3px;background:var(--border);border-radius:2px;overflow:hidden}
+  .mod-bar{height:100%;border-radius:2px;transition:width .4s ease}
+
+  /* ── Sub-module rows ── */
+  .sub-list{padding:6px 0 10px}
+  .sub-row{
+    display:flex;align-items:center;gap:8px;
+    padding:5px 10px 5px 14px;cursor:pointer;border-radius:6px;
+    transition:background .15s;position:relative;
+  }
+  .sub-row:hover{background:rgba(94,129,172,.06)}
+  .sub-row.active{background:rgba(94,129,172,.1)}
+  .sub-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;transition:all .2s}
+  .sub-dot.done{background:var(--green)}
+  .sub-dot.running{background:var(--cyan);animation:dot-pulse 1.8s ease-in-out infinite}
+  .sub-dot.pending{background:var(--text-muted);opacity:.4}
+  .sub-dot.error{background:var(--red)}
+  @keyframes dot-pulse{0%,100%{box-shadow:0 0 0 0 rgba(136,192,208,.5)}50%{box-shadow:0 0 0 5px rgba(136,192,208,0)}}
+  .sub-name{font-size:11px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text-dim)}
+  .sub-row.active .sub-name,.sub-row:hover .sub-name{color:var(--text)}
+  .sub-metric{font-size:10px;color:var(--text-muted);flex-shrink:0}
+
+  /* ══════════════════════════════════════════════
+     PARTICLE CANVAS
+     ══════════════════════════════════════════════ */
+  #particleCanvas{position:fixed;top:0;left:0;width:var(--sidebar-w);height:100vh;pointer-events:none;z-index:10}
+
+  /* ══════════════════════════════════════════════
+     MAIN CONTENT
+     ══════════════════════════════════════════════ */
+  .main{flex:1;padding:32px 40px;overflow-y:auto;height:100vh}
+  .main::-webkit-scrollbar{width:6px}
+  .main::-webkit-scrollbar-track{background:transparent}
+  .main::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+  .main-title{display:flex;align-items:center;gap:12px;margin-bottom:6px}
+  .main-title h1{font-size:20px;font-weight:700;letter-spacing:-.3px;color:var(--text-bright)}
+  .main-subtitle{font-size:12px;color:var(--text-dim);margin-bottom:28px}
+
+  /* ── What happened ── */
+  .what-section{
+    background:var(--surface);border:1px solid var(--border);border-radius:10px;
+    padding:18px 22px;margin-bottom:20px;
+  }
+  .what-label{font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--text-muted);margin-bottom:8px;font-weight:600}
+  .what-text{font-size:13px;line-height:1.7;color:var(--text-dim)}
+
+  /* ── Stat Cards ── */
+  .stat-row{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px}
+  .stat-card{
+    background:var(--surface);border:1px solid var(--border);border-radius:10px;
+    padding:16px 18px;transition:border-color .2s;
+  }
+  .stat-card:hover{border-color:var(--border-light)}
+  .stat-label{font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--text-muted);font-weight:600;margin-bottom:8px}
+  .stat-val{font-size:22px;font-weight:700;margin-bottom:4px;letter-spacing:-.5px;color:var(--text-bright)}
+  .stat-sub{font-size:10px;color:var(--text-dim);margin-bottom:10px}
+  .stat-bar-wrap{height:4px;background:var(--border);border-radius:2px;overflow:hidden}
+  .stat-bar{height:100%;border-radius:2px;transition:width .4s ease}
+
+  /* ── Item list ── */
+  .items-section{
+    background:var(--surface);border:1px solid var(--border);border-radius:10px;
+    padding:18px 22px;margin-bottom:20px;
+  }
+  .items-label{font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--text-muted);font-weight:600;margin-bottom:12px}
+  .item-row{
+    display:flex;align-items:center;gap:10px;padding:8px 0;
+    border-bottom:1px solid var(--border);
+  }
+  .item-row:last-child{border-bottom:none}
+  .item-icon{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;
+    justify-content:center;font-size:12px;background:rgba(94,129,172,.1);color:var(--blue);flex-shrink:0}
+  .item-info{flex:1;min-width:0}
+  .item-name{font-size:12px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .item-desc{font-size:10px;color:var(--text-muted)}
+  .item-badge{font-size:9px;padding:2px 7px;border-radius:10px;font-weight:600;flex-shrink:0}
+
+  /* ══════════════════════════════════════════════
+     LIVE ACTIVITY FEED
+     ══════════════════════════════════════════════ */
+  .feed-section{
+    background:var(--surface);border:1px solid var(--border);border-radius:10px;
+    padding:18px 22px;margin-bottom:20px;
+    max-height:360px;display:flex;flex-direction:column;
+  }
+  .feed-header{
+    display:flex;align-items:center;justify-content:space-between;
+    margin-bottom:14px;
+  }
+  .feed-label{
+    font-size:10px;text-transform:uppercase;letter-spacing:.8px;
+    color:var(--text-muted);font-weight:600;
+  }
+  .feed-live-indicator{
+    display:flex;align-items:center;gap:6px;
+    font-size:10px;font-weight:600;color:var(--cyan);
+    text-transform:uppercase;letter-spacing:.5px;
+  }
+  .feed-live-dot{
+    width:7px;height:7px;border-radius:50%;background:var(--cyan);
+    animation:feed-live-blink 1.5s ease-in-out infinite;
+    box-shadow:0 0 6px var(--cyan-glow);
+  }
+  @keyframes feed-live-blink{
+    0%,100%{opacity:1;box-shadow:0 0 6px var(--cyan-glow)}
+    50%{opacity:.35;box-shadow:0 0 2px var(--cyan-glow)}
+  }
+  .feed-completed-indicator{
+    display:flex;align-items:center;gap:6px;
+    font-size:10px;font-weight:600;color:var(--green);
+    text-transform:uppercase;letter-spacing:.5px;
+  }
+  .feed-completed-dot{
+    width:7px;height:7px;border-radius:50%;background:var(--green);
+  }
+
+  .feed-list{
+    flex:1;overflow-y:auto;
+    scrollbar-width:thin;scrollbar-color:var(--border) transparent;
+  }
+  .feed-list::-webkit-scrollbar{width:4px}
+  .feed-list::-webkit-scrollbar-track{background:transparent}
+  .feed-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+
+  .feed-entry{
+    display:flex;align-items:flex-start;gap:10px;
+    padding:9px 0;border-bottom:1px solid rgba(37,45,59,.6);
+    animation:feed-fade-in .45s ease-out;
+  }
+  .feed-entry:last-child{border-bottom:none}
+  @keyframes feed-fade-in{
+    from{opacity:0;transform:translateY(-6px)}
+    to{opacity:1;transform:translateY(0)}
+  }
+
+  .feed-time{
+    font-size:11px;font-family:'Inter',monospace;color:var(--text-muted);
+    flex-shrink:0;letter-spacing:.2px;min-width:52px;padding-top:1px;
+  }
+  .feed-dot-col{
+    display:flex;align-items:flex-start;padding-top:5px;flex-shrink:0;
+  }
+  .feed-status-dot{
+    width:7px;height:7px;border-radius:50%;flex-shrink:0;
+  }
+  .feed-status-dot.info{background:var(--blue);box-shadow:0 0 4px var(--blue-glow)}
+  .feed-status-dot.success{background:var(--green);box-shadow:0 0 4px var(--green-glow)}
+  .feed-status-dot.warning{background:var(--amber);box-shadow:0 0 4px var(--amber-glow)}
+  .feed-status-dot.error{background:var(--red);box-shadow:0 0 4px var(--red-glow)}
+  .feed-status-dot.progress{background:var(--cyan);box-shadow:0 0 4px var(--cyan-glow)}
+  .feed-status-dot.metric{background:var(--purple);box-shadow:0 0 4px var(--purple-glow)}
+  .feed-desc{font-size:12px;color:var(--text-dim);line-height:1.5;flex:1}
+  .feed-desc strong{color:var(--text);font-weight:600}
+
+  /* ── Empty state ── */
+  .empty-state{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    height:60vh;color:var(--text-muted);
+  }
+  .empty-state svg{width:48px;height:48px;margin-bottom:16px;opacity:.3}
+  .empty-state p{font-size:13px}
+
+  /* ── Keyboard hint ── */
+  .kbd-hint{
+    position:fixed;bottom:14px;right:20px;display:flex;gap:10px;
+    font-size:10px;color:var(--text-muted);opacity:.45;
+  }
+  kbd{
+    padding:2px 6px;border:1px solid var(--border);border-radius:4px;
+    font-family:inherit;font-size:10px;background:var(--surface);
+  }
+
+  /* ── Feed entry hover ── */
+  .feed-entry:hover{
+    background:rgba(94,129,172,.04);
+    border-radius:6px;
+    margin:0 -6px;
+    padding-left:6px;
+    padding-right:6px;
+  }
+
+  /* ── Feed entry separator subtle variant ── */
+  .feed-entry + .feed-entry{
+    border-top:none;
+  }
+
+  /* ── Feed scroll shadow indicators ── */
+  .feed-list{
+    position:relative;
+    mask-image:linear-gradient(to bottom,black 0%,black 90%,transparent 100%);
+    -webkit-mask-image:linear-gradient(to bottom,black 0%,black 90%,transparent 100%);
+  }
+
+  /* ── Stat card accent line ── */
+  .stat-card{position:relative;overflow:hidden}
+  .stat-card::before{
+    content:'';position:absolute;top:0;left:0;right:0;height:2px;
+    background:linear-gradient(90deg,transparent,var(--border-light),transparent);
+    opacity:0;transition:opacity .25s;
+  }
+  .stat-card:hover::before{opacity:1}
+
+  /* ── Module card selected state ── */
+  .mod-card.selected{
+    background:var(--surface-raised);
+    border-color:var(--border-light);
+  }
+
+  /* ── Activity feed new entry glow ── */
+  .feed-entry.new-entry{
+    background:rgba(136,192,208,.04);
+    border-radius:6px;
+    margin:0 -6px;
+    padding-left:6px;
+    padding-right:6px;
+  }
+  .feed-entry.new-entry .feed-time{color:var(--cyan)}
+
+  /* New-entry glow fades after animation */
+  @keyframes new-entry-fade{
+    0%{background:rgba(136,192,208,.08)}
+    100%{background:transparent}
+  }
+  .feed-entry.new-entry{
+    animation:feed-fade-in .45s ease-out, new-entry-fade 3s ease-out .5s forwards;
+  }
+
+  /* ── Responsive ── */
+  @media(max-width:800px){
+    .sidebar{width:180px;min-width:180px;padding:14px 10px}
+    .main{padding:20px 18px}
+    .stat-row{grid-template-columns:1fr}
+    .ring-container{width:80px;height:80px}
+    .ring-pct{font-size:18px}
+    .feed-section{max-height:260px}
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════
+     SIDEBAR
+     ═══════════════════════════════════════════════ -->
+<aside class="sidebar" id="sidebar">
+  <!-- Progress Ring -->
+  <div class="ring-wrap">
+    <div class="ring-container">
+      <svg class="ring-svg" viewBox="0 0 100 100">
+        <defs>
+          <linearGradient id="ringGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="var(--blue)"/>
+            <stop offset="100%" stop-color="var(--cyan)"/>
+          </linearGradient>
+        </defs>
+        <circle class="ring-bg" cx="50" cy="50" r="42"/>
+        <circle class="ring-glow" cx="50" cy="50" r="42"/>
+        <circle class="ring-fg" cx="50" cy="50" r="42"/>
+        <circle class="ring-endpoint" cx="50" cy="50"/>
+      </svg>
+      <div class="ring-label">
+        <span class="ring-pct">65%</span>
+        <span class="ring-sub">Overall</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Module Cards + Sub-modules -->
+  <div id="modList"></div>
+</aside>
+
+<!-- Particle Canvas -->
+<canvas id="particleCanvas"></canvas>
+
+<!-- ═══════════════════════════════════════════════
+     MAIN CONTENT
+     ═══════════════════════════════════════════════ -->
+<main class="main" id="mainContent">
+  <div class="empty-state" id="emptyState">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <path d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25m18 0A2.25 2.25 0 0018.75 3H5.25A2.25 2.25 0 003 5.25m18 0V12a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 12V5.25"/>
+    </svg>
+    <p>Select a sub-module to view details</p>
+  </div>
+  <div id="detailView" style="display:none"></div>
+</main>
+
+<!-- Keyboard Hints -->
+<div class="kbd-hint">
+  <span><kbd>&uarr;</kbd><kbd>&darr;</kbd> sub-modules</span>
+  <span><kbd>&larr;</kbd><kbd>&rarr;</kbd> modules</span>
+</div>
+
+<script>
+(function() {
+'use strict';
+
+// ==========================================================
+// MOCK DATA
+// ==========================================================
+var MODULES = [
+  {
+    name: "Seed", color: "green", status: "done", metric: "4/4 steps",
+    progress: 100, barColor: "var(--green)",
+    subs: [
+      { name: "Load Domain KG", status: "done", metric: "1.2s",
+        duration: "1.2s", durationPct: 8, cost: "$0.02", costPct: 3, messages: "4 msgs", msgBreakdown: "2 sys / 2 asst",
+        summary: "I loaded the invention knowledge graph from the cached JSONL store. 847 nodes and 2,104 edges were indexed. No schema mismatches detected, so I skipped the migration path entirely.",
+        feedEntries: [
+          { time: "09:41:14", dot: "success", text: "KG load complete \u2014 <strong>847 nodes</strong>, 2,104 edges indexed" },
+          { time: "09:41:14", dot: "metric", text: "Index build time: 0.34s \u2014 hash-based adjacency list" },
+          { time: "09:41:13", dot: "info", text: "Schema validation passed (v3.2), migration skipped" },
+          { time: "09:41:13", dot: "info", text: "Edge types: 14 relation categories, 3 meta-relations" },
+          { time: "09:41:12", dot: "progress", text: "Reading JSONL store from cache (1.8 MB, 847 records)" },
+          { time: "09:41:12", dot: "info", text: "Cache hit \u2014 using pre-computed graph at /data/kg_cache/" },
+          { time: "09:41:12", dot: "info", text: "Initializing knowledge graph loader module" }
+        ]
+      },
+      { name: "Extract Themes", status: "done", metric: "3.4s",
+        duration: "3.4s", durationPct: 22, cost: "$0.08", costPct: 12, messages: "12 msgs", msgBreakdown: "4 sys / 6 asst / 2 tool",
+        summary: "I clustered the KG nodes into 14 thematic groups using spectral embedding. The top three themes were sensor-fusion architectures, lightweight on-device inference, and cross-modal retrieval. Two outlier nodes were absorbed into the nearest cluster.",
+        feedEntries: [
+          { time: "09:41:18", dot: "success", text: "Theme extraction complete \u2014 <strong>14 clusters</strong> formed" },
+          { time: "09:41:18", dot: "metric", text: "Silhouette score: 0.71 \u2014 good cluster separation" },
+          { time: "09:41:17", dot: "info", text: "Absorbed 2 outlier nodes into nearest clusters (cosine > 0.4)" },
+          { time: "09:41:17", dot: "warning", text: "Cluster 9 has only 4 nodes \u2014 flagged as low-confidence" },
+          { time: "09:41:16", dot: "metric", text: "Top themes: sensor-fusion, on-device inference, cross-modal retrieval" },
+          { time: "09:41:16", dot: "info", text: "Eigenvalue gap analysis suggests 14 natural clusters" },
+          { time: "09:41:15", dot: "progress", text: "Running spectral embedding on 847 nodes (dim=64)" },
+          { time: "09:41:15", dot: "info", text: "Building Laplacian matrix from adjacency graph" },
+          { time: "09:41:14", dot: "info", text: "Starting thematic clustering pass" }
+        ]
+      },
+      { name: "Generate Seeds", status: "done", metric: "6.1s",
+        duration: "6.1s", durationPct: 40, cost: "$0.31", costPct: 48, messages: "28 msgs", msgBreakdown: "6 sys / 18 asst / 4 tool",
+        summary: "I generated 12 seed hypotheses by crossing high-potential theme pairs. Each seed was grounded against at least two KG edges. I pruned 3 seeds that were too similar to existing literature entries.",
+        feedEntries: [
+          { time: "09:41:24", dot: "success", text: "Seed generation complete \u2014 <strong>12 seeds</strong> produced, 3 pruned" },
+          { time: "09:41:24", dot: "metric", text: "Diversity index: 0.83 across all theme clusters" },
+          { time: "09:41:23", dot: "warning", text: "Pruned seed #5: 89% overlap with Chen et al. 2024" },
+          { time: "09:41:23", dot: "warning", text: "Pruned seed #8: overlaps with patent US-2024-0183792" },
+          { time: "09:41:23", dot: "warning", text: "Pruned seed #11: redundant with seed #3 (cosine 0.94)" },
+          { time: "09:41:22", dot: "info", text: "Grounding check: all 12 seeds backed by 2+ KG edges" },
+          { time: "09:41:21", dot: "metric", text: "Generated 15 raw candidates, filtering to 12" },
+          { time: "09:41:20", dot: "progress", text: "Crossing 14 theme pairs \u2014 91 combinations evaluated" },
+          { time: "09:41:19", dot: "info", text: "Applying creativity temperature: 0.85" },
+          { time: "09:41:18", dot: "info", text: "Selecting high-potential theme pairs for crossing" }
+        ]
+      },
+      { name: "Validate Seeds", status: "done", metric: "4.8s",
+        duration: "4.8s", durationPct: 31, cost: "$0.24", costPct: 37, messages: "18 msgs", msgBreakdown: "4 sys / 10 asst / 4 tool",
+        summary: "I ran novelty and feasibility checks on all 12 seeds. 9 passed both thresholds. The 3 rejected seeds overlapped with patents filed in 2024. Final seed pool has good diversity across all theme clusters.",
+        feedEntries: [
+          { time: "09:41:29", dot: "success", text: "Validation complete \u2014 <strong>9 of 12</strong> seeds passed all checks" },
+          { time: "09:41:29", dot: "metric", text: "Final pool diversity: 0.81 \u2014 good spread across clusters" },
+          { time: "09:41:28", dot: "warning", text: "Rejected seed #2: patent overlap (US-2024-0183792)" },
+          { time: "09:41:28", dot: "warning", text: "Rejected seed #7: novelty score 0.41 (below 0.65 threshold)" },
+          { time: "09:41:28", dot: "warning", text: "Rejected seed #10: feasibility score 0.53 (below 0.72 threshold)" },
+          { time: "09:41:27", dot: "metric", text: "Feasibility range: 0.78 \u2013 0.94 across passing seeds" },
+          { time: "09:41:27", dot: "metric", text: "Novelty range: 0.67 \u2013 0.91 across passing seeds" },
+          { time: "09:41:26", dot: "progress", text: "Checking patent databases for novelty conflicts" },
+          { time: "09:41:26", dot: "progress", text: "Computing feasibility scores for all 12 seeds" },
+          { time: "09:41:25", dot: "info", text: "Starting validation pipeline (novelty + feasibility + patent check)" }
+        ]
+      }
+    ]
+  },
+  {
+    name: "Hypothesis", color: "blue", status: "running", metric: "Score 6.2 \u2192 8.4",
+    progress: 83, barColor: "var(--blue)",
+    subs: [
+      { name: "Draft Hypotheses", status: "done", metric: "12.3s",
+        duration: "12.3s", durationPct: 28, cost: "$0.87", costPct: 32, messages: "42 msgs", msgBreakdown: "8 sys / 28 asst / 6 tool",
+        summary: "I expanded the 9 seeds into full hypothesis documents, each with a problem statement, proposed mechanism, and expected outcome. The drafts average 340 words. I flagged two hypotheses that need stronger grounding in the next review pass.",
+        feedEntries: [
+          { time: "09:41:42", dot: "success", text: "Drafted <strong>9 hypotheses</strong> from seed pool (avg 340 words each)" },
+          { time: "09:41:41", dot: "metric", text: "Token usage: 18.4K input, 6.2K output across 9 drafts" },
+          { time: "09:41:40", dot: "warning", text: "Hypo #3 weak grounding \u2014 mechanism relies on unverified claim" },
+          { time: "09:41:40", dot: "warning", text: "Hypo #7 weak grounding \u2014 expected outcome lacks quantification" },
+          { time: "09:41:39", dot: "info", text: "Writing hypothesis 9/9: cross-modal distillation via shared latent space" },
+          { time: "09:41:37", dot: "info", text: "Writing hypothesis 7/9: sparse attention for streaming inference" },
+          { time: "09:41:35", dot: "info", text: "Writing hypothesis 5/9: adaptive quantization with gradient feedback" },
+          { time: "09:41:33", dot: "info", text: "Writing hypothesis 3/9: contrastive sensor fusion" },
+          { time: "09:41:32", dot: "progress", text: "Expanding seeds into structured hypothesis documents" },
+          { time: "09:41:31", dot: "info", text: "Template: problem statement + mechanism + expected outcome" },
+          { time: "09:41:30", dot: "info", text: "Starting hypothesis draft generation from 9 validated seeds" }
+        ]
+      },
+      { name: "Literature Check", status: "done", metric: "8.7s",
+        duration: "8.7s", durationPct: 20, cost: "$0.42", costPct: 16, messages: "24 msgs", msgBreakdown: "6 sys / 14 asst / 4 tool",
+        summary: "I cross-referenced all 9 hypotheses against the Semantic Scholar corpus. Three hypotheses had partial overlap with 2024 publications; I annotated them with differentiation notes so the review step can assess whether the novelty gap is sufficient.",
+        feedEntries: [
+          { time: "09:41:51", dot: "success", text: "Literature check complete \u2014 9/9 hypotheses cross-referenced" },
+          { time: "09:41:51", dot: "metric", text: "Average novelty confidence: 0.74 after literature check" },
+          { time: "09:41:50", dot: "warning", text: "Hypo #1: partial overlap with Wang et al., NeurIPS 2024" },
+          { time: "09:41:50", dot: "warning", text: "Hypo #4: partial overlap with Kumar, ICML 2024 workshop" },
+          { time: "09:41:49", dot: "warning", text: "Hypo #6: partial overlap with Liu & Chen, AAAI 2025 preprint" },
+          { time: "09:41:49", dot: "info", text: "Differentiation notes added to 3 overlapping hypotheses" },
+          { time: "09:41:48", dot: "metric", text: "Scanned <strong>412 relevant papers</strong> from Semantic Scholar" },
+          { time: "09:41:46", dot: "progress", text: "Cross-referencing hypothesis 7/9 against corpus" },
+          { time: "09:41:45", dot: "progress", text: "Querying Semantic Scholar API (batch mode)" },
+          { time: "09:41:43", dot: "info", text: "Building query embeddings for 9 hypotheses" },
+          { time: "09:41:42", dot: "info", text: "Starting literature cross-reference pass" }
+        ]
+      },
+      { name: "Review Hypo (R1)", status: "done", metric: "6.2 avg",
+        duration: "14.1s", durationPct: 32, cost: "$0.64", costPct: 24, messages: "36 msgs", msgBreakdown: "6 sys / 24 asst / 6 tool",
+        summary: "I scored each hypothesis on novelty, feasibility, and impact. Round 1 average was 6.2 out of 10. The weakest dimension was feasibility \u2014 four hypotheses assumed hardware capabilities that don't exist yet. I wrote revision directives for all sub-7.0 entries.",
+        feedEntries: [
+          { time: "09:42:05", dot: "success", text: "Review R1 complete \u2014 average score <strong>6.2/10</strong>" },
+          { time: "09:42:04", dot: "info", text: "Generated revision directives for 6 entries scoring below 7.0" },
+          { time: "09:42:03", dot: "warning", text: "Hypo #2: assumes 1000-qubit hardware (not available until 2027)" },
+          { time: "09:42:03", dot: "warning", text: "Hypo #4: requires real-time processing at 10 GHz \u2014 infeasible" },
+          { time: "09:42:02", dot: "warning", text: "Hypo #6, #8: hardware assumptions exceed current capabilities" },
+          { time: "09:42:01", dot: "metric", text: "Score breakdown: novelty 7.1, feasibility 5.1, impact 6.4" },
+          { time: "09:42:00", dot: "metric", text: "Best hypothesis: #9 (score 8.2) \u2014 cross-modal distillation" },
+          { time: "09:41:58", dot: "metric", text: "Worst hypothesis: #4 (score 4.1) \u2014 hardware infeasible" },
+          { time: "09:41:56", dot: "progress", text: "Scoring hypothesis 9/9 on three dimensions" },
+          { time: "09:41:55", dot: "progress", text: "Evaluating novelty, feasibility, and impact dimensions" },
+          { time: "09:41:52", dot: "info", text: "Starting review round 1 with standard rubric (v2.1)" }
+        ]
+      },
+      { name: "Revise Hypotheses", status: "done", metric: "9 revised",
+        duration: "11.8s", durationPct: 27, cost: "$0.53", costPct: 20, messages: "32 msgs", msgBreakdown: "6 sys / 20 asst / 6 tool",
+        summary: "I rewrote the mechanism sections of 6 hypotheses to address feasibility gaps identified in Review R1. I also tightened the scope of 2 hypotheses that were too broad. All 9 hypotheses now have concrete, testable predictions.",
+        feedEntries: [
+          { time: "09:42:17", dot: "success", text: "Revision complete \u2014 <strong>9 hypotheses</strong> updated successfully" },
+          { time: "09:42:16", dot: "metric", text: "Average word count increased: 340 \u2192 385 words per hypothesis" },
+          { time: "09:42:15", dot: "info", text: "Tightened scope on hypo #5 (sensor fusion) and #9 (distillation)" },
+          { time: "09:42:14", dot: "info", text: "Rewrote mechanism for hypothesis 6/6: added constraint bounds" },
+          { time: "09:42:13", dot: "info", text: "Rewrote mechanism for hypothesis 5/6: replaced hardware assumption" },
+          { time: "09:42:12", dot: "info", text: "Rewrote mechanism for hypothesis 4/6: reduced clock requirement" },
+          { time: "09:42:10", dot: "progress", text: "Rewriting mechanism sections addressing feasibility gaps" },
+          { time: "09:42:09", dot: "info", text: "6 hypotheses queued for mechanism rewrite" },
+          { time: "09:42:08", dot: "info", text: "All 9 hypotheses now include concrete, testable predictions" },
+          { time: "09:42:06", dot: "info", text: "Applying R1 revision directives to 6 sub-7.0 entries" }
+        ]
+      },
+      { name: "Review Hypo (R2)", status: "running", metric: "8.4 avg",
+        duration: "9.2s", durationPct: 21, cost: "$0.38", costPct: 14, messages: "22 msgs", msgBreakdown: "4 sys / 14 asst / 4 tool",
+        summary: "I am re-scoring the revised hypotheses. So far 7 of 9 are complete, averaging 8.4. The revisions closed the feasibility gap effectively. Two hypotheses jumped from 5.8 to 8.9 after mechanism rewrites. Waiting on the final two evaluations.",
+        feedEntries: [
+          { time: "14:32:07", dot: "progress", text: "Scoring hypothesis 8/9 \u2014 cross-modal distillation" },
+          { time: "14:31:45", dot: "metric", text: "Running average: <strong>8.4/10</strong> across 7 completed evaluations" },
+          { time: "14:31:28", dot: "success", text: "Hypothesis 7 scored: <strong>8.9</strong> (was 5.8 pre-revision)" },
+          { time: "14:31:12", dot: "info", text: "Feasibility gap closed \u2014 all 7 scored hypotheses above 7.5" },
+          { time: "14:30:58", dot: "success", text: "Hypothesis 6 scored: <strong>8.7</strong> (was 6.1 pre-revision)" },
+          { time: "14:30:34", dot: "metric", text: "Novelty dimension holding strong: avg 8.8 across 6 scored" },
+          { time: "14:30:12", dot: "progress", text: "Evaluating revised hypotheses against R1 baselines" },
+          { time: "14:29:55", dot: "info", text: "Starting review round 2 with updated scoring rubric" }
+        ],
+        // Live feed simulation entries for the running sub-module
+        liveFeedQueue: [
+          { dot: "metric", text: "Hypothesis 8 novelty sub-score: <strong>9.1</strong> (cross-modal transfer)" },
+          { dot: "progress", text: "Computing feasibility sub-score for hypothesis 8" },
+          { dot: "metric", text: "Hypothesis 8 feasibility sub-score: <strong>8.2</strong> \u2014 within hardware bounds" },
+          { dot: "success", text: "Hypothesis 8 scored: <strong>8.6</strong> \u2014 strong cross-modal approach" },
+          { dot: "progress", text: "Scoring hypothesis 9/9 \u2014 adaptive quantization" },
+          { dot: "info", text: "Hypothesis 9 shows novel constraint-relaxation mechanism" },
+          { dot: "metric", text: "Hypothesis 9 novelty sub-score: <strong>8.3</strong>" },
+          { dot: "progress", text: "Computing feasibility and impact sub-scores for hypothesis 9" },
+          { dot: "metric", text: "Hypothesis 9 feasibility: 7.4, impact: 8.1" },
+          { dot: "success", text: "Hypothesis 9 scored: <strong>7.9</strong> \u2014 solid but narrower scope" },
+          { dot: "metric", text: "Final running average: <strong>8.3/10</strong> across all 9 evaluations" },
+          { dot: "info", text: "Score improvement from R1: +2.1 average (6.2 \u2192 8.3)" },
+          { dot: "success", text: "All 9 hypotheses scored \u2014 review round 2 complete" },
+          { dot: "info", text: "Preparing ranked list for finalist selection step" }
+        ]
+      },
+      { name: "Select Finalists", status: "pending", metric: "\u2014",
+        duration: "\u2014", durationPct: 0, cost: "\u2014", costPct: 0, messages: "\u2014", msgBreakdown: "\u2014",
+        summary: "Waiting for Review R2 to complete before selecting the top hypotheses for the invention loop.",
+        feedEntries: []
+      }
+    ]
+  },
+  {
+    name: "Invention", color: "amber", status: "pending", metric: "3/5 artifacts",
+    progress: 0, barColor: "var(--amber)",
+    subs: [
+      { name: "Select Strategy", status: "pending", metric: "\u2014",
+        duration: "\u2014", durationPct: 0, cost: "\u2014", costPct: 0, messages: "\u2014", msgBreakdown: "\u2014",
+        summary: "I will choose an invention strategy (compositional, analogical, or constraint-relaxation) based on the finalist hypothesis profiles.",
+        feedEntries: [] },
+      { name: "Generate Plan", status: "pending", metric: "\u2014",
+        duration: "\u2014", durationPct: 0, cost: "\u2014", costPct: 0, messages: "\u2014", msgBreakdown: "\u2014",
+        summary: "I will produce a structured invention plan with milestones, required artifacts, and validation criteria.",
+        feedEntries: [] },
+      { name: "Draft Paper Text", status: "pending", metric: "\u2014",
+        duration: "\u2014", durationPct: 0, cost: "\u2014", costPct: 0, messages: "\u2014", msgBreakdown: "\u2014",
+        summary: "I will write the core paper sections: abstract, introduction, method, and expected results.",
+        feedEntries: [] },
+      { name: "Generate Artifacts", status: "pending", metric: "\u2014",
+        duration: "\u2014", durationPct: 0, cost: "\u2014", costPct: 0, messages: "\u2014", msgBreakdown: "\u2014",
+        items: [
+          { icon: "\ud83d\udcca", name: "performance_comparison.py", desc: "Bar chart benchmark", badge: "pending" },
+          { icon: "\ud83e\udde9", name: "architecture_diagram.svg", desc: "System overview", badge: "pending" },
+          { icon: "\ud83d\udcc8", name: "ablation_study.py", desc: "Component ablation", badge: "pending" },
+          { icon: "\ud83d\uddc2\ufe0f", name: "dataset_stats.json", desc: "Data summary", badge: "pending" },
+          { icon: "\ud83d\udd27", name: "config_template.yaml", desc: "Repro config", badge: "pending" }
+        ],
+        summary: "I will generate code artifacts, visualizations, and configuration files required to support the paper claims.",
+        feedEntries: [] },
+      { name: "Review Paper", status: "pending", metric: "\u2014",
+        duration: "\u2014", durationPct: 0, cost: "\u2014", costPct: 0, messages: "\u2014", msgBreakdown: "\u2014",
+        summary: "I will run a self-review pass checking logical consistency, citation coverage, and claim-evidence alignment.",
+        feedEntries: [] },
+      { name: "Revise Paper", status: "pending", metric: "\u2014",
+        duration: "\u2014", durationPct: 0, cost: "\u2014", costPct: 0, messages: "\u2014", msgBreakdown: "\u2014",
+        summary: "I will apply review feedback, strengthen weak arguments, and polish the writing for final submission.",
+        feedEntries: [] }
+    ]
+  },
+  {
+    name: "Paper", color: "purple", status: "pending", metric: "5 steps",
+    progress: 0, barColor: "var(--purple)",
+    subs: [
+      { name: "Compile LaTeX", status: "pending", metric: "\u2014",
+        duration: "\u2014", durationPct: 0, cost: "\u2014", costPct: 0, messages: "\u2014", msgBreakdown: "\u2014",
+        summary: "I will compile the full LaTeX document, resolving references, citations, and figure placements.",
+        feedEntries: [] },
+      { name: "Generate Figures", status: "pending", metric: "\u2014",
+        duration: "\u2014", durationPct: 0, cost: "\u2014", costPct: 0, messages: "\u2014", msgBreakdown: "\u2014",
+        summary: "I will render all matplotlib and SVG figures at publication resolution, ensuring consistent styling.",
+        feedEntries: [] },
+      { name: "Build Repo", status: "pending", metric: "\u2014",
+        duration: "\u2014", durationPct: 0, cost: "\u2014", costPct: 0, messages: "\u2014", msgBreakdown: "\u2014",
+        summary: "I will structure the companion code repository with README, requirements, and reproduction scripts.",
+        feedEntries: [] },
+      { name: "Final QA", status: "pending", metric: "\u2014",
+        duration: "\u2014", durationPct: 0, cost: "\u2014", costPct: 0, messages: "\u2014", msgBreakdown: "\u2014",
+        summary: "I will run automated checks: LaTeX warnings, broken references, code lint, and figure resolution validation.",
+        feedEntries: [] },
+      { name: "Package Output", status: "pending", metric: "\u2014",
+        duration: "\u2014", durationPct: 0, cost: "\u2014", costPct: 0, messages: "\u2014", msgBreakdown: "\u2014",
+        summary: "I will bundle the PDF, supplementary materials, and code repo into the final deliverable archive.",
+        feedEntries: [] }
+    ]
+  }
+];
+
+// ==========================================================
+// STATE
+// ==========================================================
+var activeModIdx = 1;   // Hypothesis is running
+var activeSubIdx = 4;   // Review Hypo (R2)
+var selectedModIdx = null;
+var selectedSubIdx = null;
+
+// Live feed simulation state
+var liveFeedTimer = null;
+var liveFeedQueueIdx = 0;
+var currentLiveFeedTarget = null; // { modIdx, subIdx }
+
+// ==========================================================
+// BUILD SIDEBAR
+// ==========================================================
+function buildSidebar() {
+  var wrap = document.getElementById('modList');
+  wrap.innerHTML = '';
+  MODULES.forEach(function(mod, mi) {
+    // Module Card
+    var card = document.createElement('div');
+    card.className = 'mod-card' + (mi === activeModIdx ? ' active' : '');
+    card.dataset.color = mod.color;
+    card.dataset.mi = mi;
+    card.innerHTML =
+      '<div class="mod-head">' +
+        '<span class="mod-name">' + mod.name + '</span>' +
+        '<span class="badge badge-' + mod.status + '">' + mod.status + '</span>' +
+      '</div>' +
+      '<div class="mod-metric">' + mod.metric + '</div>' +
+      '<div class="mod-bar-wrap">' +
+        '<div class="mod-bar" style="width:' + mod.progress + '%;background:' + mod.barColor + '"></div>' +
+      '</div>';
+    card.addEventListener('click', (function(idx) {
+      return function() {
+        selectedModIdx = idx;
+        selectedSubIdx = 0;
+        renderDetail();
+        highlightSidebar();
+      };
+    })(mi));
+    wrap.appendChild(card);
+
+    // Sub-module rows
+    var subList = document.createElement('div');
+    subList.className = 'sub-list';
+    mod.subs.forEach(function(sub, si) {
+      var row = document.createElement('div');
+      row.className = 'sub-row' + (selectedModIdx === mi && selectedSubIdx === si ? ' active' : '');
+      row.dataset.mi = mi;
+      row.dataset.si = si;
+      row.innerHTML =
+        '<span class="sub-dot ' + sub.status + '"></span>' +
+        '<span class="sub-name">' + sub.name + '</span>' +
+        '<span class="sub-metric">' + sub.metric + '</span>';
+      row.addEventListener('click', (function(midx, sidx) {
+        return function(e) {
+          e.stopPropagation();
+          selectedModIdx = midx;
+          selectedSubIdx = sidx;
+          renderDetail();
+          highlightSidebar();
+        };
+      })(mi, si));
+      subList.appendChild(row);
+    });
+    wrap.appendChild(subList);
+  });
+}
+
+function highlightSidebar() {
+  var rows = document.querySelectorAll('.sub-row');
+  for (var i = 0; i < rows.length; i++) {
+    var r = rows[i];
+    var mi = +r.dataset.mi, si = +r.dataset.si;
+    r.classList.toggle('active', mi === selectedModIdx && si === selectedSubIdx);
+  }
+}
+
+// ==========================================================
+// RENDER DETAIL
+// ==========================================================
+function renderDetail() {
+  var empty = document.getElementById('emptyState');
+  var detail = document.getElementById('detailView');
+  if (selectedModIdx === null) { empty.style.display = ''; detail.style.display = 'none'; stopLiveFeed(); return; }
+  empty.style.display = 'none';
+  detail.style.display = '';
+
+  var mod = MODULES[selectedModIdx];
+  var sub = mod.subs[selectedSubIdx];
+  var statusClass = 'badge-' + sub.status;
+
+  // Items section (artifacts)
+  var itemsHtml = '';
+  if (sub.items && sub.items.length) {
+    itemsHtml =
+      '<div class="items-section">' +
+        '<div class="items-label">Artifacts</div>' +
+        sub.items.map(function(it) {
+          return '<div class="item-row">' +
+            '<div class="item-icon">' + it.icon + '</div>' +
+            '<div class="item-info">' +
+              '<div class="item-name">' + it.name + '</div>' +
+              '<div class="item-desc">' + it.desc + '</div>' +
+            '</div>' +
+            '<span class="item-badge badge-' + it.badge + '">' + it.badge + '</span>' +
+          '</div>';
+        }).join('') +
+      '</div>';
+  }
+
+  // Activity Feed section
+  var isRunning = (sub.status === 'running');
+  var feedHtml = '';
+  var feedEntries = sub.feedEntries || [];
+  if (feedEntries.length > 0 || isRunning) {
+    var indicatorHtml = isRunning
+      ? '<div class="feed-live-indicator"><span class="feed-live-dot"></span>Live</div>'
+      : '<div class="feed-completed-indicator"><span class="feed-completed-dot"></span>Completed</div>';
+
+    var entriesHtml = '';
+    for (var i = 0; i < feedEntries.length; i++) {
+      var entry = feedEntries[i];
+      entriesHtml +=
+        '<div class="feed-entry">' +
+          '<span class="feed-time">' + entry.time + '</span>' +
+          '<div class="feed-dot-col"><span class="feed-status-dot ' + entry.dot + '"></span></div>' +
+          '<span class="feed-desc">' + entry.text + '</span>' +
+        '</div>';
+    }
+
+    feedHtml =
+      '<div class="feed-section">' +
+        '<div class="feed-header">' +
+          '<div class="feed-label">Activity Feed</div>' +
+          indicatorHtml +
+        '</div>' +
+        '<div class="feed-list" id="feedList">' +
+          entriesHtml +
+        '</div>' +
+      '</div>';
+  }
+
+  detail.innerHTML =
+    '<div class="main-title">' +
+      '<h1>' + sub.name + '</h1>' +
+      '<span class="badge ' + statusClass + '">' + sub.status + '</span>' +
+    '</div>' +
+    '<div class="main-subtitle">' + mod.name + ' \u2022 Step ' + (selectedSubIdx + 1) + ' of ' + mod.subs.length + '</div>' +
+
+    '<div class="what-section">' +
+      '<div class="what-label">What happened</div>' +
+      '<div class="what-text">' + sub.summary + '</div>' +
+    '</div>' +
+
+    '<div class="stat-row">' +
+      '<div class="stat-card">' +
+        '<div class="stat-label">Duration</div>' +
+        '<div class="stat-val">' + sub.duration + '</div>' +
+        '<div class="stat-sub">' + sub.durationPct + '% of module time</div>' +
+        '<div class="stat-bar-wrap"><div class="stat-bar" style="width:' + sub.durationPct + '%;background:var(--cyan)"></div></div>' +
+      '</div>' +
+      '<div class="stat-card">' +
+        '<div class="stat-label">Cost</div>' +
+        '<div class="stat-val">' + sub.cost + '</div>' +
+        '<div class="stat-sub">' + sub.costPct + '% of module cost</div>' +
+        '<div class="stat-bar-wrap"><div class="stat-bar" style="width:' + sub.costPct + '%;background:var(--amber)"></div></div>' +
+      '</div>' +
+      '<div class="stat-card">' +
+        '<div class="stat-label">Messages</div>' +
+        '<div class="stat-val">' + sub.messages + '</div>' +
+        '<div class="stat-sub">' + sub.msgBreakdown + '</div>' +
+        '<div class="stat-bar-wrap"><div class="stat-bar" style="width:' + Math.min(100, sub.durationPct * 2.5) + '%;background:var(--purple)"></div></div>' +
+      '</div>' +
+    '</div>' +
+
+    itemsHtml +
+    feedHtml;
+
+  // Start or stop live feed simulation
+  if (isRunning && sub.liveFeedQueue && sub.liveFeedQueue.length > 0) {
+    startLiveFeed(selectedModIdx, selectedSubIdx);
+  } else {
+    stopLiveFeed();
+  }
+}
+
+// ==========================================================
+// LIVE FEED SIMULATION
+// ==========================================================
+function getSimulatedTime() {
+  var now = new Date();
+  var h = String(now.getHours()).padStart(2, '0');
+  var m = String(now.getMinutes()).padStart(2, '0');
+  var s = String(now.getSeconds()).padStart(2, '0');
+  return h + ':' + m + ':' + s;
+}
+
+// Polyfill for padStart
+if (!String.prototype.padStart) {
+  String.prototype.padStart = function(targetLength, padString) {
+    targetLength = targetLength >> 0;
+    padString = String(padString || ' ');
+    if (this.length >= targetLength) return String(this);
+    targetLength = targetLength - this.length;
+    if (targetLength > padString.length) {
+      padString += padString.repeat(targetLength / padString.length);
+    }
+    return padString.slice(0, targetLength) + String(this);
+  };
+}
+
+function startLiveFeed(modIdx, subIdx) {
+  // If already running for this target, do nothing
+  if (currentLiveFeedTarget &&
+      currentLiveFeedTarget.modIdx === modIdx &&
+      currentLiveFeedTarget.subIdx === subIdx &&
+      liveFeedTimer !== null) {
+    return;
+  }
+  stopLiveFeed();
+  currentLiveFeedTarget = { modIdx: modIdx, subIdx: subIdx };
+  liveFeedQueueIdx = 0;
+
+  liveFeedTimer = setInterval(function() {
+    var sub = MODULES[currentLiveFeedTarget.modIdx].subs[currentLiveFeedTarget.subIdx];
+    if (!sub.liveFeedQueue || liveFeedQueueIdx >= sub.liveFeedQueue.length) {
+      stopLiveFeed();
+      return;
+    }
+
+    var feedList = document.getElementById('feedList');
+    if (!feedList) { stopLiveFeed(); return; }
+
+    var nextEntry = sub.liveFeedQueue[liveFeedQueueIdx];
+    var timeStr = getSimulatedTime();
+
+    // Also push into feedEntries for persistence
+    sub.feedEntries.unshift({ time: timeStr, dot: nextEntry.dot, text: nextEntry.text });
+
+    // Create DOM element and prepend with new-entry class for glow
+    var div = document.createElement('div');
+    div.className = 'feed-entry new-entry';
+    div.innerHTML =
+      '<span class="feed-time">' + timeStr + '</span>' +
+      '<div class="feed-dot-col"><span class="feed-status-dot ' + nextEntry.dot + '"></span></div>' +
+      '<span class="feed-desc">' + nextEntry.text + '</span>';
+
+    feedList.insertBefore(div, feedList.firstChild);
+
+    liveFeedQueueIdx++;
+  }, 4000);
+}
+
+function stopLiveFeed() {
+  if (liveFeedTimer !== null) {
+    clearInterval(liveFeedTimer);
+    liveFeedTimer = null;
+  }
+  currentLiveFeedTarget = null;
+  liveFeedQueueIdx = 0;
+}
+
+// ==========================================================
+// KEYBOARD NAV
+// ==========================================================
+document.addEventListener('keydown', function(e) {
+  if (selectedModIdx === null) { selectedModIdx = 0; selectedSubIdx = 0; renderDetail(); highlightSidebar(); return; }
+  var mod = MODULES[selectedModIdx];
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    if (selectedSubIdx < mod.subs.length - 1) selectedSubIdx++;
+    renderDetail(); highlightSidebar(); scrollSubIntoView();
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (selectedSubIdx > 0) selectedSubIdx--;
+    renderDetail(); highlightSidebar(); scrollSubIntoView();
+  } else if (e.key === 'ArrowRight') {
+    e.preventDefault();
+    if (selectedModIdx < MODULES.length - 1) { selectedModIdx++; selectedSubIdx = 0; }
+    renderDetail(); highlightSidebar(); scrollSubIntoView();
+  } else if (e.key === 'ArrowLeft') {
+    e.preventDefault();
+    if (selectedModIdx > 0) { selectedModIdx--; selectedSubIdx = 0; }
+    renderDetail(); highlightSidebar(); scrollSubIntoView();
+  }
+});
+
+function scrollSubIntoView() {
+  var row = document.querySelector('.sub-row[data-mi="' + selectedModIdx + '"][data-si="' + selectedSubIdx + '"]');
+  if (row) row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+// ==========================================================
+// RING ENDPOINT POSITION
+// ==========================================================
+function positionEndpoint() {
+  var pct = 0.65;
+  var angle = (2 * Math.PI * pct) - (Math.PI / 2);
+  var ep = document.querySelector('.ring-endpoint');
+  if (ep) {
+    ep.setAttribute('cx', 50 + 42 * Math.cos(angle));
+    ep.setAttribute('cy', 50 + 42 * Math.sin(angle));
+  }
+}
+
+// ==========================================================
+// PARTICLE FLOW
+// ==========================================================
+var particles = [];
+var PARTICLE_COUNT = 20;
+var PARTICLE_SPEED = 1.1;
+
+function initParticles() {
+  var canvas = document.getElementById('particleCanvas');
+  canvas.width = 232;
+  canvas.height = window.innerHeight;
+
+  window.addEventListener('resize', function() { canvas.height = window.innerHeight; });
+
+  function getActiveCardRect() {
+    var card = document.querySelector('.mod-card.active');
+    return card ? card.getBoundingClientRect() : null;
+  }
+  function getActiveSubDotRect() {
+    var rows = document.querySelectorAll('.sub-row[data-mi="' + activeModIdx + '"]');
+    for (var i = 0; i < rows.length; i++) {
+      var dot = rows[i].querySelector('.sub-dot.running');
+      if (dot) return dot.getBoundingClientRect();
+    }
+    return null;
+  }
+
+  function spawnParticle() {
+    var cardR = getActiveCardRect();
+    var dotR = getActiveSubDotRect();
+    if (!cardR || !dotR) return;
+    particles.push({
+      x: cardR.left + cardR.width / 2 + (Math.random() - 0.5) * 22,
+      y: cardR.bottom - 2,
+      targetX: dotR.left + dotR.width / 2,
+      targetY: dotR.top + dotR.height / 2,
+      progress: 0,
+      speed: PARTICLE_SPEED + Math.random() * 0.5,
+      size: 1.8 + Math.random() * 1.5,
+      opacity: 0.45 + Math.random() * 0.4
+    });
+  }
+
+  var ctx = canvas.getContext('2d');
+
+  function animate() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Spawn particles
+    if (particles.length < PARTICLE_COUNT && Math.random() < 0.14) spawnParticle();
+
+    for (var i = particles.length - 1; i >= 0; i--) {
+      var p = particles[i];
+      p.progress += p.speed / 100;
+
+      if (p.progress >= 1) { particles.splice(i, 1); continue; }
+
+      // Cubic bezier path from card to sub-dot
+      var cp1x = p.x;
+      var cp1y = p.y + (p.targetY - p.y) * 0.3;
+      var cp2x = p.targetX;
+      var cp2y = p.y + (p.targetY - p.y) * 0.7;
+      var t = p.progress;
+      var it = 1 - t;
+      var cx = it*it*it*p.x + 3*it*it*t*cp1x + 3*it*t*t*cp2x + t*t*t*p.targetX;
+      var cy = it*it*it*p.y + 3*it*it*t*cp1y + 3*it*t*t*cp2y + t*t*t*p.targetY;
+
+      // Fade in/out
+      var alpha = p.opacity;
+      if (t < 0.15) alpha *= t / 0.15;
+      if (t > 0.85) alpha *= (1 - t) / 0.15;
+
+      // Core particle
+      ctx.beginPath();
+      ctx.arc(cx, cy, p.size, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(94, 129, 172, ' + alpha + ')';
+      ctx.fill();
+
+      // Glow halo
+      ctx.beginPath();
+      ctx.arc(cx, cy, p.size * 2.8, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(136, 192, 208, ' + (alpha * 0.12) + ')';
+      ctx.fill();
+    }
+
+    requestAnimationFrame(animate);
+  }
+  animate();
+}
+
+// ==========================================================
+// INIT
+// ==========================================================
+positionEndpoint();
+buildSidebar();
+initParticles();
+
+// Auto-select the running sub-module on load
+selectedModIdx = activeModIdx;
+selectedSubIdx = activeSubIdx;
+renderDetail();
+highlightSidebar();
+
+})();
+</script>
+</body>
+</html>

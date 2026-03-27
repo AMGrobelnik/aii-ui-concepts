@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Vertical Multi-Row Navigation</title>
+<style>
+  :root {
+    --bg:#0a0e17; --panel-bg:#0f1520; --border:#1a2235;
+    --text:#c8d0e0; --text-dim:#5a6580; --text-bright:#e8ecf4;
+    --green:#34d399; --green-dim:#065f46; --purple:#a78bfa; --purple-dim:#4c1d95;
+    --blue:#60a5fa; --blue-dim:#1e3a5f; --gray:#4b5563; --gray-dim:#1f2937;
+    --amber:#fbbf24; --red:#f87171;
+    --col-w:56px; --panel-w:200px; --ring-big:100px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--text);font-family:'SF Mono','Fira Code','JetBrains Mono',monospace;font-size:11px;height:100vh;overflow:hidden;display:flex}
+
+  /* Left panel */
+  .left-panel{width:var(--panel-w);min-width:var(--panel-w);background:var(--panel-bg);border-right:1px solid var(--border);display:flex;height:100vh;position:relative;overflow:hidden}
+
+  /* Nav columns */
+  .nav-column{width:var(--col-w);min-width:var(--col-w);display:flex;flex-direction:column;align-items:center;padding-top:20px;gap:6px;border-right:1px solid var(--border);position:relative;transition:opacity .25s,transform .25s,width .25s,min-width .25s}
+  .nav-column.hidden{opacity:0;transform:translateX(-10px);pointer-events:none;width:0;min-width:0;padding:0;overflow:hidden;border:none}
+  .nav-column.visible{opacity:1;transform:translateX(0)}
+  .nav-column.active-col{background:rgba(96,165,250,.02)}
+  .nav-column::after{content:'';position:absolute;top:50px;bottom:20px;left:50%;width:1px;background:linear-gradient(to bottom,transparent,var(--border) 10%,var(--border) 90%,transparent);z-index:0}
+  .col-label{font-size:7px;text-transform:uppercase;letter-spacing:1.2px;color:var(--text-dim);margin-bottom:8px;writing-mode:vertical-rl;text-orientation:mixed;transform:rotate(180deg);white-space:nowrap}
+
+  /* Module markers */
+  .module-marker{position:relative;z-index:1;width:40px;height:40px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .2s}
+  .module-marker:hover{transform:scale(1.12)}
+  .module-marker.focused{transform:scale(1.18)}
+  .module-marker.focused .marker-ring{filter:drop-shadow(0 0 6px var(--ring-color))}
+  .marker-ring{position:absolute;inset:0;transition:filter .2s}
+  .marker-ring circle.track{fill:none;stroke:var(--gray-dim);stroke-width:2.5}
+  .marker-ring circle.progress{fill:none;stroke:var(--ring-color);stroke-width:2.5;stroke-linecap:round;transform:rotate(-90deg);transform-origin:center;transition:stroke-dashoffset .6s}
+  .marker-diamond{width:12px;height:12px;transform:rotate(45deg);border-radius:2px;position:relative;z-index:2;transition:background .2s,box-shadow .2s}
+  .marker-label{position:absolute;bottom:-12px;left:50%;transform:translateX(-50%);font-size:6.5px;text-transform:uppercase;letter-spacing:.8px;color:var(--text-dim);white-space:nowrap;transition:color .2s}
+  .module-marker.focused .marker-label,.module-marker:hover .marker-label{color:var(--text)}
+  .marker-badge{position:absolute;top:-2px;right:-4px;font-size:7px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:0 3px;color:var(--text-dim);z-index:3;line-height:1.4}
+  @keyframes pulse-ring{0%,100%{opacity:1}50%{opacity:.5}}
+  .module-marker.active .marker-ring circle.progress{animation:pulse-ring 2s ease-in-out infinite}
+
+  /* Sub-module dots */
+  .sub-dot{position:relative;z-index:1;width:36px;height:28px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:transform .15s}
+  .sub-dot:hover{transform:scale(1.15)}
+  .sub-dot.focused{transform:scale(1.2)}
+  .dot-circle{width:10px;height:10px;border-radius:50%;border:1.5px solid var(--gray);background:transparent;transition:all .2s}
+  .sub-dot.done .dot-circle{background:var(--green);border-color:var(--green)}
+  .sub-dot.running .dot-circle{background:var(--blue);border-color:var(--blue);box-shadow:0 0 6px var(--blue)}
+  .sub-dot.focused .dot-circle{box-shadow:0 0 8px var(--ring-color,var(--blue))}
+  .dot-label{position:absolute;left:calc(100% + 2px);top:50%;transform:translateY(-50%);font-size:7px;color:var(--text-dim);white-space:nowrap;opacity:0;transition:opacity .2s;pointer-events:none}
+  .sub-dot:hover .dot-label,.sub-dot.focused .dot-label{opacity:1;color:var(--text)}
+  .dot-status{position:absolute;right:-1px;top:50%;transform:translateY(-50%);font-size:6px;color:var(--text-dim)}
+  .sub-dot.done .dot-status{color:var(--green)}
+  .sub-dot.running .dot-status{color:var(--blue)}
+
+  /* Detail dots (column 3) */
+  .detail-dot{position:relative;z-index:1;width:36px;height:24px;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:transform .15s}
+  .detail-dot:hover{transform:scale(1.15)}
+  .detail-dot.focused{transform:scale(1.2)}
+  .detail-pip{width:7px;height:7px;border-radius:50%;border:1.5px solid var(--gray);background:transparent;transition:all .2s}
+  .detail-dot.done .detail-pip{background:var(--green);border-color:var(--green)}
+  .detail-dot.running .detail-pip{background:var(--amber);border-color:var(--amber);box-shadow:0 0 5px var(--amber)}
+  .detail-label{position:absolute;left:calc(100% + 2px);top:50%;transform:translateY(-50%);font-size:7px;color:var(--text-dim);white-space:nowrap;opacity:0;transition:opacity .2s;pointer-events:none}
+  .detail-dot:hover .detail-label,.detail-dot.focused .detail-label{opacity:1;color:var(--text)}
+
+  /* Breadcrumb bar */
+  .breadcrumb-bar{position:absolute;bottom:0;left:0;right:0;height:28px;background:rgba(10,14,23,.85);border-top:1px solid var(--border);display:flex;align-items:center;padding:0 8px;gap:4px;font-size:7px;color:var(--text-dim);z-index:10}
+  .breadcrumb-bar span{opacity:.6}
+  .breadcrumb-bar .crumb{color:var(--text);opacity:1}
+  .breadcrumb-bar .sep{color:var(--text-dim);opacity:.4}
+
+  /* Right area */
+  .right-area{flex:1;display:flex;flex-direction:column;padding:24px 32px;overflow-y:auto;gap:20px}
+  .big-ring-section{display:flex;align-items:center;gap:24px}
+  .big-ring{width:var(--ring-big);height:var(--ring-big);position:relative;flex-shrink:0}
+  .big-ring svg{width:100%;height:100%}
+  .big-ring .track{fill:none;stroke:var(--gray-dim);stroke-width:4}
+  .big-ring .progress{fill:none;stroke:var(--blue);stroke-width:4;stroke-linecap:round;transform:rotate(-90deg);transform-origin:center;transition:stroke-dashoffset .8s}
+  .big-ring .pct-label{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column}
+  .big-ring .pct-num{font-size:22px;font-weight:700;color:var(--text-bright);line-height:1}
+  .big-ring .pct-unit{font-size:8px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;margin-top:2px}
+  .ring-meta{display:flex;flex-direction:column;gap:6px}
+  .ring-meta .module-title{font-size:16px;font-weight:600;color:var(--text-bright)}
+  .ring-meta .module-subtitle{font-size:10px;color:var(--text-dim);line-height:1.5;max-width:360px}
+  .status-pill{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:8px;font-size:8px;text-transform:uppercase;letter-spacing:.8px;width:fit-content}
+  .status-pill.running{background:rgba(96,165,250,.12);color:var(--blue);border:1px solid rgba(96,165,250,.25)}
+  .status-pill .pill-dot{width:5px;height:5px;border-radius:50%;background:currentColor;animation:pulse-ring 1.5s ease-in-out infinite}
+
+  /* Content cards */
+  .content-section,.detail-card,.log-section{background:rgba(15,21,32,.6);border:1px solid var(--border);border-radius:8px;padding:16px 20px}
+  .content-section h3,.detail-card h3,.log-section h3{font-size:11px;font-weight:600;color:var(--text-bright);margin-bottom:10px;text-transform:uppercase;letter-spacing:1px}
+  .step-list{display:flex;flex-direction:column;gap:8px}
+  .step-row{display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:6px;transition:background .15s}
+  .step-row:hover{background:rgba(255,255,255,.02)}
+  .step-row.active{background:rgba(96,165,250,.06);border:1px solid rgba(96,165,250,.15)}
+  .step-icon{width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:8px;flex-shrink:0}
+  .step-icon.done{background:var(--green-dim);color:var(--green)}
+  .step-icon.running{background:var(--blue-dim);color:var(--blue);animation:pulse-ring 1.5s ease-in-out infinite}
+  .step-icon.pending{background:var(--gray-dim);color:var(--gray)}
+  .step-info{flex:1}
+  .step-info .step-name{font-size:10px;color:var(--text);font-weight:500}
+  .step-info .step-desc{font-size:8px;color:var(--text-dim);margin-top:1px}
+  .step-time{font-size:8px;color:var(--text-dim);font-variant-numeric:tabular-nums}
+
+  /* Detail grid */
+  .detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .detail-cell{padding:8px 10px;border-radius:6px;background:rgba(255,255,255,.015);border:1px solid var(--border)}
+  .detail-cell .cell-label{font-size:7px;text-transform:uppercase;letter-spacing:.8px;color:var(--text-dim);margin-bottom:4px}
+  .detail-cell .cell-value{font-size:12px;color:var(--text-bright);font-weight:600}
+  .detail-cell .cell-sub{font-size:8px;color:var(--text-dim);margin-top:2px}
+
+  /* Logs */
+  .log-line{display:flex;gap:8px;padding:3px 0;font-size:9px;line-height:1.5}
+  .log-time{color:var(--text-dim);font-variant-numeric:tabular-nums;flex-shrink:0;width:52px}
+  .log-msg{color:var(--text)}
+  .log-msg.info{color:var(--blue)}
+  .log-msg.ok{color:var(--green)}
+  .log-msg.warn{color:var(--amber)}
+
+  /* Keyboard hints */
+  .kbd-hint{position:fixed;bottom:12px;right:16px;display:flex;gap:8px;font-size:8px;color:var(--text-dim);z-index:100}
+  .kbd-hint kbd{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:16px;padding:0 4px;background:var(--gray-dim);border:1px solid var(--border);border-radius:3px;font-family:inherit;font-size:7px;color:var(--text)}
+</style>
+</head>
+<body>
+
+<!-- Left Panel -->
+<div class="left-panel" id="leftPanel">
+  <!-- Column 1: Module markers -->
+  <div class="nav-column visible active-col" id="col1">
+    <div class="col-label">Modules</div>
+    <div class="module-marker done" data-module="0" style="--ring-color:var(--green)" onclick="selectModule(0)">
+      <svg class="marker-ring" viewBox="0 0 40 40"><circle class="track" cx="20" cy="20" r="16"/><circle class="progress" cx="20" cy="20" r="16" stroke-dasharray="100.53" stroke-dashoffset="0"/></svg>
+      <div class="marker-diamond" style="background:var(--green)"></div>
+      <span class="marker-label">Seed</span>
+      <span class="marker-badge" style="color:var(--green)">&#10003;</span>
+    </div>
+    <div class="module-marker done" data-module="1" style="--ring-color:var(--purple);margin-top:10px" onclick="selectModule(1)">
+      <svg class="marker-ring" viewBox="0 0 40 40"><circle class="track" cx="20" cy="20" r="16"/><circle class="progress" cx="20" cy="20" r="16" stroke-dasharray="100.53" stroke-dashoffset="16.6"/></svg>
+      <div class="marker-diamond" style="background:var(--purple)"></div>
+      <span class="marker-label">Hypo</span>
+      <span class="marker-badge">8.4</span>
+    </div>
+    <div class="module-marker active focused" data-module="2" style="--ring-color:var(--blue);margin-top:10px" onclick="selectModule(2)">
+      <svg class="marker-ring" viewBox="0 0 40 40"><circle class="track" cx="20" cy="20" r="16"/><circle class="progress" cx="20" cy="20" r="16" stroke-dasharray="100.53" stroke-dashoffset="40.2"/></svg>
+      <div class="marker-diamond" style="background:var(--blue);box-shadow:0 0 8px var(--blue)"></div>
+      <span class="marker-label">Invent</span>
+      <span class="marker-badge">3/5</span>
+    </div>
+    <div class="module-marker" data-module="3" style="--ring-color:var(--gray);margin-top:10px" onclick="selectModule(3)">
+      <svg class="marker-ring" viewBox="0 0 40 40"><circle class="track" cx="20" cy="20" r="16"/><circle class="progress" cx="20" cy="20" r="16" stroke-dasharray="100.53" stroke-dashoffset="100.53"/></svg>
+      <div class="marker-diamond" style="background:var(--gray-dim);border:1px solid var(--gray)"></div>
+      <span class="marker-label">Paper</span>
+      <span class="marker-badge" style="opacity:.4">&#9675;</span>
+    </div>
+  </div>
+  <!-- Column 2: Sub-module dots (populated by JS) -->
+  <div class="nav-column visible" id="col2" style="--ring-color:var(--blue)"><div class="col-label">Steps</div></div>
+  <!-- Column 3: Detail dots (populated by JS) -->
+  <div class="nav-column hidden" id="col3" style="--ring-color:var(--blue)"><div class="col-label">Detail</div></div>
+  <!-- Breadcrumb -->
+  <div class="breadcrumb-bar" id="breadcrumb">
+    <span class="crumb" id="bc-mod">Invention</span>
+    <span class="sep">/</span>
+    <span class="crumb" id="bc-sub">Artifacts</span>
+  </div>
+</div>
+
+<!-- Right Area -->
+<div class="right-area" id="rightArea">
+  <!-- Big ring + title -->
+  <div class="big-ring-section">
+    <div class="big-ring" id="bigRing">
+      <svg viewBox="0 0 100 100">
+        <circle class="track" cx="50" cy="50" r="42"/>
+        <circle class="progress" cx="50" cy="50" r="42" id="bigRingProgress" stroke-dasharray="263.89" stroke-dashoffset="92.36"/>
+      </svg>
+      <div class="pct-label">
+        <span class="pct-num" id="bigPct">65</span>
+        <span class="pct-unit">percent</span>
+      </div>
+    </div>
+    <div class="ring-meta">
+      <div class="module-title" id="rightTitle">Invention Loop &mdash; Iteration 3/5</div>
+      <div class="module-subtitle" id="rightSubtitle">Generating artifacts to validate the hypothesis. Strategy and plan complete. Currently producing demonstration artifacts.</div>
+      <div class="status-pill running"><span class="pill-dot"></span>Generating Artifacts</div>
+    </div>
+  </div>
+
+  <!-- Step list -->
+  <div class="content-section">
+    <h3>Artifact Generation Steps</h3>
+    <div class="step-list" id="stepList">
+      <div class="step-row">
+        <div class="step-icon done">&#10003;</div>
+        <div class="step-info"><div class="step-name">Baseline Implementation</div><div class="step-desc">Reference implementation of the core algorithm</div></div>
+        <div class="step-time">2m 14s</div>
+      </div>
+      <div class="step-row">
+        <div class="step-icon done">&#10003;</div>
+        <div class="step-info"><div class="step-name">Dataset Synthesis</div><div class="step-desc">Generated synthetic evaluation datasets (n=500)</div></div>
+        <div class="step-time">1m 48s</div>
+      </div>
+      <div class="step-row">
+        <div class="step-icon done">&#10003;</div>
+        <div class="step-info"><div class="step-name">Proof of Concept</div><div class="step-desc">Formal verification of convergence properties</div></div>
+        <div class="step-time">3m 02s</div>
+      </div>
+      <div class="step-row active">
+        <div class="step-icon running">&#9654;</div>
+        <div class="step-info"><div class="step-name">Ablation Study</div><div class="step-desc">Testing component contributions via systematic removal</div></div>
+        <div class="step-time">1m 22s ...</div>
+      </div>
+      <div class="step-row">
+        <div class="step-icon pending">&#8226;</div>
+        <div class="step-info"><div class="step-name">Evaluation Suite</div><div class="step-desc">Benchmark comparisons against SOTA methods</div></div>
+        <div class="step-time">&mdash;</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Detail metrics -->
+  <div class="detail-card">
+    <h3>Current Task &mdash; Ablation Study</h3>
+    <div class="detail-grid">
+      <div class="detail-cell">
+        <div class="cell-label">Components Tested</div>
+        <div class="cell-value">3 / 7</div>
+        <div class="cell-sub">attention, residual, normalization</div>
+      </div>
+      <div class="detail-cell">
+        <div class="cell-label">Elapsed</div>
+        <div class="cell-value">1m 22s</div>
+        <div class="cell-sub">Est. remaining: ~2m 40s</div>
+      </div>
+      <div class="detail-cell">
+        <div class="cell-label">LLM Calls</div>
+        <div class="cell-value">14</div>
+        <div class="cell-sub">Avg latency: 2.8s</div>
+      </div>
+      <div class="detail-cell">
+        <div class="cell-label">Token Usage</div>
+        <div class="cell-value">18.4k</div>
+        <div class="cell-sub">Input: 12.1k / Output: 6.3k</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Log lines -->
+  <div class="log-section">
+    <h3>Recent Activity</h3>
+    <div id="logLines">
+      <div class="log-line"><span class="log-time">14:22:08</span><span class="log-msg ok">&#10003; Baseline implementation validated</span></div>
+      <div class="log-line"><span class="log-time">14:24:22</span><span class="log-msg ok">&#10003; Dataset synthesis complete (500 samples)</span></div>
+      <div class="log-line"><span class="log-time">14:27:24</span><span class="log-msg ok">&#10003; Convergence proof verified</span></div>
+      <div class="log-line"><span class="log-time">14:28:01</span><span class="log-msg info">&#9654; Starting ablation study</span></div>
+      <div class="log-line"><span class="log-time">14:28:14</span><span class="log-msg">  Testing component: attention mechanism</span></div>
+      <div class="log-line"><span class="log-time">14:28:42</span><span class="log-msg ok">  attention removed: accuracy -12.3%</span></div>
+      <div class="log-line"><span class="log-time">14:28:58</span><span class="log-msg">  Testing component: residual connections</span></div>
+      <div class="log-line"><span class="log-time">14:29:18</span><span class="log-msg ok">  residual removed: accuracy -4.7%</span></div>
+      <div class="log-line"><span class="log-time">14:29:23</span><span class="log-msg info">  Testing component: layer normalization</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- Keyboard hints -->
+<div class="kbd-hint">
+  <span><kbd>&uarr;</kbd><kbd>&darr;</kbd> navigate</span>
+  <span><kbd>&rarr;</kbd> drill in</span>
+  <span><kbd>&larr;</kbd> back</span>
+</div>
+
+<script>
+/* ── DATA MODEL ──────────────────────────────────────── */
+const modules = [
+  { name:'Seed', color:'green', status:'done', pct:100, badge:'\u2713',
+    title:'Seed Hypothesis', subtitle:'Initial hypothesis generated from knowledge graph traversal.',
+    subs:[{name:'KG Traverse',status:'done'},{name:'Seed Gen',status:'done'}] },
+  { name:'Hypothesis', color:'purple', status:'done', pct:84, badge:'8.4',
+    title:'Hypothesis Loop \u2014 Score 8.4', subtitle:'Iterative hypothesis refinement. Converged after 3 iterations with review score 8.4/10.',
+    subs:[{name:'Generate',status:'done'},{name:'Review',status:'done'},{name:'Refine',status:'done'}] },
+  { name:'Invention', color:'blue', status:'active', pct:65, badge:'3/5',
+    title:'Invention Loop \u2014 Iteration 3/5', subtitle:'Generating artifacts to validate the hypothesis. Strategy and plan complete. Currently producing demonstration artifacts.',
+    subs:[
+      {name:'Strategy',status:'done'},{name:'Plan',status:'done'},
+      {name:'Artifacts',status:'running',details:[
+        {name:'Baseline',status:'done'},{name:'Dataset',status:'done'},
+        {name:'Proof',status:'done'},{name:'Ablation',status:'running'},{name:'Eval',status:'pending'}
+      ]},
+      {name:'Paper Draft',status:'pending'},{name:'Review',status:'pending'},{name:'Update',status:'pending'}
+    ] },
+  { name:'Paper', color:'gray', status:'pending', pct:0, badge:'\u25CB',
+    title:'Paper Generation', subtitle:'Final paper compilation, visualization, and repository packaging. Waiting for invention loop to complete.',
+    subs:[{name:'Compile',status:'pending'},{name:'Visualize',status:'pending'},{name:'Package',status:'pending'}] }
+];
+
+/* ── STATE ───────────────────────────────────────────── */
+let activeCol = 0, selModule = 2, selSub = 2, selDetail = 3;
+let focusIdx = [2, 2, 3];
+
+/* ── RENDER COLUMN 1 ────────────────────────────────── */
+function renderCol1() {
+  const markers = document.getElementById('col1').querySelectorAll('.module-marker');
+  markers.forEach((m, i) => m.classList.toggle('focused', i === focusIdx[0] && activeCol === 0));
+  document.querySelectorAll('.nav-column').forEach((c, i) => c.classList.toggle('active-col', i === activeCol));
+}
+
+/* ── RENDER COLUMN 2 ────────────────────────────────── */
+function renderCol2() {
+  const col = document.getElementById('col2'), mod = modules[selModule];
+  const label = col.querySelector('.col-label');
+  col.innerHTML = ''; col.appendChild(label);
+  col.style.setProperty('--ring-color', `var(--${mod.color})`);
+  mod.subs.forEach((s, i) => {
+    const dot = document.createElement('div');
+    dot.className = `sub-dot ${s.status}`;
+    if ((i === focusIdx[1] && activeCol === 1) || i === selSub) dot.classList.add('focused');
+    dot.style.setProperty('--ring-color', `var(--${mod.color})`);
+    dot.onclick = () => { selSub = i; focusIdx[1] = i; renderAll(); };
+    dot.innerHTML = `<div class="dot-circle"></div><span class="dot-label">${s.name}</span><span class="dot-status">${s.status==='done'?'\u2713':s.status==='running'?'\u25B6':'\u25CB'}</span>`;
+    col.appendChild(dot);
+  });
+  col.classList.remove('hidden'); col.classList.add('visible');
+}
+
+/* ── RENDER COLUMN 3 ────────────────────────────────── */
+function renderCol3() {
+  const col = document.getElementById('col3'), mod = modules[selModule], sub = mod.subs[selSub];
+  const label = col.querySelector('.col-label');
+  col.innerHTML = ''; col.appendChild(label);
+  if (!sub || !sub.details || !sub.details.length) {
+    col.classList.remove('visible'); col.classList.add('hidden'); return;
+  }
+  col.style.setProperty('--ring-color', `var(--${mod.color})`);
+  col.classList.remove('hidden'); col.classList.add('visible');
+  sub.details.forEach((d, i) => {
+    const dot = document.createElement('div');
+    dot.className = `detail-dot ${d.status}`;
+    if (i === focusIdx[2] && activeCol === 2) dot.classList.add('focused');
+    dot.onclick = () => { selDetail = i; focusIdx[2] = i; renderAll(); };
+    dot.innerHTML = `<div class="detail-pip"></div><span class="detail-label">${d.name}</span>`;
+    col.appendChild(dot);
+  });
+}
+
+/* ── RENDER BREADCRUMB ──────────────────────────────── */
+function renderBreadcrumb() {
+  const mod = modules[selModule], sub = mod.subs[selSub], bc = document.getElementById('breadcrumb');
+  let html = `<span class="crumb">${mod.name}</span>`;
+  if (sub) {
+    html += `<span class="sep">/</span><span class="crumb">${sub.name}</span>`;
+    if (sub.details && sub.details[selDetail])
+      html += `<span class="sep">/</span><span class="crumb">${sub.details[selDetail].name}</span>`;
+  }
+  bc.innerHTML = html;
+}
+
+/* ── RENDER RIGHT ────────────────────────────────────── */
+function renderRight() {
+  const mod = modules[selModule], circ = 2 * Math.PI * 42;
+  const rp = document.getElementById('bigRingProgress');
+  rp.style.strokeDashoffset = circ * (1 - mod.pct / 100);
+  rp.style.stroke = `var(--${mod.color})`;
+  document.getElementById('bigPct').textContent = mod.pct;
+  document.getElementById('rightTitle').textContent = mod.title;
+  document.getElementById('rightSubtitle').textContent = mod.subtitle;
+}
+
+function renderAll() { renderCol1(); renderCol2(); renderCol3(); renderBreadcrumb(); renderRight(); }
+
+/* ── MODULE CLICK ────────────────────────────────────── */
+function selectModule(idx) {
+  selModule = idx; focusIdx[0] = idx;
+  selSub = 0; focusIdx[1] = 0; selDetail = 0; focusIdx[2] = 0;
+  autoSelectSub(); activeCol = 0; renderAll();
+}
+
+function autoSelectSub() {
+  const subs = modules[selModule].subs;
+  for (let i = 0; i < subs.length; i++) {
+    if (subs[i].status === 'running') { selSub = i; focusIdx[1] = i; break; }
+    if (subs[i].status === 'done') { selSub = i; focusIdx[1] = i; }
+  }
+  autoSelectDetail();
+}
+
+function autoSelectDetail() {
+  const sub = modules[selModule].subs[selSub];
+  if (sub && sub.details) {
+    selDetail = 0; focusIdx[2] = 0;
+    for (let i = 0; i < sub.details.length; i++) {
+      if (sub.details[i].status === 'running') { selDetail = i; focusIdx[2] = i; break; }
+      if (sub.details[i].status === 'done') { selDetail = i; focusIdx[2] = i; }
+    }
+  }
+}
+
+/* ── KEYBOARD NAV ────────────────────────────────────── */
+function getItems(col) {
+  if (col === 0) return modules;
+  if (col === 1) return modules[selModule].subs;
+  if (col === 2) { const s = modules[selModule].subs[selSub]; return (s && s.details) || []; }
+  return [];
+}
+function colVisible(col) {
+  if (col <= 1) return true;
+  const s = modules[selModule].subs[selSub];
+  return s && s.details && s.details.length > 0;
+}
+
+function applySelection() {
+  if (activeCol === 0 && focusIdx[0] !== selModule) {
+    selModule = focusIdx[0]; selSub = 0; focusIdx[1] = 0; selDetail = 0; focusIdx[2] = 0;
+    autoSelectSub();
+  } else if (activeCol === 1) {
+    selSub = focusIdx[1]; selDetail = 0; focusIdx[2] = 0; autoSelectDetail();
+  } else if (activeCol === 2) {
+    selDetail = focusIdx[2];
+  }
+}
+
+document.addEventListener('keydown', (e) => {
+  const items = getItems(activeCol);
+  if (!items.length) return;
+  switch (e.key) {
+    case 'ArrowUp':
+      e.preventDefault(); focusIdx[activeCol] = Math.max(0, focusIdx[activeCol] - 1);
+      applySelection(); renderAll(); break;
+    case 'ArrowDown':
+      e.preventDefault(); focusIdx[activeCol] = Math.min(items.length - 1, focusIdx[activeCol] + 1);
+      applySelection(); renderAll(); break;
+    case 'ArrowRight':
+      e.preventDefault();
+      if (activeCol < 2 && colVisible(activeCol + 1)) {
+        applySelection(); activeCol++;
+        const ni = getItems(activeCol);
+        if (focusIdx[activeCol] >= ni.length) focusIdx[activeCol] = Math.max(0, ni.length - 1);
+        renderAll();
+      } break;
+    case 'ArrowLeft':
+      e.preventDefault(); if (activeCol > 0) { activeCol--; renderAll(); } break;
+  }
+});
+
+/* ── SIMULATED LOG ───────────────────────────────────── */
+const logMsgs = [
+  {time:'14:29:31',msg:'  normalization removed: accuracy -8.1%',cls:'ok'},
+  {time:'14:29:44',msg:'  Testing component: dropout layers',cls:''},
+  {time:'14:30:02',msg:'  dropout removed: accuracy -1.2%',cls:'ok'},
+  {time:'14:30:15',msg:'  Testing component: skip connections',cls:''},
+  {time:'14:30:38',msg:'  skip removed: accuracy -6.9%',cls:'ok'},
+  {time:'14:30:52',msg:'  Testing component: embedding projection',cls:''},
+  {time:'14:31:10',msg:'  embedding removed: accuracy -15.4%',cls:'warn'},
+  {time:'14:31:22',msg:'  Testing component: positional encoding',cls:''},
+  {time:'14:31:45',msg:'  positional removed: accuracy -9.7%',cls:'ok'},
+  {time:'14:31:58',msg:'\u2713 Ablation study complete (7/7 components)',cls:'ok'},
+  {time:'14:32:01',msg:'\u25B6 Starting evaluation suite',cls:'info'},
+];
+let logIdx = 0;
+setInterval(() => {
+  if (logIdx >= logMsgs.length) return;
+  const c = document.getElementById('logLines'), e = logMsgs[logIdx];
+  const d = document.createElement('div'); d.className = 'log-line';
+  d.innerHTML = `<span class="log-time">${e.time}</span><span class="log-msg ${e.cls}">${e.msg}</span>`;
+  d.style.opacity = '0'; d.style.transition = 'opacity .3s';
+  c.appendChild(d); requestAnimationFrame(() => d.style.opacity = '1');
+  c.scrollTop = c.scrollHeight; logIdx++;
+}, 3500);
+
+/* ── ELAPSED TIMER ───────────────────────────────────── */
+let elapsed = 82;
+setInterval(() => {
+  elapsed++;
+  const m = Math.floor(elapsed/60), s = elapsed%60, ts = `${m}m ${String(s).padStart(2,'0')}s`;
+  const at = document.querySelector('.step-row.active .step-time');
+  if (at) at.textContent = ts + ' ...';
+  const cells = document.querySelectorAll('.detail-cell .cell-value');
+  if (cells[1]) cells[1].textContent = ts;
+}, 1000);
+
+/* ── INIT ────────────────────────────────────────────── */
+renderAll();
+</script>
+</body>
+</html>

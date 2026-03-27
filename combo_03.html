@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Combo 03: Diamond Markers + Multi-Row Dots</title>
+<style>
+  :root {
+    --bg: #0a0c14;
+    --strip-bg: #0c0e16;
+    --border: #1a1d2e;
+    --text: #c8cad0;
+    --text-dim: #6b7084;
+    --text-bright: #eef0f6;
+    --green: #34d399;
+    --purple: #a78bfa;
+    --blue: #60a5fa;
+    --gray: #4b5068;
+    --accent-glow: 0 0 14px 3px;
+    --line-color: #1e2138;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Progress bar (4px at very top) ── */
+  #progress-bar {
+    height: 4px;
+    background: #12141f;
+    flex-shrink: 0;
+    position: relative;
+  }
+  #progress-fill {
+    height: 100%;
+    width: 65%;
+    background: linear-gradient(90deg, var(--green), var(--blue));
+    border-radius: 0 2px 2px 0;
+    transition: width 0.6s ease;
+  }
+
+  /* ── Top strip container ── */
+  #top-strip {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── Row shared styles ── */
+  .row-strip {
+    background: var(--strip-bg);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+    transition: max-height 0.35s ease, opacity 0.3s ease, padding 0.35s ease;
+  }
+  .row-strip.collapsed {
+    max-height: 0;
+    opacity: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+  }
+
+  /* Row 1 — modules */
+  #row-modules {
+    height: 52px;
+    min-height: 52px;
+    gap: 0;
+    padding: 4px 0 6px;
+  }
+
+  /* Row 2 — sub-modules */
+  #row-subs {
+    max-height: 44px;
+    padding: 3px 0 5px;
+  }
+
+  /* Row 3 — detail items */
+  #row-details {
+    max-height: 40px;
+    padding: 2px 0 5px;
+  }
+
+  /* ── Module marker (diamond-in-ring) ── */
+  .module-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+    position: relative;
+    z-index: 2;
+    padding: 0 28px;
+    user-select: none;
+  }
+  .module-marker {
+    width: 36px;
+    height: 36px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: filter 0.3s ease;
+  }
+  .module-marker svg {
+    width: 36px;
+    height: 36px;
+    overflow: visible;
+  }
+
+  /* Ring */
+  .marker-ring {
+    fill: none;
+    stroke-width: 2;
+    transition: stroke 0.3s ease, filter 0.3s ease;
+  }
+  /* Diamond */
+  .marker-diamond {
+    transition: fill 0.3s ease, filter 0.3s ease;
+  }
+  /* Percentage arc */
+  .marker-arc {
+    fill: none;
+    stroke-width: 2.5;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 0.8s ease;
+  }
+  /* Inner text */
+  .marker-text {
+    font-size: 8px;
+    font-weight: 700;
+    fill: var(--bg);
+    text-anchor: middle;
+    dominant-baseline: central;
+    pointer-events: none;
+  }
+
+  /* Module label */
+  .module-label {
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    margin-top: 1px;
+    transition: color 0.3s ease;
+    color: var(--text-dim);
+  }
+  .module-group.active .module-label { color: var(--text-bright); }
+  .module-group.selected .module-label { color: var(--text-bright); }
+
+  /* Connector line between modules */
+  #module-connectors {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  /* Glow for active module */
+  .module-group.active .module-marker svg { filter: drop-shadow(var(--accent-glow) var(--mod-color)); }
+  .module-group.selected:not(.active) .module-marker svg { filter: drop-shadow(0 0 6px 1px var(--mod-color)); }
+
+  /* ── Dot markers (rows 2 & 3) ── */
+  .dot-row-inner {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    position: relative;
+  }
+  .dot-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: pointer;
+    padding: 0 14px;
+    user-select: none;
+    position: relative;
+    z-index: 2;
+  }
+  .dot-marker {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid var(--gray);
+    background: transparent;
+    transition: all 0.3s ease;
+    position: relative;
+  }
+  .dot-marker.done {
+    background: var(--mod-color, var(--blue));
+    border-color: var(--mod-color, var(--blue));
+  }
+  .dot-marker.active {
+    border-color: var(--mod-color, var(--blue));
+    background: var(--mod-color, var(--blue));
+    box-shadow: 0 0 10px 2px var(--mod-color, var(--blue));
+    animation: dotPulse 2s ease-in-out infinite;
+  }
+  .dot-marker.pending {
+    border-color: var(--gray);
+    background: transparent;
+  }
+  .dot-label {
+    font-size: 8px;
+    font-weight: 500;
+    color: var(--text-dim);
+    margin-top: 2px;
+    white-space: nowrap;
+    transition: color 0.3s ease;
+  }
+  .dot-group.selected .dot-label,
+  .dot-group.active .dot-label { color: var(--text-bright); }
+
+  /* Thin connector between dots */
+  .dot-connector-line {
+    position: absolute;
+    top: 6px;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: var(--line-color);
+    z-index: 1;
+  }
+
+  @keyframes dotPulse {
+    0%, 100% { box-shadow: 0 0 8px 2px var(--mod-color, var(--blue)); }
+    50% { box-shadow: 0 0 16px 4px var(--mod-color, var(--blue)); }
+  }
+
+  /* Pulse for active module diamond */
+  @keyframes diamondPulse {
+    0%, 100% { filter: drop-shadow(0 0 10px 2px var(--mod-color)); }
+    50% { filter: drop-shadow(0 0 20px 5px var(--mod-color)); }
+  }
+  .module-group.active .module-marker svg {
+    animation: none;
+  }
+  .module-group.active.pulsing .module-marker svg {
+    animation: svgPulse 2s ease-in-out infinite;
+  }
+  @keyframes svgPulse {
+    0%, 100% { filter: drop-shadow(0 0 10px var(--mod-color)); }
+    50% { filter: drop-shadow(0 0 22px var(--mod-color)); }
+  }
+
+  /* ── Content area ── */
+  #content-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  #content-area::-webkit-scrollbar { width: 4px; }
+  #content-area::-webkit-scrollbar-thumb { background: #1e2138; border-radius: 2px; }
+
+  .content-header {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 4px;
+  }
+  .content-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-bright);
+  }
+  .content-badge {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .badge-done { background: rgba(52,211,153,0.15); color: var(--green); }
+  .badge-running { background: rgba(96,165,250,0.15); color: var(--blue); }
+  .badge-pending { background: rgba(75,80,104,0.15); color: var(--gray); }
+
+  .content-summary {
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text);
+    max-width: 680px;
+  }
+  .content-detail {
+    background: var(--strip-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 18px;
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--text-dim);
+    max-width: 680px;
+  }
+  .content-detail strong { color: var(--text); font-weight: 600; }
+  .detail-grid {
+    display: grid;
+    grid-template-columns: 110px 1fr;
+    gap: 4px 12px;
+    margin-top: 6px;
+  }
+  .detail-key { color: var(--text-dim); text-align: right; }
+  .detail-val { color: var(--text); }
+
+  /* ── Keyboard hint ── */
+  #kb-hint {
+    position: fixed;
+    bottom: 10px;
+    right: 16px;
+    font-size: 10px;
+    color: var(--text-dim);
+    opacity: 0.5;
+  }
+  kbd {
+    background: #161828;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 1px 5px;
+    font-family: inherit;
+    font-size: 9px;
+  }
+</style>
+</head>
+<body>
+
+<!-- Progress bar -->
+<div id="progress-bar"><div id="progress-fill"></div></div>
+
+<!-- Top strip -->
+<div id="top-strip">
+  <!-- Row 1: Modules -->
+  <div class="row-strip" id="row-modules">
+    <svg id="module-connectors"></svg>
+    <div class="module-group" id="mod-seed" data-idx="0" style="--mod-color: var(--green)">
+      <div class="module-marker">
+        <svg viewBox="0 0 40 40">
+          <circle class="marker-ring" cx="20" cy="20" r="16" stroke="#1e2138"/>
+          <circle class="marker-arc" cx="20" cy="20" r="16" stroke="var(--green)"
+            stroke-dasharray="100.53" stroke-dashoffset="0"
+            transform="rotate(-90 20 20)"/>
+          <polygon class="marker-diamond" points="20,8 32,20 20,32 8,20" fill="var(--green)"/>
+          <text class="marker-text" x="20" y="20.5" font-size="11">&#10003;</text>
+        </svg>
+      </div>
+      <span class="module-label">Seed</span>
+    </div>
+
+    <div class="module-group" id="mod-hypo" data-idx="1" style="--mod-color: var(--purple)">
+      <div class="module-marker">
+        <svg viewBox="0 0 40 40">
+          <circle class="marker-ring" cx="20" cy="20" r="16" stroke="#1e2138"/>
+          <circle class="marker-arc" cx="20" cy="20" r="16" stroke="var(--purple)"
+            stroke-dasharray="100.53" stroke-dashoffset="0"
+            transform="rotate(-90 20 20)"/>
+          <polygon class="marker-diamond" points="20,8 32,20 20,32 8,20" fill="var(--purple)"/>
+          <text class="marker-text" x="20" y="20.5" font-size="8.5">8.4</text>
+        </svg>
+      </div>
+      <span class="module-label">Hypo</span>
+    </div>
+
+    <div class="module-group active pulsing" id="mod-invention" data-idx="2" style="--mod-color: var(--blue)">
+      <div class="module-marker">
+        <svg viewBox="0 0 40 40">
+          <circle class="marker-ring" cx="20" cy="20" r="16" stroke="#1e2138"/>
+          <circle class="marker-arc" cx="20" cy="20" r="16" stroke="var(--blue)"
+            stroke-dasharray="100.53" stroke-dashoffset="40.21"
+            transform="rotate(-90 20 20)"/>
+          <polygon class="marker-diamond" points="20,8 32,20 20,32 8,20" fill="var(--blue)"/>
+          <text class="marker-text" x="20" y="20.5" font-size="7.5">3/5</text>
+        </svg>
+      </div>
+      <span class="module-label">Invention</span>
+    </div>
+
+    <div class="module-group" id="mod-paper" data-idx="3" style="--mod-color: var(--gray)">
+      <div class="module-marker">
+        <svg viewBox="0 0 40 40">
+          <circle class="marker-ring" cx="20" cy="20" r="16" stroke="#1e2138"/>
+          <circle class="marker-arc" cx="20" cy="20" r="16" stroke="var(--gray)"
+            stroke-dasharray="100.53" stroke-dashoffset="100.53"
+            transform="rotate(-90 20 20)"/>
+          <polygon class="marker-diamond" points="20,8 32,20 20,32 8,20" fill="var(--gray)" opacity="0.4"/>
+          <text class="marker-text" x="20" y="20.5" font-size="12" fill="var(--gray)">&#9675;</text>
+        </svg>
+      </div>
+      <span class="module-label">Paper</span>
+    </div>
+  </div>
+
+  <!-- Row 2: Sub-modules -->
+  <div class="row-strip" id="row-subs">
+    <div class="dot-row-inner" id="subs-inner">
+      <div class="dot-connector-line"></div>
+    </div>
+  </div>
+
+  <!-- Row 3: Detail items -->
+  <div class="row-strip collapsed" id="row-details">
+    <div class="dot-row-inner" id="details-inner">
+      <div class="dot-connector-line"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Content area -->
+<div id="content-area">
+  <div class="content-header">
+    <span class="content-title" id="ct-title">Artifacts</span>
+    <span class="content-badge badge-running" id="ct-badge">running</span>
+  </div>
+  <div class="content-summary" id="ct-summary"></div>
+  <div class="content-detail" id="ct-detail"></div>
+</div>
+
+<!-- Keyboard hint -->
+<div id="kb-hint">
+  <kbd>&larr;</kbd><kbd>&rarr;</kbd> navigate &nbsp;
+  <kbd>Tab</kbd> row &nbsp;
+  <kbd>Enter</kbd> drill
+</div>
+
+<script>
+// ── Data model ──
+const DATA = {
+  modules: [
+    {
+      id: 'seed', label: 'Seed', color: 'var(--green)', pct: 100, status: 'done',
+      badge: 'done', marker: '\u2713',
+      summary: 'Knowledge graph seeded from 142 source papers across 3 research domains. Extracted 891 concepts, 2,340 relationships, and 67 frontier gaps.',
+      detail: { 'Sources': '142 papers', 'Concepts': '891', 'Relations': '2,340', 'Gaps found': '67', 'Duration': '4m 12s', 'Status': 'Complete' },
+      subs: []
+    },
+    {
+      id: 'hypo', label: 'Hypo', color: 'var(--purple)', pct: 100, status: 'done',
+      badge: 'done', marker: '8.4',
+      summary: 'Generated 24 candidate hypotheses from frontier gaps. Top hypothesis scored 8.4/10 on novelty, feasibility, and impact. Review loop completed in 3 iterations.',
+      detail: { 'Candidates': '24', 'Top score': '8.4 / 10', 'Iterations': '3', 'Pruned': '18', 'Finalists': '6', 'Duration': '11m 38s' },
+      subs: [
+        { id: 'gen', label: 'Gen', status: 'done',
+          summary: 'Generated 24 hypotheses from knowledge graph frontier gaps using divergent prompting strategy.',
+          detail: { 'Generated': '24', 'Strategy': 'Divergent', 'Duration': '3m 05s' } },
+        { id: 'review', label: 'Review', status: 'done',
+          summary: 'Multi-criteria review scored each hypothesis on novelty (0-10), feasibility (0-10), and projected impact.',
+          detail: { 'Reviewed': '24', 'Avg score': '5.7', 'Top score': '8.4', 'Duration': '6m 20s' } },
+        { id: 'select', label: 'Select', status: 'done',
+          summary: 'Selected top 6 finalists exceeding threshold. Best candidate: "Adaptive Topology-Aware Gradient Routing."',
+          detail: { 'Threshold': '6.5', 'Selected': '6', 'Best': 'Adaptive Topology-Aware Gradient Routing' } }
+      ]
+    },
+    {
+      id: 'invention', label: 'Invention', color: 'var(--blue)', pct: 60, status: 'running',
+      badge: 'running', marker: '3/5', pulsing: true,
+      summary: 'Invention loop iteration 3 of 5. Currently generating artifact demonstrations for the ablation study. Strategy and plan stages complete.',
+      detail: { 'Iteration': '3 / 5', 'Strategy': 'Complete', 'Plan': 'Complete', 'Artifacts': 'In progress (4/5)', 'Paper text': 'Pending', 'Review': 'Pending' },
+      subs: [
+        { id: 'strat', label: 'Strat', status: 'done',
+          summary: 'Exploration strategy locked: topology-aware routing with gradient checkpointing. Search space bounded to transformer variants.',
+          detail: { 'Approach': 'Topology-aware routing', 'Search space': 'Transformer variants', 'Constraints': '3 defined', 'Duration': '2m 10s' } },
+        { id: 'plan', label: 'Plan', status: 'done',
+          summary: 'Experimental plan finalized with 5 artifact targets: baseline, dataset, proof, ablation, evaluation.',
+          detail: { 'Artifacts planned': '5', 'Dependencies': 'Linear chain', 'Estimated time': '18m', 'Duration': '1m 45s' } },
+        { id: 'art', label: 'Art', status: 'running',
+          summary: 'Generating artifact demonstrations. Baseline, dataset, and proof complete. Ablation study in progress.',
+          detail: { 'Complete': '3 / 5', 'Current': 'Ablation study', 'Elapsed': '8m 22s', 'Est. remaining': '6m' },
+          children: [
+            { id: 'baseline', label: 'Baseline', status: 'done',
+              summary: 'Baseline model trained on standard configuration. Accuracy: 78.3% on validation set.',
+              detail: { 'Model': 'Standard transformer', 'Val accuracy': '78.3%', 'Train loss': '0.342', 'Duration': '2m 01s' } },
+            { id: 'dataset', label: 'Dataset', status: 'done',
+              summary: 'Synthetic dataset generated: 10k samples with controlled topology variation. Split 80/10/10.',
+              detail: { 'Samples': '10,000', 'Split': '80/10/10', 'Features': '128-dim', 'Duration': '1m 18s' } },
+            { id: 'proof', label: 'Proof', status: 'done',
+              summary: 'Convergence proof verified for bounded gradient norms under topology-aware routing. Theorem holds for L <= 12 layers.',
+              detail: { 'Theorem': 'Convergence bound', 'Condition': 'L <= 12', 'Verified': 'Symbolically', 'Duration': '3m 40s' } },
+            { id: 'ablation', label: 'Ablation', status: 'running',
+              summary: 'Running ablation study: removing routing components one at a time. 3 of 5 ablation variants complete.',
+              detail: { 'Variants': '3 / 5', 'Current': 'No checkpoint variant', 'Best delta': '-4.2% accuracy', 'Elapsed': '1m 23s' } },
+            { id: 'eval', label: 'Eval', status: 'pending',
+              summary: 'Final evaluation pending. Will run full test suite on best configuration.',
+              detail: { 'Planned': 'Full test suite', 'Metrics': 'Acc, F1, Latency', 'Status': 'Waiting for ablation' } }
+          ]
+        },
+        { id: 'paper', label: 'Paper', status: 'pending',
+          summary: 'Paper text generation pending. Will compile results from all artifacts into structured sections.',
+          detail: { 'Sections': '7 planned', 'Style': 'NeurIPS format', 'Status': 'Waiting for artifacts' } },
+        { id: 'review', label: 'Review', status: 'pending',
+          summary: 'Automated review pending. Will evaluate coherence, novelty claims, and experimental rigor.',
+          detail: { 'Criteria': 'Coherence, Novelty, Rigor', 'Threshold': '7.0', 'Status': 'Waiting for paper' } },
+        { id: 'update', label: 'Update', status: 'pending',
+          summary: 'Hypothesis update pending. Will incorporate reviewer feedback and adjust for next iteration.',
+          detail: { 'Action': 'Refine hypothesis', 'Status': 'Waiting for review' } }
+      ]
+    },
+    {
+      id: 'paper_gen', label: 'Paper', color: 'var(--gray)', pct: 0, status: 'pending',
+      badge: 'pending', marker: '\u25CB',
+      summary: 'Paper generation has not started. Waiting for invention loop to complete all 5 iterations.',
+      detail: { 'Status': 'Pending', 'Depends on': 'Invention loop (3/5)', 'Estimated start': '~25 minutes' },
+      subs: [
+        { id: 'compile', label: 'Compile', status: 'pending',
+          summary: 'Compile final paper from all invention artifacts and text.',
+          detail: { 'Status': 'Pending' } },
+        { id: 'viz', label: 'Viz', status: 'pending',
+          summary: 'Generate visualizations: figures, tables, and diagrams.',
+          detail: { 'Status': 'Pending' } },
+        { id: 'format', label: 'Format', status: 'pending',
+          summary: 'Format paper to target venue style (NeurIPS).',
+          detail: { 'Status': 'Pending' } },
+        { id: 'export', label: 'Export', status: 'pending',
+          summary: 'Export final PDF and supplementary materials.',
+          detail: { 'Status': 'Pending' } }
+      ]
+    }
+  ]
+};
+
+// ── State ──
+let focusRow = 0;        // 0=modules, 1=subs, 2=details
+let selModule = 2;       // default: Invention
+let selSub = 2;          // default: Art
+let selDetail = 3;       // default: Ablation
+
+const modules = DATA.modules;
+const modEls = document.querySelectorAll('.module-group');
+const rowSubs = document.getElementById('row-subs');
+const rowDetails = document.getElementById('row-details');
+const subsInner = document.getElementById('subs-inner');
+const detailsInner = document.getElementById('details-inner');
+
+// ── Draw connector lines between module markers ──
+function drawModuleConnectors() {
+  const svg = document.getElementById('module-connectors');
+  const row = document.getElementById('row-modules');
+  const rect = row.getBoundingClientRect();
+  svg.setAttribute('viewBox', `0 0 ${rect.width} ${rect.height}`);
+  svg.style.width = rect.width + 'px';
+  svg.style.height = rect.height + 'px';
+
+  svg.innerHTML = '';
+  const groups = [...modEls];
+  for (let i = 0; i < groups.length - 1; i++) {
+    const a = groups[i].querySelector('.module-marker').getBoundingClientRect();
+    const b = groups[i + 1].querySelector('.module-marker').getBoundingClientRect();
+    const x1 = a.left + a.width / 2 - rect.left + 18;
+    const y1 = a.top + a.height / 2 - rect.top;
+    const x2 = b.left + b.width / 2 - rect.left - 18;
+    const y2 = b.top + b.height / 2 - rect.top;
+
+    const colA = getComputedStyle(groups[i]).getPropertyValue('--mod-color').trim();
+    const colB = getComputedStyle(groups[i + 1]).getPropertyValue('--mod-color').trim();
+
+    const gradId = `lg${i}`;
+    const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+    defs.innerHTML = `<linearGradient id="${gradId}" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="${colA}"/>
+      <stop offset="100%" stop-color="${colB}"/>
+    </linearGradient>`;
+    svg.appendChild(defs);
+
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', x1);
+    line.setAttribute('y1', y1);
+    line.setAttribute('x2', x2);
+    line.setAttribute('y2', y2);
+    line.setAttribute('stroke', `url(#${gradId})`);
+    line.setAttribute('stroke-width', '1.5');
+    line.setAttribute('opacity', '0.4');
+    svg.appendChild(line);
+  }
+}
+
+// ── Build dot row ──
+function buildDotRow(container, items, color, selectedIdx) {
+  // Keep the connector line, clear rest
+  const connLine = container.querySelector('.dot-connector-line');
+  container.innerHTML = '';
+  container.appendChild(connLine);
+
+  items.forEach((item, i) => {
+    const g = document.createElement('div');
+    g.className = 'dot-group';
+    if (i === selectedIdx) g.classList.add('selected');
+
+    const dot = document.createElement('div');
+    dot.className = 'dot-marker';
+    dot.style.setProperty('--mod-color', color);
+    if (item.status === 'done') dot.classList.add('done');
+    else if (item.status === 'running') dot.classList.add('active');
+    else dot.classList.add('pending');
+
+    const lbl = document.createElement('span');
+    lbl.className = 'dot-label';
+    lbl.textContent = item.label;
+
+    g.appendChild(dot);
+    g.appendChild(lbl);
+    g.addEventListener('click', () => {
+      if (container === subsInner) {
+        selSub = i;
+        focusRow = 1;
+      } else {
+        selDetail = i;
+        focusRow = 2;
+      }
+      render();
+    });
+    container.appendChild(g);
+  });
+}
+
+// ── Render everything ──
+function render() {
+  const mod = modules[selModule];
+
+  // Module highlighting
+  modEls.forEach((el, i) => {
+    el.classList.toggle('selected', i === selModule);
+    el.classList.toggle('active', modules[i].status === 'running');
+    el.classList.toggle('pulsing', !!modules[i].pulsing);
+  });
+
+  // Sub-modules
+  const hasSubs = mod.subs && mod.subs.length > 0;
+  if (hasSubs) {
+    rowSubs.classList.remove('collapsed');
+    if (selSub >= mod.subs.length) selSub = 0;
+    buildDotRow(subsInner, mod.subs, mod.color, selSub);
+  } else {
+    rowSubs.classList.add('collapsed');
+  }
+
+  // Detail items
+  const sub = hasSubs ? mod.subs[selSub] : null;
+  const hasDetails = sub && sub.children && sub.children.length > 0;
+  if (hasDetails) {
+    rowDetails.classList.remove('collapsed');
+    if (selDetail >= sub.children.length) selDetail = 0;
+    buildDotRow(detailsInner, sub.children, mod.color, selDetail);
+  } else {
+    rowDetails.classList.add('collapsed');
+    if (focusRow === 2) focusRow = 1;
+  }
+
+  // Determine what content to show based on focus row
+  let contentItem;
+  if (focusRow === 2 && hasDetails) {
+    contentItem = sub.children[selDetail];
+  } else if (focusRow === 1 && hasSubs) {
+    contentItem = mod.subs[selSub];
+  } else {
+    contentItem = mod;
+  }
+
+  // Update content
+  const ctTitle = document.getElementById('ct-title');
+  const ctBadge = document.getElementById('ct-badge');
+  const ctSummary = document.getElementById('ct-summary');
+  const ctDetail = document.getElementById('ct-detail');
+
+  ctTitle.textContent = contentItem.label || mod.label;
+  ctBadge.textContent = contentItem.status;
+  ctBadge.className = 'content-badge badge-' + contentItem.status;
+  ctSummary.textContent = contentItem.summary || '';
+
+  if (contentItem.detail && typeof contentItem.detail === 'object') {
+    let html = '<div class="detail-grid">';
+    for (const [k, v] of Object.entries(contentItem.detail)) {
+      html += `<span class="detail-key">${k}</span><span class="detail-val">${v}</span>`;
+    }
+    html += '</div>';
+    ctDetail.innerHTML = html;
+    ctDetail.style.display = '';
+  } else {
+    ctDetail.style.display = 'none';
+  }
+
+  // Focus ring styling
+  highlightFocusRow();
+
+  // Redraw connectors
+  requestAnimationFrame(drawModuleConnectors);
+}
+
+function highlightFocusRow() {
+  document.querySelectorAll('.row-strip').forEach(r => r.style.outline = 'none');
+
+  // Subtle left-border indicator for focused row
+  const rows = [
+    document.getElementById('row-modules'),
+    document.getElementById('row-subs'),
+    document.getElementById('row-details')
+  ];
+  rows.forEach((r, i) => {
+    if (i === focusRow && !r.classList.contains('collapsed')) {
+      r.style.borderLeft = '2px solid rgba(96,165,250,0.3)';
+    } else {
+      r.style.borderLeft = '2px solid transparent';
+    }
+  });
+}
+
+// ── Keyboard navigation ──
+document.addEventListener('keydown', (e) => {
+  const mod = modules[selModule];
+  const hasSubs = mod.subs && mod.subs.length > 0;
+  const sub = hasSubs ? mod.subs[selSub] : null;
+  const hasDetails = sub && sub.children && sub.children.length > 0;
+
+  switch (e.key) {
+    case 'ArrowLeft':
+      e.preventDefault();
+      if (focusRow === 0) {
+        selModule = Math.max(0, selModule - 1);
+        selSub = 0;
+        selDetail = 0;
+      } else if (focusRow === 1) {
+        selSub = Math.max(0, selSub - 1);
+        selDetail = 0;
+      } else if (focusRow === 2) {
+        selDetail = Math.max(0, selDetail - 1);
+      }
+      render();
+      break;
+
+    case 'ArrowRight':
+      e.preventDefault();
+      if (focusRow === 0) {
+        selModule = Math.min(modules.length - 1, selModule + 1);
+        selSub = 0;
+        selDetail = 0;
+      } else if (focusRow === 1) {
+        selSub = Math.min(mod.subs.length - 1, selSub + 1);
+        selDetail = 0;
+      } else if (focusRow === 2 && hasDetails) {
+        selDetail = Math.min(sub.children.length - 1, selDetail + 1);
+      }
+      render();
+      break;
+
+    case 'Tab':
+      e.preventDefault();
+      if (e.shiftKey) {
+        // Go up
+        if (focusRow > 0) focusRow--;
+      } else {
+        // Go down, but only to visible rows
+        if (focusRow === 0 && hasSubs) focusRow = 1;
+        else if (focusRow === 1 && hasDetails) focusRow = 2;
+      }
+      render();
+      break;
+
+    case 'Enter':
+      e.preventDefault();
+      // Drill down: move focus to next row if available
+      if (focusRow === 0 && hasSubs) {
+        focusRow = 1;
+      } else if (focusRow === 1 && hasDetails) {
+        focusRow = 2;
+      }
+      render();
+      break;
+
+    case 'Escape':
+      e.preventDefault();
+      if (focusRow > 0) focusRow--;
+      render();
+      break;
+
+    case 'ArrowUp':
+      e.preventDefault();
+      if (focusRow > 0) focusRow--;
+      render();
+      break;
+
+    case 'ArrowDown':
+      e.preventDefault();
+      if (focusRow === 0 && hasSubs) focusRow = 1;
+      else if (focusRow === 1 && hasDetails) focusRow = 2;
+      render();
+      break;
+  }
+});
+
+// ── Click handlers for modules ──
+modEls.forEach((el, i) => {
+  el.addEventListener('click', () => {
+    selModule = i;
+    selSub = 0;
+    selDetail = 0;
+    focusRow = 0;
+    render();
+  });
+});
+
+// ── Resize handler ──
+window.addEventListener('resize', drawModuleConnectors);
+
+// ── Init ──
+render();
+</script>
+</body>
+</html>

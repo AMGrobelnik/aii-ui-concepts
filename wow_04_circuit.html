@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Circuit Board View</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --pcb-bg: #0a1a0a;
+    --pcb-grid: #0f2a0f;
+    --copper: #b87333;
+    --copper-dim: #5a3a1a;
+    --copper-bright: #e6a050;
+    --gold: #d4a843;
+    --green-glow: #00ff88;
+    --purple-glow: #b060ff;
+    --blue-glow: #4090ff;
+    --orange-glow: #ff8c30;
+    --chip-bg: #101810;
+    --chip-border: #1a3a1a;
+    --text-primary: #c8d8c0;
+    --text-dim: #5a6a50;
+    --solder: #c0c0c0;
+  }
+
+  body {
+    background: var(--pcb-bg);
+    color: var(--text-primary);
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* ---- PCB grid texture ---- */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background:
+      linear-gradient(var(--pcb-grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--pcb-grid) 1px, transparent 1px);
+    background-size: 20px 20px;
+    opacity: 0.35;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* faint radial vignette */
+  body::after {
+    content: '';
+    position: fixed; inset: 0;
+    background: radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.6) 100%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ---- Canvas for traces & electricity ---- */
+  #traceCanvas {
+    position: fixed; inset: 0;
+    width: 100%; height: 100%;
+    z-index: 1;
+  }
+
+  /* ---- Vias layer (decorative) ---- */
+  .via {
+    position: fixed;
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    border: 2px solid var(--copper);
+    background: var(--pcb-bg);
+    z-index: 2;
+    opacity: 0.5;
+  }
+  .via::after {
+    content: '';
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 3px; height: 3px;
+    border-radius: 50%;
+    background: var(--copper-dim);
+  }
+
+  /* ---- Chip shared styles ---- */
+  .chip {
+    position: fixed;
+    z-index: 10;
+    width: 260px;
+    background: var(--chip-bg);
+    border: 2px solid var(--chip-border);
+    border-radius: 8px;
+    padding: 20px 18px 16px;
+    cursor: default;
+    transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+  }
+  .chip:hover {
+    transform: scale(1.05);
+    z-index: 20;
+  }
+  .chip:hover .pin-extra { opacity: 1; max-height: 60px; margin-top: 8px; }
+  .chip:hover .chip-status-text { opacity: 1; max-height: 30px; margin-top: 6px; }
+
+  /* chip notch (IC indent) */
+  .chip::before {
+    content: '';
+    position: absolute;
+    top: -2px; left: 50%;
+    transform: translateX(-50%);
+    width: 30px; height: 8px;
+    background: var(--pcb-bg);
+    border: 2px solid var(--chip-border);
+    border-top: none;
+    border-radius: 0 0 10px 10px;
+  }
+
+  .chip-name {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  .chip-subtitle {
+    font-family: 'Inter', sans-serif;
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 10px;
+  }
+
+  /* status LED */
+  .status-led {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-bottom: 10px;
+  }
+  .led-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+
+  /* pins row */
+  .pins {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .pin {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    padding: 2px 6px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 3px;
+    color: var(--text-dim);
+    letter-spacing: 0.5px;
+  }
+
+  .pin-extra {
+    opacity: 0;
+    max-height: 0;
+    overflow: hidden;
+    transition: all 0.3s ease;
+  }
+
+  .chip-status-text {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--text-dim);
+    opacity: 0;
+    max-height: 0;
+    overflow: hidden;
+    transition: all 0.3s ease;
+  }
+
+  /* ---- Pin marks along chip edges ---- */
+  .edge-pins {
+    position: absolute;
+    display: flex;
+    gap: 8px;
+  }
+  .edge-pins.top { top: -5px; left: 50px; right: 50px; justify-content: space-evenly; }
+  .edge-pins.bottom { bottom: -5px; left: 50px; right: 50px; justify-content: space-evenly; }
+  .edge-pins.left { left: -5px; top: 30px; bottom: 20px; flex-direction: column; justify-content: space-evenly; }
+  .edge-pins.right { right: -5px; top: 30px; bottom: 20px; flex-direction: column; justify-content: space-evenly; }
+
+  .edge-pin {
+    width: 10px; height: 4px;
+    background: var(--solder);
+    border-radius: 1px;
+    opacity: 0.35;
+  }
+  .edge-pins.left .edge-pin,
+  .edge-pins.right .edge-pin {
+    width: 4px; height: 10px;
+  }
+
+  /* ---- Chip-specific glows ---- */
+  #chip-seed {
+    top: 14%; left: 12%;
+    border-color: rgba(0, 255, 136, 0.25);
+    box-shadow: 0 0 20px rgba(0, 255, 136, 0.08);
+  }
+  #chip-seed .chip-name { color: var(--green-glow); }
+  #chip-seed .led-dot { background: var(--green-glow); box-shadow: 0 0 6px var(--green-glow); }
+  #chip-seed:hover { box-shadow: 0 0 35px rgba(0, 255, 136, 0.15); border-color: rgba(0, 255, 136, 0.4); }
+
+  #chip-hypo {
+    top: 14%; right: 12%;
+    border-color: rgba(176, 96, 255, 0.25);
+    box-shadow: 0 0 20px rgba(176, 96, 255, 0.08);
+  }
+  #chip-hypo .chip-name { color: var(--purple-glow); }
+  #chip-hypo .led-dot { background: var(--purple-glow); box-shadow: 0 0 6px var(--purple-glow); }
+  #chip-hypo:hover { box-shadow: 0 0 35px rgba(176, 96, 255, 0.15); border-color: rgba(176, 96, 255, 0.4); }
+
+  #chip-inv {
+    bottom: 22%; left: 12%;
+    border-color: rgba(64, 144, 255, 0.4);
+    box-shadow: 0 0 30px rgba(64, 144, 255, 0.15), 0 0 60px rgba(64, 144, 255, 0.06);
+    animation: activeGlow 2s ease-in-out infinite;
+  }
+  #chip-inv .chip-name { color: var(--blue-glow); }
+  #chip-inv .led-dot { background: var(--blue-glow); box-shadow: 0 0 8px var(--blue-glow); animation: ledPulse 1s ease-in-out infinite; }
+  #chip-inv:hover { box-shadow: 0 0 50px rgba(64, 144, 255, 0.25), 0 0 80px rgba(64, 144, 255, 0.1); border-color: rgba(64, 144, 255, 0.5); }
+
+  #chip-paper {
+    bottom: 22%; right: 12%;
+    border-color: rgba(255, 140, 48, 0.12);
+    box-shadow: 0 0 10px rgba(255, 140, 48, 0.04);
+    opacity: 0.55;
+  }
+  #chip-paper .chip-name { color: rgba(255, 140, 48, 0.5); }
+  #chip-paper .led-dot { background: rgba(255, 140, 48, 0.3); }
+  #chip-paper:hover { opacity: 0.8; box-shadow: 0 0 25px rgba(255, 140, 48, 0.1); border-color: rgba(255, 140, 48, 0.25); }
+
+  /* ---- Active chip spinner ---- */
+  .chip-spinner {
+    position: absolute;
+    top: 14px; right: 14px;
+    width: 18px; height: 18px;
+    border: 2px solid rgba(64, 144, 255, 0.15);
+    border-top-color: var(--blue-glow);
+    border-radius: 50%;
+    animation: spin 1.2s linear infinite;
+  }
+
+  /* ---- Bottom status bar ---- */
+  .status-bar {
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    height: 44px;
+    background: linear-gradient(180deg, rgba(10, 26, 10, 0.9) 0%, rgba(6, 14, 6, 0.98) 100%);
+    border-top: 1px solid rgba(184, 115, 51, 0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 32px;
+    z-index: 30;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--copper);
+    letter-spacing: 1px;
+  }
+  .status-bar span { opacity: 0.7; }
+  .status-bar .sep { color: var(--copper-dim); }
+  .status-bar .val { color: var(--copper-bright); opacity: 1; }
+  .status-bar .active-val { color: var(--blue-glow); opacity: 1; }
+
+  /* ---- Title plaque ---- */
+  .title-plaque {
+    position: fixed;
+    top: 20px; left: 50%;
+    transform: translateX(-50%);
+    z-index: 30;
+    text-align: center;
+    padding: 10px 28px;
+    background: rgba(10, 26, 10, 0.85);
+    border: 1px solid rgba(184, 115, 51, 0.2);
+    border-radius: 4px;
+  }
+  .title-plaque h1 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--gold);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+  }
+  .title-plaque .sub {
+    font-family: 'Inter', sans-serif;
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-top: 2px;
+    letter-spacing: 0.5px;
+  }
+
+  /* ---- Animations ---- */
+  @keyframes activeGlow {
+    0%, 100% { box-shadow: 0 0 30px rgba(64,144,255,0.15), 0 0 60px rgba(64,144,255,0.06); }
+    50% { box-shadow: 0 0 45px rgba(64,144,255,0.25), 0 0 90px rgba(64,144,255,0.1); }
+  }
+  @keyframes ledPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="traceCanvas"></canvas>
+
+<!-- Decorative Vias — placed by JS -->
+
+<!-- Title -->
+<div class="title-plaque">
+  <h1>AI Inventor</h1>
+  <div class="sub">Autonomous Scientific Research Pipeline</div>
+</div>
+
+<!-- CHIP 1: SEED_HYPO -->
+<div class="chip" id="chip-seed">
+  <div class="edge-pins top"><span class="edge-pin"></span><span class="edge-pin"></span><span class="edge-pin"></span><span class="edge-pin"></span><span class="edge-pin"></span></div>
+  <div class="edge-pins bottom"><span class="edge-pin"></span><span class="edge-pin"></span><span class="edge-pin"></span><span class="edge-pin"></span><span class="edge-pin"></span></div>
+  <div class="edge-pins left"><span class="edge-pin"></span><span class="edge-pin"></span><span class="edge-pin"></span></div>
+  <div class="edge-pins right"><span class="edge-pin"></span><span class="edge-pin"></span><span class="edge-pin"></span></div>
+  <div class="chip-name">SEED_HYPO</div>
+  <div class="chip-subtitle">Hypothesis Generation</div>
+  <div class="status-led"><span class="led-dot"></span> COMPLETE</div>
+  <div class="pins">
+    <span class="pin">KG_BUILD</span>
+    <span class="pin">FETCH_LIT</span>
+    <span class="pin">GEN_SEED</span>
+  </div>
+  <div class="pin-extra pins">
+    <span class="pin">PARSE_PDF</span>
+    <span class="pin">EMBED_VEC</span>
+    <span class="pin">CLUSTER</span>
+  </div>
+  <div class="chip-status-text">3 hypotheses seeded in 4m12s</div>
+</div>
+
+<!-- CHIP 2: HYPO_LOOP -->
+<div class="chip" id="chip-hypo">
+  <div class="edge-pins top"><span class="edge-pin"></span><span class="edge-pin"></span><span class="edge-pin"></span><span class="edge-pin"></span><span class="edge-pin"></span></div>
+  <div class="edge-pins bottom"><span class="edge-pin"></span><span class="edge-pin"></span><span class="edge-pin"></span><span class="edge-pin"></span><span class="edge-pin"></span></div>
+  <div class="edge-pins left"><span class="edge-pin"></span><span class="edge-pin"></span><span class="edge-pin"></span></div>
+  <div class="edge-pins right"><span class="edge-pin"></span><span class="edge-pin"></span><span class="edge-pin"></span></div>
+  <div class="chip-name">HYPO_LOOP</div>
+  <div class="chip-subtitle">Hypothesis Refinement</div>
+  <div class="status-led"><span class="led-dot"></span> COMPLETE</div>
+  <div class="pins">
+    <span class="pin">REVIEW</span>
+    <span class="pin">REFINE</span>
+    <span class="pin">VALIDATE</span>
+  </div>
+  <div class="pin-extra pins">
+    <span class="pin">NOVELTY_CHK</span>
+    <span class="pin">CITE_LINK</span>
+    <span class="pin">SCORE</span>
+  </div>
+  <div class="chip-status-text">2 rounds, best score: 0.87</div>
+</div>
+
+<!-- CHIP 3: INV_LOOP (ACTIVE) -->
+<div class="chip" id="chip-inv">
+  <div class="edge-pins top"><span class="edge-pin"></span><span class="edge-pin"></span><span class="edge-pin"></span><span class="edge-pin"></span><span class="edge-pin"></span></div>
+  <div class="edge-pins bottom"><span class="edge-pin"></span><span class="edge-pin"></span><span class="edge-pin"></span><span class="edge-pin"></span><span class="edge-pin"></span></div>
+  <div class="edge-pins left"><span class="edge-pin"></span><span class="edge-pin"></span><span class="edge-pin"></span></div>
+  <div class="edge-pins right"><span class="edge-pin"></span><span class="edge-pin"></span><span class="edge-pin"></span></div>
+  <div class="chip-spinner"></div>
+  <div class="chip-name">INV_LOOP</div>
+  <div class="chip-subtitle">Invention Iteration</div>
+  <div class="status-led"><span class="led-dot"></span> ACTIVE</div>
+  <div class="pins">
+    <span class="pin">GEN_STRAT</span>
+    <span class="pin">GEN_PLAN</span>
+    <span class="pin">GEN_TEXT</span>
+  </div>
+  <div class="pin-extra pins">
+    <span class="pin">REVIEW_PAPER</span>
+    <span class="pin">REVISION</span>
+    <span class="pin">CITE_FMT</span>
+  </div>
+  <div class="chip-status-text">Iteration 2/3 &mdash; generating plan</div>
+</div>
+
+<!-- CHIP 4: PAPER_REPO (pending) -->
+<div class="chip" id="chip-paper">
+  <div class="edge-pins top"><span class="edge-pin"></span><span class="edge-pin"></span><span class="edge-pin"></span><span class="edge-pin"></span><span class="edge-pin"></span></div>
+  <div class="edge-pins bottom"><span class="edge-pin"></span><span class="edge-pin"></span><span class="edge-pin"></span><span class="edge-pin"></span><span class="edge-pin"></span></div>
+  <div class="edge-pins left"><span class="edge-pin"></span><span class="edge-pin"></span><span class="edge-pin"></span></div>
+  <div class="edge-pins right"><span class="edge-pin"></span><span class="edge-pin"></span><span class="edge-pin"></span></div>
+  <div class="chip-name">PAPER_REPO</div>
+  <div class="chip-subtitle">Paper &amp; Repository Output</div>
+  <div class="status-led"><span class="led-dot"></span> PENDING</div>
+  <div class="pins">
+    <span class="pin">GEN_DEMO</span>
+    <span class="pin">GEN_VIZ</span>
+    <span class="pin">GEN_PAPER</span>
+  </div>
+  <div class="pin-extra pins">
+    <span class="pin">LATEX_FMT</span>
+    <span class="pin">REPO_PKG</span>
+    <span class="pin">ARTIFACT</span>
+  </div>
+  <div class="chip-status-text">Awaiting invention loop output</div>
+</div>
+
+<!-- Status Bar -->
+<div class="status-bar">
+  <span>AI INVENTOR PCB v3.0</span>
+  <span class="sep">|</span>
+  <span>RUN: <span class="val">ssl-low-resource-v3</span></span>
+  <span class="sep">|</span>
+  <span>CLK: <span class="active-val" id="clock">02:34:17</span></span>
+  <span class="sep">|</span>
+  <span>PWR: <span class="val">$12.47</span></span>
+  <span class="sep">|</span>
+  <span>STAGE: <span class="active-val">3/4</span></span>
+</div>
+
+<script>
+// ============================================================
+//  TRACE & ELECTRICITY ENGINE
+// ============================================================
+const canvas = document.getElementById('traceCanvas');
+const ctx = canvas.getContext('2d');
+
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ---- Chip center coordinates (updated on resize / init) ----
+function chipCenter(id) {
+  const el = document.getElementById(id);
+  const r = el.getBoundingClientRect();
+  return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+}
+function chipRight(id) {
+  const el = document.getElementById(id);
+  const r = el.getBoundingClientRect();
+  return { x: r.right, y: r.top + r.height / 2 };
+}
+function chipLeft(id) {
+  const el = document.getElementById(id);
+  const r = el.getBoundingClientRect();
+  return { x: r.left, y: r.top + r.height / 2 };
+}
+function chipBottom(id) {
+  const el = document.getElementById(id);
+  const r = el.getBoundingClientRect();
+  return { x: r.left + r.width / 2, y: r.bottom };
+}
+function chipTop(id) {
+  const el = document.getElementById(id);
+  const r = el.getBoundingClientRect();
+  return { x: r.left + r.width / 2, y: r.top };
+}
+
+// ---- Build right-angle trace paths between chips ----
+// Each path is an array of {x, y} waypoints.  We compute them
+// relative to current chip positions so they survive resizes.
+
+function buildTraces() {
+  // Trace 1: SEED -> HYPO (top row, left to right)
+  const s1 = chipRight('chip-seed');
+  const e1 = chipLeft('chip-hypo');
+  const midX1 = (s1.x + e1.x) / 2;
+  const trace1 = [
+    s1,
+    { x: midX1, y: s1.y },
+    { x: midX1, y: e1.y },
+    e1
+  ];
+
+  // Trace 2: HYPO -> INV (top-right down to bottom-left)
+  const s2 = chipBottom('chip-hypo');
+  const e2 = chipTop('chip-inv');
+  const midY2 = (s2.y + e2.y) / 2;
+  const midX2 = (s2.x + e2.x) / 2;
+  const trace2 = [
+    s2,
+    { x: s2.x, y: midY2 },
+    { x: e2.x, y: midY2 },
+    e2
+  ];
+
+  // Trace 3: INV -> PAPER (bottom row, left to right)
+  const s3 = chipRight('chip-inv');
+  const e3 = chipLeft('chip-paper');
+  const midX3 = (s3.x + e3.x) / 2;
+  const trace3 = [
+    s3,
+    { x: midX3, y: s3.y },
+    { x: midX3, y: e3.y },
+    e3
+  ];
+
+  return [
+    { path: trace1, state: 'complete', color: '#00ff88', dimColor: '#1a5a3a' },
+    { path: trace2, state: 'active',   color: '#4090ff', dimColor: '#1a3060' },
+    { path: trace3, state: 'pending',  color: '#ff8c30', dimColor: '#3a2210' }
+  ];
+}
+
+// ---- Compute total path length & segment lengths ----
+function pathMeta(path) {
+  let totalLen = 0;
+  const segments = [];
+  for (let i = 1; i < path.length; i++) {
+    const dx = path[i].x - path[i-1].x;
+    const dy = path[i].y - path[i-1].y;
+    const len = Math.sqrt(dx*dx + dy*dy);
+    segments.push(len);
+    totalLen += len;
+  }
+  return { totalLen, segments };
+}
+
+// Get point at distance d along path
+function pointAtDist(path, segments, d) {
+  let accumulated = 0;
+  for (let i = 0; i < segments.length; i++) {
+    if (accumulated + segments[i] >= d) {
+      const t = (d - accumulated) / segments[i];
+      return {
+        x: path[i].x + (path[i+1].x - path[i].x) * t,
+        y: path[i].y + (path[i+1].y - path[i].y) * t
+      };
+    }
+    accumulated += segments[i];
+  }
+  return path[path.length - 1];
+}
+
+// ---- Electricity dots ----
+// Each trace can have multiple dots traveling along it.
+class ElecDot {
+  constructor(totalLen, speed, delay) {
+    this.totalLen = totalLen;
+    this.speed = speed;        // px per second
+    this.dist = -delay * speed; // negative = delayed start
+    this.trailLen = 40;
+  }
+  update(dt) {
+    this.dist += this.speed * dt;
+    if (this.dist > this.totalLen + this.trailLen) {
+      this.dist = -Math.random() * 100 - 30; // re-enter with slight random delay
+    }
+  }
+}
+
+// ---- Decorative vias ----
+function placeVias() {
+  const count = 30;
+  for (let i = 0; i < count; i++) {
+    const via = document.createElement('div');
+    via.className = 'via';
+    via.style.left = (Math.random() * 90 + 5) + '%';
+    via.style.top = (Math.random() * 85 + 5) + '%';
+    via.style.opacity = 0.15 + Math.random() * 0.35;
+    const size = 6 + Math.random() * 6;
+    via.style.width = size + 'px';
+    via.style.height = size + 'px';
+    document.body.appendChild(via);
+  }
+}
+placeVias();
+
+// ---- Flash on pin arrival ----
+const pinFlashes = []; // { x, y, t, maxT, color }
+function addFlash(x, y, color) {
+  pinFlashes.push({ x, y, t: 0, maxT: 0.5, color });
+}
+
+// ---- Render loop ----
+let lastTime = performance.now();
+let traces = buildTraces();
+let traceData = [];  // { meta, dots[] }
+
+function initDots() {
+  traceData = traces.map(tr => {
+    const meta = pathMeta(tr.path);
+    const dots = [];
+    const dotCount = tr.state === 'active' ? 6 : tr.state === 'complete' ? 3 : 0;
+    const speed = tr.state === 'active' ? 140 : 80;
+    for (let i = 0; i < dotCount; i++) {
+      dots.push(new ElecDot(meta.totalLen, speed, i * (meta.totalLen / dotCount / speed)));
+    }
+    return { meta, dots };
+  });
+}
+
+function rebuildAll() {
+  traces = buildTraces();
+  initDots();
+}
+rebuildAll();
+window.addEventListener('resize', () => { resize(); rebuildAll(); });
+
+function drawTraceBase(path, state, color, dimColor) {
+  ctx.lineWidth = state === 'active' ? 3.5 : 3;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  // base copper trace
+  ctx.strokeStyle = state === 'pending' ? '#3a2a14' : dimColor;
+  ctx.beginPath();
+  ctx.moveTo(path[0].x, path[0].y);
+  for (let i = 1; i < path.length; i++) ctx.lineTo(path[i].x, path[i].y);
+  ctx.stroke();
+
+  // glow layer for complete / active
+  if (state === 'complete') {
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = 0.12;
+    ctx.lineWidth = 8;
+    ctx.beginPath();
+    ctx.moveTo(path[0].x, path[0].y);
+    for (let i = 1; i < path.length; i++) ctx.lineTo(path[i].x, path[i].y);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.lineWidth = 3;
+
+    // steady bright line for completed
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = 0.35;
+    ctx.beginPath();
+    ctx.moveTo(path[0].x, path[0].y);
+    for (let i = 1; i < path.length; i++) ctx.lineTo(path[i].x, path[i].y);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  if (state === 'active') {
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = 0.18;
+    ctx.lineWidth = 10;
+    ctx.beginPath();
+    ctx.moveTo(path[0].x, path[0].y);
+    for (let i = 1; i < path.length; i++) ctx.lineTo(path[i].x, path[i].y);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.lineWidth = 3;
+  }
+
+  // solder pads at endpoints
+  [path[0], path[path.length-1]].forEach(p => {
+    ctx.fillStyle = '#c0c0c0';
+    ctx.globalAlpha = 0.5;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  });
+}
+
+function drawElecDots(trIdx, dt) {
+  const tr = traces[trIdx];
+  const td = traceData[trIdx];
+  if (!td) return;
+  const { meta, dots } = td;
+  const { totalLen, segments } = meta;
+  const path = tr.path;
+  const color = tr.color;
+
+  dots.forEach(dot => {
+    dot.update(dt);
+    if (dot.dist < 0) return;
+
+    // draw trail
+    const steps = 12;
+    for (let s = 0; s < steps; s++) {
+      const d = dot.dist - s * (dot.trailLen / steps);
+      if (d < 0 || d > totalLen) continue;
+      const pt = pointAtDist(path, segments, d);
+      const alpha = (1 - s / steps) * 0.9;
+      const radius = (1 - s / steps) * 3 + 1;
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, radius, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.globalAlpha = alpha;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+
+    // bright head
+    if (dot.dist >= 0 && dot.dist <= totalLen) {
+      const pt = pointAtDist(path, segments, dot.dist);
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, 4, 0, Math.PI * 2);
+      ctx.fillStyle = '#ffffff';
+      ctx.globalAlpha = 0.8;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+
+      // glow around head
+      const g = ctx.createRadialGradient(pt.x, pt.y, 0, pt.x, pt.y, 14);
+      g.addColorStop(0, color);
+      g.addColorStop(1, 'transparent');
+      ctx.fillStyle = g;
+      ctx.globalAlpha = 0.4;
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, 14, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+
+    // Flash when reaching the end
+    if (dot.dist >= totalLen && dot.dist - dot.speed * dt < totalLen) {
+      const end = path[path.length - 1];
+      addFlash(end.x, end.y, color);
+    }
+  });
+}
+
+function drawFlashes(dt) {
+  for (let i = pinFlashes.length - 1; i >= 0; i--) {
+    const f = pinFlashes[i];
+    f.t += dt;
+    if (f.t >= f.maxT) { pinFlashes.splice(i, 1); continue; }
+    const progress = f.t / f.maxT;
+    const radius = 8 + progress * 25;
+    const alpha = (1 - progress) * 0.6;
+    const g = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, radius);
+    g.addColorStop(0, f.color);
+    g.addColorStop(1, 'transparent');
+    ctx.fillStyle = g;
+    ctx.globalAlpha = alpha;
+    ctx.beginPath();
+    ctx.arc(f.x, f.y, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+}
+
+// Ambient particles — floating copper dust
+const particles = [];
+for (let i = 0; i < 40; i++) {
+  particles.push({
+    x: Math.random() * window.innerWidth,
+    y: Math.random() * window.innerHeight,
+    vx: (Math.random() - 0.5) * 8,
+    vy: (Math.random() - 0.5) * 8,
+    r: Math.random() * 1.5 + 0.5,
+    alpha: Math.random() * 0.15 + 0.05
+  });
+}
+
+function drawParticles(dt) {
+  particles.forEach(p => {
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    if (p.x < 0) p.x = canvas.width;
+    if (p.x > canvas.width) p.x = 0;
+    if (p.y < 0) p.y = canvas.height;
+    if (p.y > canvas.height) p.y = 0;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    ctx.fillStyle = '#b87333';
+    ctx.globalAlpha = p.alpha;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  });
+}
+
+// ---- Additional trace decoration: corner solder joints ----
+function drawCornerJoints() {
+  traces.forEach(tr => {
+    const path = tr.path;
+    // draw small circles at intermediate waypoints
+    for (let i = 1; i < path.length - 1; i++) {
+      ctx.beginPath();
+      ctx.arc(path[i].x, path[i].y, 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#a0a0a0';
+      ctx.globalAlpha = 0.3;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+  });
+}
+
+// ---- Main render loop ----
+function render(now) {
+  const dt = Math.min((now - lastTime) / 1000, 0.05); // cap dt
+  lastTime = now;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Draw base traces
+  traces.forEach((tr, i) => {
+    drawTraceBase(tr.path, tr.state, tr.color, tr.dimColor);
+  });
+
+  drawCornerJoints();
+
+  // Draw electricity
+  traces.forEach((tr, i) => {
+    drawElecDots(i, dt);
+  });
+
+  drawFlashes(dt);
+  drawParticles(dt);
+
+  requestAnimationFrame(render);
+}
+requestAnimationFrame(render);
+
+// ---- Clock tick ----
+let clockSec = 2 * 3600 + 34 * 60 + 17;
+setInterval(() => {
+  clockSec++;
+  const h = String(Math.floor(clockSec / 3600)).padStart(2, '0');
+  const m = String(Math.floor((clockSec % 3600) / 60)).padStart(2, '0');
+  const s = String(clockSec % 60).padStart(2, '0');
+  document.getElementById('clock').textContent = `${h}:${m}:${s}`;
+}, 1000);
+</script>
+</body>
+</html>

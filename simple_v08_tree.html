@@ -1,0 +1,1309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Tree / Mind Map</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #111118;
+    --surface-2: #16161f;
+    --surface-3: #1c1c28;
+    --border: #1e1e2a;
+    --border-subtle: #282838;
+    --green: #22c55e;
+    --green-dim: rgba(34,197,94,0.12);
+    --green-glow: rgba(34,197,94,0.25);
+    --purple: #8b5cf6;
+    --purple-dim: rgba(139,92,246,0.12);
+    --purple-glow: rgba(139,92,246,0.25);
+    --blue: #3b82f6;
+    --blue-dim: rgba(59,130,246,0.12);
+    --blue-glow: rgba(59,130,246,0.3);
+    --orange: #f59e0b;
+    --orange-dim: rgba(245,158,11,0.10);
+    --orange-glow: rgba(245,158,11,0.2);
+    --text: #e2e2ef;
+    --text-dim: #8888a0;
+    --text-muted: #55556a;
+    --text-faint: #3a3a50;
+    --glass-bg: rgba(17,17,24,0.75);
+    --glass-border: rgba(255,255,255,0.06);
+  }
+
+  html, body {
+    height: 100%; width: 100%;
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  #app {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+
+  /* ── Top Bar ── */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+    height: 48px;
+    min-height: 48px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    z-index: 100;
+    flex-shrink: 0;
+  }
+  .topbar-left {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .brand {
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+  }
+  .brand-accent { color: var(--blue); }
+  .separator {
+    width: 1px;
+    height: 18px;
+    background: var(--border);
+  }
+  .run-badge {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 12px;
+    border-radius: 100px;
+    background: var(--blue-dim);
+    border: 1px solid rgba(59,130,246,0.15);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--blue);
+  }
+  .live-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--blue);
+    animation: livePulse 1.8s ease-in-out infinite;
+  }
+  @keyframes livePulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.7); }
+  }
+  .topbar-center {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .topbar-center .elapsed {
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
+    color: var(--text);
+  }
+  .topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+  .cost {
+    font-weight: 600;
+    color: var(--green);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ── Tree Canvas ── */
+  .tree-viewport {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    cursor: grab;
+  }
+  .tree-viewport:active { cursor: grabbing; }
+  .tree-canvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 4000px;
+    height: 3000px;
+    transform-origin: 0 0;
+  }
+
+  /* ── SVG Overlay for branches ── */
+  .branch-svg {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1;
+  }
+  .branch-svg path {
+    fill: none;
+    stroke-width: 2;
+    transition: opacity 0.4s;
+  }
+  .branch-svg path.glow {
+    stroke-width: 6;
+    opacity: 0.15;
+    filter: blur(4px);
+  }
+  .branch-done { stroke-dasharray: none; }
+  .branch-active {
+    stroke-dasharray: 8 4;
+    animation: dashFlow 1.2s linear infinite;
+  }
+  .branch-pending {
+    stroke-dasharray: 3 6;
+    opacity: 0.3;
+  }
+  @keyframes dashFlow {
+    to { stroke-dashoffset: -24; }
+  }
+
+  /* ── Node Base ── */
+  .tree-node {
+    position: absolute;
+    z-index: 10;
+    transition: opacity 0.4s ease, transform 0.4s ease;
+    cursor: pointer;
+    user-select: none;
+  }
+  .tree-node.entering {
+    opacity: 0;
+    transform: translate(-20px, 0) scale(0.9);
+  }
+
+  /* ── Root Node ── */
+  .root-node {
+    width: 64px; height: 64px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 30% 30%, var(--surface-3), var(--surface));
+    border: 2px solid var(--border-subtle);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 30px rgba(59,130,246,0.08), 0 0 60px rgba(139,92,246,0.04);
+    animation: rootBreathe 4s ease-in-out infinite;
+    position: relative;
+  }
+  .root-node::after {
+    content: '';
+    position: absolute;
+    inset: -8px;
+    border-radius: 50%;
+    border: 1px solid rgba(59,130,246,0.08);
+    animation: rootRing 4s ease-in-out infinite;
+  }
+  @keyframes rootBreathe {
+    0%, 100% { box-shadow: 0 0 30px rgba(59,130,246,0.08), 0 0 60px rgba(139,92,246,0.04); }
+    50% { box-shadow: 0 0 40px rgba(59,130,246,0.14), 0 0 80px rgba(139,92,246,0.06); }
+  }
+  @keyframes rootRing {
+    0%, 100% { transform: scale(1); opacity: 0.6; }
+    50% { transform: scale(1.1); opacity: 0.3; }
+  }
+  .root-icon {
+    font-size: 22px;
+    filter: grayscale(0.2);
+  }
+  .root-label {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 10px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    text-align: center;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+  }
+
+  /* ── Module Node ── */
+  .module-node {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    border-radius: 12px;
+    background: var(--glass-bg);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid var(--glass-border);
+    min-width: 140px;
+    transition: all 0.3s ease;
+    animation: nodeFloat 6s ease-in-out infinite;
+    position: relative;
+  }
+  .module-node::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; bottom: 0;
+    width: 3px;
+    border-radius: 12px 0 0 12px;
+  }
+  .module-node:hover {
+    border-color: rgba(255,255,255,0.1);
+    transform: translateX(3px);
+  }
+  .module-node.expanded {
+    border-color: rgba(255,255,255,0.12);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  }
+  @keyframes nodeFloat {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-2px); }
+  }
+  .module-node:hover { animation-play-state: paused; }
+  .module-status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .module-info { display: flex; flex-direction: column; gap: 2px; }
+  .module-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    white-space: nowrap;
+  }
+  .module-meta {
+    font-size: 10px;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+  .module-expand-icon {
+    margin-left: auto;
+    font-size: 10px;
+    color: var(--text-muted);
+    transition: transform 0.3s;
+  }
+  .module-node.expanded .module-expand-icon {
+    transform: rotate(90deg);
+    color: var(--text-dim);
+  }
+
+  /* Module color variants */
+  .module-green::before { background: var(--green); }
+  .module-green .module-status-dot { background: var(--green); box-shadow: 0 0 8px var(--green-glow); }
+  .module-purple::before { background: var(--purple); }
+  .module-purple .module-status-dot { background: var(--purple); box-shadow: 0 0 8px var(--purple-glow); }
+  .module-blue::before { background: var(--blue); }
+  .module-blue .module-status-dot { background: var(--blue); box-shadow: 0 0 8px var(--blue-glow); animation: dotPulse 1.8s ease-in-out infinite; }
+  .module-orange::before { background: var(--orange); opacity: 0.4; }
+  .module-orange .module-status-dot { background: var(--orange); opacity: 0.35; }
+  .module-orange .module-name { color: var(--text-muted); }
+
+  /* Active module glow */
+  .module-node.is-active {
+    min-width: 160px;
+    box-shadow: 0 0 30px var(--blue-glow), 0 0 60px rgba(59,130,246,0.08);
+    border-color: rgba(59,130,246,0.2);
+  }
+  .module-node.is-active::after {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: 16px;
+    border: 1.5px solid rgba(59,130,246,0.12);
+    animation: activeRing 3s ease-in-out infinite;
+  }
+  @keyframes activeRing {
+    0%, 100% { opacity: 0.6; }
+    50% { opacity: 0.2; }
+  }
+  @keyframes dotPulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.8); }
+  }
+
+  /* ── Iteration Node ── */
+  .iter-node {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 12px;
+    border-radius: 8px;
+    background: var(--glass-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    transition: all 0.3s;
+    cursor: pointer;
+    animation: nodeFloat 6s ease-in-out infinite;
+    white-space: nowrap;
+  }
+  .iter-node:hover {
+    border-color: rgba(255,255,255,0.1);
+    transform: translateX(2px);
+  }
+  .iter-node.expanded {
+    border-color: rgba(255,255,255,0.1);
+  }
+  .iter-label {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text);
+  }
+  .iter-badge {
+    font-size: 9px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 4px;
+  }
+  .iter-badge-done { background: var(--green-dim); color: var(--green); }
+  .iter-badge-active { background: var(--blue-dim); color: var(--blue); }
+  .iter-badge-pending { background: rgba(85,85,106,0.15); color: var(--text-muted); }
+
+  /* ── Step Node ── */
+  .step-node {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border-radius: 6px;
+    background: var(--glass-bg);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid var(--glass-border);
+    transition: all 0.3s;
+    cursor: pointer;
+    white-space: nowrap;
+    animation: nodeFloat 7s ease-in-out infinite;
+  }
+  .step-node:hover {
+    border-color: rgba(255,255,255,0.12);
+    transform: scale(1.04);
+    z-index: 20;
+  }
+  .step-icon {
+    font-size: 10px;
+    width: 16px; height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    flex-shrink: 0;
+  }
+  .step-icon-done { background: var(--green-dim); color: var(--green); }
+  .step-icon-active { background: var(--blue-dim); color: var(--blue); animation: dotPulse 1.8s ease-in-out infinite; }
+  .step-icon-pending { background: rgba(85,85,106,0.1); color: var(--text-muted); }
+  .step-name {
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--text-dim);
+  }
+  .step-node.is-done .step-name { color: var(--text); }
+  .step-node.is-active .step-name { color: var(--blue); font-weight: 600; }
+  .step-node.is-active {
+    border-color: rgba(59,130,246,0.2);
+    box-shadow: 0 0 14px rgba(59,130,246,0.12);
+  }
+
+  /* ── Summary Card ── */
+  .summary-card {
+    position: absolute;
+    z-index: 50;
+    width: 280px;
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    padding: 16px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.5), 0 0 1px rgba(255,255,255,0.06);
+    opacity: 0;
+    transform: translateX(-10px) scale(0.96);
+    transition: all 0.3s ease;
+    pointer-events: none;
+  }
+  .summary-card.visible {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+    pointer-events: auto;
+  }
+  .summary-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(59,130,246,0.3), transparent);
+  }
+  .summary-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+  }
+  .summary-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .summary-stats {
+    display: flex;
+    gap: 10px;
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+  .summary-stats .val { font-weight: 600; color: var(--text); }
+  .summary-items { display: flex; flex-direction: column; gap: 5px; }
+  .summary-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.5;
+  }
+  .summary-item-icon {
+    width: 14px;
+    text-align: center;
+    flex-shrink: 0;
+    font-size: 10px;
+  }
+  .si-done { color: var(--green); }
+  .si-active { color: var(--blue); }
+  .si-pending { color: var(--text-muted); }
+  .summary-item-detail {
+    font-size: 9px;
+    color: var(--text-muted);
+    margin-left: 22px;
+  }
+
+  /* Connector line from node to summary card */
+  .summary-connector {
+    position: absolute;
+    z-index: 45;
+    pointer-events: none;
+  }
+  .summary-connector line {
+    stroke: rgba(59,130,246,0.2);
+    stroke-width: 1;
+    stroke-dasharray: 3 3;
+  }
+
+  /* ── Bottom Stats Bar ── */
+  .bottom-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+    height: 36px;
+    min-height: 36px;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--text-muted);
+    z-index: 100;
+    flex-shrink: 0;
+  }
+  .bottom-bar .stats {
+    display: flex;
+    gap: 20px;
+  }
+  .stat-val {
+    color: var(--text-dim);
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+  }
+  .bottom-bar .hint {
+    color: var(--text-faint);
+    font-size: 10px;
+  }
+  .hint kbd {
+    background: var(--surface-3);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-family: inherit;
+    font-size: 10px;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+  }
+
+  /* ── Zoom controls ── */
+  .zoom-controls {
+    position: absolute;
+    bottom: 50px;
+    right: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    z-index: 90;
+  }
+  .zoom-btn {
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    font-size: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .zoom-btn:hover {
+    background: var(--surface-2);
+    color: var(--text);
+    border-color: var(--border-subtle);
+  }
+
+  /* ── Utility ── */
+  .fade-stagger { animation: fadeInRight 0.4s ease forwards; }
+  @keyframes fadeInRight {
+    from { opacity: 0; transform: translateX(-16px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <!-- Top Bar -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <span class="brand">AI <span class="brand-accent">Inventor</span></span>
+      <span class="separator"></span>
+      <div class="run-badge">
+        <span class="live-dot"></span>
+        <span>ssl-low-resource-v3</span>
+      </div>
+    </div>
+    <div class="topbar-center">
+      <span>Elapsed <span class="elapsed" id="elapsed">1h 42m 16s</span></span>
+      <span class="separator"></span>
+      <span>Iteration <span class="elapsed">2 / 3</span></span>
+    </div>
+    <div class="topbar-right">
+      <span>Tokens <span class="cost">2.4M</span></span>
+      <span class="separator"></span>
+      <span>Cost <span class="cost">$18.73</span></span>
+    </div>
+  </div>
+
+  <!-- Tree Viewport -->
+  <div class="tree-viewport" id="viewport">
+    <div class="tree-canvas" id="canvas">
+      <svg class="branch-svg" id="branchSvg"></svg>
+      <!-- Nodes injected by JS -->
+    </div>
+
+    <!-- Zoom Controls -->
+    <div class="zoom-controls">
+      <button class="zoom-btn" id="zoomIn" title="Zoom in">+</button>
+      <button class="zoom-btn" id="zoomOut" title="Zoom out">-</button>
+      <button class="zoom-btn" id="zoomReset" title="Re-center">&#8982;</button>
+    </div>
+  </div>
+
+  <!-- Bottom Bar -->
+  <div class="bottom-bar">
+    <div class="stats">
+      <span>Hypotheses <span class="stat-val">12</span></span>
+      <span>Inventions <span class="stat-val">4</span></span>
+      <span>Papers <span class="stat-val">1</span></span>
+      <span>Artifacts <span class="stat-val">8 / 15</span></span>
+      <span>LLM Calls <span class="stat-val">347</span></span>
+    </div>
+    <div class="hint">
+      <kbd>Scroll</kbd> zoom &middot; <kbd>Drag</kbd> pan &middot; <kbd>Click</kbd> expand
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  // ── Mock Data ──
+  const TREE = {
+    root: { id: 'root', label: 'ssl-low-resource-v3', icon: '\u{1F9E0}' },
+    modules: [
+      {
+        id: 'seed',
+        name: 'Seed Hypothesis',
+        color: 'green',
+        status: 'done',
+        meta: '12 hypotheses',
+        steps: null,
+        iterations: [
+          {
+            id: 'seed-gen', label: 'Seed Generation', status: 'done',
+            children: [
+              { id: 'seed-kg', name: 'Build KG', status: 'done' },
+              { id: 'seed-gen-h', name: 'Generate', status: 'done' },
+              { id: 'seed-dedup', name: 'Dedup', status: 'done' },
+            ],
+            summary: {
+              title: 'Seed Hypothesis',
+              time: '8m 32s', cost: '$1.42',
+              items: [
+                { text: 'Knowledge graph built (847 nodes)', status: 'done' },
+                { text: '18 raw hypotheses generated', status: 'done' },
+                { text: 'Deduplication: 18 -> 12 unique', status: 'done' },
+              ]
+            }
+          }
+        ]
+      },
+      {
+        id: 'hypo',
+        name: 'Hypothesis Loop',
+        color: 'purple',
+        status: 'done',
+        meta: '3 iterations',
+        iterations: [
+          {
+            id: 'hypo-i1', label: 'Iter 1', status: 'done',
+            children: [
+              { id: 'hypo-i1-gen', name: 'gen_hypo', status: 'done' },
+              { id: 'hypo-i1-rev', name: 'review', status: 'done' },
+            ],
+            summary: {
+              title: 'Hypothesis Loop - Iter 1', time: '6m 14s', cost: '$2.10',
+              items: [
+                { text: 'Generated 4 hypothesis variants', status: 'done' },
+                { text: 'Review: 3 accepted, 1 rejected', status: 'done' },
+              ]
+            }
+          },
+          {
+            id: 'hypo-i2', label: 'Iter 2', status: 'done',
+            children: [
+              { id: 'hypo-i2-gen', name: 'gen_hypo', status: 'done' },
+              { id: 'hypo-i2-rev', name: 'review', status: 'done' },
+            ],
+            summary: {
+              title: 'Hypothesis Loop - Iter 2', time: '5m 48s', cost: '$1.95',
+              items: [
+                { text: 'Refined 3 hypotheses', status: 'done' },
+                { text: 'Review: all accepted', status: 'done' },
+              ]
+            }
+          },
+          {
+            id: 'hypo-i3', label: 'Iter 3', status: 'done',
+            children: [
+              { id: 'hypo-i3-gen', name: 'gen_hypo', status: 'done' },
+              { id: 'hypo-i3-rev', name: 'review', status: 'done' },
+            ],
+            summary: {
+              title: 'Hypothesis Loop - Iter 3', time: '4m 22s', cost: '$1.68',
+              items: [
+                { text: 'Final refinement pass', status: 'done' },
+                { text: 'Review: 3 finalized', status: 'done' },
+              ]
+            }
+          }
+        ]
+      },
+      {
+        id: 'inv',
+        name: 'Invention Loop',
+        color: 'blue',
+        status: 'active',
+        meta: 'Iter 2 / 3',
+        iterations: [
+          {
+            id: 'inv-i1', label: 'Iter 1', status: 'done',
+            children: [
+              { id: 'inv-i1-s1', name: 'gen_strat', status: 'done' },
+              { id: 'inv-i1-s2', name: 'gen_plan', status: 'done' },
+              { id: 'inv-i1-s3', name: 'gen_text', status: 'done' },
+              { id: 'inv-i1-s4', name: 'gen_art', status: 'done' },
+              { id: 'inv-i1-s5', name: 'review', status: 'done' },
+              { id: 'inv-i1-s6', name: 'refine', status: 'done' },
+            ],
+            summary: {
+              title: 'Invention - Iter 1', time: '22m 44s', cost: '$4.87',
+              items: [
+                { text: 'Strategy: contrastive SSL approach', status: 'done' },
+                { text: 'Plan: 4 experiments outlined', status: 'done' },
+                { text: 'Paper text: 3,200 words drafted', status: 'done' },
+                { text: 'Artifacts: 5/5 complete', status: 'done' },
+                { text: 'Review: major revisions needed', status: 'done' },
+                { text: 'Refinement applied', status: 'done' },
+              ]
+            }
+          },
+          {
+            id: 'inv-i2', label: 'Iter 2', status: 'active',
+            children: [
+              { id: 'inv-i2-s1', name: 'gen_strat', status: 'done' },
+              { id: 'inv-i2-s2', name: 'gen_plan', status: 'done' },
+              { id: 'inv-i2-s3', name: 'gen_text', status: 'done' },
+              { id: 'inv-i2-s4', name: 'gen_art', status: 'active' },
+              { id: 'inv-i2-s5', name: 'review', status: 'pending' },
+              { id: 'inv-i2-s6', name: 'refine', status: 'pending' },
+            ],
+            summary: {
+              title: 'Artifacts - Iteration 2', time: '12m 08s', cost: '$5.41',
+              items: [
+                { text: 'Contrastive baseline (acc 0.847)', status: 'done' },
+                { text: 'Multilingual pairs (2,400 examples)', status: 'done' },
+                { text: 'Convergence proof (verified)', status: 'done' },
+                { text: 'Ablation study (running)', status: 'active' },
+                { text: 'Cross-lingual eval', status: 'pending' },
+              ]
+            }
+          },
+          {
+            id: 'inv-i3', label: 'Iter 3', status: 'pending',
+            children: [
+              { id: 'inv-i3-s1', name: 'gen_strat', status: 'pending' },
+              { id: 'inv-i3-s2', name: 'gen_plan', status: 'pending' },
+              { id: 'inv-i3-s3', name: 'gen_text', status: 'pending' },
+              { id: 'inv-i3-s4', name: 'gen_art', status: 'pending' },
+              { id: 'inv-i3-s5', name: 'review', status: 'pending' },
+              { id: 'inv-i3-s6', name: 'refine', status: 'pending' },
+            ],
+            summary: null
+          }
+        ]
+      },
+      {
+        id: 'paper',
+        name: 'Paper & Repo',
+        color: 'orange',
+        status: 'pending',
+        meta: 'Pending',
+        iterations: [
+          {
+            id: 'paper-gen', label: 'Generation', status: 'pending',
+            children: [
+              { id: 'paper-s1', name: 'gen_demos', status: 'pending' },
+              { id: 'paper-s2', name: 'gen_viz', status: 'pending' },
+              { id: 'paper-s3', name: 'gen_paper', status: 'pending' },
+              { id: 'paper-s4', name: 'compile', status: 'pending' },
+            ],
+            summary: null
+          }
+        ]
+      }
+    ]
+  };
+
+  // ── State ──
+  const state = {
+    expandedModules: new Set(['inv']),
+    expandedIters: new Set(['inv-i2']),
+    activeSummary: null,
+    pan: { x: 0, y: 0 },
+    zoom: 1,
+    dragging: false,
+    dragStart: { x: 0, y: 0 },
+    panStart: { x: 0, y: 0 },
+    nodePositions: {},
+    elapsedSec: 6136,
+  };
+
+  const canvas = document.getElementById('canvas');
+  const viewport = document.getElementById('viewport');
+  const branchSvg = document.getElementById('branchSvg');
+
+  // ── Layout Constants ──
+  const COL_ROOT = 80;
+  const COL_MODULE = 280;
+  const COL_ITER = 500;
+  const COL_STEP_START = 680;
+  const STEP_GAP = 110;
+  const MODULE_VGAP = 100;
+  const ITER_VGAP = 64;
+  const STEP_VGAP = 44;
+  const BASE_Y = 200;
+
+  // ── Helpers ──
+  function colorVar(color) {
+    const map = { green: '#22c55e', purple: '#8b5cf6', blue: '#3b82f6', orange: '#f59e0b' };
+    return map[color] || '#3b82f6';
+  }
+  function statusIcon(s) {
+    if (s === 'done') return '\u2713';
+    if (s === 'active') return '\u25B6';
+    return '\u25CB';
+  }
+  function statusClass(s) {
+    if (s === 'done') return 'done';
+    if (s === 'active') return 'active';
+    return 'pending';
+  }
+
+  // ── Build SVG path (cubic bezier) ──
+  function svgPath(x1, y1, x2, y2, color, status, isGlow) {
+    const mx = x1 + (x2 - x1) * 0.5;
+    const d = `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`;
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', d);
+    path.setAttribute('stroke', color);
+    path.classList.add('branch-' + statusClass(status));
+    if (isGlow) path.classList.add('glow');
+    return path;
+  }
+
+  // ── Calculate all node positions ──
+  function calcPositions() {
+    const pos = {};
+    const modules = TREE.modules;
+
+    // Calculate total height for vertical centering
+    let totalModuleHeight = 0;
+    modules.forEach((mod, i) => {
+      const expanded = state.expandedModules.has(mod.id);
+      if (expanded && mod.iterations) {
+        let iterHeight = 0;
+        mod.iterations.forEach((iter, j) => {
+          const iterExpanded = state.expandedIters.has(iter.id);
+          if (iterExpanded && iter.children) {
+            iterHeight += Math.max(iter.children.length * STEP_VGAP, ITER_VGAP);
+          } else {
+            iterHeight += ITER_VGAP;
+          }
+        });
+        totalModuleHeight += Math.max(iterHeight, MODULE_VGAP);
+      } else {
+        totalModuleHeight += MODULE_VGAP;
+      }
+    });
+
+    const startY = Math.max(BASE_Y, (1400 - totalModuleHeight) / 2);
+
+    // Root
+    const rootCenterY = startY + totalModuleHeight / 2;
+    pos['root'] = { x: COL_ROOT, y: rootCenterY, cx: COL_ROOT + 32, cy: rootCenterY + 32 };
+
+    let curY = startY;
+    modules.forEach((mod) => {
+      const expanded = state.expandedModules.has(mod.id);
+
+      let moduleBlockH = MODULE_VGAP;
+      if (expanded && mod.iterations) {
+        let iterH = 0;
+        mod.iterations.forEach((iter) => {
+          const ie = state.expandedIters.has(iter.id);
+          if (ie && iter.children) {
+            iterH += Math.max(iter.children.length * STEP_VGAP, ITER_VGAP);
+          } else {
+            iterH += ITER_VGAP;
+          }
+        });
+        moduleBlockH = Math.max(iterH, MODULE_VGAP);
+      }
+
+      const modY = curY + moduleBlockH / 2 - 22;
+      pos[mod.id] = { x: COL_MODULE, y: modY, cx: COL_MODULE, cy: modY + 22 };
+
+      if (expanded && mod.iterations) {
+        let iy = curY;
+        mod.iterations.forEach((iter) => {
+          const ie = state.expandedIters.has(iter.id);
+          let iterBlockH = ITER_VGAP;
+          if (ie && iter.children) {
+            iterBlockH = Math.max(iter.children.length * STEP_VGAP, ITER_VGAP);
+          }
+
+          const iterY = iy + iterBlockH / 2 - 16;
+          pos[iter.id] = { x: COL_ITER, y: iterY, cx: COL_ITER, cy: iterY + 16 };
+
+          if (ie && iter.children) {
+            let sy = iy;
+            iter.children.forEach((step, si) => {
+              const stepX = COL_STEP_START + si * STEP_GAP;
+              const stepY = iterY;
+              pos[step.id] = { x: stepX, y: stepY, cx: stepX, cy: stepY + 14 };
+              sy += STEP_VGAP;
+            });
+          }
+
+          iy += iterBlockH;
+        });
+      }
+
+      curY += moduleBlockH;
+    });
+
+    state.nodePositions = pos;
+    return pos;
+  }
+
+  // ── Render ──
+  function render() {
+    const pos = calcPositions();
+
+    // Clear canvas nodes (keep SVG)
+    const existingNodes = canvas.querySelectorAll('.tree-node, .summary-card, .summary-connector');
+    existingNodes.forEach(n => n.remove());
+
+    // Clear SVG
+    branchSvg.innerHTML = '';
+
+    // ─ Root Node ─
+    const rootEl = createEl('div', 'tree-node');
+    rootEl.style.left = pos.root.x + 'px';
+    rootEl.style.top = pos.root.y + 'px';
+    rootEl.innerHTML = `
+      <div class="root-node">
+        <span class="root-icon">${TREE.root.icon}</span>
+      </div>
+      <span class="root-label">${TREE.root.label}</span>
+    `;
+    canvas.appendChild(rootEl);
+
+    // ─ Module Nodes + Branches ─
+    TREE.modules.forEach((mod, mi) => {
+      const p = pos[mod.id];
+      if (!p) return;
+      const expanded = state.expandedModules.has(mod.id);
+      const isActive = mod.status === 'active';
+
+      // Branch: root -> module
+      const rootCx = pos.root.cx + 32;
+      const rootCy = pos.root.cy;
+      const modCx = p.x;
+      const modCy = p.cy;
+      const col = colorVar(mod.color);
+
+      branchSvg.appendChild(svgPath(rootCx, rootCy, modCx, modCy, col, mod.status, true));
+      branchSvg.appendChild(svgPath(rootCx, rootCy, modCx, modCy, col, mod.status, false));
+
+      // Module node element
+      const modEl = createEl('div', 'tree-node');
+      modEl.style.left = p.x + 'px';
+      modEl.style.top = p.y + 'px';
+      modEl.style.animationDelay = (mi * 0.15) + 's';
+      modEl.innerHTML = `
+        <div class="module-node module-${mod.color} ${expanded ? 'expanded' : ''} ${isActive ? 'is-active' : ''}">
+          <span class="module-status-dot"></span>
+          <div class="module-info">
+            <span class="module-name">${mod.name}</span>
+            <span class="module-meta">${mod.meta}</span>
+          </div>
+          <span class="module-expand-icon">\u25B8</span>
+        </div>
+      `;
+      modEl.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleModule(mod.id);
+      });
+      canvas.appendChild(modEl);
+
+      // ─ Iteration Nodes ─
+      if (expanded && mod.iterations) {
+        mod.iterations.forEach((iter, ii) => {
+          const ip = pos[iter.id];
+          if (!ip) return;
+          const iterExpanded = state.expandedIters.has(iter.id);
+
+          // Branch: module -> iteration
+          const mx2 = p.x + 160;
+          const my2 = p.cy;
+          branchSvg.appendChild(svgPath(mx2, my2, ip.x, ip.cy, col, iter.status, true));
+          branchSvg.appendChild(svgPath(mx2, my2, ip.x, ip.cy, col, iter.status, false));
+
+          const iterEl = createEl('div', 'tree-node fade-stagger');
+          iterEl.style.left = ip.x + 'px';
+          iterEl.style.top = ip.y + 'px';
+          iterEl.style.animationDelay = (ii * 0.08 + 0.1) + 's';
+          const badgeClass = iter.status === 'done' ? 'iter-badge-done' :
+                             iter.status === 'active' ? 'iter-badge-active' : 'iter-badge-pending';
+          iterEl.innerHTML = `
+            <div class="iter-node ${iterExpanded ? 'expanded' : ''}">
+              <span class="iter-badge ${badgeClass}">${statusIcon(iter.status)}</span>
+              <span class="iter-label">${iter.label}</span>
+            </div>
+          `;
+          iterEl.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toggleIter(iter.id, mod.id);
+          });
+          canvas.appendChild(iterEl);
+
+          // ─ Step Nodes ─
+          if (iterExpanded && iter.children) {
+            iter.children.forEach((step, si) => {
+              const sp = pos[step.id];
+              if (!sp) return;
+
+              // Branch: iteration -> step (or step -> step chain)
+              if (si === 0) {
+                const ix2 = ip.x + 100;
+                branchSvg.appendChild(svgPath(ix2, ip.cy, sp.x, sp.cy, col, step.status, true));
+                branchSvg.appendChild(svgPath(ix2, ip.cy, sp.x, sp.cy, col, step.status, false));
+              } else {
+                const prevStep = iter.children[si - 1];
+                const pp = pos[prevStep.id];
+                if (pp) {
+                  const prevX = pp.x + 90;
+                  branchSvg.appendChild(svgPath(prevX, pp.cy, sp.x, sp.cy, col, step.status, true));
+                  branchSvg.appendChild(svgPath(prevX, pp.cy, sp.x, sp.cy, col, step.status, false));
+                }
+              }
+
+              const stepEl = createEl('div', 'tree-node fade-stagger');
+              stepEl.style.left = sp.x + 'px';
+              stepEl.style.top = sp.y + 'px';
+              stepEl.style.animationDelay = (si * 0.06 + 0.2) + 's';
+              const iconCls = step.status === 'done' ? 'step-icon-done' :
+                              step.status === 'active' ? 'step-icon-active' : 'step-icon-pending';
+              stepEl.innerHTML = `
+                <div class="step-node is-${step.status}">
+                  <span class="step-icon ${iconCls}">${statusIcon(step.status)}</span>
+                  <span class="step-name">${step.name}</span>
+                </div>
+              `;
+              stepEl.addEventListener('click', (e) => {
+                e.stopPropagation();
+                showSummary(iter, step, sp);
+              });
+              canvas.appendChild(stepEl);
+            });
+          }
+        });
+      }
+    });
+
+    // Re-show summary if active
+    if (state.activeSummary) {
+      renderSummary(state.activeSummary.iter, state.activeSummary.step, state.activeSummary.pos);
+    }
+
+    applyTransform();
+  }
+
+  function createEl(tag, cls) {
+    const el = document.createElement(tag);
+    if (cls) el.className = cls;
+    return el;
+  }
+
+  // ── Toggle Modules / Iterations ──
+  function toggleModule(id) {
+    closeSummary();
+    if (state.expandedModules.has(id)) {
+      state.expandedModules.delete(id);
+      // Collapse iterations within
+      TREE.modules.find(m => m.id === id)?.iterations?.forEach(it => {
+        state.expandedIters.delete(it.id);
+      });
+    } else {
+      state.expandedModules.add(id);
+      // Auto-expand active iteration
+      const mod = TREE.modules.find(m => m.id === id);
+      if (mod?.iterations) {
+        const activeIter = mod.iterations.find(it => it.status === 'active');
+        if (activeIter) state.expandedIters.add(activeIter.id);
+      }
+    }
+    render();
+  }
+
+  function toggleIter(iterId, moduleId) {
+    closeSummary();
+    if (state.expandedIters.has(iterId)) {
+      state.expandedIters.delete(iterId);
+    } else {
+      // Collapse other iters in same module
+      const mod = TREE.modules.find(m => m.id === moduleId);
+      if (mod?.iterations) {
+        mod.iterations.forEach(it => state.expandedIters.delete(it.id));
+      }
+      state.expandedIters.add(iterId);
+    }
+    render();
+  }
+
+  // ── Summary Card ──
+  function showSummary(iter, step, stepPos) {
+    if (state.activeSummary && state.activeSummary.step.id === step.id) {
+      closeSummary();
+      render();
+      return;
+    }
+    state.activeSummary = { iter, step, pos: stepPos };
+    render();
+  }
+
+  function closeSummary() {
+    state.activeSummary = null;
+    const cards = canvas.querySelectorAll('.summary-card, .summary-connector');
+    cards.forEach(c => c.remove());
+  }
+
+  function renderSummary(iter, step, stepPos) {
+    if (!iter.summary) return;
+    const s = iter.summary;
+    const cardX = stepPos.x + 100;
+    const cardY = stepPos.y - 40;
+
+    // Connector SVG line
+    const conn = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    conn.classList.add('summary-connector');
+    conn.style.position = 'absolute';
+    conn.style.left = '0'; conn.style.top = '0';
+    conn.style.width = '100%'; conn.style.height = '100%';
+    conn.style.pointerEvents = 'none'; conn.style.zIndex = '45';
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('x1', stepPos.x + 90);
+    line.setAttribute('y1', stepPos.cy);
+    line.setAttribute('x2', cardX);
+    line.setAttribute('y2', cardY + 40);
+    line.setAttribute('stroke', 'rgba(59,130,246,0.2)');
+    line.setAttribute('stroke-width', '1');
+    line.setAttribute('stroke-dasharray', '3 3');
+    conn.appendChild(line);
+    canvas.appendChild(conn);
+
+    // Card
+    const card = createEl('div', 'summary-card');
+    card.style.left = cardX + 'px';
+    card.style.top = cardY + 'px';
+
+    const itemsHtml = s.items.map(item => {
+      const icn = item.status === 'done' ? '\u2713' : item.status === 'active' ? '\u25B6' : '\u25CB';
+      const cls = 'si-' + item.status;
+      return `<div class="summary-item"><span class="summary-item-icon ${cls}">${icn}</span><span>${item.text}</span></div>`;
+    }).join('');
+
+    const completedCount = s.items.filter(i => i.status === 'done').length;
+
+    card.innerHTML = `
+      <div class="summary-header">
+        <span class="summary-title">${s.title}</span>
+      </div>
+      <div class="summary-stats">
+        <span>\u23F1 <span class="val">${s.time}</span></span>
+        <span>\u{1F4B2} <span class="val">${s.cost}</span></span>
+        <span>${completedCount}/${s.items.length} complete</span>
+      </div>
+      <div class="summary-items">${itemsHtml}</div>
+    `;
+
+    card.addEventListener('click', (e) => e.stopPropagation());
+    canvas.appendChild(card);
+
+    // Animate in
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        card.classList.add('visible');
+      });
+    });
+  }
+
+  // ── Pan / Zoom ──
+  function applyTransform() {
+    canvas.style.transform = `translate(${state.pan.x}px, ${state.pan.y}px) scale(${state.zoom})`;
+  }
+
+  viewport.addEventListener('mousedown', (e) => {
+    if (e.target.closest('.tree-node, .summary-card, .zoom-btn')) return;
+    state.dragging = true;
+    state.dragStart = { x: e.clientX, y: e.clientY };
+    state.panStart = { ...state.pan };
+  });
+
+  window.addEventListener('mousemove', (e) => {
+    if (!state.dragging) return;
+    state.pan.x = state.panStart.x + (e.clientX - state.dragStart.x);
+    state.pan.y = state.panStart.y + (e.clientY - state.dragStart.y);
+    applyTransform();
+  });
+
+  window.addEventListener('mouseup', () => { state.dragging = false; });
+
+  viewport.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.06 : 0.06;
+    const newZoom = Math.max(0.3, Math.min(2.5, state.zoom + delta));
+
+    // Zoom toward cursor position
+    const rect = viewport.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const scale = newZoom / state.zoom;
+
+    state.pan.x = mx - scale * (mx - state.pan.x);
+    state.pan.y = my - scale * (my - state.pan.y);
+    state.zoom = newZoom;
+    applyTransform();
+  }, { passive: false });
+
+  // Zoom buttons
+  document.getElementById('zoomIn').addEventListener('click', () => {
+    state.zoom = Math.min(2.5, state.zoom + 0.15);
+    applyTransform();
+  });
+  document.getElementById('zoomOut').addEventListener('click', () => {
+    state.zoom = Math.max(0.3, state.zoom - 0.15);
+    applyTransform();
+  });
+  document.getElementById('zoomReset').addEventListener('click', centerOnActive);
+
+  // Click outside to close summary
+  viewport.addEventListener('click', (e) => {
+    if (!e.target.closest('.tree-node, .summary-card')) {
+      closeSummary();
+      render();
+    }
+  });
+
+  // ── Center on active node ──
+  function centerOnActive() {
+    const pos = state.nodePositions;
+    // Find the active iteration
+    let targetId = 'inv-i2';
+    const tp = pos[targetId];
+    if (!tp) return;
+
+    const rect = viewport.getBoundingClientRect();
+    const cx = rect.width / 2;
+    const cy = rect.height / 2;
+
+    state.zoom = 1;
+    state.pan.x = cx - tp.x * state.zoom - 60;
+    state.pan.y = cy - tp.cy * state.zoom;
+    applyTransform();
+  }
+
+  // ── Elapsed Timer ──
+  function updateElapsed() {
+    state.elapsedSec++;
+    const h = Math.floor(state.elapsedSec / 3600);
+    const m = Math.floor((state.elapsedSec % 3600) / 60);
+    const s = state.elapsedSec % 60;
+    document.getElementById('elapsed').textContent =
+      `${h}h ${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}s`;
+  }
+  setInterval(updateElapsed, 1000);
+
+  // ── Init ──
+  render();
+  // Allow layout to settle, then center
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      centerOnActive();
+    });
+  });
+
+})();
+</script>
+</body>
+</html>

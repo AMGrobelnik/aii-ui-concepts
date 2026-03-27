@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Paper Draft Viewer</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg-base:#0f1117;
+    --bg-surface:#161822;
+    --bg-elevated:#1c1f2e;
+    --bg-panel:#1a1d2b;
+    --border:#2a2d3e;
+    --border-light:#353850;
+    --text-primary:#e2e4ed;
+    --text-secondary:#9499b3;
+    --text-muted:#6b708a;
+    --accent:#6c8cff;
+    --accent-dim:#4a62c4;
+    --accent-glow:rgba(108,140,255,.12);
+    --green:#4ade80;
+    --green-dim:#22804a;
+    --yellow:#facc15;
+    --yellow-dim:rgba(250,204,21,.15);
+    --yellow-border:rgba(250,204,21,.35);
+    --orange:#fb923c;
+    --orange-dim:rgba(251,146,60,.12);
+    --red:#f87171;
+    --red-dim:rgba(248,113,113,.12);
+    --paper-bg:#faf9f6;
+    --paper-text:#1a1a2e;
+    --paper-muted:#555;
+    --radius:6px;
+    --radius-lg:10px;
+    --mono:'SF Mono','Fira Code','Cascadia Code',monospace;
+    --sans:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    --serif:'Georgia','Times New Roman',serif;
+    --transition:150ms ease;
+  }
+  html,body{height:100%;font-family:var(--sans);background:var(--bg-base);color:var(--text-primary);overflow:hidden;font-size:14px;line-height:1.5}
+  button{cursor:pointer;font-family:inherit;border:none;background:none;color:inherit}
+  input,textarea,select{font-family:inherit;color:inherit}
+
+  /* ---------- LAYOUT ---------- */
+  .app{display:flex;flex-direction:column;height:100vh}
+  .topbar{display:flex;align-items:center;gap:12px;padding:0 16px;height:44px;background:var(--bg-surface);border-bottom:1px solid var(--border);flex-shrink:0}
+  .topbar-logo{display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px;letter-spacing:-.02em}
+  .topbar-logo svg{width:20px;height:20px}
+  .topbar-sep{width:1px;height:20px;background:var(--border)}
+  .topbar-breadcrumb{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary)}
+  .topbar-breadcrumb span.crumb-dim{color:var(--text-muted)}
+  .topbar-breadcrumb svg{width:12px;height:12px;color:var(--text-muted)}
+  .topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+  .topbar-badge{font-size:11px;padding:2px 8px;border-radius:999px;background:var(--accent-glow);color:var(--accent);border:1px solid rgba(108,140,255,.2);font-weight:600}
+  .topbar-icon-btn{width:30px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:var(--radius);transition:background var(--transition)}
+  .topbar-icon-btn:hover{background:var(--bg-elevated)}
+  .topbar-icon-btn svg{width:16px;height:16px;color:var(--text-secondary)}
+
+  .main{display:flex;flex:1;overflow:hidden}
+
+  /* ---------- LEFT SIDEBAR (collapsed) ---------- */
+  .sidebar{width:48px;background:var(--bg-surface);border-right:1px solid var(--border);display:flex;flex-direction:column;align-items:center;padding:10px 0;gap:4px;flex-shrink:0}
+  .sidebar-btn{width:36px;height:36px;display:flex;align-items:center;justify-content:center;border-radius:var(--radius);color:var(--text-muted);transition:all var(--transition);position:relative}
+  .sidebar-btn:hover,.sidebar-btn.active{color:var(--text-primary);background:var(--bg-elevated)}
+  .sidebar-btn.active::before{content:'';position:absolute;left:-6px;top:50%;transform:translateY(-50%);width:3px;height:18px;background:var(--accent);border-radius:0 3px 3px 0}
+  .sidebar-btn svg{width:18px;height:18px}
+  .sidebar-spacer{flex:1}
+  .sidebar-divider{width:24px;height:1px;background:var(--border);margin:4px 0}
+
+  /* ---------- CENTER: PAPER PREVIEW ---------- */
+  .center{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+  .center-header{display:flex;align-items:center;gap:12px;padding:10px 20px;border-bottom:1px solid var(--border);background:var(--bg-surface);flex-shrink:0}
+  .center-title{font-weight:600;font-size:14px;white-space:nowrap}
+  .iter-selector{display:flex;align-items:center;gap:0;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+  .iter-btn{padding:4px 10px;font-size:12px;font-weight:500;color:var(--text-muted);transition:all var(--transition);border-right:1px solid var(--border)}
+  .iter-btn:last-child{border-right:none}
+  .iter-btn:hover{color:var(--text-primary)}
+  .iter-btn.active{background:var(--accent);color:#fff}
+  .center-header-right{margin-left:auto;display:flex;align-items:center;gap:8px}
+  .diff-toggle{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary);cursor:pointer;user-select:none}
+  .diff-toggle input{display:none}
+  .diff-toggle .toggle-track{width:32px;height:18px;border-radius:9px;background:var(--border-light);position:relative;transition:background var(--transition)}
+  .diff-toggle input:checked+.toggle-track{background:var(--accent)}
+  .diff-toggle .toggle-knob{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;transition:transform var(--transition)}
+  .diff-toggle input:checked+.toggle-track .toggle-knob{transform:translateX(14px)}
+
+  .paper-scroll{flex:1;overflow-y:auto;padding:32px 24px;background:var(--bg-base)}
+  .paper-scroll::-webkit-scrollbar{width:8px}
+  .paper-scroll::-webkit-scrollbar-track{background:transparent}
+  .paper-scroll::-webkit-scrollbar-thumb{background:var(--border-light);border-radius:4px}
+
+  /* ---------- PAPER CARD ---------- */
+  .paper{max-width:760px;margin:0 auto;background:var(--paper-bg);border-radius:var(--radius-lg);box-shadow:0 4px 24px rgba(0,0,0,.35);padding:56px 64px;font-family:var(--serif);color:var(--paper-text);font-size:15px;line-height:1.75}
+  .paper-title{font-size:22px;font-weight:700;text-align:center;margin-bottom:6px;line-height:1.3;font-family:var(--sans);color:#111}
+  .paper-authors{text-align:center;font-size:13px;color:var(--paper-muted);margin-bottom:4px;font-family:var(--sans)}
+  .paper-affiliation{text-align:center;font-size:12px;color:#888;margin-bottom:28px;font-style:italic;font-family:var(--sans)}
+  .paper h2{font-family:var(--sans);font-size:16px;font-weight:700;margin:28px 0 10px;color:#111;border-bottom:1px solid #e5e5e5;padding-bottom:4px}
+  .paper h3{font-family:var(--sans);font-size:14px;font-weight:600;margin:20px 0 8px;color:#222}
+  .paper p{margin-bottom:14px;text-align:justify;hyphens:auto}
+  .paper .abstract-label{font-family:var(--sans);font-weight:700;font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:#333;margin-bottom:6px}
+  .paper .abstract-body{font-size:14px;color:#444;padding:0 16px;margin-bottom:24px;border-left:3px solid #ddd}
+  .paper .citation-marker{color:#1a5fb4;font-weight:600;cursor:default;font-size:13px}
+
+  /* figure placeholders */
+  .paper .figure-placeholder{border:2px dashed #c5c8d4;border-radius:8px;padding:28px 20px;text-align:center;margin:18px 0;background:#f4f3ef;cursor:pointer;transition:border-color .2s,background .2s}
+  .paper .figure-placeholder:hover{border-color:#7c8adb;background:#eef0fa}
+  .paper .figure-placeholder .fig-icon{font-size:28px;margin-bottom:6px;color:#7c8adb}
+  .paper .figure-placeholder .fig-label{font-family:var(--sans);font-size:13px;font-weight:600;color:#444}
+  .paper .figure-placeholder .fig-hint{font-family:var(--sans);font-size:11px;color:#999;margin-top:2px}
+
+  /* references */
+  .paper .ref-list{font-size:12.5px;color:#444;line-height:1.6}
+  .paper .ref-list li{margin-bottom:6px}
+  .paper .ref-list li .ref-num{font-weight:700;color:#1a5fb4}
+
+  /* inline annotation highlight */
+  .annotation{background:var(--yellow-dim);border-bottom:2px solid var(--yellow-border);cursor:help;position:relative;padding:0 1px;border-radius:2px}
+  .annotation .ann-icon{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;background:var(--yellow);color:#000;border-radius:50%;font-size:9px;font-weight:700;margin-left:2px;vertical-align:middle;font-family:var(--sans);position:relative;top:-1px}
+  .annotation .ann-tooltip{display:none;position:absolute;left:0;bottom:calc(100% + 8px);width:280px;background:#1e2030;color:#e2e4ed;padding:10px 12px;border-radius:var(--radius);font-family:var(--sans);font-size:12px;line-height:1.5;box-shadow:0 8px 24px rgba(0,0,0,.5);z-index:100;pointer-events:none;border:1px solid var(--border-light)}
+  .annotation .ann-tooltip::after{content:'';position:absolute;bottom:-6px;left:20px;width:12px;height:12px;background:#1e2030;border-right:1px solid var(--border-light);border-bottom:1px solid var(--border-light);transform:rotate(45deg)}
+  .annotation:hover .ann-tooltip{display:block}
+  .ann-tooltip .ann-severity{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
+  .ann-tooltip .ann-severity.major{color:var(--red)}
+  .ann-tooltip .ann-severity.minor{color:var(--orange)}
+
+  /* diff styling */
+  .paper .diff-added{background:rgba(74,222,128,.15);border-left:3px solid var(--green);padding-left:8px;margin-left:-11px}
+  .paper .diff-removed{background:rgba(248,113,113,.1);text-decoration:line-through;color:#b44;opacity:.7}
+  .diff-hidden{display:none}
+
+  /* ---------- RIGHT PANEL ---------- */
+  .right-panel{width:360px;background:var(--bg-surface);border-left:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;overflow:hidden}
+  .right-header{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;flex-shrink:0}
+  .right-header-title{font-weight:600;font-size:14px}
+  .right-header-iter{font-size:11px;color:var(--text-muted);margin-left:auto}
+
+  .right-scroll{flex:1;overflow-y:auto;padding:16px}
+  .right-scroll::-webkit-scrollbar{width:6px}
+  .right-scroll::-webkit-scrollbar-track{background:transparent}
+  .right-scroll::-webkit-scrollbar-thumb{background:var(--border-light);border-radius:3px}
+
+  /* score */
+  .overall-score{display:flex;align-items:center;gap:14px;margin-bottom:18px;padding:14px;background:var(--bg-elevated);border-radius:var(--radius-lg);border:1px solid var(--border)}
+  .score-ring{position:relative;width:64px;height:64px;flex-shrink:0}
+  .score-ring svg{width:64px;height:64px;transform:rotate(-90deg)}
+  .score-ring circle{fill:none;stroke-width:5}
+  .score-ring .ring-bg{stroke:var(--border)}
+  .score-ring .ring-fg{stroke:var(--accent);stroke-linecap:round;stroke-dasharray:176;stroke-dashoffset:calc(176 - 176 * var(--pct))}
+  .score-ring .ring-label{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700}
+  .score-ring .ring-label span{font-size:11px;font-weight:400;color:var(--text-muted)}
+  .score-meta{font-size:12px;color:var(--text-secondary);line-height:1.5}
+  .score-meta strong{color:var(--text-primary);font-size:14px;display:block;margin-bottom:2px}
+
+  /* dimension bars */
+  .dim-bars{display:flex;flex-direction:column;gap:10px;margin-bottom:20px}
+  .dim-row{display:flex;align-items:center;gap:10px}
+  .dim-label{width:90px;font-size:12px;color:var(--text-secondary);text-align:right;flex-shrink:0}
+  .dim-track{flex:1;height:7px;background:var(--bg-base);border-radius:4px;overflow:hidden;position:relative}
+  .dim-fill{height:100%;border-radius:4px;transition:width .6s ease}
+  .dim-val{width:32px;font-size:12px;font-weight:600;color:var(--text-primary);text-align:right;flex-shrink:0}
+
+  .section-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);margin-bottom:10px}
+
+  /* critique cards */
+  .critique-list{display:flex;flex-direction:column;gap:10px;margin-bottom:20px}
+  .critique{padding:12px;background:var(--bg-elevated);border-radius:var(--radius);border:1px solid var(--border);transition:border-color var(--transition)}
+  .critique:hover{border-color:var(--border-light)}
+  .critique-top{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+  .critique-severity{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;padding:2px 6px;border-radius:3px}
+  .critique-severity.major{background:var(--red-dim);color:var(--red)}
+  .critique-severity.minor{background:var(--orange-dim);color:var(--orange)}
+  .critique-num{font-size:11px;color:var(--text-muted)}
+  .critique-text{font-size:13px;color:var(--text-primary);line-height:1.5;margin-bottom:8px}
+  .critique-meta{display:flex;flex-direction:column;gap:4px;font-size:12px}
+  .critique-loc{color:var(--accent);cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:4px}
+  .critique-loc:hover{text-decoration:underline}
+  .critique-loc svg{width:12px;height:12px}
+  .critique-suggested{color:var(--text-secondary);padding-left:12px;border-left:2px solid var(--border);margin-top:2px}
+  .critique-suggested b{color:var(--text-primary);font-weight:600}
+
+  .right-divider{height:1px;background:var(--border);margin:8px 0 16px}
+
+  /* feedback form */
+  .feedback-area{width:100%;min-height:72px;max-height:140px;resize:vertical;background:var(--bg-base);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;font-size:13px;color:var(--text-primary);outline:none;transition:border-color var(--transition)}
+  .feedback-area:focus{border-color:var(--accent)}
+  .feedback-area::placeholder{color:var(--text-muted)}
+  .feedback-checks{display:flex;flex-direction:column;gap:8px;margin:12px 0 14px}
+  .feedback-check{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-secondary);cursor:pointer;user-select:none}
+  .feedback-check input{display:none}
+  .feedback-check .checkbox{width:16px;height:16px;border:1.5px solid var(--border-light);border-radius:3px;display:flex;align-items:center;justify-content:center;transition:all var(--transition);flex-shrink:0}
+  .feedback-check input:checked+.checkbox{background:var(--accent);border-color:var(--accent)}
+  .feedback-check input:checked+.checkbox svg{display:block}
+  .feedback-check .checkbox svg{display:none;width:10px;height:10px;color:#fff}
+  .submit-btn{width:100%;padding:9px 16px;background:var(--accent);color:#fff;font-weight:600;font-size:13px;border-radius:var(--radius);transition:all var(--transition);display:flex;align-items:center;justify-content:center;gap:8px}
+  .submit-btn:hover{background:var(--accent-dim);box-shadow:0 0 16px rgba(108,140,255,.25)}
+  .submit-btn svg{width:14px;height:14px}
+
+  /* ---------- BOTTOM BAR ---------- */
+  .bottombar{display:flex;align-items:center;padding:0 16px;height:34px;background:var(--bg-surface);border-top:1px solid var(--border);font-size:11px;color:var(--text-muted);gap:16px;flex-shrink:0}
+  .bottombar-stat{display:flex;align-items:center;gap:4px}
+  .bottombar-stat svg{width:12px;height:12px}
+  .bottombar-dot{width:3px;height:3px;border-radius:50%;background:var(--text-muted)}
+  .bottombar-right{margin-left:auto;display:flex;align-items:center;gap:8px}
+  .export-btn{display:flex;align-items:center;gap:5px;padding:3px 10px;background:var(--bg-elevated);border:1px solid var(--border);border-radius:var(--radius);font-size:11px;font-weight:600;color:var(--text-secondary);transition:all var(--transition)}
+  .export-btn:hover{background:var(--accent-glow);border-color:var(--accent-dim);color:var(--accent)}
+  .export-btn svg{width:12px;height:12px}
+
+  /* tooltips for sidebar */
+  .sidebar-btn{position:relative}
+  .sidebar-btn::after{content:attr(data-tip);position:absolute;left:calc(100% + 8px);top:50%;transform:translateY(-50%);background:#1e2030;color:var(--text-primary);padding:4px 8px;border-radius:4px;font-size:11px;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity var(--transition);border:1px solid var(--border);z-index:200}
+  .sidebar-btn:hover::after{opacity:1}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ===== TOP BAR ===== -->
+  <header class="topbar">
+    <div class="topbar-logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+      AI Inventor
+    </div>
+    <div class="topbar-sep"></div>
+    <nav class="topbar-breadcrumb">
+      <span class="crumb-dim">Inventions</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+      <span>cross-lingual-pretraining</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+      <span style="color:var(--text-primary)">Paper Draft</span>
+    </nav>
+    <div class="topbar-right">
+      <span class="topbar-badge">Iteration 2 / 3</span>
+      <button class="topbar-icon-btn" title="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></button>
+      <button class="topbar-icon-btn" title="Notifications"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg></button>
+    </div>
+  </header>
+
+  <div class="main">
+
+    <!-- ===== LEFT SIDEBAR (collapsed pipeline tree) ===== -->
+    <aside class="sidebar">
+      <button class="sidebar-btn" data-tip="Pipeline"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h18v18H3z"/><path d="M3 9h18"/><path d="M9 21V9"/></svg></button>
+      <button class="sidebar-btn" data-tip="Hypotheses"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg></button>
+      <button class="sidebar-btn" data-tip="Plans"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/><path d="M9 12h6"/><path d="M9 16h6"/></svg></button>
+      <button class="sidebar-btn active" data-tip="Paper"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></button>
+      <button class="sidebar-btn" data-tip="Artifacts"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></button>
+      <button class="sidebar-btn" data-tip="Repository"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg></button>
+      <div class="sidebar-spacer"></div>
+      <div class="sidebar-divider"></div>
+      <button class="sidebar-btn" data-tip="Telemetry"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg></button>
+      <button class="sidebar-btn" data-tip="Terminal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg></button>
+    </aside>
+
+    <!-- ===== CENTER: PAPER PREVIEW ===== -->
+    <div class="center">
+      <div class="center-header">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        <span class="center-title">Paper Draft — Iteration 2</span>
+        <div class="iter-selector">
+          <button class="iter-btn" data-iter="1">1</button>
+          <button class="iter-btn active" data-iter="2">2</button>
+          <button class="iter-btn" data-iter="3">3</button>
+        </div>
+        <div class="center-header-right">
+          <label class="diff-toggle" id="diffToggleLabel">
+            <span>Show diff from Iteration 1</span>
+            <input type="checkbox" id="diffToggle">
+            <div class="toggle-track"><div class="toggle-knob"></div></div>
+          </label>
+        </div>
+      </div>
+
+      <div class="paper-scroll" id="paperScroll">
+        <article class="paper" id="paperBody">
+
+          <!-- Title block -->
+          <div class="paper-title">Cross-lingual Contrastive Pre-training with Synthetic Code-Switching for Low-Resource Transfer</div>
+          <div class="paper-authors">Yuki Tanaka<sup>1</sup>, Priya Narayanan<sup>1,2</sup>, Lukas Hoffmann<sup>1</sup></div>
+          <div class="paper-affiliation"><sup>1</sup>Institute for Multilingual AI, ETH Zurich &nbsp;&middot;&nbsp; <sup>2</sup>Google DeepMind</div>
+
+          <!-- Abstract -->
+          <div id="sec-abstract">
+            <div class="abstract-label">Abstract</div>
+            <div class="abstract-body">
+              <span class="annotation">We present <b>XL-CONTRAST</b>, a novel pre-training framework that combines contrastive learning with synthetic code-switching to improve cross-lingual transfer for low-resource languages.
+                <span class="ann-icon">!</span>
+                <span class="ann-tooltip">
+                  <div class="ann-severity minor">Minor</div>
+                  Abstract could be more concise. Consider tightening to ~150 words; current draft is approximately 180 words.
+                </span>
+              </span>
+              Our approach generates synthetic code-switched data by strategically replacing tokens in high-resource language corpora with their low-resource equivalents, guided by a bilingual lexicon and word-alignment model.
+              We then apply a multi-view contrastive objective that aligns representations of parallel and code-switched sequences in a shared embedding space.
+              Experiments on the XTREME benchmark across 14 low-resource languages demonstrate that XL-CONTRAST achieves state-of-the-art results on zero-shot cross-lingual transfer, outperforming existing methods by an average of 3.8 F1 points on NER and 2.1 accuracy points on XNLI. Our analysis reveals that synthetic code-switching is particularly beneficial for typologically distant language pairs, where direct lexical alignment is sparse.
+              We release our code and pre-trained models to facilitate further research in low-resource NLP.
+            </div>
+          </div>
+
+          <!-- 1. Introduction -->
+          <h2 id="sec-intro">1. Introduction</h2>
+          <p>Cross-lingual transfer learning has emerged as a promising paradigm for extending the reach of NLP systems to the thousands of languages for which labeled training data is scarce or nonexistent <span class="citation-marker">[1]</span> <span class="citation-marker">[2]</span>.
+          Multilingual pre-trained models such as mBERT and XLM-RoBERTa have demonstrated remarkable zero-shot transfer capabilities, yet their performance degrades significantly for low-resource languages that are underrepresented in the pre-training corpus <span class="citation-marker">[3]</span>.
+          This performance gap is exacerbated for typologically distant language pairs, where structural and lexical divergences impede effective representation sharing.</p>
+
+          <p>In this work, we propose a two-stage approach that addresses these limitations. First, we construct synthetic code-switched corpora that expose the model to fine-grained lexical correspondences between high-resource and low-resource languages.
+          Second, we introduce a contrastive pre-training objective that leverages these code-switched sequences alongside parallel data to learn tightly aligned cross-lingual representations.
+          Unlike prior code-switching augmentation methods that operate at the sentence level <span class="citation-marker">[4]</span>, our approach performs linguistically informed token-level substitution, preserving syntactic structure while maximizing lexical exposure.</p>
+
+          <!-- 2. Related Work -->
+          <h2 id="sec-related">2. Related Work</h2>
+          <p>Recent advances in multilingual pre-training have established strong baselines for cross-lingual transfer <span class="citation-marker">[1]</span> <span class="citation-marker">[5]</span>.
+          Conneau et al. introduced XLM-RoBERTa, demonstrating that scaling multilingual pre-training data significantly improves downstream performance.
+          Code-switching as a data augmentation strategy has been explored in several works, though primarily for bilingual settings.
+          Yang et al. <span class="citation-marker">[4]</span> proposed random token replacement for augmenting NER training data, while Qin et al. studied phrase-level code-switching for machine translation.
+          Contrastive learning for cross-lingual alignment has been explored by Chi et al. <span class="citation-marker">[6]</span>, who proposed InfoXLM with a cross-lingual contrastive task.
+          Our work differs in combining synthetic code-switching with contrastive pre-training in a unified framework, and in targeting low-resource languages specifically.</p>
+
+          <!-- 3. Methodology -->
+          <h2 id="sec-method">3. Methodology</h2>
+          <h3 id="sec-method-arch">3.1 Architecture Overview</h3>
+
+          <!-- Figure 1 -->
+          <div class="figure-placeholder" onclick="alert('Figure viewer not implemented in mockup')">
+            <div class="fig-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+            </div>
+            <div class="fig-label">Figure 1: Architecture Overview</div>
+            <div class="fig-hint">Click to view generated artifact</div>
+          </div>
+
+          <p>XL-CONTRAST builds on the Transformer encoder architecture with a dual-stream design.
+          <span class="annotation">The first stream processes the original high-resource language input, while the second stream receives the synthetically code-switched variant. Both streams share parameters and produce contextualized representations that are aligned through our contrastive objective.
+            <span class="ann-icon">!</span>
+            <span class="ann-tooltip">
+              <div class="ann-severity major">Major</div>
+              Section 3 lacks sufficient detail on the contrastive loss function. Add a formal mathematical definition of the loss, including temperature parameter and negative sampling strategy.
+            </span>
+          </span>
+          The code-switching module employs a bilingual lexicon filtered by POS tags and word-alignment scores to select replacement candidates. We apply a stochastic substitution policy with a language-specific replacement probability calibrated to the lexicon coverage of each target language.</p>
+
+          <p class="diff-hidden" id="diffBlock1"><span class="diff-added">Formally, given an input sequence <i>x</i> = (x<sub>1</sub>, ..., x<sub>n</sub>) in the source language, the code-switching module produces a variant <i>x'</i> by replacing each token x<sub>i</sub> with its target-language equivalent with probability p<sub>i</sub> proportional to the bilingual lexicon confidence score. The contrastive loss is defined as L = -log(exp(sim(z, z')/&tau;) / &Sigma; exp(sim(z, z<sub>j</sub>)/&tau;)), where z and z' are the pooled representations of the original and code-switched sequences, and &tau; is the temperature hyperparameter set to 0.07.</span></p>
+
+          <!-- 4. Experiments -->
+          <h2 id="sec-experiments">4. Experiments</h2>
+
+          <!-- Figure 2 -->
+          <div class="figure-placeholder" onclick="alert('Figure viewer not implemented in mockup')">
+            <div class="fig-icon">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg>
+            </div>
+            <div class="fig-label">Figure 2: Zero-shot Transfer Results</div>
+            <div class="fig-hint">Click to view generated artifact</div>
+          </div>
+
+          <p>
+            <span class="annotation">We evaluate XL-CONTRAST on the XTREME benchmark, focusing on 14 low-resource languages across three tasks: Named Entity Recognition (NER), Natural Language Inference (XNLI), and Question Answering (XQuAD). As shown in Figure 2, our method achieves consistent improvements across all language families.
+              <span class="ann-icon">!</span>
+              <span class="ann-tooltip">
+                <div class="ann-severity major">Major</div>
+                Missing comparison with mBERT and XLM-R baselines. The results table should include these standard baselines for a fair comparison.
+              </span>
+            </span>
+            On NER, XL-CONTRAST outperforms the previous state-of-the-art by an average of 3.8 F1 points, with the largest gains observed for Quechua (+7.2 F1) and Yoruba (+6.1 F1).
+            <span class="annotation">Note that Figure 2 illustrates zero-shot transfer performance before the architecture diagram in Figure 1 is discussed in full context.
+              <span class="ann-icon">!</span>
+              <span class="ann-tooltip">
+                <div class="ann-severity minor">Minor</div>
+                Figure 2 is referenced before the reader has fully engaged with Figure 1. Consider reordering figure references for better narrative flow.
+              </span>
+            </span>
+            For XNLI, the improvement is 2.1 accuracy points on average, with particularly strong results on Swahili and Urdu, two languages with limited parallel data in common pre-training corpora.
+          </p>
+
+          <p class="diff-hidden" id="diffBlock2"><span class="diff-removed">The baseline comparison includes only our reimplementation of prior contrastive methods.</span><br><span class="diff-added">Table 1 compares XL-CONTRAST against mBERT, XLM-RoBERTa-base, XLM-RoBERTa-large, and InfoXLM across all 14 target languages. Our method outperforms all baselines on 12 of 14 languages, with the two exceptions being Hindi and Vietnamese where XLM-RoBERTa-large achieves comparable performance due to higher pre-training corpus coverage.</span></p>
+
+          <!-- 5. Conclusion -->
+          <h2 id="sec-conclusion">5. Conclusion</h2>
+          <p>We have presented XL-CONTRAST, a contrastive pre-training framework that leverages synthetic code-switching to improve cross-lingual transfer for low-resource languages. Our experiments demonstrate significant improvements over existing methods across multiple tasks and languages, with the largest gains observed for typologically distant and extremely low-resource languages. The success of our approach suggests that linguistically informed data augmentation, when combined with representation alignment objectives, can substantially narrow the performance gap between high- and low-resource languages. Future work will explore extending our framework to generative tasks and investigating its applicability to language families not covered in current benchmarks.</p>
+
+          <!-- References -->
+          <h2 id="sec-references">References</h2>
+          <ol class="ref-list">
+            <li><span class="ref-num">[1]</span> Conneau, A., Khandelwal, K., Goyal, N., Chaudhary, V., Wenzek, G., Guzman, F., Grave, E., Ott, M., Zettlemoyer, L., and Stoyanov, V. "Unsupervised cross-lingual representation learning at scale." In <i>Proceedings of ACL</i>, pp. 8440-8451, 2020.</li>
+            <li><span class="ref-num">[2]</span> Pires, T., Schlinger, E., and Garrette, D. "How multilingual is multilingual BERT?" In <i>Proceedings of ACL</i>, pp. 4996-5001, 2019.</li>
+            <li><span class="ref-num">[3]</span> Wu, S. and Dredze, M. "Beto, Bentz, Becas: The surprising cross-lingual effectiveness of BERT." In <i>Proceedings of EMNLP</i>, pp. 833-844, 2019.</li>
+            <li><span class="ref-num">[4]</span> Yang, J., Liang, S., and Zhang, Y. "Design challenges and misconceptions in neural sequence labeling." In <i>Proceedings of COLING</i>, pp. 3879-3889, 2018.</li>
+            <li><span class="ref-num">[5]</span> Hu, J., Ruder, S., Siddhant, A., Neubig, G., Firat, O., and Johnson, M. "XTREME: A massively multilingual multi-task benchmark for evaluating cross-lingual generalization." In <i>Proceedings of ICML</i>, pp. 4411-4421, 2020.</li>
+            <li><span class="ref-num">[6]</span> Chi, Z., Hewitt, J., and Manning, C. D. "InfoXLM: An information-theoretic framework for cross-lingual language model pre-training." In <i>Proceedings of NAACL</i>, pp. 3576-3588, 2021.</li>
+          </ol>
+
+        </article>
+      </div>
+    </div>
+
+    <!-- ===== RIGHT PANEL: REVIEW ===== -->
+    <aside class="right-panel">
+      <div class="right-header">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+        <span class="right-header-title">Paper Review</span>
+        <span class="right-header-iter">Iteration 2</span>
+      </div>
+
+      <div class="right-scroll">
+
+        <!-- Overall Score -->
+        <div class="overall-score">
+          <div class="score-ring" style="--pct:0.72">
+            <svg viewBox="0 0 64 64"><circle class="ring-bg" cx="32" cy="32" r="28"/><circle class="ring-fg" cx="32" cy="32" r="28"/></svg>
+            <div class="ring-label">7.2<span>/10</span></div>
+          </div>
+          <div class="score-meta">
+            <strong>Overall Score</strong>
+            Solid draft with clear structure. Needs stronger baselines and formal loss definition.
+          </div>
+        </div>
+
+        <!-- Dimension bars -->
+        <div class="section-label">Dimensions</div>
+        <div class="dim-bars">
+          <div class="dim-row">
+            <span class="dim-label">Soundness</span>
+            <div class="dim-track"><div class="dim-fill" style="width:70%;background:linear-gradient(90deg,var(--accent),#818cf8)"></div></div>
+            <span class="dim-val">7/10</span>
+          </div>
+          <div class="dim-row">
+            <span class="dim-label">Presentation</span>
+            <div class="dim-track"><div class="dim-fill" style="width:80%;background:linear-gradient(90deg,var(--green),#86efac)"></div></div>
+            <span class="dim-val">8/10</span>
+          </div>
+          <div class="dim-row">
+            <span class="dim-label">Contribution</span>
+            <div class="dim-track"><div class="dim-fill" style="width:70%;background:linear-gradient(90deg,var(--accent),#818cf8)"></div></div>
+            <span class="dim-val">7/10</span>
+          </div>
+          <div class="dim-row">
+            <span class="dim-label">Clarity</span>
+            <div class="dim-track"><div class="dim-fill" style="width:60%;background:linear-gradient(90deg,var(--orange),#fdba74)"></div></div>
+            <span class="dim-val">6/10</span>
+          </div>
+        </div>
+
+        <!-- Critiques -->
+        <div class="section-label">Critiques</div>
+        <div class="critique-list">
+
+          <div class="critique">
+            <div class="critique-top">
+              <span class="critique-severity major">Major</span>
+              <span class="critique-num">#1</span>
+            </div>
+            <div class="critique-text">Section 3 lacks sufficient detail on the contrastive loss function. The reader cannot reproduce the approach from the current description.</div>
+            <div class="critique-meta">
+              <a class="critique-loc" href="#sec-method-arch" onclick="scrollToPaperSection('sec-method-arch');return false;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                &sect;3.1 Architecture Overview
+              </a>
+              <div class="critique-suggested"><b>Suggested:</b> Add formal definition of the loss function with equations, including temperature parameter and negative sampling strategy.</div>
+            </div>
+          </div>
+
+          <div class="critique">
+            <div class="critique-top">
+              <span class="critique-severity major">Major</span>
+              <span class="critique-num">#2</span>
+            </div>
+            <div class="critique-text">Missing comparison with mBERT and XLM-R baselines. Without these standard baselines the claimed improvements cannot be properly contextualized.</div>
+            <div class="critique-meta">
+              <a class="critique-loc" href="#sec-experiments" onclick="scrollToPaperSection('sec-experiments');return false;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                &sect;4 Experiments
+              </a>
+              <div class="critique-suggested"><b>Suggested:</b> Add a comprehensive baseline comparison table including mBERT, XLM-R-base, XLM-R-large, and InfoXLM.</div>
+            </div>
+          </div>
+
+          <div class="critique">
+            <div class="critique-top">
+              <span class="critique-severity minor">Minor</span>
+              <span class="critique-num">#3</span>
+            </div>
+            <div class="critique-text">Abstract could be more concise. Current length (~180 words) exceeds the typical 150-word guideline.</div>
+            <div class="critique-meta">
+              <a class="critique-loc" href="#sec-abstract" onclick="scrollToPaperSection('sec-abstract');return false;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                Abstract
+              </a>
+              <div class="critique-suggested"><b>Suggested:</b> Reduce from 180 to 150 words by tightening the methodology summary.</div>
+            </div>
+          </div>
+
+          <div class="critique">
+            <div class="critique-top">
+              <span class="critique-severity minor">Minor</span>
+              <span class="critique-num">#4</span>
+            </div>
+            <div class="critique-text">Figure 2 is referenced before the reader fully engages with Figure 1, creating a disjointed reading flow.</div>
+            <div class="critique-meta">
+              <a class="critique-loc" href="#sec-experiments" onclick="scrollToPaperSection('sec-experiments');return false;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                &sect;4 Experiments
+              </a>
+              <div class="critique-suggested"><b>Suggested:</b> Reorder figure references or move Figure 1 earlier in the text.</div>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="right-divider"></div>
+
+        <!-- Feedback form -->
+        <div class="section-label">Your Feedback</div>
+        <textarea class="feedback-area" placeholder="Add your own feedback or instructions for the next iteration..."></textarea>
+        <div class="feedback-checks">
+          <label class="feedback-check">
+            <input type="checkbox" checked>
+            <span class="checkbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>
+            Re-run paper generation with this feedback
+          </label>
+          <label class="feedback-check">
+            <input type="checkbox">
+            <span class="checkbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg></span>
+            Also re-generate affected artifacts
+          </label>
+        </div>
+        <button class="submit-btn" onclick="handleSubmit()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+          Submit &amp; Re-run
+        </button>
+
+      </div>
+    </aside>
+
+  </div>
+
+  <!-- ===== BOTTOM BAR ===== -->
+  <footer class="bottombar">
+    <div class="bottombar-stat">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      6 sections
+    </div>
+    <div class="bottombar-dot"></div>
+    <div class="bottombar-stat">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+      4 critiques
+    </div>
+    <div class="bottombar-dot"></div>
+    <div class="bottombar-stat">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+      2 figures
+    </div>
+    <div class="bottombar-dot"></div>
+    <div class="bottombar-stat">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+      6 references
+    </div>
+    <div class="bottombar-dot"></div>
+    <div class="bottombar-stat">
+      ~2,840 words
+    </div>
+    <div class="bottombar-right">
+      <span style="color:var(--green)">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Generated 4m 32s ago
+      </span>
+      <button class="export-btn" onclick="alert('PDF export not implemented in mockup')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Export PDF
+      </button>
+    </div>
+  </footer>
+
+</div>
+
+<script>
+  // Scroll to paper section when critique location is clicked
+  function scrollToPaperSection(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const scroller = document.getElementById('paperScroll');
+    const rect = el.getBoundingClientRect();
+    const scrollerRect = scroller.getBoundingClientRect();
+    const offset = rect.top - scrollerRect.top + scroller.scrollTop - 20;
+    scroller.scrollTo({ top: offset, behavior: 'smooth' });
+
+    // Flash highlight
+    el.style.transition = 'background 0.3s';
+    el.style.background = 'rgba(108,140,255,0.15)';
+    el.style.borderRadius = '4px';
+    el.style.padding = '2px 6px';
+    el.style.margin = '-2px -6px';
+    setTimeout(() => {
+      el.style.background = 'transparent';
+      setTimeout(() => {
+        el.style.padding = '';
+        el.style.margin = '';
+      }, 300);
+    }, 1500);
+  }
+
+  // Diff toggle
+  document.getElementById('diffToggle').addEventListener('change', function() {
+    const blocks = document.querySelectorAll('.diff-hidden, .diff-visible');
+    blocks.forEach(b => {
+      if (this.checked) {
+        b.classList.remove('diff-hidden');
+        b.classList.add('diff-visible');
+        b.style.display = '';
+      } else {
+        b.classList.remove('diff-visible');
+        b.classList.add('diff-hidden');
+        b.style.display = 'none';
+      }
+    });
+  });
+
+  // Iteration selector
+  document.querySelectorAll('.iter-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('.iter-btn').forEach(b => b.classList.remove('active'));
+      this.classList.add('active');
+      const iter = this.getAttribute('data-iter');
+      document.querySelector('.center-title').textContent = 'Paper Draft \u2014 Iteration ' + iter;
+      document.querySelector('.right-header-iter').textContent = 'Iteration ' + iter;
+    });
+  });
+
+  // Submit handler
+  function handleSubmit() {
+    const btn = document.querySelector('.submit-btn');
+    const origHTML = btn.innerHTML;
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg> Submitting...';
+    btn.style.pointerEvents = 'none';
+    btn.style.opacity = '0.7';
+    setTimeout(() => {
+      btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> Submitted — Iteration 3 queued';
+      btn.style.background = 'var(--green-dim)';
+      setTimeout(() => {
+        btn.innerHTML = origHTML;
+        btn.style.pointerEvents = '';
+        btn.style.opacity = '';
+        btn.style.background = '';
+      }, 2500);
+    }, 1500);
+  }
+
+  // Spin animation for loading indicator
+  const styleEl = document.createElement('style');
+  styleEl.textContent = '@keyframes spin{to{transform:rotate(360deg)}}';
+  document.head.appendChild(styleEl);
+</script>
+</body>
+</html>

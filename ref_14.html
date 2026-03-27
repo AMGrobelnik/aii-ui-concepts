@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Simple View</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+  :root {
+    --bg: #0c0e14;
+    --surface: #13161f;
+    --border: #1e2233;
+    --text: #c8cdd8;
+    --text-dim: #5a6070;
+    --text-bright: #eef0f6;
+    --active-glow: #3b8bff;
+    --active-glow-rgb: 59,139,255;
+  }
+
+  body {
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', 'JetBrains Mono', monospace;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── MODULE COLORS ─────────────────────────────────────── */
+  .mod-0 { --mc: #ff6b6b; --mc-rgb: 255,107,107; }
+  .mod-1 { --mc: #ffa94d; --mc-rgb: 255,169,77;  }
+  .mod-2 { --mc: #69db7c; --mc-rgb: 105,219,124; }
+  .mod-3 { --mc: #74c0fc; --mc-rgb: 116,192,252; }
+  .mod-4 { --mc: #b197fc; --mc-rgb: 177,151,252; }
+  .mod-5 { --mc: #fcc419; --mc-rgb: 252,196,25;  }
+
+  /* ── TOP TRAIL STRIP ───────────────────────────────────── */
+  .trail-strip {
+    position: relative;
+    width: 100%;
+    height: 110px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+    overflow-y: hidden;
+    display: flex;
+    align-items: center;
+    scrollbar-width: thin;
+    scrollbar-color: #2a2e3e transparent;
+  }
+
+  .trail-strip::-webkit-scrollbar { height: 4px; }
+  .trail-strip::-webkit-scrollbar-track { background: transparent; }
+  .trail-strip::-webkit-scrollbar-thumb { background: #2a2e3e; border-radius: 2px; }
+
+  .trail-container {
+    display: flex;
+    align-items: center;
+    padding: 0 60px;
+    position: relative;
+    height: 100%;
+  }
+
+  /* The connecting line behind nodes */
+  .trail-segment {
+    position: absolute;
+    height: 2px;
+    top: 50%;
+    transform: translateY(-1px);
+    opacity: 0.5;
+    transition: opacity 0.4s;
+  }
+  .trail-segment.past { opacity: 0.7; }
+  .trail-segment.future { opacity: 0.15; }
+
+  /* ── NODE BASE ─────────────────────────────────────────── */
+  .node {
+    position: relative;
+    flex-shrink: 0;
+    cursor: pointer;
+    z-index: 2;
+    transition: transform 0.2s, filter 0.3s;
+  }
+  .node:hover { transform: scale(1.2); }
+  .node.future-node { opacity: 0.3; filter: saturate(0.2); }
+  .node.future-node:hover { opacity: 0.6; filter: saturate(0.5); }
+
+  /* ── DIAMOND (MODULE) ──────────────────────────────────── */
+  .diamond {
+    width: 28px;
+    height: 28px;
+    margin: 0 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .diamond-shape {
+    width: 28px;
+    height: 28px;
+    transform: rotate(45deg);
+    border: 2px solid var(--mc);
+    background: rgba(var(--mc-rgb), 0.12);
+    border-radius: 3px;
+    transition: background 0.3s, box-shadow 0.3s, border-color 0.3s;
+  }
+
+  .diamond.past .diamond-shape {
+    background: rgba(var(--mc-rgb), 0.25);
+    box-shadow:
+      0 0 8px rgba(var(--mc-rgb), 0.4),
+      0 0 20px rgba(var(--mc-rgb), 0.15);
+  }
+
+  .diamond.pending .diamond-shape {
+    background: transparent;
+    border-color: rgba(var(--mc-rgb), 0.25);
+    box-shadow: none;
+  }
+
+  .diamond.active .diamond-shape {
+    background: rgba(var(--mc-rgb), 0.35);
+    box-shadow:
+      0 0 12px rgba(var(--mc-rgb), 0.6),
+      0 0 30px rgba(var(--mc-rgb), 0.2);
+  }
+
+  /* Module label below diamond */
+  .diamond-label {
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-top: 8px;
+    font-size: 9px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: var(--mc);
+    white-space: nowrap;
+    opacity: 0.7;
+    transition: opacity 0.3s;
+    pointer-events: none;
+  }
+  .diamond.past .diamond-label { opacity: 0.9; }
+  .diamond.pending .diamond-label { opacity: 0.25; }
+  .diamond.active .diamond-label { opacity: 1; font-weight: 600; }
+
+  /* Small index inside diamond */
+  .diamond-index {
+    position: absolute;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--mc);
+    z-index: 3;
+    pointer-events: none;
+  }
+  .diamond.pending .diamond-index { opacity: 0.25; }
+
+  /* ── DOT (SUB-STEP) ────────────────────────────────────── */
+  .dot {
+    width: 8px;
+    height: 8px;
+    margin: 0 5px;
+    border-radius: 50%;
+    background: rgba(var(--mc-rgb), 0.35);
+    transition: background 0.3s, box-shadow 0.3s, width 0.3s, height 0.3s;
+  }
+
+  .dot.past {
+    background: rgba(var(--mc-rgb), 0.55);
+  }
+
+  .dot.future {
+    background: rgba(var(--mc-rgb), 0.1);
+  }
+
+  .dot.active-dot {
+    width: 12px;
+    height: 12px;
+    background: var(--active-glow);
+    box-shadow:
+      0 0 10px rgba(var(--active-glow-rgb), 0.8),
+      0 0 30px rgba(var(--active-glow-rgb), 0.4),
+      0 0 50px rgba(var(--active-glow-rgb), 0.15);
+    animation: pulse-dot 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-dot {
+    0%, 100% {
+      box-shadow:
+        0 0 10px rgba(var(--active-glow-rgb), 0.8),
+        0 0 30px rgba(var(--active-glow-rgb), 0.4),
+        0 0 50px rgba(var(--active-glow-rgb), 0.15);
+    }
+    50% {
+      box-shadow:
+        0 0 14px rgba(var(--active-glow-rgb), 1),
+        0 0 40px rgba(var(--active-glow-rgb), 0.55),
+        0 0 65px rgba(var(--active-glow-rgb), 0.25);
+    }
+  }
+
+  /* Tooltip on hover */
+  .node-tooltip {
+    position: absolute;
+    bottom: calc(100% + 12px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1a1d2a;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 11px;
+    color: var(--text-bright);
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s;
+    z-index: 100;
+  }
+  .node-tooltip::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-top-color: #1a1d2a;
+  }
+  .node:hover .node-tooltip { opacity: 1; }
+
+  /* ── CONTENT AREA ──────────────────────────────────────── */
+  .content-area {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 40px 30px;
+    min-height: calc(100vh - 110px);
+  }
+
+  .content-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 32px;
+    animation: fadeSlide 0.35s ease-out;
+  }
+
+  @keyframes fadeSlide {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .content-card .card-tag {
+    display: inline-block;
+    font-size: 10px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 3px 10px;
+    border-radius: 4px;
+    margin-bottom: 16px;
+    font-weight: 600;
+  }
+
+  .content-card .card-tag.module-tag {
+    background: rgba(var(--mc-rgb), 0.15);
+    color: var(--mc);
+    border: 1px solid rgba(var(--mc-rgb), 0.25);
+  }
+
+  .content-card .card-tag.step-tag {
+    background: rgba(var(--active-glow-rgb), 0.1);
+    color: var(--active-glow);
+    border: 1px solid rgba(var(--active-glow-rgb), 0.2);
+  }
+
+  .content-card h2 {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text-bright);
+    margin-bottom: 8px;
+  }
+
+  .content-card .card-subtitle {
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-bottom: 24px;
+  }
+
+  .content-card .card-body {
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--text);
+  }
+
+  .content-card .card-body p { margin-bottom: 12px; }
+  .content-card .card-body p:last-child { margin-bottom: 0; }
+
+  /* Module summary stats row */
+  .stats-row {
+    display: flex;
+    gap: 16px;
+    margin-top: 24px;
+    flex-wrap: wrap;
+  }
+
+  .stat-box {
+    flex: 1;
+    min-width: 120px;
+    background: rgba(var(--mc-rgb), 0.06);
+    border: 1px solid rgba(var(--mc-rgb), 0.12);
+    border-radius: 8px;
+    padding: 14px 16px;
+    text-align: center;
+  }
+
+  .stat-box .stat-val {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--mc);
+  }
+
+  .stat-box .stat-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-dim);
+    margin-top: 4px;
+  }
+
+  /* Sub-step detail fields */
+  .detail-fields {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin-top: 20px;
+  }
+
+  .detail-field {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 14px;
+  }
+
+  .detail-field .df-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-dim);
+    margin-bottom: 4px;
+  }
+
+  .detail-field .df-value {
+    font-size: 13px;
+    color: var(--text-bright);
+    font-weight: 500;
+  }
+
+  .detail-field.full-width {
+    grid-column: 1 / -1;
+  }
+
+  /* Status pill */
+  .status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-weight: 600;
+  }
+  .status-pill.done {
+    background: rgba(105,219,124,0.12);
+    color: #69db7c;
+  }
+  .status-pill.running {
+    background: rgba(var(--active-glow-rgb),0.12);
+    color: var(--active-glow);
+  }
+  .status-pill.pending {
+    background: rgba(90,96,112,0.15);
+    color: var(--text-dim);
+  }
+  .status-pill::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+  .status-pill.running::before {
+    animation: blink 1.2s ease-in-out infinite;
+  }
+  @keyframes blink {
+    0%,100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  /* ── KEYBOARD NAV HINT ─────────────────────────────────── */
+  .nav-hint {
+    position: fixed;
+    bottom: 20px;
+    right: 24px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--text-dim);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 14px;
+    z-index: 50;
+  }
+
+  .nav-hint kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    height: 22px;
+    padding: 0 5px;
+    background: #1a1d2a;
+    border: 1px solid #2a2e3e;
+    border-radius: 4px;
+    font-size: 11px;
+    font-family: inherit;
+    color: var(--text);
+  }
+
+  /* ── SELECTION HIGHLIGHT ON STRIP ──────────────────────── */
+  .node.selected .diamond-shape {
+    border-color: #fff !important;
+    box-shadow:
+      0 0 6px rgba(255,255,255,0.3),
+      0 0 15px rgba(var(--mc-rgb), 0.5) !important;
+  }
+  .node.selected.dot-node {
+    outline: 2px solid rgba(255,255,255,0.5);
+    outline-offset: 3px;
+    border-radius: 50%;
+  }
+</style>
+</head>
+<body>
+
+<!-- ── TRAIL STRIP ────────────────────────────────────────── -->
+<div class="trail-strip" id="trailStrip">
+  <div class="trail-container" id="trailContainer">
+    <!-- Populated by JS -->
+  </div>
+</div>
+
+<!-- ── CONTENT AREA ───────────────────────────────────────── -->
+<div class="content-area" id="contentArea">
+  <!-- Populated by JS -->
+</div>
+
+<!-- ── NAV HINT ───────────────────────────────────────────── -->
+<div class="nav-hint">
+  <kbd>&larr;</kbd><kbd>&rarr;</kbd> modules
+  &nbsp;&middot;&nbsp;
+  <kbd>Shift</kbd>+<kbd>&larr;</kbd><kbd>&rarr;</kbd> steps
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════
+//  DATA
+// ═══════════════════════════════════════════════════════════
+
+const MODULES = [
+  {
+    id: 'seed',
+    name: 'Seed Hypotheses',
+    colorIdx: 0,
+    summary: 'Generates initial seed hypotheses from the invention knowledge graph by traversing concept clusters and extracting promising research directions.',
+    stats: { generated: 48, filtered: 12, duration: '3m 14s' },
+    steps: [
+      { name: 'Load KG snapshot',     status: 'done',    detail: 'Loaded 2,841 nodes and 7,203 edges from the cached knowledge graph.' },
+      { name: 'Cluster extraction',   status: 'done',    detail: 'Identified 23 concept clusters using spectral decomposition.' },
+      { name: 'Cross-cluster links',  status: 'done',    detail: 'Found 156 inter-cluster bridges with novelty score > 0.7.' },
+      { name: 'Hypothesis drafting',  status: 'done',    detail: 'Drafted 48 raw hypotheses from bridge-connected concept pairs.' },
+      { name: 'Dedup & filter',       status: 'done',    detail: 'Removed 36 near-duplicates. 12 unique hypotheses remain.' },
+    ]
+  },
+  {
+    id: 'hypo_loop',
+    name: 'Hypothesis Loop',
+    colorIdx: 1,
+    summary: 'Iteratively refines hypotheses through review cycles, scoring each on novelty, feasibility, and impact, then selecting the strongest candidates.',
+    stats: { iterations: 3, candidates: 5, duration: '8m 42s' },
+    steps: [
+      { name: 'Initial scoring',       status: 'done',    detail: 'Scored 12 hypotheses on novelty (0-1), feasibility (0-1), impact (0-1).' },
+      { name: 'Review round 1',        status: 'done',    detail: 'LLM reviewer flagged 4 hypotheses as under-specified. Revised prompts sent.' },
+      { name: 'Review round 2',        status: 'done',    detail: 'Rescored after revision. Top-5 separated clearly (score >= 0.82).' },
+      { name: 'Adversarial check',     status: 'done',    detail: 'Adversarial agent challenged all 5 candidates. 2 weaknesses patched.' },
+      { name: 'Convergence check',     status: 'done',    detail: 'Score delta < 0.01 across last two rounds — loop converged.' },
+      { name: 'Final ranking',         status: 'done',    detail: 'Ranked candidates by composite score. Top hypothesis: score 0.94.' },
+      { name: 'Export candidates',     status: 'done',    detail: 'Exported 5 candidates to invention loop input manifest.' },
+    ]
+  },
+  {
+    id: 'invention',
+    name: 'Invention Loop',
+    colorIdx: 2,
+    summary: 'Takes the top hypothesis and develops it into a full invention: research strategy, detailed plan, paper text drafts, and iterative review.',
+    stats: { drafts: 4, revisions: 7, duration: '22m 08s' },
+    steps: [
+      { name: 'Strategy generation',    status: 'done',    detail: 'Generated 3 research strategies. Selected: "compositional transfer" approach.' },
+      { name: 'Plan generation',        status: 'done',    detail: 'Produced a 12-section research plan with method, evaluation, baselines.' },
+      { name: 'Draft 1 — Methods',      status: 'done',    detail: 'First methods section draft: 1,847 words covering core algorithm.' },
+      { name: 'Draft 2 — Results',      status: 'done',    detail: 'Synthetic results section with 3 tables and 2 figure placeholders.' },
+      { name: 'Draft 3 — Introduction', status: 'done',    detail: 'Introduction connecting motivation to prior work. 1,206 words.' },
+      { name: 'Review pass',            status: 'running', detail: 'Reviewer agent checking coherence across sections. Found 3 minor issues so far.' },
+      { name: 'Final integration',      status: 'pending', detail: 'Will merge all sections into unified paper body.' },
+      { name: 'Quality gate',           status: 'pending', detail: 'Final quality check against rubric before proceeding to paper repo.' },
+    ]
+  },
+  {
+    id: 'paper_repo',
+    name: 'Paper Repo',
+    colorIdx: 3,
+    summary: 'Generates the complete paper repository including LaTeX source, visualizations, artifact demos, and supplementary materials.',
+    stats: { files: '—', figures: '—', duration: '—' },
+    steps: [
+      { name: 'Scaffold repo',        status: 'pending', detail: 'Creates directory structure: /paper, /figures, /code, /supplements.' },
+      { name: 'Generate artifacts',    status: 'pending', detail: 'Produces runnable Python demos for each core claim.' },
+      { name: 'Generate viz',          status: 'pending', detail: 'Creates publication-quality figures (matplotlib/plotly).' },
+      { name: 'Compile full paper',    status: 'pending', detail: 'Assembles all sections into final LaTeX document.' },
+      { name: 'Self-review',           status: 'pending', detail: 'Automated review pass on compiled PDF output.' },
+    ]
+  },
+  {
+    id: 'publish',
+    name: 'Publish',
+    colorIdx: 4,
+    summary: 'Handles final packaging, metadata tagging, and output of the completed invention paper to the configured destination.',
+    stats: { outputs: '—', tags: '—', duration: '—' },
+    steps: [
+      { name: 'Metadata tagging',     status: 'pending', detail: 'Attaches invention ID, timestamps, provenance chain.' },
+      { name: 'Package outputs',      status: 'pending', detail: 'Bundles paper PDF, source, figures, and code into archive.' },
+      { name: 'Push to destination',   status: 'pending', detail: 'Uploads final package to configured output store.' },
+    ]
+  }
+];
+
+// ═══════════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════════
+
+// Find active dot
+let activeModIdx = -1;
+let activeStepIdx = -1;
+(function findActive() {
+  for (let m = 0; m < MODULES.length; m++) {
+    for (let s = 0; s < MODULES[m].steps.length; s++) {
+      if (MODULES[m].steps[s].status === 'running') {
+        activeModIdx = m;
+        activeStepIdx = s;
+        return;
+      }
+    }
+  }
+})();
+
+let selectedNodeKey = null;  // 'mod-2' or 'step-2-5'
+
+// ═══════════════════════════════════════════════════════════
+//  BUILD TRAIL
+// ═══════════════════════════════════════════════════════════
+
+function buildTrail() {
+  const container = document.getElementById('trailContainer');
+  container.innerHTML = '';
+
+  const nodes = [];       // { el, type, modIdx, stepIdx?, key }
+  const segments = [];    // { el, modIdx, state }
+
+  // Determine module states
+  function modState(mIdx) {
+    if (mIdx < activeModIdx) return 'past';
+    if (mIdx === activeModIdx) return 'active';
+    return 'pending';
+  }
+  function stepState(mIdx, sIdx) {
+    if (mIdx < activeModIdx) return 'past';
+    if (mIdx > activeModIdx) return 'future';
+    if (sIdx < activeStepIdx) return 'past';
+    if (sIdx === activeStepIdx) return 'active';
+    return 'future';
+  }
+
+  MODULES.forEach((mod, mIdx) => {
+    const ms = modState(mIdx);
+
+    // ── Diamond node ──
+    const dWrap = document.createElement('div');
+    dWrap.className = `node diamond mod-${mod.colorIdx} ${ms}`;
+    dWrap.dataset.key = `mod-${mIdx}`;
+
+    const shape = document.createElement('div');
+    shape.className = 'diamond-shape';
+    dWrap.appendChild(shape);
+
+    const idx = document.createElement('span');
+    idx.className = 'diamond-index';
+    idx.textContent = mIdx + 1;
+    dWrap.appendChild(idx);
+
+    const label = document.createElement('span');
+    label.className = 'diamond-label';
+    label.textContent = mod.name;
+    dWrap.appendChild(label);
+
+    const tip = document.createElement('div');
+    tip.className = 'node-tooltip';
+    tip.textContent = mod.name;
+    dWrap.appendChild(tip);
+
+    container.appendChild(dWrap);
+    nodes.push({ el: dWrap, type: 'diamond', modIdx: mIdx, key: `mod-${mIdx}` });
+
+    // ── Dots for sub-steps ──
+    mod.steps.forEach((step, sIdx) => {
+      const ss = stepState(mIdx, sIdx);
+
+      const dot = document.createElement('div');
+      let cls = `node dot-node dot mod-${mod.colorIdx}`;
+      if (ss === 'past') cls += ' past';
+      else if (ss === 'future') cls += ' future';
+      if (ss === 'active') cls += ' active-dot';
+      if (ss === 'future' || (ms === 'pending')) cls += ' future-node';
+      dot.className = cls;
+      dot.dataset.key = `step-${mIdx}-${sIdx}`;
+
+      const stip = document.createElement('div');
+      stip.className = 'node-tooltip';
+      stip.textContent = step.name;
+      dot.appendChild(stip);
+
+      container.appendChild(dot);
+      nodes.push({ el: dot, type: 'dot', modIdx: mIdx, stepIdx: sIdx, key: `step-${mIdx}-${sIdx}` });
+    });
+  });
+
+  // Click handlers
+  nodes.forEach(n => {
+    n.el.addEventListener('click', () => selectNode(n.key));
+  });
+
+  // Draw connecting line segments after layout
+  requestAnimationFrame(() => drawSegments(nodes));
+
+  // Store for navigation
+  window._trailNodes = nodes;
+
+  // Default selection
+  if (activeModIdx >= 0 && activeStepIdx >= 0) {
+    selectNode(`step-${activeModIdx}-${activeStepIdx}`);
+  } else {
+    selectNode('mod-0');
+  }
+}
+
+function drawSegments(nodes) {
+  const container = document.getElementById('trailContainer');
+
+  // Remove old segments
+  container.querySelectorAll('.trail-segment').forEach(s => s.remove());
+
+  const containerRect = container.getBoundingClientRect();
+
+  for (let i = 0; i < nodes.length - 1; i++) {
+    const a = nodes[i].el;
+    const b = nodes[i + 1].el;
+
+    const aRect = a.getBoundingClientRect();
+    const bRect = b.getBoundingClientRect();
+
+    const x1 = aRect.left + aRect.width / 2 - containerRect.left;
+    const x2 = bRect.left + bRect.width / 2 - containerRect.left;
+
+    const seg = document.createElement('div');
+    seg.className = 'trail-segment';
+    seg.style.left = x1 + 'px';
+    seg.style.width = (x2 - x1) + 'px';
+
+    // Color from the module of the left node
+    const mIdx = nodes[i].modIdx;
+    const mod = MODULES[mIdx];
+    const rgb = getComputedStyle(document.querySelector(`.mod-${mod.colorIdx}`)).getPropertyValue('--mc').trim();
+    seg.style.background = rgb || `var(--mc)`;
+
+    // Past or future
+    const isPast = (mIdx < activeModIdx) ||
+                   (mIdx === activeModIdx && nodes[i].type === 'dot' && nodes[i].stepIdx <= activeStepIdx);
+    seg.classList.add(isPast ? 'past' : 'future');
+
+    // Apply module color class
+    seg.classList.add(`mod-${mod.colorIdx}`);
+    seg.style.background = `var(--mc)`;
+
+    container.appendChild(seg);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SELECT NODE & RENDER CONTENT
+// ═══════════════════════════════════════════════════════════
+
+function selectNode(key) {
+  selectedNodeKey = key;
+
+  // Update highlight
+  document.querySelectorAll('.node.selected').forEach(n => n.classList.remove('selected'));
+  const el = document.querySelector(`[data-key="${key}"]`);
+  if (el) {
+    el.classList.add('selected');
+    el.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+  }
+
+  // Render content
+  const content = document.getElementById('contentArea');
+
+  if (key.startsWith('mod-')) {
+    const mIdx = parseInt(key.split('-')[1]);
+    content.innerHTML = renderModuleCard(mIdx);
+  } else if (key.startsWith('step-')) {
+    const parts = key.split('-');
+    const mIdx = parseInt(parts[1]);
+    const sIdx = parseInt(parts[2]);
+    content.innerHTML = renderStepCard(mIdx, sIdx);
+  }
+}
+
+function renderModuleCard(mIdx) {
+  const mod = MODULES[mIdx];
+  const colorCls = `mod-${mod.colorIdx}`;
+
+  const doneCount = mod.steps.filter(s => s.status === 'done').length;
+  const totalCount = mod.steps.length;
+  const pct = Math.round((doneCount / totalCount) * 100);
+
+  let statsHTML = '';
+  if (mod.stats) {
+    statsHTML = '<div class="stats-row">';
+    for (const [label, val] of Object.entries(mod.stats)) {
+      statsHTML += `
+        <div class="stat-box ${colorCls}">
+          <div class="stat-val">${val}</div>
+          <div class="stat-label">${label}</div>
+        </div>`;
+    }
+    statsHTML += '</div>';
+  }
+
+  // Steps list
+  let stepsListHTML = '<div style="margin-top:24px;">';
+  stepsListHTML += '<div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim);margin-bottom:12px;">Sub-steps</div>';
+  mod.steps.forEach((step, sIdx) => {
+    const pillCls = step.status;
+    const pillLabel = step.status === 'done' ? 'Done' : step.status === 'running' ? 'Running' : 'Pending';
+    stepsListHTML += `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);cursor:pointer;"
+           class="step-row" data-step-key="step-${mIdx}-${sIdx}">
+        <span style="font-size:13px;color:var(--text-bright);">${sIdx + 1}. ${step.name}</span>
+        <span class="status-pill ${pillCls}">${pillLabel}</span>
+      </div>`;
+  });
+  stepsListHTML += '</div>';
+
+  return `
+    <div class="content-card ${colorCls}">
+      <span class="card-tag module-tag">Module ${mIdx + 1} of ${MODULES.length}</span>
+      <h2>${mod.name}</h2>
+      <div class="card-subtitle">${pct}% complete &mdash; ${doneCount}/${totalCount} steps</div>
+      <div class="card-body">
+        <p>${mod.summary}</p>
+      </div>
+      ${statsHTML}
+      ${stepsListHTML}
+    </div>`;
+}
+
+function renderStepCard(mIdx, sIdx) {
+  const mod = MODULES[mIdx];
+  const step = mod.steps[sIdx];
+  const colorCls = `mod-${mod.colorIdx}`;
+
+  const pillCls = step.status;
+  const pillLabel = step.status === 'done' ? 'Done' : step.status === 'running' ? 'Running' : 'Pending';
+
+  // Determine timing estimate
+  const timing = step.status === 'done' ? 'Completed' : step.status === 'running' ? 'In progress...' : 'Waiting';
+
+  // Breadcrumb
+  const breadcrumb = `${mod.name} &rsaquo; Step ${sIdx + 1} of ${mod.steps.length}`;
+
+  return `
+    <div class="content-card ${colorCls}">
+      <span class="card-tag step-tag">Sub-step</span>
+      <div class="card-subtitle" style="margin-bottom:6px;">${breadcrumb}</div>
+      <h2>${step.name}</h2>
+      <div style="margin:12px 0;">
+        <span class="status-pill ${pillCls}">${pillLabel}</span>
+      </div>
+      <div class="card-body">
+        <p>${step.detail}</p>
+      </div>
+      <div class="detail-fields">
+        <div class="detail-field">
+          <div class="df-label">Module</div>
+          <div class="df-value" style="color:var(--mc);">${mod.name}</div>
+        </div>
+        <div class="detail-field">
+          <div class="df-label">Status</div>
+          <div class="df-value">${timing}</div>
+        </div>
+        <div class="detail-field">
+          <div class="df-label">Position</div>
+          <div class="df-value">Step ${sIdx + 1} / ${mod.steps.length}</div>
+        </div>
+        <div class="detail-field">
+          <div class="df-label">Module Progress</div>
+          <div class="df-value">${mod.steps.filter(s=>s.status==='done').length} of ${mod.steps.length} done</div>
+        </div>
+      </div>
+      <div style="margin-top:24px;display:flex;gap:10px;">
+        ${sIdx > 0 ? `<button class="step-nav-btn" data-step-key="step-${mIdx}-${sIdx-1}" style="
+          background:rgba(var(--mc-rgb),0.08);border:1px solid rgba(var(--mc-rgb),0.2);
+          color:var(--mc);padding:8px 16px;border-radius:6px;cursor:pointer;font-family:inherit;font-size:12px;
+        ">&larr; ${mod.steps[sIdx-1].name}</button>` : ''}
+        ${sIdx < mod.steps.length - 1 ? `<button class="step-nav-btn" data-step-key="step-${mIdx}-${sIdx+1}" style="
+          background:rgba(var(--mc-rgb),0.08);border:1px solid rgba(var(--mc-rgb),0.2);
+          color:var(--mc);padding:8px 16px;border-radius:6px;cursor:pointer;font-family:inherit;font-size:12px;
+          margin-left:auto;
+        ">${mod.steps[sIdx+1].name} &rarr;</button>` : ''}
+      </div>
+    </div>`;
+}
+
+// ═══════════════════════════════════════════════════════════
+//  EVENT DELEGATION FOR CARD LINKS
+// ═══════════════════════════════════════════════════════════
+
+document.getElementById('contentArea').addEventListener('click', (e) => {
+  const row = e.target.closest('[data-step-key]');
+  if (row) {
+    selectNode(row.dataset.stepKey);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════
+//  KEYBOARD NAVIGATION
+// ═══════════════════════════════════════════════════════════
+
+document.addEventListener('keydown', (e) => {
+  if (!selectedNodeKey || !window._trailNodes) return;
+
+  const nodes = window._trailNodes;
+  const curIdx = nodes.findIndex(n => n.key === selectedNodeKey);
+  if (curIdx < 0) return;
+
+  if (e.shiftKey && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+    // Shift+Arrow: navigate between individual steps
+    e.preventDefault();
+    const next = e.key === 'ArrowRight'
+      ? Math.min(curIdx + 1, nodes.length - 1)
+      : Math.max(curIdx - 1, 0);
+    selectNode(nodes[next].key);
+  } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+    // Arrow: jump between module diamonds
+    e.preventDefault();
+    const diamonds = nodes.filter(n => n.type === 'diamond');
+    const curDiamond = diamonds.findIndex(d => {
+      if (selectedNodeKey.startsWith('mod-')) return d.key === selectedNodeKey;
+      // If on a dot, find the parent module
+      const parts = selectedNodeKey.split('-');
+      return d.modIdx === parseInt(parts[1]);
+    });
+    if (curDiamond < 0) return;
+
+    const nextDiamond = e.key === 'ArrowRight'
+      ? Math.min(curDiamond + 1, diamonds.length - 1)
+      : Math.max(curDiamond - 1, 0);
+    selectNode(diamonds[nextDiamond].key);
+  }
+});
+
+// ═══════════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════════
+
+buildTrail();
+
+// Recalculate segments on resize
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    if (window._trailNodes) drawSegments(window._trailNodes);
+  }, 150);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Pipeline Feed</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0f1117;
+    --surface: #181a20;
+    --surface-active: #1e2028;
+    --border: #2a2d37;
+    --text: #d1d5db;
+    --text-dim: #6b7280;
+    --text-muted: #4b5058;
+    --accent-blue: #3b82f6;
+    --accent-green: #22c55e;
+    --accent-amber: #f59e0b;
+    --accent-purple: #a855f7;
+    --accent-rose: #f43f5e;
+    --link: #60a5fa;
+    --progress-bg: #1f2937;
+    --progress-fill: #3b82f6;
+    --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+
+  html { font-size: 14px; }
+
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  /* --- Header --- */
+  .header {
+    width: 100%;
+    max-width: 650px;
+    padding: 40px 20px 24px;
+    text-align: center;
+  }
+
+  .header h1 {
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: #e5e7eb;
+    letter-spacing: -0.01em;
+  }
+
+  .header .subtitle {
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    margin-top: 4px;
+  }
+
+  .header .run-id {
+    display: inline-block;
+    margin-top: 10px;
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    background: var(--surface);
+    padding: 3px 10px;
+    border-radius: 10px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+  }
+
+  /* --- Feed container --- */
+  .feed {
+    width: 100%;
+    max-width: 650px;
+    padding: 0 20px 80px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  /* --- Message card --- */
+  .msg {
+    position: relative;
+    padding: 18px 20px 16px 20px;
+    border-left: 3px solid transparent;
+    border-radius: 6px;
+    background: var(--surface);
+    transition: background 0.2s, opacity 0.2s;
+  }
+
+  .msg.state-complete { border-left-color: var(--accent-green); }
+  .msg.state-running  { border-left-color: var(--accent-blue); background: var(--surface-active); }
+  .msg.state-pending  { border-left-color: var(--border); opacity: 0.38; }
+
+  .msg.state-running .msg-title { color: #f3f4f6; }
+
+  /* timestamp row */
+  .msg-meta-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+
+  .msg-timestamp {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    min-width: 52px;
+  }
+
+  .msg-module-tag {
+    font-size: 0.68rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 1px 7px;
+    border-radius: 3px;
+    background: rgba(255,255,255,0.04);
+  }
+
+  .msg.state-complete .msg-module-tag { color: var(--accent-green); }
+  .msg.state-running  .msg-module-tag { color: var(--accent-blue); }
+  .msg.state-pending  .msg-module-tag { color: var(--text-muted); }
+
+  /* title line */
+  .msg-title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: #c9cdd5;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .msg-title .badge {
+    font-size: 0.72rem;
+    font-weight: 500;
+    padding: 1px 8px;
+    border-radius: 10px;
+    display: inline-block;
+  }
+
+  .badge-complete { background: rgba(34,197,94,0.12); color: var(--accent-green); }
+  .badge-running  { background: rgba(59,130,246,0.12); color: var(--accent-blue); }
+  .badge-pending  { background: rgba(75,80,88,0.15); color: var(--text-muted); }
+  .badge-score    { background: rgba(245,158,11,0.12); color: var(--accent-amber); }
+
+  /* body text */
+  .msg-body {
+    font-size: 0.88rem;
+    color: var(--text-dim);
+    line-height: 1.55;
+    margin-bottom: 10px;
+  }
+
+  /* progress bar */
+  .progress-wrap {
+    margin: 10px 0 8px;
+  }
+
+  .progress-label {
+    font-size: 0.75rem;
+    color: var(--text-dim);
+    margin-bottom: 5px;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .progress-bar {
+    height: 5px;
+    border-radius: 3px;
+    background: var(--progress-bg);
+    overflow: hidden;
+  }
+
+  .progress-fill {
+    height: 100%;
+    border-radius: 3px;
+    background: var(--progress-fill);
+    transition: width 0.6s ease;
+  }
+
+  /* stats row */
+  .msg-stats {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .msg-stats .sep {
+    color: var(--border);
+  }
+
+  /* see details toggle */
+  .details-toggle {
+    background: none;
+    border: none;
+    color: var(--link);
+    font-size: 0.8rem;
+    font-family: var(--font);
+    cursor: pointer;
+    padding: 0;
+    margin-top: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    transition: color 0.15s;
+  }
+
+  .details-toggle:hover { color: #93bbfc; }
+
+  .details-toggle .arrow {
+    display: inline-block;
+    font-size: 0.65rem;
+    transition: transform 0.25s;
+  }
+
+  .details-toggle.open .arrow { transform: rotate(180deg); }
+
+  /* details panel */
+  .details-panel {
+    overflow: hidden;
+    max-height: 0;
+    opacity: 0;
+    transition: max-height 0.35s ease, opacity 0.25s ease, margin 0.25s ease;
+    margin-top: 0;
+  }
+
+  .details-panel.open {
+    opacity: 1;
+    margin-top: 12px;
+  }
+
+  .details-inner {
+    padding: 14px 16px;
+    background: rgba(0,0,0,0.18);
+    border-radius: 5px;
+    border: 1px solid rgba(255,255,255,0.04);
+  }
+
+  /* sub-stage list */
+  .sub-stages { list-style: none; }
+
+  .sub-stages li {
+    padding: 7px 0;
+    font-size: 0.82rem;
+    color: var(--text-dim);
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+  }
+
+  .sub-stages li:last-child { border-bottom: none; }
+
+  .sub-icon {
+    flex-shrink: 0;
+    width: 16px;
+    text-align: center;
+    font-size: 0.78rem;
+    line-height: 1.5;
+  }
+
+  .sub-icon.done    { color: var(--accent-green); }
+  .sub-icon.active  { color: var(--accent-blue); }
+  .sub-icon.pending { color: var(--text-muted); }
+
+  .sub-label { flex: 1; }
+  .sub-label strong { font-weight: 500; color: var(--text); }
+  .sub-note { color: var(--text-muted); font-size: 0.78rem; }
+
+  /* nested expand (artifacts, iterations) */
+  .nested-toggle {
+    background: none;
+    border: none;
+    color: var(--link);
+    font-size: 0.76rem;
+    font-family: var(--font);
+    cursor: pointer;
+    padding: 0;
+    margin-left: 4px;
+    transition: color 0.15s;
+  }
+
+  .nested-toggle:hover { color: #93bbfc; }
+  .nested-toggle .arrow {
+    display: inline-block;
+    font-size: 0.6rem;
+    transition: transform 0.25s;
+  }
+  .nested-toggle.open .arrow { transform: rotate(180deg); }
+
+  .nested-panel {
+    overflow: hidden;
+    max-height: 0;
+    opacity: 0;
+    transition: max-height 0.35s ease, opacity 0.25s ease, margin 0.25s ease;
+    margin-top: 0;
+  }
+
+  .nested-panel.open {
+    opacity: 1;
+    margin-top: 6px;
+  }
+
+  .nested-list {
+    list-style: none;
+    padding-left: 24px;
+  }
+
+  .nested-list li {
+    padding: 5px 0;
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    display: flex;
+    align-items: flex-start;
+    gap: 7px;
+    border-bottom: 1px solid rgba(255,255,255,0.02);
+  }
+
+  .nested-list li:last-child { border-bottom: none; }
+
+  /* iteration detail expand */
+  .iter-detail-panel {
+    overflow: hidden;
+    max-height: 0;
+    opacity: 0;
+    transition: max-height 0.35s ease, opacity 0.25s ease, margin 0.25s ease;
+    margin-top: 0;
+  }
+
+  .iter-detail-panel.open {
+    opacity: 1;
+    margin-top: 6px;
+  }
+
+  .iter-detail-content {
+    padding: 10px 14px;
+    margin-left: 24px;
+    background: rgba(0,0,0,0.15);
+    border-radius: 4px;
+    border-left: 2px solid rgba(255,255,255,0.06);
+    font-size: 0.78rem;
+    line-height: 1.6;
+    color: var(--text-dim);
+  }
+
+  .iter-detail-content .dt-title {
+    font-weight: 500;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+
+  .iter-detail-content .dt-abstract {
+    margin-bottom: 6px;
+  }
+
+  .iter-detail-content .dt-feedback {
+    padding-top: 6px;
+    border-top: 1px solid rgba(255,255,255,0.04);
+    color: var(--text-muted);
+    font-style: italic;
+  }
+
+  /* running pulse */
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .pulse { animation: pulse-dot 1.8s ease-in-out infinite; }
+
+  /* running elapsed timer */
+  .timer-running {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>AI Inventor</h1>
+  <div class="subtitle">Pipeline execution feed</div>
+  <div class="run-id">run-2026-0326-a7f3</div>
+</div>
+
+<div class="feed" id="feed">
+
+  <!-- ============== Message 1: Seed Hypothesis ============== -->
+  <div class="msg state-complete" data-module="seed">
+    <div class="msg-meta-top">
+      <span class="msg-timestamp">14:02</span>
+      <span class="msg-module-tag">Step 1</span>
+    </div>
+    <div class="msg-title">
+      Seed Hypothesis
+      <span class="badge badge-complete">Complete</span>
+    </div>
+    <div class="msg-body">
+      Mined 847 papers, built knowledge graph, identified 12 research gaps.
+    </div>
+    <div class="msg-stats">
+      <span>2m 14s</span>
+      <span class="sep">&middot;</span>
+      <span>$0.43</span>
+    </div>
+    <button class="details-toggle" onclick="toggleDetails(this)">
+      See details <span class="arrow">&#9662;</span>
+    </button>
+    <div class="details-panel">
+      <div class="details-inner">
+        <ul class="sub-stages">
+          <li>
+            <span class="sub-icon done">&#10003;</span>
+            <div class="sub-label">
+              <strong>Paper Mining</strong>
+              <span class="sub-note"> &mdash; 847 papers from Semantic Scholar, arXiv, OpenReview</span>
+            </div>
+          </li>
+          <li>
+            <span class="sub-icon done">&#10003;</span>
+            <div class="sub-label">
+              <strong>Knowledge Graph</strong>
+              <span class="sub-note"> &mdash; 2,314 nodes, 5,891 edges, 8 method clusters</span>
+            </div>
+          </li>
+          <li>
+            <span class="sub-icon done">&#10003;</span>
+            <div class="sub-label">
+              <strong>Gap Identification</strong>
+              <span class="sub-note"> &mdash; 12 research gaps ranked by novelty score</span>
+            </div>
+          </li>
+          <li>
+            <span class="sub-icon done">&#10003;</span>
+            <div class="sub-label">
+              <strong>Initial Hypothesis</strong>
+              <span class="sub-note"> &mdash; Contrastive pre-training for cross-lingual alignment</span>
+            </div>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============== Message 2: Hypothesis Loop ============== -->
+  <div class="msg state-complete" data-module="hypo">
+    <div class="msg-meta-top">
+      <span class="msg-timestamp">14:04</span>
+      <span class="msg-module-tag">Step 2</span>
+    </div>
+    <div class="msg-title">
+      Hypothesis Loop
+      <span class="badge badge-complete">Complete</span>
+      <span class="badge badge-score">8.4 / 10</span>
+    </div>
+    <div class="msg-body">
+      Refined hypothesis over 3 iterations. Score: 6.2 &rarr; 7.8 &rarr; 8.4. Ready for research.
+    </div>
+    <div class="msg-stats">
+      <span>18m 22s</span>
+      <span class="sep">&middot;</span>
+      <span>$4.12</span>
+    </div>
+    <button class="details-toggle" onclick="toggleDetails(this)">
+      See details <span class="arrow">&#9662;</span>
+    </button>
+    <div class="details-panel">
+      <div class="details-inner">
+        <ul class="sub-stages">
+          <!-- Iteration 1 -->
+          <li>
+            <span class="sub-icon done">&#10003;</span>
+            <div class="sub-label">
+              <strong>Iteration 1</strong> &mdash; Score 6.2 &mdash; Initial proposal
+              <button class="nested-toggle" onclick="toggleNested(this)">
+                See detail <span class="arrow">&#9662;</span>
+              </button>
+              <div class="iter-detail-panel">
+                <div class="iter-detail-content">
+                  <div class="dt-title">Cross-Lingual Contrastive Pre-training for Low-Resource Alignment</div>
+                  <div class="dt-abstract">
+                    Proposes using contrastive objectives on parallel corpora to improve cross-lingual
+                    transfer in low-resource settings. Initial formulation focuses on sentence-level alignment
+                    with InfoNCE loss.
+                  </div>
+                  <div class="dt-feedback">
+                    Reviewer: "Promising direction but lacks novelty over XLM-R. Needs stronger differentiation
+                    and ablation plan. Consider token-level alignment and multilingual benchmarks beyond XNLI."
+                  </div>
+                </div>
+              </div>
+            </div>
+          </li>
+          <!-- Iteration 2 -->
+          <li>
+            <span class="sub-icon done">&#10003;</span>
+            <div class="sub-label">
+              <strong>Iteration 2</strong> &mdash; Score 7.8 &mdash; Added contrastive pre-training
+              <button class="nested-toggle" onclick="toggleNested(this)">
+                See detail <span class="arrow">&#9662;</span>
+              </button>
+              <div class="iter-detail-panel">
+                <div class="iter-detail-content">
+                  <div class="dt-title">Hierarchical Contrastive Alignment with Token-Level Objectives</div>
+                  <div class="dt-abstract">
+                    Extends to hierarchical contrastive loss operating at both token and sentence levels.
+                    Introduces language-agnostic anchor tokens and a new multilingual evaluation suite
+                    covering 12 typologically diverse languages.
+                  </div>
+                  <div class="dt-feedback">
+                    Reviewer: "Significant improvement. Hierarchical approach is well-motivated.
+                    Suggestion: add convergence guarantees and compare with recent prompt-based alignment methods."
+                  </div>
+                </div>
+              </div>
+            </div>
+          </li>
+          <!-- Iteration 3 -->
+          <li>
+            <span class="sub-icon done">&#10003;</span>
+            <div class="sub-label">
+              <strong>Iteration 3</strong> &mdash; Score 8.4 &mdash; Final version
+              <button class="nested-toggle" onclick="toggleNested(this)">
+                See detail <span class="arrow">&#9662;</span>
+              </button>
+              <div class="iter-detail-panel">
+                <div class="iter-detail-content">
+                  <div class="dt-title">Provably Convergent Hierarchical Contrastive Alignment for Cross-Lingual Transfer</div>
+                  <div class="dt-abstract">
+                    Adds formal convergence proof (verified in Lean 4), comprehensive ablation design,
+                    and comparison with prompt-tuning baselines. Evaluation expanded to 12 languages across
+                    NLI, QA, and NER tasks.
+                  </div>
+                  <div class="dt-feedback">
+                    Reviewer: "Strong contribution. Novel convergence result, thorough evaluation plan.
+                    Ready for research phase. Minor: consider computational cost analysis."
+                  </div>
+                </div>
+              </div>
+            </div>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============== Message 3: Invention Loop (active) ============== -->
+  <div class="msg state-running" data-module="invention">
+    <div class="msg-meta-top">
+      <span class="msg-timestamp">14:22</span>
+      <span class="msg-module-tag">Step 3</span>
+    </div>
+    <div class="msg-title">
+      Invention Loop
+      <span class="badge badge-running">Running</span>
+      <span class="badge badge-score">Iter 2 / 3</span>
+    </div>
+    <div class="msg-body">
+      Generating artifacts: 3/5 complete. Running ablation study. Baseline accuracy 0.847.
+    </div>
+    <div class="progress-wrap">
+      <div class="progress-label">
+        <span>Progress</span>
+        <span>60%</span>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill" style="width: 60%;"></div>
+      </div>
+    </div>
+    <div class="msg-stats">
+      <span class="timer-running" id="running-timer">42m 08s</span>
+      <span class="sep">&middot;</span>
+      <span>$12.47</span>
+      <span class="sep">&middot;</span>
+      <span class="pulse" style="color:var(--accent-blue);">running</span>
+    </div>
+    <button class="details-toggle" onclick="toggleDetails(this)">
+      See details <span class="arrow">&#9662;</span>
+    </button>
+    <div class="details-panel">
+      <div class="details-inner">
+        <ul class="sub-stages">
+          <li>
+            <span class="sub-icon done">&#10003;</span>
+            <div class="sub-label">
+              <strong>Strategy</strong>
+              <span class="sub-note"> &mdash; Contrastive alignment, ablation focus</span>
+            </div>
+          </li>
+          <li>
+            <span class="sub-icon done">&#10003;</span>
+            <div class="sub-label">
+              <strong>Plan</strong>
+              <span class="sub-note"> &mdash; 5 artifacts planned</span>
+            </div>
+          </li>
+          <li>
+            <span class="sub-icon active">&#9654;</span>
+            <div class="sub-label">
+              <strong>Artifacts</strong>
+              <span class="sub-note"> &mdash; 3/5 complete</span>
+              <button class="nested-toggle" onclick="toggleNested(this)">
+                See artifacts <span class="arrow">&#9662;</span>
+              </button>
+              <div class="nested-panel">
+                <ul class="nested-list">
+                  <li>
+                    <span class="sub-icon done">&#10003;</span>
+                    <div class="sub-label">
+                      <strong>Contrastive Baseline</strong>
+                      <span class="sub-note"> &mdash; acc: 0.847 (+17.5%)</span>
+                    </div>
+                  </li>
+                  <li>
+                    <span class="sub-icon done">&#10003;</span>
+                    <div class="sub-label">
+                      <strong>Multilingual Pairs</strong>
+                      <span class="sub-note"> &mdash; 2,400 examples, 12 langs</span>
+                    </div>
+                  </li>
+                  <li>
+                    <span class="sub-icon done">&#10003;</span>
+                    <div class="sub-label">
+                      <strong>Convergence Proof</strong>
+                      <span class="sub-note"> &mdash; verified (Lean 4)</span>
+                    </div>
+                  </li>
+                  <li>
+                    <span class="sub-icon active pulse">&#9654;</span>
+                    <div class="sub-label">
+                      <strong>Ablation Study</strong>
+                      <span class="sub-note"> &mdash; running... 1m 20s</span>
+                    </div>
+                  </li>
+                  <li>
+                    <span class="sub-icon pending">&#9675;</span>
+                    <div class="sub-label">
+                      <strong>Cross-lingual Eval</strong>
+                      <span class="sub-note"> &mdash; pending</span>
+                    </div>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </li>
+          <li>
+            <span class="sub-icon pending">&#9675;</span>
+            <div class="sub-label">
+              <strong>Paper Draft</strong>
+            </div>
+          </li>
+          <li>
+            <span class="sub-icon pending">&#9675;</span>
+            <div class="sub-label">
+              <strong>Review</strong>
+            </div>
+          </li>
+          <li>
+            <span class="sub-icon pending">&#9675;</span>
+            <div class="sub-label">
+              <strong>Update Hypo</strong>
+            </div>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============== Message 4: Paper & Repository (pending) ============== -->
+  <div class="msg state-pending" data-module="paper">
+    <div class="msg-meta-top">
+      <span class="msg-timestamp">&mdash;</span>
+      <span class="msg-module-tag">Step 4</span>
+    </div>
+    <div class="msg-title">
+      Paper &amp; Repository
+      <span class="badge badge-pending">Pending</span>
+    </div>
+    <div class="msg-body">
+      Will generate demos, visualizations, and compile final paper.
+    </div>
+    <div class="msg-stats">
+      <span>&mdash;</span>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // ---- Details panel toggle ----
+  function toggleDetails(btn) {
+    const panel = btn.nextElementSibling;
+    const isOpen = panel.classList.contains('open');
+
+    if (isOpen) {
+      panel.style.maxHeight = panel.scrollHeight + 'px';
+      requestAnimationFrame(() => {
+        panel.style.maxHeight = '0px';
+      });
+      panel.classList.remove('open');
+      btn.classList.remove('open');
+    } else {
+      panel.classList.add('open');
+      btn.classList.add('open');
+      panel.style.maxHeight = panel.scrollHeight + 'px';
+      panel.addEventListener('transitionend', function handler() {
+        if (panel.classList.contains('open')) {
+          panel.style.maxHeight = 'none';
+        }
+        panel.removeEventListener('transitionend', handler);
+      });
+    }
+  }
+
+  // ---- Nested panel toggle (artifacts, iteration details) ----
+  function toggleNested(btn) {
+    const panel = btn.nextElementSibling;
+    if (!panel) return;
+    const isOpen = panel.classList.contains('open');
+
+    if (isOpen) {
+      panel.style.maxHeight = panel.scrollHeight + 'px';
+      requestAnimationFrame(() => {
+        panel.style.maxHeight = '0px';
+      });
+      panel.classList.remove('open');
+      btn.classList.remove('open');
+    } else {
+      panel.classList.add('open');
+      btn.classList.add('open');
+      panel.style.maxHeight = panel.scrollHeight + 'px';
+      panel.addEventListener('transitionend', function handler() {
+        if (panel.classList.contains('open')) {
+          panel.style.maxHeight = 'none';
+        }
+        panel.removeEventListener('transitionend', handler);
+      });
+
+      // Recalculate ancestor panels
+      let ancestor = panel.closest('.details-panel');
+      while (ancestor) {
+        if (ancestor.classList.contains('open')) {
+          ancestor.style.maxHeight = 'none';
+        }
+        ancestor = ancestor.parentElement
+          ? ancestor.parentElement.closest('.details-panel')
+          : null;
+      }
+    }
+  }
+
+  // ---- Running timer ----
+  (function() {
+    const timerEl = document.getElementById('running-timer');
+    if (!timerEl) return;
+
+    let totalSeconds = 42 * 60 + 8; // start at 42m 08s
+
+    function formatTime(s) {
+      const m = Math.floor(s / 60);
+      const sec = s % 60;
+      return m + 'm ' + String(sec).padStart(2, '0') + 's';
+    }
+
+    setInterval(() => {
+      totalSeconds++;
+      timerEl.textContent = formatTime(totalSeconds);
+    }, 1000);
+  })();
+
+  // ---- Auto-scroll to running message on load ----
+  window.addEventListener('DOMContentLoaded', () => {
+    const running = document.querySelector('.msg.state-running');
+    if (running) {
+      setTimeout(() => {
+        running.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 300);
+    }
+  });
+</script>
+
+</body>
+</html>

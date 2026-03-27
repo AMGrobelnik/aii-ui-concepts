@@ -1,0 +1,998 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Hexagon Badges</title>
+<style>
+  /* ── Reset & Base ───────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg-primary:   #0a0c14;
+    --bg-surface:   #11141f;
+    --bg-card:      #161a28;
+    --border-dim:   #1e2438;
+    --text-primary: #e2e6f0;
+    --text-muted:   #6b7394;
+    --text-dim:     #3e4563;
+
+    --green:   #34d399;
+    --green-g: linear-gradient(135deg, #22c55e, #34d399);
+    --purple:  #a78bfa;
+    --purple-g:linear-gradient(135deg, #8b5cf6, #c084fc);
+    --blue:    #60a5fa;
+    --blue-g:  linear-gradient(135deg, #3b82f6, #818cf8);
+    --gray:    #4b5275;
+    --gray-g:  linear-gradient(135deg, #3e4563, #4b5275);
+
+    --hex-size: 52px;
+    --hex-gap:  -12px;
+
+    --active-index: 2;
+    --transition-speed: 0.45s;
+  }
+
+  body {
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+    line-height: 1.55;
+  }
+
+  /* ── Ambient background glow ────────────────────────── */
+  body::before {
+    content: '';
+    position: fixed;
+    top: -120px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 700px;
+    height: 350px;
+    background: radial-gradient(ellipse, rgba(96,165,250,0.07) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+    transition: background 0.8s ease;
+  }
+  body.stage-0::before { background: radial-gradient(ellipse, rgba(52,211,153,0.07) 0%, transparent 70%); }
+  body.stage-1::before { background: radial-gradient(ellipse, rgba(167,139,250,0.07) 0%, transparent 70%); }
+  body.stage-2::before { background: radial-gradient(ellipse, rgba(96,165,250,0.07) 0%, transparent 70%); }
+  body.stage-3::before { background: radial-gradient(ellipse, rgba(75,82,117,0.05) 0%, transparent 70%); }
+
+  /* ── Layout ─────────────────────────────────────────── */
+  .app {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 0 24px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ── Top Strip — Hexagon Badge Bar ─────────────────── */
+  .hex-strip {
+    height: 108px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding-top: 18px;
+    position: relative;
+  }
+
+  /* Connecting line behind hexagons */
+  .hex-strip::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 220px;
+    height: 2px;
+    background: linear-gradient(90deg,
+      var(--green) 0%, var(--purple) 35%,
+      var(--blue) 65%, var(--gray) 100%);
+    opacity: 0.15;
+    border-radius: 1px;
+  }
+
+  .hex-chain {
+    display: flex;
+    align-items: center;
+    position: relative;
+  }
+
+  /* ── Individual Hex Badge ──────────────────────────── */
+  .hex-badge {
+    position: relative;
+    width: var(--hex-size);
+    height: calc(var(--hex-size) * 1.1547);
+    cursor: pointer;
+    transition: transform var(--transition-speed) cubic-bezier(0.34, 1.56, 0.64, 1),
+                filter var(--transition-speed) ease;
+    z-index: 1;
+  }
+  .hex-badge + .hex-badge {
+    margin-left: var(--hex-gap);
+  }
+  .hex-badge:hover {
+    transform: scale(1.08);
+    z-index: 5;
+  }
+  .hex-badge.active {
+    transform: scale(1.15);
+    z-index: 10;
+  }
+
+  /* Outer hex — the glow / border layer */
+  .hex-outer {
+    position: absolute;
+    inset: -4px;
+    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+    transition: opacity var(--transition-speed) ease;
+    opacity: 0;
+  }
+  .hex-badge.completed .hex-outer {
+    opacity: 0.35;
+  }
+  .hex-badge.active .hex-outer {
+    opacity: 1;
+  }
+
+  /* Rotating gradient border for active hex */
+  .hex-badge.active .hex-outer {
+    animation: hex-border-rotate 3s linear infinite;
+  }
+  @keyframes hex-border-rotate {
+    0%   { filter: hue-rotate(0deg); }
+    100% { filter: hue-rotate(360deg); }
+  }
+
+  /* Per-stage outer colors */
+  .hex-badge[data-stage="0"] .hex-outer { background: var(--green-g); }
+  .hex-badge[data-stage="1"] .hex-outer { background: var(--purple-g); }
+  .hex-badge[data-stage="2"] .hex-outer { background: var(--blue-g); }
+  .hex-badge[data-stage="3"] .hex-outer { background: var(--gray-g); }
+
+  /* Inner hex — the fill layer */
+  .hex-inner {
+    position: absolute;
+    inset: 0;
+    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background var(--transition-speed) ease,
+                box-shadow var(--transition-speed) ease;
+  }
+
+  .hex-badge[data-stage="0"] .hex-inner { background: linear-gradient(160deg, #166534, #15803d); }
+  .hex-badge[data-stage="1"] .hex-inner { background: linear-gradient(160deg, #5b21b6, #7c3aed); }
+  .hex-badge[data-stage="2"] .hex-inner { background: linear-gradient(160deg, #1e40af, #3b82f6); }
+  .hex-badge[data-stage="3"] .hex-inner { background: var(--bg-card); }
+
+  /* Pending (locked) state */
+  .hex-badge.pending .hex-inner {
+    background: var(--bg-card) !important;
+    border: none;
+  }
+  .hex-badge.pending::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+    border: 2px solid var(--border-dim);
+    pointer-events: none;
+  }
+  .hex-badge.pending {
+    filter: brightness(0.55) saturate(0.3);
+  }
+  .hex-badge.pending:hover {
+    filter: brightness(0.7) saturate(0.5);
+  }
+
+  /* Value text inside hex */
+  .hex-value {
+    font-size: 13px;
+    font-weight: 700;
+    color: #fff;
+    text-shadow: 0 1px 4px rgba(0,0,0,0.5);
+    z-index: 2;
+    pointer-events: none;
+    letter-spacing: 0.02em;
+    line-height: 1;
+  }
+  .hex-badge.pending .hex-value {
+    color: var(--text-dim);
+    text-shadow: none;
+  }
+
+  /* Pulsing glow for running stage */
+  .hex-badge.running .hex-inner {
+    animation: hex-pulse 2.2s ease-in-out infinite;
+  }
+  @keyframes hex-pulse {
+    0%, 100% { filter: brightness(1) drop-shadow(0 0 6px rgba(96,165,250,0.3)); }
+    50%      { filter: brightness(1.2) drop-shadow(0 0 16px rgba(96,165,250,0.55)); }
+  }
+
+  /* Label below hex */
+  .hex-label {
+    position: absolute;
+    bottom: -20px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 9.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+    white-space: nowrap;
+    transition: color var(--transition-speed) ease,
+                opacity var(--transition-speed) ease;
+    pointer-events: none;
+  }
+  .hex-badge.active .hex-label {
+    color: var(--text-primary);
+  }
+  .hex-badge.completed .hex-label {
+    color: var(--text-muted);
+  }
+
+  /* Achievement unlock sparkle */
+  .hex-badge.completed .hex-inner::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+    background: linear-gradient(135deg, rgba(255,255,255,0.12) 0%, transparent 50%);
+    pointer-events: none;
+  }
+
+  /* ── Keyboard hint ─────────────────────────────────── */
+  .nav-hint {
+    text-align: center;
+    margin-top: 30px;
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.06em;
+  }
+  .nav-hint kbd {
+    display: inline-block;
+    background: var(--bg-card);
+    border: 1px solid var(--border-dim);
+    border-radius: 4px;
+    padding: 1px 7px;
+    font-family: inherit;
+    font-size: 10px;
+    color: var(--text-muted);
+    margin: 0 2px;
+    line-height: 1.6;
+  }
+
+  /* ── Content Area ──────────────────────────────────── */
+  .content-area {
+    margin-top: 22px;
+    position: relative;
+    min-height: 500px;
+  }
+
+  .stage-panel {
+    display: none;
+    animation: panel-enter 0.5s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+  .stage-panel.visible {
+    display: block;
+  }
+
+  @keyframes panel-enter {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Stage header */
+  .stage-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border-dim);
+  }
+  .stage-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  .stage-0 .stage-icon { background: linear-gradient(135deg, #166534, #22c55e); }
+  .stage-1 .stage-icon { background: linear-gradient(135deg, #5b21b6, #a78bfa); }
+  .stage-2 .stage-icon { background: linear-gradient(135deg, #1e40af, #60a5fa); }
+  .stage-3 .stage-icon { background: linear-gradient(135deg, #374151, #6b7280); }
+
+  .stage-title {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  .stage-subtitle {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  .stage-status-pill {
+    margin-left: auto;
+    font-size: 10.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 4px 12px;
+    border-radius: 20px;
+    white-space: nowrap;
+  }
+  .pill-complete  { background: rgba(34,197,94,0.12); color: var(--green); }
+  .pill-running   { background: rgba(96,165,250,0.12); color: var(--blue); animation: pill-blink 2s ease-in-out infinite; }
+  .pill-pending   { background: rgba(75,82,117,0.12); color: var(--text-dim); }
+
+  @keyframes pill-blink {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.6; }
+  }
+
+  /* ── Cards ─────────────────────────────────────────── */
+  .card-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+  .card-grid.single-col {
+    grid-template-columns: 1fr;
+  }
+
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-dim);
+    border-radius: 10px;
+    padding: 18px;
+    transition: border-color 0.3s ease, transform 0.3s ease;
+  }
+  .card:hover {
+    border-color: #2a3050;
+    transform: translateY(-1px);
+  }
+  .card-label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+  }
+  .card-value {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+  .card-sub {
+    font-size: 11.5px;
+    color: var(--text-muted);
+    margin-top: 5px;
+    line-height: 1.45;
+  }
+
+  .card-value.green  { color: var(--green); }
+  .card-value.purple { color: var(--purple); }
+  .card-value.blue   { color: var(--blue); }
+  .card-value.gray   { color: var(--gray); }
+
+  /* Compact item list card */
+  .item-list {
+    list-style: none;
+    margin-top: 10px;
+  }
+  .item-list li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border-dim);
+    font-size: 13px;
+  }
+  .item-list li:last-child { border-bottom: none; }
+
+  .item-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .item-dot.green  { background: var(--green); box-shadow: 0 0 6px rgba(34,197,94,0.4); }
+  .item-dot.purple { background: var(--purple); box-shadow: 0 0 6px rgba(167,139,250,0.4); }
+  .item-dot.blue   { background: var(--blue); box-shadow: 0 0 6px rgba(96,165,250,0.4); }
+  .item-dot.dim    { background: var(--text-dim); }
+
+  .item-name { flex: 1; color: var(--text-primary); }
+  .item-meta {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Wide card */
+  .card.wide {
+    grid-column: 1 / -1;
+  }
+
+  /* Progress bar */
+  .progress-track {
+    width: 100%;
+    height: 6px;
+    background: var(--bg-primary);
+    border-radius: 3px;
+    margin-top: 12px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    border-radius: 3px;
+    transition: width 1s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .progress-fill.green  { background: var(--green-g); }
+  .progress-fill.purple { background: var(--purple-g); }
+  .progress-fill.blue   { background: var(--blue-g); }
+
+  /* Mini bar chart */
+  .mini-bars {
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+    height: 50px;
+    margin-top: 10px;
+  }
+  .mini-bar {
+    flex: 1;
+    border-radius: 3px 3px 0 0;
+    min-height: 4px;
+    transition: height 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+    position: relative;
+  }
+  .mini-bar::after {
+    content: attr(data-label);
+    position: absolute;
+    bottom: -16px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 8px;
+    color: var(--text-dim);
+    white-space: nowrap;
+  }
+  .mini-bar.green  { background: var(--green-g); }
+  .mini-bar.purple { background: var(--purple-g); }
+  .mini-bar.blue   { background: var(--blue-g); }
+  .mini-bar.gray   { background: var(--gray-g); }
+
+  /* Log-style text block */
+  .log-block {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-dim);
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin-top: 12px;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    font-size: 11.5px;
+    line-height: 1.7;
+    color: var(--text-muted);
+    max-height: 180px;
+    overflow-y: auto;
+  }
+  .log-block .log-time {
+    color: var(--green);
+    margin-right: 6px;
+  }
+  .log-block .log-level {
+    font-weight: 700;
+    margin-right: 6px;
+  }
+  .log-block .log-level.info { color: var(--blue); }
+  .log-block .log-level.warn { color: #fbbf24; }
+  .log-block .log-level.ok   { color: var(--green); }
+
+  /* ── Transition overlay flash ──────────────────────── */
+  .transition-flash {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 100;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+  }
+  .transition-flash.show {
+    opacity: 1;
+    animation: flash-fade 0.4s ease forwards;
+  }
+  @keyframes flash-fade {
+    0%   { opacity: 0.06; }
+    100% { opacity: 0; }
+  }
+  .stage-0 ~ .transition-flash { background: var(--green); }
+  .stage-1 ~ .transition-flash { background: var(--purple); }
+  .stage-2 ~ .transition-flash { background: var(--blue); }
+  .stage-3 ~ .transition-flash { background: var(--gray); }
+
+  /* ── Scrollbar ─────────────────────────────────────── */
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border-dim); border-radius: 3px; }
+
+  /* ── Direction hint arrows ─────────────────────────── */
+  .direction-arrows {
+    position: fixed;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 20px;
+    color: var(--text-dim);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    pointer-events: none;
+    z-index: 50;
+  }
+  .direction-arrows.left { left: 20px; }
+  .direction-arrows.right { right: 20px; }
+  .direction-arrows.visible { opacity: 0.3; animation: arrow-nudge 1.5s ease-in-out infinite; }
+
+  @keyframes arrow-nudge {
+    0%, 100% { transform: translateY(-50%) translateX(0); }
+    50% { transform: translateY(-50%) translateX(-4px); }
+  }
+  .direction-arrows.right.visible { animation-name: arrow-nudge-right; }
+  @keyframes arrow-nudge-right {
+    0%, 100% { transform: translateY(-50%) translateX(0); }
+    50% { transform: translateY(-50%) translateX(4px); }
+  }
+
+  /* ── Footer ────────────────────────────────────────── */
+  .footer {
+    margin-top: 36px;
+    padding: 16px 0 28px;
+    border-top: 1px solid var(--border-dim);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .footer-run {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+    background: var(--bg-card);
+    padding: 3px 10px;
+    border-radius: 4px;
+  }
+</style>
+</head>
+<body class="stage-2">
+
+<div class="app">
+
+  <!-- ────── Hexagon Badge Strip ────── -->
+  <div class="hex-strip">
+    <div class="hex-chain">
+
+      <div class="hex-badge completed" data-stage="0" data-index="0" onclick="goTo(0)">
+        <div class="hex-outer"></div>
+        <div class="hex-inner">
+          <span class="hex-value">&#10003;</span>
+        </div>
+        <span class="hex-label">Seed</span>
+      </div>
+
+      <div class="hex-badge completed" data-stage="1" data-index="1" onclick="goTo(1)">
+        <div class="hex-outer"></div>
+        <div class="hex-inner">
+          <span class="hex-value">8.4</span>
+        </div>
+        <span class="hex-label">Hypothesis</span>
+      </div>
+
+      <div class="hex-badge running active" data-stage="2" data-index="2" onclick="goTo(2)">
+        <div class="hex-outer"></div>
+        <div class="hex-inner">
+          <span class="hex-value">3/5</span>
+        </div>
+        <span class="hex-label">Invention</span>
+      </div>
+
+      <div class="hex-badge pending" data-stage="3" data-index="3" onclick="goTo(3)">
+        <div class="hex-outer"></div>
+        <div class="hex-inner">
+          <span class="hex-value">&#8212;</span>
+        </div>
+        <span class="hex-label">Paper</span>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Navigation hint -->
+  <div class="nav-hint">
+    <kbd>&larr;</kbd> <kbd>&rarr;</kbd> navigate stages
+  </div>
+
+  <!-- ────── Content Panels ────── -->
+  <div class="content-area">
+
+    <!-- ===== Stage 0: Seed ===== -->
+    <div class="stage-panel stage-0" data-panel="0">
+      <div class="stage-header">
+        <div class="stage-icon">&#9672;</div>
+        <div>
+          <div class="stage-title">Seed Hypotheses</div>
+          <div class="stage-subtitle">Knowledge-graph-driven hypothesis generation</div>
+        </div>
+        <span class="stage-status-pill pill-complete">Complete</span>
+      </div>
+
+      <div class="card-grid">
+        <div class="card">
+          <div class="card-label">Papers Ingested</div>
+          <div class="card-value green">847</div>
+          <div class="card-sub">Across 12 domain clusters from Semantic Scholar</div>
+        </div>
+        <div class="card">
+          <div class="card-label">KG Triples</div>
+          <div class="card-value green">3,219</div>
+          <div class="card-sub">Entity-relation triples extracted via LLM pass</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Candidate Seeds</div>
+          <div class="card-value green">24</div>
+          <div class="card-sub">Filtered from 156 raw candidates by novelty score</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Avg. Novelty</div>
+          <div class="card-value green">0.82</div>
+          <div class="card-sub">Cosine distance from nearest published work</div>
+        </div>
+
+        <div class="card wide">
+          <div class="card-label">Top Seed Clusters</div>
+          <div class="mini-bars">
+            <div class="mini-bar green" style="height:90%" data-label="Neuro"></div>
+            <div class="mini-bar green" style="height:72%" data-label="Graph"></div>
+            <div class="mini-bar green" style="height:65%" data-label="Accel"></div>
+            <div class="mini-bar green" style="height:48%" data-label="Optim"></div>
+            <div class="mini-bar green" style="height:38%" data-label="Acous"></div>
+            <div class="mini-bar green" style="height:30%" data-label="Compr"></div>
+          </div>
+        </div>
+
+        <div class="card wide">
+          <div class="card-label">Recent Log</div>
+          <div class="log-block">
+            <div><span class="log-time">14:02:11</span><span class="log-level ok">OK</span>KG build complete — 3,219 triples in 847 papers</div>
+            <div><span class="log-time">14:02:13</span><span class="log-level info">INFO</span>Novelty filter: 156 &rarr; 24 candidates (threshold 0.70)</div>
+            <div><span class="log-time">14:02:14</span><span class="log-level ok">OK</span>Seed pool saved &mdash; 24 entries ready for hypothesis loop</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== Stage 1: Hypothesis ===== -->
+    <div class="stage-panel stage-1" data-panel="1">
+      <div class="stage-header">
+        <div class="stage-icon">&#9830;</div>
+        <div>
+          <div class="stage-title">Hypothesis Loop</div>
+          <div class="stage-subtitle">Generate, review, refine &mdash; scored by feasibility</div>
+        </div>
+        <span class="stage-status-pill pill-complete">Complete</span>
+      </div>
+
+      <div class="card-grid">
+        <div class="card">
+          <div class="card-label">Iterations</div>
+          <div class="card-value purple">6</div>
+          <div class="card-sub">Converged after 6 generate-review cycles</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Final Score</div>
+          <div class="card-value purple">8.4</div>
+          <div class="card-sub">Composite of novelty, feasibility, impact</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Hypotheses Tried</div>
+          <div class="card-value purple">18</div>
+          <div class="card-sub">3 per iteration, best carried forward</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Delta from Seed</div>
+          <div class="card-value purple">+2.1</div>
+          <div class="card-sub">Improvement from initial seed score of 6.3</div>
+        </div>
+
+        <div class="card wide">
+          <div class="card-label">Score Progression</div>
+          <div class="progress-track">
+            <div class="progress-fill purple" style="width: 84%"></div>
+          </div>
+          <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:10px;color:var(--text-dim)">
+            <span>Iter 1: 6.3</span><span>Iter 3: 7.5</span><span>Iter 6: 8.4</span>
+          </div>
+        </div>
+
+        <div class="card wide">
+          <div class="card-label">Selected Hypothesis</div>
+          <div class="card-sub" style="margin-top:6px;font-size:13px;color:var(--text-primary);line-height:1.65">
+            Hierarchical graph-attention networks with adaptive edge pruning can
+            achieve O(n log n) scaling on sparse molecular interaction graphs,
+            enabling real-time drug-target binding predictions without
+            sacrificing accuracy on standard benchmarks.
+          </div>
+        </div>
+
+        <div class="card wide">
+          <div class="card-label">Review Feedback (Final)</div>
+          <ul class="item-list">
+            <li><span class="item-dot purple"></span><span class="item-name">Novelty</span><span class="item-meta">9.1 / 10</span></li>
+            <li><span class="item-dot purple"></span><span class="item-name">Feasibility</span><span class="item-meta">7.8 / 10</span></li>
+            <li><span class="item-dot purple"></span><span class="item-name">Expected Impact</span><span class="item-meta">8.2 / 10</span></li>
+            <li><span class="item-dot purple"></span><span class="item-name">Clarity</span><span class="item-meta">8.5 / 10</span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== Stage 2: Invention (Active) ===== -->
+    <div class="stage-panel stage-2 visible" data-panel="2">
+      <div class="stage-header">
+        <div class="stage-icon">&#9733;</div>
+        <div>
+          <div class="stage-title">Invention Loop</div>
+          <div class="stage-subtitle">Strategy, plan, write, review &mdash; iterative refinement</div>
+        </div>
+        <span class="stage-status-pill pill-running">Running</span>
+      </div>
+
+      <div class="card-grid">
+        <div class="card">
+          <div class="card-label">Current Iteration</div>
+          <div class="card-value blue">3 / 5</div>
+          <div class="card-sub">Strategy refined twice, now generating plan</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Paper Quality</div>
+          <div class="card-value blue">7.6</div>
+          <div class="card-sub">Review score trending up from 6.1 on iter 1</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Tokens Used</div>
+          <div class="card-value blue">482K</div>
+          <div class="card-sub">~$3.21 estimated cost for this loop</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Elapsed</div>
+          <div class="card-value blue">8m 42s</div>
+          <div class="card-sub">Est. 5m remaining for iterations 4-5</div>
+        </div>
+
+        <div class="card wide">
+          <div class="card-label">Sub-step Progress</div>
+          <ul class="item-list">
+            <li><span class="item-dot green"></span><span class="item-name">Generate Strategy</span><span class="item-meta">Done</span></li>
+            <li><span class="item-dot green"></span><span class="item-name">Generate Plan</span><span class="item-meta">Done</span></li>
+            <li><span class="item-dot blue"></span><span class="item-name">Generate Paper Text</span><span class="item-meta">Running...</span></li>
+            <li><span class="item-dot dim"></span><span class="item-name">Review Paper</span><span class="item-meta">Pending</span></li>
+          </ul>
+          <div class="progress-track">
+            <div class="progress-fill blue" style="width: 62%"></div>
+          </div>
+        </div>
+
+        <div class="card wide">
+          <div class="card-label">Iteration Score History</div>
+          <div class="mini-bars">
+            <div class="mini-bar blue" style="height:55%" data-label="Iter 1"></div>
+            <div class="mini-bar blue" style="height:70%" data-label="Iter 2"></div>
+            <div class="mini-bar blue" style="height:82%" data-label="Iter 3"></div>
+            <div class="mini-bar gray" style="height:12%" data-label="Iter 4"></div>
+            <div class="mini-bar gray" style="height:12%" data-label="Iter 5"></div>
+          </div>
+        </div>
+
+        <div class="card wide">
+          <div class="card-label">Live Log</div>
+          <div class="log-block">
+            <div><span class="log-time">14:08:33</span><span class="log-level ok">OK</span>Strategy v3 accepted (focus: edge pruning heuristics)</div>
+            <div><span class="log-time">14:09:01</span><span class="log-level info">INFO</span>Plan generated &mdash; 5 sections, 2 algorithms, 3 figures</div>
+            <div><span class="log-time">14:09:44</span><span class="log-level info">INFO</span>Paper text gen: section 2/5 (Methodology)...</div>
+            <div><span class="log-time">14:10:12</span><span class="log-level warn">WARN</span>Token budget at 72% &mdash; compressing context</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== Stage 3: Paper (Pending) ===== -->
+    <div class="stage-panel stage-3" data-panel="3">
+      <div class="stage-header">
+        <div class="stage-icon">&#9881;</div>
+        <div>
+          <div class="stage-title">Paper Generation</div>
+          <div class="stage-subtitle">Artifacts, visualizations, full paper assembly</div>
+        </div>
+        <span class="stage-status-pill pill-pending">Pending</span>
+      </div>
+
+      <div class="card-grid">
+        <div class="card">
+          <div class="card-label">Status</div>
+          <div class="card-value gray">Waiting</div>
+          <div class="card-sub">Blocked until invention loop completes</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Expected Steps</div>
+          <div class="card-value gray">4</div>
+          <div class="card-sub">Demos, figures, full paper, repo bundle</div>
+        </div>
+
+        <div class="card wide">
+          <div class="card-label">Planned Pipeline</div>
+          <ul class="item-list">
+            <li><span class="item-dot dim"></span><span class="item-name">Generate Artifact Demos</span><span class="item-meta">Pending</span></li>
+            <li><span class="item-dot dim"></span><span class="item-name">Generate Visualizations</span><span class="item-meta">Pending</span></li>
+            <li><span class="item-dot dim"></span><span class="item-name">Assemble Full Paper</span><span class="item-meta">Pending</span></li>
+            <li><span class="item-dot dim"></span><span class="item-name">Bundle Repository</span><span class="item-meta">Pending</span></li>
+          </ul>
+        </div>
+
+        <div class="card wide">
+          <div class="card-label">Pre-requisites</div>
+          <div class="card-sub" style="margin-top:6px;font-size:13px;line-height:1.65">
+            Waiting for invention loop iteration 5 to complete with a review
+            score above the 7.5 threshold. Current trajectory suggests
+            completion in approximately 5 minutes.
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ────── Footer ────── -->
+  <div class="footer">
+    <span>AI Inventor Pipeline</span>
+    <span class="footer-run">run-20260326-1402-a8f3</span>
+  </div>
+
+</div>
+
+<!-- Direction arrows -->
+<div class="direction-arrows left" id="arrow-left">&#8249;</div>
+<div class="direction-arrows right visible" id="arrow-right">&#8250;</div>
+
+<!-- Transition flash overlay -->
+<div class="transition-flash" id="flash"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  const STAGES = 4;
+  let current = 2; // Start on Invention (the active/running stage)
+
+  const badges   = Array.from(document.querySelectorAll('.hex-badge'));
+  const panels   = Array.from(document.querySelectorAll('.stage-panel'));
+  const body     = document.body;
+  const flash    = document.getElementById('flash');
+  const arrowL   = document.getElementById('arrow-left');
+  const arrowR   = document.getElementById('arrow-right');
+
+  function updateArrows() {
+    arrowL.classList.toggle('visible', current > 0);
+    arrowR.classList.toggle('visible', current < STAGES - 1);
+  }
+
+  function triggerFlash() {
+    flash.classList.remove('show');
+    void flash.offsetWidth; // reflow
+    flash.classList.add('show');
+  }
+
+  function goTo(index) {
+    if (index < 0 || index >= STAGES || index === current) return;
+    current = index;
+
+    // Update body class for ambient glow
+    body.className = 'stage-' + index;
+
+    // Update badge active states
+    badges.forEach((b, i) => {
+      b.classList.toggle('active', i === index);
+    });
+
+    // Update panels
+    panels.forEach((p, i) => {
+      if (i === index) {
+        p.classList.add('visible');
+        // Re-trigger animation
+        p.style.animation = 'none';
+        void p.offsetWidth;
+        p.style.animation = '';
+      } else {
+        p.classList.remove('visible');
+      }
+    });
+
+    updateArrows();
+    triggerFlash();
+  }
+
+  // Expose goTo globally for onclick handlers
+  window.goTo = goTo;
+
+  // Keyboard navigation
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowLeft' || e.key === 'h') {
+      e.preventDefault();
+      goTo(current - 1);
+    } else if (e.key === 'ArrowRight' || e.key === 'l') {
+      e.preventDefault();
+      goTo(current + 1);
+    } else if (e.key >= '1' && e.key <= '4') {
+      e.preventDefault();
+      goTo(parseInt(e.key) - 1);
+    }
+  });
+
+  // Touch swipe support
+  let touchStartX = 0;
+  let touchStartY = 0;
+
+  document.addEventListener('touchstart', function (e) {
+    touchStartX = e.changedTouches[0].screenX;
+    touchStartY = e.changedTouches[0].screenY;
+  }, { passive: true });
+
+  document.addEventListener('touchend', function (e) {
+    const dx = e.changedTouches[0].screenX - touchStartX;
+    const dy = e.changedTouches[0].screenY - touchStartY;
+
+    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 60) {
+      if (dx < 0) goTo(current + 1);
+      else goTo(current - 1);
+    }
+  }, { passive: true });
+
+  // Initialize arrows
+  updateArrows();
+
+  // Animate progress bars on load
+  requestAnimationFrame(function () {
+    document.querySelectorAll('.progress-fill').forEach(function (bar) {
+      const target = bar.style.width;
+      bar.style.width = '0%';
+      requestAnimationFrame(function () {
+        bar.style.width = target;
+      });
+    });
+  });
+
+  // Animate mini-bars on load with stagger
+  document.querySelectorAll('.mini-bar').forEach(function (bar, i) {
+    const target = bar.style.height;
+    bar.style.height = '4px';
+    setTimeout(function () {
+      bar.style.height = target;
+    }, 150 + i * 80);
+  });
+
+})();
+</script>
+
+</body>
+</html>
