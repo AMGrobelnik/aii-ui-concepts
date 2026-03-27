@@ -1,0 +1,1722 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Pipeline Monitor (Top 02)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #1a1d23;
+  --surface: #22262e;
+  --surface-raised: #282d36;
+  --border: #2e3440;
+  --border-light: #3a4150;
+  --text: #e2e4e9;
+  --text-muted: #8b919a;
+  --text-dim: #5e6572;
+
+  --green: #22c55e;
+  --green-glow: rgba(34, 197, 94, 0.35);
+  --green-dim: rgba(34, 197, 94, 0.12);
+  --purple: #a78bfa;
+  --purple-glow: rgba(167, 139, 250, 0.35);
+  --purple-dim: rgba(167, 139, 250, 0.12);
+  --blue: #3b82f6;
+  --blue-glow: rgba(59, 130, 246, 0.35);
+  --blue-dim: rgba(59, 130, 246, 0.12);
+  --orange: #f59e0b;
+  --orange-glow: rgba(245, 158, 11, 0.35);
+  --orange-dim: rgba(245, 158, 11, 0.12);
+
+  --glass-bg: rgba(34, 38, 46, 0.65);
+  --glass-border: rgba(148, 163, 184, 0.10);
+  --glass-blur: 16px;
+  --radius: 14px;
+  --radius-sm: 10px;
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-smooth: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+html {
+  font-size: 14px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+body {
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+#bgCanvas {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* ====================== HEADER BAR ====================== */
+.header-bar {
+  height: 52px;
+  min-height: 52px;
+  background: linear-gradient(180deg, rgba(30, 34, 42, 0.95) 0%, rgba(26, 29, 35, 0.90) 100%);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 24px;
+  gap: 16px;
+  position: relative;
+  z-index: 100;
+}
+.header-logo {
+  width: 30px; height: 30px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--blue) 0%, var(--purple) 100%);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 11px; color: #fff;
+  letter-spacing: -0.5px;
+  flex-shrink: 0;
+}
+.header-title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+}
+.header-separator {
+  width: 1px; height: 24px;
+  background: var(--border-light);
+  flex-shrink: 0;
+}
+.header-run-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.header-run-label em {
+  color: var(--text);
+  font-style: normal;
+  font-weight: 500;
+}
+.header-spacer { flex: 1; }
+.header-ring-wrap {
+  position: relative;
+  width: 28px; height: 28px;
+  flex-shrink: 0;
+}
+.header-ring-wrap svg {
+  width: 100%; height: 100%;
+  transform: rotate(-90deg);
+}
+.hr-track { fill: none; stroke: var(--border); stroke-width: 3; }
+.hr-fill { fill: none; stroke: var(--green); stroke-width: 3; stroke-linecap: round;
+  transition: stroke-dashoffset 1.2s var(--ease-smooth); }
+.hr-text { fill: var(--text); font-size: 8px; font-weight: 600;
+  text-anchor: middle; dominant-baseline: central; font-family: 'Inter', sans-serif; }
+.header-stat {
+  font-size: 12px;
+  color: var(--text-muted);
+  display: flex; align-items: center; gap: 6px;
+}
+.header-stat strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.header-live-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  animation: livePulse 1.5s ease-in-out infinite;
+}
+@keyframes livePulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+/* ====================== MAIN AREA ====================== */
+.main {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
+  z-index: 1;
+  padding: 20px 24px 80px;
+}
+.main::-webkit-scrollbar { width: 6px; }
+.main::-webkit-scrollbar-track { background: transparent; }
+.main::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+.main::-webkit-scrollbar-thumb:hover { background: var(--border-light); }
+
+/* ====================== MODULE CARDS ====================== */
+.module-cards {
+  display: flex;
+  gap: 14px;
+  margin-bottom: 4px;
+  position: relative;
+}
+
+.module-card {
+  flex: 1;
+  min-width: 0;
+  height: 84px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  transition: border-color 300ms ease, box-shadow 300ms ease, transform 150ms ease;
+}
+
+/* Left accent bar */
+.module-card::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  border-radius: 3px 0 0 3px;
+}
+.module-card[data-module="seed"]::before { background: var(--green); }
+.module-card[data-module="hypo"]::before { background: var(--purple); }
+.module-card[data-module="invention"]::before { background: var(--blue); }
+.module-card[data-module="paper"]::before { background: var(--orange); }
+
+/* Color tints on cards */
+.module-card[data-module="seed"] { background: linear-gradient(135deg, rgba(34,197,94,0.04) 0%, var(--glass-bg) 60%); }
+.module-card[data-module="hypo"] { background: linear-gradient(135deg, rgba(167,139,250,0.04) 0%, var(--glass-bg) 60%); }
+.module-card[data-module="invention"] { background: linear-gradient(135deg, rgba(59,130,246,0.04) 0%, var(--glass-bg) 60%); }
+.module-card[data-module="paper"] { background: linear-gradient(135deg, rgba(245,158,11,0.04) 0%, var(--glass-bg) 60%); }
+
+.module-card:hover { transform: translateY(-1px); }
+
+/* Active state */
+.module-card.active[data-module="seed"] { border-color: rgba(34,197,94,0.25); box-shadow: 0 0 20px rgba(34,197,94,0.08); background: linear-gradient(135deg, rgba(34,197,94,0.07) 0%, var(--glass-bg) 50%); }
+.module-card.active[data-module="hypo"] { border-color: rgba(167,139,250,0.25); box-shadow: 0 0 20px rgba(167,139,250,0.08); background: linear-gradient(135deg, rgba(167,139,250,0.07) 0%, var(--glass-bg) 50%); }
+.module-card.active[data-module="invention"] { border-color: rgba(59,130,246,0.25); box-shadow: 0 0 20px rgba(59,130,246,0.08); background: linear-gradient(135deg, rgba(59,130,246,0.07) 0%, var(--glass-bg) 50%); }
+.module-card.active[data-module="paper"] { border-color: rgba(245,158,11,0.25); box-shadow: 0 0 20px rgba(245,158,11,0.08); background: linear-gradient(135deg, rgba(245,158,11,0.07) 0%, var(--glass-bg) 50%); }
+
+/* Shimmer sweep on active card */
+.module-card.active::after {
+  content: '';
+  position: absolute;
+  top: 0; left: -100%; width: 50%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.03), transparent);
+  animation: shimmerSweep 4s ease-in-out infinite;
+}
+@keyframes shimmerSweep {
+  0% { left: -100%; }
+  50% { left: 200%; }
+  100% { left: 200%; }
+}
+
+/* Pulse glow */
+.module-card.active.glow-pulse {
+  animation: glowPulse 2.5s ease-in-out infinite;
+}
+@keyframes glowPulse {
+  0%, 100% { box-shadow: 0 0 15px var(--glow-color); }
+  50% { box-shadow: 0 0 25px var(--glow-color); }
+}
+.module-card[data-module="seed"] { --glow-color: rgba(34,197,94,0.1); }
+.module-card[data-module="hypo"] { --glow-color: rgba(167,139,250,0.1); }
+.module-card[data-module="invention"] { --glow-color: rgba(59,130,246,0.1); }
+.module-card[data-module="paper"] { --glow-color: rgba(245,158,11,0.1); }
+
+/* Mini ring gauge inside card */
+.card-ring {
+  width: 32px; height: 32px;
+  flex-shrink: 0;
+  position: relative;
+}
+.card-ring svg {
+  width: 100%; height: 100%;
+  transform: rotate(-90deg);
+}
+.card-ring .cr-track { fill: none; stroke: var(--border); stroke-width: 3; }
+.card-ring .cr-fill { fill: none; stroke-width: 3; stroke-linecap: round; }
+.card-ring .cr-text { fill: var(--text-muted); font-size: 7px; font-weight: 600;
+  text-anchor: middle; dominant-baseline: central; font-family: 'Inter'; }
+
+.card-info { flex: 1; min-width: 0; }
+.card-name { font-size: 13.5px; font-weight: 600; margin-bottom: 3px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; }
+.card-metric { font-size: 11.5px; color: var(--text-muted); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; }
+
+.card-badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 10px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.badge-done { background: var(--green-dim); color: var(--green); }
+.badge-active { background: var(--blue-dim); color: var(--blue); }
+.badge-pending { background: rgba(139,145,154,0.12); color: var(--text-muted); }
+
+/* Card progress bar */
+.card-progress {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 2px;
+  background: rgba(255,255,255,0.04);
+}
+.card-progress-fill {
+  height: 100%;
+  border-radius: 0 2px 2px 0;
+  transition: width 600ms var(--ease-smooth);
+}
+
+/* ====================== TREE AREA ====================== */
+.tree-area {
+  display: flex;
+  gap: 14px;
+  margin-top: 0;
+  position: relative;
+}
+
+.tree-column {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+}
+
+/* Vertical connector from card to tree */
+.tree-stem {
+  width: 2px;
+  height: 12px;
+  margin: 0 auto;
+  border-radius: 1px;
+}
+.tree-stem[data-module="seed"] { background: var(--green-dim); }
+.tree-stem[data-module="hypo"] { background: var(--purple-dim); }
+.tree-stem[data-module="invention"] { background: var(--blue-dim); }
+.tree-stem[data-module="paper"] { background: var(--orange-dim); }
+
+/* Tree branch container */
+.tree-branches {
+  padding: 4px 0;
+  position: relative;
+}
+
+/* XL Sub-modules (extra tall rows) */
+.sub-module {
+  display: flex;
+  align-items: center;
+  height: 48px;
+  padding: 0 12px 0 32px;
+  position: relative;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: background 150ms ease;
+  font-size: 13.5px;
+}
+.sub-module:hover { background: rgba(255,255,255,0.03); }
+
+/* Tree lines */
+.sub-module::before {
+  content: '';
+  position: absolute;
+  left: 12px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  border-radius: 1px;
+}
+.sub-module::after {
+  content: '';
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  width: 12px;
+  height: 2px;
+  border-radius: 1px;
+}
+/* Last sub-module: stop vertical line at center */
+.sub-module:last-child::before {
+  bottom: 50%;
+}
+
+/* Module-specific tree colors */
+.tree-column[data-module="seed"] .sub-module::before,
+.tree-column[data-module="seed"] .sub-module::after { background: var(--green-dim); }
+.tree-column[data-module="hypo"] .sub-module::before,
+.tree-column[data-module="hypo"] .sub-module::after { background: var(--purple-dim); }
+.tree-column[data-module="invention"] .sub-module::before,
+.tree-column[data-module="invention"] .sub-module::after { background: var(--blue-dim); }
+.tree-column[data-module="paper"] .sub-module::before,
+.tree-column[data-module="paper"] .sub-module::after { background: var(--orange-dim); }
+
+/* Active branch GLOW */
+.sub-module.active-step::before { box-shadow: 0 0 6px var(--branch-glow); }
+.sub-module.active-step::after { box-shadow: 0 0 6px var(--branch-glow); }
+.tree-column[data-module="seed"] .sub-module.active-step { --branch-glow: var(--green-glow); }
+.tree-column[data-module="seed"] .sub-module.active-step::before,
+.tree-column[data-module="seed"] .sub-module.active-step::after { background: var(--green); }
+.tree-column[data-module="hypo"] .sub-module.active-step { --branch-glow: var(--purple-glow); }
+.tree-column[data-module="hypo"] .sub-module.active-step::before,
+.tree-column[data-module="hypo"] .sub-module.active-step::after { background: var(--purple); }
+.tree-column[data-module="invention"] .sub-module.active-step { --branch-glow: var(--blue-glow); }
+.tree-column[data-module="invention"] .sub-module.active-step::before,
+.tree-column[data-module="invention"] .sub-module.active-step::after { background: var(--blue); }
+.tree-column[data-module="paper"] .sub-module.active-step { --branch-glow: var(--orange-glow); }
+.tree-column[data-module="paper"] .sub-module.active-step::before,
+.tree-column[data-module="paper"] .sub-module.active-step::after { background: var(--orange); }
+
+/* XL Sub-module dot */
+.sub-dot {
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  margin-right: 10px;
+  position: relative;
+}
+.sub-dot.done { background: var(--module-color); }
+.sub-dot.done::after {
+  content: '';
+  width: 5px; height: 5px;
+  background: var(--bg);
+  border-radius: 50%;
+}
+.sub-dot.running {
+  background: var(--module-color);
+  animation: dotPulse 2s ease-in-out infinite;
+}
+.sub-dot.running::after {
+  content: '';
+  width: 5px; height: 5px;
+  background: #fff;
+  border-radius: 50%;
+}
+@keyframes dotPulse {
+  0%, 100% { box-shadow: 0 0 0 0 var(--module-glow); }
+  50% { box-shadow: 0 0 0 6px transparent; }
+}
+.sub-dot.pending {
+  border: 2px solid var(--border-light);
+  background: transparent;
+}
+
+.tree-column[data-module="seed"] .sub-dot { --module-color: var(--green); --module-glow: var(--green-glow); }
+.tree-column[data-module="hypo"] .sub-dot { --module-color: var(--purple); --module-glow: var(--purple-glow); }
+.tree-column[data-module="invention"] .sub-dot { --module-color: var(--blue); --module-glow: var(--blue-glow); }
+.tree-column[data-module="paper"] .sub-dot { --module-color: var(--orange); --module-glow: var(--orange-glow); }
+
+.sub-name {
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sub-name.done { color: var(--text-muted); }
+.sub-name.running { color: var(--text); font-weight: 500; }
+.sub-name.pending { color: var(--text-dim); }
+
+.sub-badge {
+  font-size: 9.5px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  flex-shrink: 0;
+  margin-left: 8px;
+  white-space: nowrap;
+  position: relative;
+  overflow: hidden;
+}
+
+.sub-badge.badge-done {
+  background: var(--green-dim);
+  color: var(--green);
+}
+
+.sub-badge.badge-running {
+  background: var(--blue-dim);
+  color: var(--blue);
+}
+
+/* Running badge shimmer overlay */
+.sub-badge.badge-running::after {
+  content: '';
+  position: absolute;
+  top: 0; left: -100%; width: 100%; height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(59, 130, 246, 0.2) 40%,
+    rgba(59, 130, 246, 0.35) 50%,
+    rgba(59, 130, 246, 0.2) 60%,
+    transparent 100%
+  );
+  animation: badgeShimmer 2s ease-in-out infinite;
+  border-radius: 10px;
+}
+@keyframes badgeShimmer {
+  0% { left: -100%; }
+  100% { left: 200%; }
+}
+
+.sub-badge.badge-pending {
+  background: rgba(94, 101, 114, 0.18);
+  color: var(--text-dim);
+}
+
+.sub-progress {
+  position: absolute;
+  bottom: 0;
+  left: 32px;
+  right: 12px;
+  height: 3px;
+  background: rgba(255,255,255,0.04);
+  border-radius: 1.5px;
+  overflow: hidden;
+}
+.sub-progress-fill {
+  height: 100%;
+  border-radius: 1.5px;
+  transition: width 600ms var(--ease-smooth);
+}
+
+/* Color-coded progress fills */
+.tree-column[data-module="seed"] .sub-progress-fill { background: var(--green); }
+.tree-column[data-module="hypo"] .sub-progress-fill { background: var(--purple); }
+.tree-column[data-module="invention"] .sub-progress-fill { background: var(--blue); }
+.tree-column[data-module="paper"] .sub-progress-fill { background: var(--orange); }
+
+/* Running step: animated indeterminate progress */
+.sub-progress-fill.indeterminate {
+  width: 40% !important;
+  animation: progressSlide 1.5s ease-in-out infinite;
+}
+@keyframes progressSlide {
+  0% { transform: translateX(-100%); }
+  50% { transform: translateX(150%); }
+  100% { transform: translateX(250%); }
+}
+
+.sub-check {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-left: 8px;
+  flex-shrink: 0;
+}
+
+/* Collapsed tree summary */
+.tree-collapsed-summary {
+  font-size: 11px;
+  color: var(--text-dim);
+  padding: 8px 12px 8px 32px;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: background 150ms ease;
+}
+.tree-collapsed-summary:hover { background: rgba(255,255,255,0.03); }
+
+/* Sub-items (nested under XL sub-modules) */
+.sub-items {
+  overflow: hidden;
+  transition: max-height 400ms var(--ease-smooth), opacity 300ms ease;
+}
+.sub-items.collapsed { max-height: 0; opacity: 0; }
+.sub-items.expanded { opacity: 1; }
+
+.sub-item {
+  display: flex;
+  align-items: center;
+  height: 34px;
+  padding: 0 12px 0 58px;
+  position: relative;
+  font-size: 12.5px;
+  cursor: default;
+}
+/* Nested tree lines */
+.sub-item::before {
+  content: '';
+  position: absolute;
+  left: 38px;
+  top: 0; bottom: 0;
+  width: 1.5px;
+  border-radius: 1px;
+}
+.sub-item::after {
+  content: '';
+  position: absolute;
+  left: 38px;
+  top: 50%;
+  width: 10px;
+  height: 1.5px;
+  border-radius: 1px;
+}
+.sub-item:last-child::before { bottom: 50%; }
+
+.tree-column[data-module="seed"] .sub-item::before,
+.tree-column[data-module="seed"] .sub-item::after { background: rgba(34,197,94,0.08); }
+.tree-column[data-module="hypo"] .sub-item::before,
+.tree-column[data-module="hypo"] .sub-item::after { background: rgba(167,139,250,0.08); }
+.tree-column[data-module="invention"] .sub-item::before,
+.tree-column[data-module="invention"] .sub-item::after { background: rgba(59,130,246,0.08); }
+.tree-column[data-module="paper"] .sub-item::before,
+.tree-column[data-module="paper"] .sub-item::after { background: rgba(245,158,11,0.08); }
+
+.item-icon {
+  width: 18px;
+  flex-shrink: 0;
+  margin-right: 8px;
+  text-align: center;
+  font-size: 11px;
+}
+.item-icon.done { color: var(--green); }
+.item-icon.item-running { display: inline-flex; align-items: center; justify-content: center; }
+.item-icon.pending { color: var(--text-dim); }
+
+/* CSS spinner for running items */
+.mini-spinner {
+  width: 11px; height: 11px;
+  border: 1.5px solid var(--border-light);
+  border-top-color: var(--blue);
+  border-radius: 50%;
+  animation: miniSpin 0.8s linear infinite;
+}
+@keyframes miniSpin { to { transform: rotate(360deg); } }
+
+.item-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item-label.done { color: var(--text-muted); }
+.item-label.item-running { color: var(--text); font-weight: 500; }
+.item-label.pending { color: var(--text-dim); }
+
+.item-detail {
+  font-size: 10.5px;
+  color: var(--text-dim);
+  margin-left: 8px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* Staggered entrance */
+.tree-branches .sub-module,
+.tree-branches .sub-item {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+.tree-branches.visible .sub-module,
+.tree-branches.visible .sub-item {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 350ms var(--ease-smooth), transform 350ms var(--ease-smooth);
+}
+.tree-branches.visible .sub-module:nth-child(1) { transition-delay: 0ms; }
+.tree-branches.visible .sub-module:nth-child(2) { transition-delay: 60ms; }
+.tree-branches.visible .sub-module:nth-child(3) { transition-delay: 120ms; }
+.tree-branches.visible .sub-module:nth-child(4) { transition-delay: 180ms; }
+.tree-branches.visible .sub-module:nth-child(5) { transition-delay: 240ms; }
+.tree-branches.visible .sub-module:nth-child(6) { transition-delay: 300ms; }
+.tree-branches.visible .sub-module:nth-child(7) { transition-delay: 360ms; }
+.tree-branches.visible .sub-module:nth-child(8) { transition-delay: 420ms; }
+
+/* ====================== CONTENT + FEED ROW ====================== */
+.content-feed-row {
+  display: flex;
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.content-dashboard {
+  flex: 1;
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  padding: 24px;
+  animation: contentFadeIn 400ms var(--ease-smooth);
+  min-height: 260px;
+}
+@keyframes contentFadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.content-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.content-title { font-size: 16px; font-weight: 600; letter-spacing: -0.3px; }
+.content-badge {
+  font-size: 10px; font-weight: 600;
+  padding: 2px 10px; border-radius: 10px;
+}
+
+.content-summary {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-muted);
+  margin-bottom: 20px;
+  max-width: 720px;
+}
+
+.content-stats {
+  display: flex;
+  gap: 12px;
+}
+.stat-card {
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+}
+.stat-label { font-size: 11px; color: var(--text-dim); margin-bottom: 4px; text-transform: uppercase;
+  letter-spacing: 0.5px; }
+.stat-value { font-size: 20px; font-weight: 700; letter-spacing: -0.5px; }
+.stat-bar {
+  height: 3px;
+  background: var(--border);
+  border-radius: 2px;
+  margin-top: 8px;
+  overflow: hidden;
+}
+.stat-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  width: 0;
+  transition: width 600ms var(--ease-smooth) 200ms;
+}
+
+/* ====================== ACTIVITY FEED ====================== */
+.activity-feed {
+  width: 320px;
+  min-width: 280px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  padding: 18px 16px;
+  display: flex;
+  flex-direction: column;
+  animation: contentFadeIn 400ms var(--ease-smooth) 100ms;
+  animation-fill-mode: both;
+  max-height: 360px;
+}
+
+.feed-header {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.feed-header .live-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  animation: livePulse 1.5s ease-in-out infinite;
+}
+
+.feed-entries {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.feed-entries::-webkit-scrollbar { width: 4px; }
+.feed-entries::-webkit-scrollbar-track { background: transparent; }
+.feed-entries::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+.feed-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  transition: background 150ms ease;
+  animation: feedSlideIn 300ms var(--ease-smooth);
+  font-size: 12px;
+}
+@keyframes feedSlideIn {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.feed-entry:hover { background: rgba(255,255,255,0.03); }
+
+.feed-time {
+  font-size: 10px;
+  color: var(--text-dim);
+  font-family: 'Inter', monospace;
+  font-variant-numeric: tabular-nums;
+  min-width: 42px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.feed-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 5px;
+}
+.feed-message {
+  flex: 1;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+.feed-message em {
+  color: var(--text);
+  font-style: normal;
+  font-weight: 500;
+}
+
+/* ====================== TOOLTIP ====================== */
+.tooltip {
+  position: fixed;
+  z-index: 1000;
+  width: 280px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 200ms ease, transform 200ms ease;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.3);
+}
+.tooltip.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+.tooltip-title { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+.tooltip-text { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+
+#treeCanvas {
+  position: absolute;
+  top: 0; left: 0;
+  pointer-events: none;
+  z-index: 50;
+}
+.kb-focus {
+  outline: 1px solid rgba(255,255,255,0.15);
+  outline-offset: -1px;
+  border-radius: 8px;
+}
+</style>
+</head>
+<body>
+
+<!-- Background ambient particles -->
+<canvas id="bgCanvas"></canvas>
+
+<!-- HEADER BAR -->
+<header class="header-bar">
+  <div class="header-logo">AI</div>
+  <span class="header-title">AI Inventor</span>
+  <div class="header-separator"></div>
+  <span class="header-run-label">Run <em>#17</em> &mdash; Cross-lingual Contrastive Alignment</span>
+  <div class="header-spacer"></div>
+  <div class="header-live-dot"></div>
+  <div class="header-ring-wrap">
+    <svg viewBox="0 0 36 36">
+      <circle class="hr-track" cx="18" cy="18" r="15.5"/>
+      <circle class="hr-fill" cx="18" cy="18" r="15.5"
+        stroke-dasharray="97.4" stroke-dashoffset="34.1"/>
+      <text class="hr-text" x="18" y="18" transform="rotate(90,18,18)">65%</text>
+    </svg>
+  </div>
+  <div class="header-stat"><strong>02:34:17</strong></div>
+  <div class="header-separator"></div>
+  <div class="header-stat"><strong>$12.47</strong></div>
+  <div class="header-separator"></div>
+  <div class="header-stat"><strong>847K</strong> tok</div>
+</header>
+
+<!-- MAIN CONTENT -->
+<div class="main" id="mainArea">
+  <canvas id="treeCanvas"></canvas>
+
+  <!-- MODULE CARDS (wider: flex:1, ~25% each) -->
+  <div class="module-cards" id="moduleCards">
+    <div class="module-card" data-module="seed" data-index="0">
+      <div class="card-ring"><svg viewBox="0 0 36 36"><circle class="cr-track" cx="18" cy="18" r="15.5"/><circle class="cr-fill" cx="18" cy="18" r="15.5" stroke="var(--green)" stroke-dasharray="97.4" stroke-dashoffset="0"/><text class="cr-text" x="18" y="19" transform="rotate(90,18,18)">4/4</text></svg></div>
+      <div class="card-info"><div class="card-name">Seed Hypotheses</div><div class="card-metric">847 papers &rarr; 12 gaps &rarr; Top 6</div></div>
+      <span class="card-badge badge-done">Done</span>
+      <div class="card-progress"><div class="card-progress-fill" style="width:100%;background:var(--green)"></div></div>
+    </div>
+
+    <div class="module-card" data-module="hypo" data-index="1">
+      <div class="card-ring"><svg viewBox="0 0 36 36"><circle class="cr-track" cx="18" cy="18" r="15.5"/><circle class="cr-fill" cx="18" cy="18" r="15.5" stroke="var(--purple)" stroke-dasharray="97.4" stroke-dashoffset="0"/><text class="cr-text" x="18" y="19" transform="rotate(90,18,18)">6/6</text></svg></div>
+      <div class="card-info"><div class="card-name">Hypothesis Loop</div><div class="card-metric">Score: 6.2 &rarr; 7.8 &rarr; 8.4 (3 iters)</div></div>
+      <span class="card-badge badge-done">Done</span>
+      <div class="card-progress"><div class="card-progress-fill" style="width:100%;background:var(--purple)"></div></div>
+    </div>
+
+    <div class="module-card active glow-pulse" data-module="invention" data-index="2">
+      <div class="card-ring"><svg viewBox="0 0 36 36"><circle class="cr-track" cx="18" cy="18" r="15.5"/><circle class="cr-fill" cx="18" cy="18" r="15.5" stroke="var(--blue)" stroke-dasharray="97.4" stroke-dashoffset="32.5"/><text class="cr-text" x="18" y="19" transform="rotate(90,18,18)">4/6</text></svg></div>
+      <div class="card-info"><div class="card-name">Invention Iter 2</div><div class="card-metric">Artifacts 3/5 &bull; Review queued</div></div>
+      <span class="card-badge badge-active">Active</span>
+      <div class="card-progress"><div class="card-progress-fill" style="width:66%;background:var(--blue)"></div></div>
+    </div>
+
+    <div class="module-card" data-module="paper" data-index="3">
+      <div class="card-ring"><svg viewBox="0 0 36 36"><circle class="cr-track" cx="18" cy="18" r="15.5"/><circle class="cr-fill" cx="18" cy="18" r="15.5" stroke="var(--orange)" stroke-dasharray="97.4" stroke-dashoffset="97.4"/><text class="cr-text" x="18" y="19" transform="rotate(90,18,18)">0/5</text></svg></div>
+      <div class="card-info"><div class="card-name">Paper Generation</div><div class="card-metric">Waiting for invention loop</div></div>
+      <span class="card-badge badge-pending">Pending</span>
+      <div class="card-progress"><div class="card-progress-fill" style="width:0%;background:var(--orange)"></div></div>
+    </div>
+  </div>
+
+  <!-- TREE AREA -->
+  <div class="tree-area" id="treeArea">
+
+    <!-- SEED TREE -->
+    <div class="tree-column" data-module="seed">
+      <div class="tree-stem" data-module="seed"></div>
+      <div class="tree-collapsed-summary" data-module="seed" id="seedCollapsed">4/4 done &#10003;</div>
+      <div class="tree-branches" id="seedBranches" style="display:none;">
+        <div class="sub-module" data-step="seed-0" data-tooltip="Scraped 847 papers from ArXiv, Semantic Scholar, and ACL Anthology. Filtered for relevance to cross-lingual NLP.">
+          <div class="sub-dot done"></div>
+          <span class="sub-name done">Literature Scan</span>
+          <span class="sub-badge badge-done">Done</span>
+          <span class="sub-check">847 papers</span>
+          <div class="sub-progress"><div class="sub-progress-fill" style="width:100%"></div></div>
+        </div>
+        <div class="sub-module" data-step="seed-1" data-tooltip="Identified 12 research gaps via citation graph analysis and topic modeling. Prioritized by novelty and feasibility.">
+          <div class="sub-dot done"></div>
+          <span class="sub-name done">Gap Analysis</span>
+          <span class="sub-badge badge-done">Done</span>
+          <span class="sub-check">12 gaps</span>
+          <div class="sub-progress"><div class="sub-progress-fill" style="width:100%"></div></div>
+        </div>
+        <div class="sub-module" data-step="seed-2" data-tooltip="Generated initial hypothesis candidates from each gap. Applied diversity filtering to ensure coverage across sub-domains.">
+          <div class="sub-dot done"></div>
+          <span class="sub-name done">Hypothesis Seeding</span>
+          <span class="sub-badge badge-done">Done</span>
+          <span class="sub-check">36 seeds</span>
+          <div class="sub-progress"><div class="sub-progress-fill" style="width:100%"></div></div>
+        </div>
+        <div class="sub-module" data-step="seed-3" data-tooltip="Ranked hypotheses by expected impact, feasibility, and novelty. Top 6 selected for the hypothesis refinement loop.">
+          <div class="sub-dot done"></div>
+          <span class="sub-name done">Ranking &amp; Selection</span>
+          <span class="sub-badge badge-done">Done</span>
+          <span class="sub-check">Top 6</span>
+          <div class="sub-progress"><div class="sub-progress-fill" style="width:100%"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- HYPOTHESIS TREE -->
+    <div class="tree-column" data-module="hypo">
+      <div class="tree-stem" data-module="hypo"></div>
+      <div class="tree-collapsed-summary" data-module="hypo" id="hypoCollapsed">6/6 done &#10003;</div>
+      <div class="tree-branches" id="hypoBranches" style="display:none;">
+        <div class="sub-module" data-step="hypo-0" data-tooltip="Initial hypothesis formulation: contrastive alignment for cross-lingual embedding without parallel corpora.">
+          <div class="sub-dot done"></div>
+          <span class="sub-name done">Formulate v1</span>
+          <span class="sub-badge badge-done">Done</span>
+          <span class="sub-check">6.2</span>
+          <div class="sub-progress"><div class="sub-progress-fill" style="width:100%"></div></div>
+        </div>
+        <div class="sub-module" data-step="hypo-1" data-tooltip="Reviewed for logical consistency and coverage. Added constraint on language-family diversity.">
+          <div class="sub-dot done"></div>
+          <span class="sub-name done">Review 1</span>
+          <span class="sub-badge badge-done">Done</span>
+          <span class="sub-check">3 issues</span>
+          <div class="sub-progress"><div class="sub-progress-fill" style="width:100%"></div></div>
+        </div>
+        <div class="sub-module" data-step="hypo-2" data-tooltip="Refined hypothesis incorporating reviewer feedback. Tightened scope to low-resource language pairs.">
+          <div class="sub-dot done"></div>
+          <span class="sub-name done">Refine v2</span>
+          <span class="sub-badge badge-done">Done</span>
+          <span class="sub-check">7.8</span>
+          <div class="sub-progress"><div class="sub-progress-fill" style="width:100%"></div></div>
+        </div>
+        <div class="sub-module" data-step="hypo-3" data-tooltip="Second review pass. Validated novelty against 23 related works. Approved with minor suggestions.">
+          <div class="sub-dot done"></div>
+          <span class="sub-name done">Review 2</span>
+          <span class="sub-badge badge-done">Done</span>
+          <span class="sub-check">1 minor</span>
+          <div class="sub-progress"><div class="sub-progress-fill" style="width:100%"></div></div>
+        </div>
+        <div class="sub-module" data-step="hypo-4" data-tooltip="Final refinement: added ablation conditions and success criteria. Hypothesis ready for invention phase.">
+          <div class="sub-dot done"></div>
+          <span class="sub-name done">Refine v3</span>
+          <span class="sub-badge badge-done">Done</span>
+          <span class="sub-check">8.4</span>
+          <div class="sub-progress"><div class="sub-progress-fill" style="width:100%"></div></div>
+        </div>
+        <div class="sub-module" data-step="hypo-5" data-dep-target="true" data-tooltip="Final review confirmed hypothesis is well-scoped, novel, and testable. Passed to invention loop.">
+          <div class="sub-dot done"></div>
+          <span class="sub-name done">Review 3</span>
+          <span class="sub-badge badge-done">Done</span>
+          <span class="sub-check">approved</span>
+          <div class="sub-progress"><div class="sub-progress-fill" style="width:100%"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- INVENTION TREE (2 simultaneous running sub-modules) -->
+    <div class="tree-column" data-module="invention">
+      <div class="tree-stem" data-module="invention"></div>
+      <div class="tree-branches visible" id="inventionBranches">
+        <div class="sub-module" data-step="inv-0" data-tooltip="Designed the research strategy: contrastive learning with language-agnostic anchors and curriculum training schedule.">
+          <div class="sub-dot done"></div>
+          <span class="sub-name done">Strategy</span>
+          <span class="sub-badge badge-done">Done</span>
+          <span class="sub-check">&#10003;</span>
+          <div class="sub-progress"><div class="sub-progress-fill" style="width:100%"></div></div>
+        </div>
+        <div class="sub-module" data-step="inv-1" data-tooltip="Detailed implementation plan covering model architecture, training pipeline, evaluation metrics, and ablation matrix.">
+          <div class="sub-dot done"></div>
+          <span class="sub-name done">Plan</span>
+          <span class="sub-badge badge-done">Done</span>
+          <span class="sub-check">&#10003;</span>
+          <div class="sub-progress"><div class="sub-progress-fill" style="width:100%"></div></div>
+        </div>
+        <div class="sub-module" data-step="inv-2" data-tooltip="Generated paper narrative: introduction, methodology, expected results. First-person academic writing style.">
+          <div class="sub-dot done"></div>
+          <span class="sub-name done">Paper Text</span>
+          <span class="sub-badge badge-done">Done</span>
+          <span class="sub-check">&#10003;</span>
+          <div class="sub-progress"><div class="sub-progress-fill" style="width:100%"></div></div>
+        </div>
+        <!-- RUNNING sub-module 1: Artifacts -->
+        <div class="sub-module active-step" data-step="inv-3" data-tooltip="Generating experimental artifacts: baseline comparisons, dataset samples, convergence proofs, ablation runs, and cross-lingual evaluations.">
+          <div class="sub-dot running"></div>
+          <span class="sub-name running">Artifacts</span>
+          <span class="sub-badge badge-running">Running</span>
+          <span class="sub-check">3/5</span>
+          <div class="sub-progress"><div class="sub-progress-fill" style="width:60%"></div></div>
+        </div>
+        <!-- Sub-items for Artifacts -->
+        <div class="sub-items expanded" id="artifactItems" style="max-height:220px;">
+          <div class="sub-item" data-step="inv-3-0"><span class="item-icon done">&#10003;</span><span class="item-label done">Contrastive Baseline</span><span class="item-detail">acc: 0.847</span></div>
+          <div class="sub-item" data-step="inv-3-1"><span class="item-icon done">&#10003;</span><span class="item-label done">Multilingual Pairs</span><span class="item-detail">2,400 examples</span></div>
+          <div class="sub-item" data-step="inv-3-2"><span class="item-icon done">&#10003;</span><span class="item-label done">Convergence Proof</span><span class="item-detail">verified</span></div>
+          <div class="sub-item" data-step="inv-3-3"><span class="item-icon item-running"><div class="mini-spinner"></div></span><span class="item-label item-running">Ablation Study</span><span class="item-detail">running...</span></div>
+          <div class="sub-item" data-step="inv-3-4"><span class="item-icon pending">&#9675;</span><span class="item-label pending">Cross-lingual Eval</span><span class="item-detail">pending</span></div>
+        </div>
+        <!-- RUNNING sub-module 2: Review Paper (simultaneously running) -->
+        <div class="sub-module active-step" data-step="inv-4" data-tooltip="Reviewing generated paper text for logical consistency, technical accuracy, and citation coverage while artifacts continue generating in parallel.">
+          <div class="sub-dot running"></div>
+          <span class="sub-name running">Review Paper</span>
+          <span class="sub-badge badge-running">Running</span>
+          <span class="sub-check">pass 1</span>
+          <div class="sub-progress"><div class="sub-progress-fill indeterminate" style="width:40%"></div></div>
+        </div>
+        <div class="sub-module" data-step="inv-5" data-tooltip="Final iteration incorporating review feedback. Polish paper text and finalize all artifacts.">
+          <div class="sub-dot pending"></div>
+          <span class="sub-name pending">Final Polish</span>
+          <span class="sub-badge badge-pending">Pending</span>
+          <div class="sub-progress"><div class="sub-progress-fill" style="width:0%"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PAPER TREE -->
+    <div class="tree-column" data-module="paper">
+      <div class="tree-stem" data-module="paper"></div>
+      <div class="tree-collapsed-summary" data-module="paper" id="paperCollapsed">0/5 pending</div>
+      <div class="tree-branches" id="paperBranches" style="display:none;">
+        <div class="sub-module" data-step="paper-0" data-tooltip="Generate LaTeX document structure with sections, figures, and tables layout.">
+          <div class="sub-dot pending"></div>
+          <span class="sub-name pending">LaTeX Structure</span>
+          <span class="sub-badge badge-pending">Pending</span>
+          <div class="sub-progress"><div class="sub-progress-fill" style="width:0%"></div></div>
+        </div>
+        <div class="sub-module" data-step="paper-1" data-tooltip="Compile all visualizations: training curves, comparison tables, architecture diagrams.">
+          <div class="sub-dot pending"></div>
+          <span class="sub-name pending">Visualizations</span>
+          <span class="sub-badge badge-pending">Pending</span>
+          <div class="sub-progress"><div class="sub-progress-fill" style="width:0%"></div></div>
+        </div>
+        <div class="sub-module" data-step="paper-2" data-tooltip="Generate full paper text with citations, cross-references, and appendix materials.">
+          <div class="sub-dot pending"></div>
+          <span class="sub-name pending">Full Paper Text</span>
+          <span class="sub-badge badge-pending">Pending</span>
+          <div class="sub-progress"><div class="sub-progress-fill" style="width:0%"></div></div>
+        </div>
+        <div class="sub-module" data-step="paper-3" data-tooltip="Build reproducibility package: code, data splits, config files, and README.">
+          <div class="sub-dot pending"></div>
+          <span class="sub-name pending">Repo Package</span>
+          <span class="sub-badge badge-pending">Pending</span>
+          <div class="sub-progress"><div class="sub-progress-fill" style="width:0%"></div></div>
+        </div>
+        <div class="sub-module" data-step="paper-4" data-tooltip="Final review of complete paper and repository. Check formatting, citations, and code quality.">
+          <div class="sub-dot pending"></div>
+          <span class="sub-name pending">Final Review</span>
+          <span class="sub-badge badge-pending">Pending</span>
+          <div class="sub-progress"><div class="sub-progress-fill" style="width:0%"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CONTENT + FEED ROW -->
+  <div class="content-feed-row">
+    <!-- CONTENT DASHBOARD -->
+    <div class="content-dashboard" id="contentDashboard">
+      <div class="content-header">
+        <span class="content-title" id="contentTitle">Artifacts + Review Paper &mdash; Invention Iter 2</span>
+        <span class="content-badge badge-active" id="contentBadge">2 Active</span>
+      </div>
+      <div class="content-summary" id="contentSummary">
+        Two sub-modules are running simultaneously in the invention loop. The Artifacts step has completed
+        the contrastive baseline (accuracy 0.847), generated 2,400 multilingual pairs, and formally verified
+        convergence. The ablation study is actively running (3 of 4 conditions complete). In parallel, the
+        Review Paper step is performing its first consistency pass over the generated narrative, checking
+        technical claims against the artifact outputs and validating citation coverage across 23 references.
+      </div>
+      <div class="content-stats" id="contentStats">
+        <div class="stat-card"><div class="stat-label">Duration</div><div class="stat-value" id="statDuration">02:34:17</div><div class="stat-bar"><div class="stat-bar-fill" style="background:var(--green);" data-width="65%"></div></div></div>
+        <div class="stat-card"><div class="stat-label">Cost</div><div class="stat-value" id="statCost">$12.47</div><div class="stat-bar"><div class="stat-bar-fill" style="background:var(--blue);" data-width="42%"></div></div></div>
+        <div class="stat-card"><div class="stat-label">Messages</div><div class="stat-value" id="statMessages">847K tok</div><div class="stat-bar"><div class="stat-bar-fill" style="background:var(--purple);" data-width="57%"></div></div></div>
+      </div>
+    </div>
+
+    <!-- ACTIVITY FEED -->
+    <div class="activity-feed" id="activityFeed">
+      <div class="feed-header">
+        <span class="live-dot"></span>
+        Activity Feed
+      </div>
+      <div class="feed-entries" id="feedEntries">
+        <div class="feed-entry"><span class="feed-time">2:34</span><span class="feed-dot" style="background:var(--blue)"></span><span class="feed-message"><em>Review Paper</em> started pass 1 &mdash; checking technical claims</span></div>
+        <div class="feed-entry"><span class="feed-time">2:33</span><span class="feed-dot" style="background:var(--blue)"></span><span class="feed-message"><em>Ablation Study</em> started training run 3 of 4</span></div>
+        <div class="feed-entry"><span class="feed-time">2:31</span><span class="feed-dot" style="background:var(--blue)"></span><span class="feed-message"><em>Ablation Study</em> completed run 2 &mdash; anchor ablation (acc 0.812)</span></div>
+        <div class="feed-entry"><span class="feed-time">2:28</span><span class="feed-dot" style="background:var(--green)"></span><span class="feed-message"><em>Convergence Proof</em> formally verified via Lyapunov analysis</span></div>
+        <div class="feed-entry"><span class="feed-time">2:22</span><span class="feed-dot" style="background:var(--green)"></span><span class="feed-message"><em>Multilingual Pairs</em> generated 2,400 examples across 12 families</span></div>
+        <div class="feed-entry"><span class="feed-time">2:14</span><span class="feed-dot" style="background:var(--green)"></span><span class="feed-message"><em>Contrastive Baseline</em> finished &mdash; accuracy 0.847 on XLBench</span></div>
+        <div class="feed-entry"><span class="feed-time">2:09</span><span class="feed-dot" style="background:var(--green)"></span><span class="feed-message"><em>Paper Text</em> completed &mdash; 4,200 words, 23 citations</span></div>
+        <div class="feed-entry"><span class="feed-time">1:52</span><span class="feed-dot" style="background:var(--green)"></span><span class="feed-message"><em>Plan</em> generated &mdash; architecture + training pipeline + ablation matrix</span></div>
+        <div class="feed-entry"><span class="feed-time">1:38</span><span class="feed-dot" style="background:var(--green)"></span><span class="feed-message"><em>Strategy</em> designed &mdash; contrastive anchors + curriculum schedule</span></div>
+        <div class="feed-entry"><span class="feed-time">1:21</span><span class="feed-dot" style="background:var(--purple)"></span><span class="feed-message"><em>Review 3</em> approved hypothesis &mdash; passed to invention loop</span></div>
+        <div class="feed-entry"><span class="feed-time">1:04</span><span class="feed-dot" style="background:var(--purple)"></span><span class="feed-message"><em>Refine v3</em> score improved to 8.4</span></div>
+        <div class="feed-entry"><span class="feed-time">0:47</span><span class="feed-dot" style="background:var(--purple)"></span><span class="feed-message"><em>Review 2</em> validated novelty against 23 related works</span></div>
+        <div class="feed-entry"><span class="feed-time">0:33</span><span class="feed-dot" style="background:var(--purple)"></span><span class="feed-message"><em>Refine v2</em> tightened scope to low-resource pairs (score 7.8)</span></div>
+        <div class="feed-entry"><span class="feed-time">0:18</span><span class="feed-dot" style="background:var(--green)"></span><span class="feed-message"><em>Seed</em> completed &mdash; 847 papers scanned, 12 gaps, top 6 selected</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Tooltip -->
+<div class="tooltip" id="tooltip">
+  <div class="tooltip-title" id="tooltipTitle"></div>
+  <div class="tooltip-text" id="tooltipText"></div>
+</div>
+
+<script>
+const MODULES = [
+  { key: 'seed', name: 'Seed Hypotheses', color: '#22c55e',
+    status: 'done', progress: 100, metric: '847 papers -> 12 gaps -> Top 6',
+    steps: [
+      { name: 'Literature Scan', status: 'done', detail: '847 papers', progress: 100, summary: 'Scanned 847 papers from ArXiv, Semantic Scholar, and ACL Anthology. Citation graph revealed underexplored contrastive learning connections.' },
+      { name: 'Gap Analysis', status: 'done', detail: '12 gaps', progress: 100, summary: 'Identified 12 research gaps via topic modeling. Most promising: contrastive alignment without parallel corpora.' },
+      { name: 'Hypothesis Seeding', status: 'done', detail: '36 seeds', progress: 100, summary: 'Generated 36 candidates from 12 gaps with diversity filtering across zero-shot transfer, anchor selection, and curriculum design.' },
+      { name: 'Ranking & Selection', status: 'done', detail: 'Top 6', progress: 100, summary: 'Ranked by impact, feasibility, novelty. Top 6 selected; lead candidate: language-agnostic anchor contrastive alignment.' }
+    ], duration: '00:18:42', cost: '$1.23', messages: '124K tok' },
+  { key: 'hypo', name: 'Hypothesis Loop', color: '#a78bfa',
+    status: 'done', progress: 100, metric: 'Score: 6.2 -> 7.8 -> 8.4',
+    steps: [
+      { name: 'Formulate v1', status: 'done', detail: '6.2', progress: 100, summary: 'Initial hypothesis: contrastive alignment for cross-lingual embeddings using language-agnostic anchors from shared subword tokens.' },
+      { name: 'Review 1', status: 'done', detail: '3 issues', progress: 100, summary: 'Found 3 issues: insufficient language-family diversity, missing anchor justification, unclear scaling.' },
+      { name: 'Refine v2', status: 'done', detail: '7.8', progress: 100, summary: 'Tightened scope to low-resource pairs. Added anchor quality criterion based on cross-lingual mutual information.' },
+      { name: 'Review 2', status: 'done', detail: '1 minor', progress: 100, summary: 'Validated novelty against 23 works. Minor: add mBERT fine-tuning baseline comparison.' },
+      { name: 'Refine v3', status: 'done', detail: '8.4', progress: 100, summary: 'Added ablation conditions and success criteria. Hypothesis fully specified and testable.' },
+      { name: 'Review 3', status: 'done', detail: 'approved', progress: 100, summary: 'Confirmed well-scoped, novel, testable. Clear differentiation from existing methods. Passed to invention.' }
+    ], duration: '00:47:31', cost: '$4.82', messages: '312K tok' },
+  { key: 'invention', name: 'Invention Iter 2', color: '#3b82f6',
+    status: 'active', progress: 66, metric: 'Artifacts 3/5 + Review parallel',
+    steps: [
+      { name: 'Strategy', status: 'done', detail: null, progress: 100, summary: 'Contrastive learning with language-agnostic anchors and curriculum training that gradually increases language diversity.' },
+      { name: 'Plan', status: 'done', detail: null, progress: 100, summary: 'Transformer encoder + projection head, training pipeline, 7 eval metrics, 4-condition ablation matrix.' },
+      { name: 'Paper Text', status: 'done', detail: null, progress: 100, summary: 'Generated narrative: introduction, methodology, expected results. Academic style, 23 citations.' },
+      { name: 'Artifacts', status: 'running', detail: '3/5', progress: 60,
+        summary: 'Baseline complete (acc 0.847), 2,400 multilingual pairs built, convergence verified. Running ablation study; cross-lingual eval next.',
+        children: [
+          { name: 'Contrastive Baseline', status: 'done', detail: 'acc: 0.847' },
+          { name: 'Multilingual Pairs', status: 'done', detail: '2,400 examples' },
+          { name: 'Convergence Proof', status: 'done', detail: 'verified' },
+          { name: 'Ablation Study', status: 'running', detail: 'running...' },
+          { name: 'Cross-lingual Eval', status: 'pending', detail: 'pending' }
+        ] },
+      { name: 'Review Paper', status: 'running', detail: 'pass 1', progress: 35,
+        summary: 'First review pass running in parallel with artifact generation. Checking technical claims against artifact outputs, validating citation coverage, and assessing logical flow of methodology section.' },
+      { name: 'Final Polish', status: 'pending', detail: null, progress: 0,
+        summary: 'Pending: final iteration incorporating review feedback.' }
+    ], duration: '01:28:04', cost: '$6.42', messages: '411K tok' },
+  { key: 'paper', name: 'Paper Generation', color: '#f59e0b',
+    status: 'pending', progress: 0, metric: 'Waiting for invention loop',
+    steps: [
+      { name: 'LaTeX Structure', status: 'pending', detail: null, progress: 0, summary: 'Pending: generate LaTeX document structure.' },
+      { name: 'Visualizations', status: 'pending', detail: null, progress: 0, summary: 'Pending: training curves, comparison tables, architecture diagrams.' },
+      { name: 'Full Paper Text', status: 'pending', detail: null, progress: 0, summary: 'Pending: full text with citations and cross-references.' },
+      { name: 'Repo Package', status: 'pending', detail: null, progress: 0, summary: 'Pending: code, data splits, config, README.' },
+      { name: 'Final Review', status: 'pending', detail: null, progress: 0, summary: 'Pending: final formatting and quality check.' }
+    ], duration: '--:--:--', cost: '$0.00', messages: '0 tok' }
+];
+
+/* Feed messages per module */
+const G = '#22c55e', P = '#a78bfa', B = '#3b82f6', D = '#5e6572';
+const FEED_MESSAGES = {
+  seed: [
+    { time: '0:18', color: G, msg: '<em>Seed</em> completed &mdash; 847 papers, 12 gaps, top 6 selected' },
+    { time: '0:14', color: G, msg: '<em>Ranking</em> selected top 6 by impact and novelty' },
+    { time: '0:09', color: G, msg: '<em>Hypothesis Seeding</em> generated 36 candidates' },
+    { time: '0:05', color: G, msg: '<em>Gap Analysis</em> identified 12 research gaps' },
+    { time: '0:01', color: G, msg: '<em>Literature Scan</em> started &mdash; ArXiv + Semantic Scholar' }
+  ],
+  hypo: [
+    { time: '1:21', color: P, msg: '<em>Review 3</em> approved &mdash; passed to invention loop' },
+    { time: '1:04', color: P, msg: '<em>Refine v3</em> score improved to 8.4' },
+    { time: '0:47', color: P, msg: '<em>Review 2</em> validated novelty against 23 works' },
+    { time: '0:33', color: P, msg: '<em>Refine v2</em> tightened scope (score 7.8)' },
+    { time: '0:22', color: P, msg: '<em>Review 1</em> found 3 issues' },
+    { time: '0:19', color: P, msg: '<em>Formulate v1</em> drafted contrastive alignment hypothesis' }
+  ],
+  invention: [
+    { time: '2:34', color: B, msg: '<em>Review Paper</em> started pass 1 &mdash; checking technical claims' },
+    { time: '2:33', color: B, msg: '<em>Ablation Study</em> started run 3 of 4' },
+    { time: '2:31', color: B, msg: '<em>Ablation Study</em> run 2 done (acc 0.812)' },
+    { time: '2:28', color: G, msg: '<em>Convergence Proof</em> verified via Lyapunov analysis' },
+    { time: '2:22', color: G, msg: '<em>Multilingual Pairs</em> 2,400 examples across 12 families' },
+    { time: '2:14', color: G, msg: '<em>Contrastive Baseline</em> acc 0.847 on XLBench' },
+    { time: '2:09', color: G, msg: '<em>Paper Text</em> 4,200 words, 23 citations' },
+    { time: '1:52', color: G, msg: '<em>Plan</em> architecture + pipeline + ablation matrix' },
+    { time: '1:38', color: G, msg: '<em>Strategy</em> contrastive anchors + curriculum' }
+  ],
+  paper: [{ time: '--:--', color: D, msg: 'Waiting for invention loop to complete' }]
+};
+
+let activeModule = 2;   // invention
+let activeStep = 3;     // artifacts (first running sub)
+let kbModule = 2;
+let kbStep = 3;
+
+/* ====================== MODULE CARD CLICKS ====================== */
+document.querySelectorAll('.module-card').forEach(card => {
+  card.addEventListener('click', () => {
+    const idx = parseInt(card.dataset.index);
+    selectModule(idx);
+  });
+});
+
+function selectModule(idx) {
+  activeModule = idx;
+  kbModule = idx;
+  const mod = MODULES[idx];
+
+  // Update card states
+  document.querySelectorAll('.module-card').forEach((c, i) => {
+    c.classList.toggle('active', i === idx);
+    c.classList.toggle('glow-pulse', i === idx && MODULES[i].status === 'active');
+  });
+
+  // Toggle tree visibility
+  toggleTrees(mod.key);
+
+  // Find first active or first step
+  const firstActive = mod.steps.findIndex(s => s.status === 'running' || s.status === 'active');
+  activeStep = firstActive >= 0 ? firstActive : 0;
+  kbStep = activeStep;
+
+  updateContent();
+  updateFeed();
+  updateKbHighlight();
+  resizeTreeCanvas();
+}
+
+function toggleTrees(activeKey) {
+  MODULES.forEach(mod => {
+    const branches = document.getElementById(mod.key + 'Branches');
+    const collapsed = document.getElementById(mod.key + 'Collapsed');
+    if (!branches) return;
+
+    if (mod.key === activeKey) {
+      branches.style.display = '';
+      if (collapsed) collapsed.style.display = 'none';
+      requestAnimationFrame(() => branches.classList.add('visible'));
+    } else {
+      branches.classList.remove('visible');
+      branches.style.display = 'none';
+      if (collapsed) collapsed.style.display = '';
+    }
+  });
+}
+
+// Collapsed summary clicks
+document.querySelectorAll('.tree-collapsed-summary').forEach(el => {
+  el.addEventListener('click', () => {
+    const mod = el.dataset.module;
+    const idx = MODULES.findIndex(m => m.key === mod);
+    if (idx >= 0) selectModule(idx);
+  });
+});
+
+/* ====================== SUB-MODULE CLICKS ====================== */
+document.querySelectorAll('.sub-module').forEach(el => {
+  el.addEventListener('click', () => {
+    const step = el.dataset.step;
+    if (!step) return;
+    const parts = step.split('-');
+    const modKey = parts[0] === 'inv' ? 'invention' : parts[0];
+    const modIdx = MODULES.findIndex(m => m.key === modKey);
+    const stepIdx = parseInt(parts[1]);
+    if (modIdx >= 0) {
+      activeModule = modIdx;
+      kbModule = modIdx;
+      activeStep = stepIdx;
+      kbStep = stepIdx;
+      updateContent();
+      updateKbHighlight();
+    }
+  });
+});
+
+/* ====================== CONTENT PANEL ====================== */
+function updateContent() {
+  const mod = MODULES[activeModule];
+  const step = mod.steps[activeStep];
+  if (!step) return;
+
+  const dash = document.getElementById('contentDashboard');
+  dash.style.animation = 'none';
+  dash.offsetHeight;
+  dash.style.animation = 'contentFadeIn 400ms var(--ease-smooth)';
+
+  // Check if multiple running in this module
+  const runningSteps = mod.steps.filter(s => s.status === 'running');
+  if (runningSteps.length > 1 && step.status === 'running') {
+    const names = runningSteps.map(s => s.name).join(' + ');
+    document.getElementById('contentTitle').textContent = names + ' \u2014 ' + mod.name;
+    document.getElementById('contentBadge').textContent = runningSteps.length + ' Active';
+    document.getElementById('contentBadge').className = 'content-badge badge-active';
+    // Combine summaries
+    const combinedSummary = runningSteps.map(s => s.summary).join(' ');
+    document.getElementById('contentSummary').textContent = combinedSummary;
+  } else {
+    document.getElementById('contentTitle').textContent = step.name + (mod.name ? ' \u2014 ' + mod.name : '');
+    const statusLabel = step.status === 'done' ? 'Done' : (step.status === 'running' ? 'Running' : (step.status === 'active' ? 'Active' : 'Pending'));
+    const badge = document.getElementById('contentBadge');
+    badge.textContent = statusLabel;
+    badge.className = 'content-badge ' + (step.status === 'done' ? 'badge-done' : (step.status === 'running' || step.status === 'active') ? 'badge-active' : 'badge-pending');
+    document.getElementById('contentSummary').textContent = step.summary || 'No details available yet.';
+  }
+
+  document.getElementById('statDuration').textContent = mod.duration;
+  document.getElementById('statCost').textContent = mod.cost;
+  document.getElementById('statMessages').textContent = mod.messages;
+
+  // Animate stat bars
+  setTimeout(() => {
+    document.querySelectorAll('.stat-bar-fill').forEach(bar => {
+      bar.style.width = bar.dataset.width;
+    });
+  }, 50);
+}
+
+function updateFeed() {
+  const mod = MODULES[activeModule];
+  const entries = document.getElementById('feedEntries');
+  const messages = FEED_MESSAGES[mod.key] || [];
+
+  entries.innerHTML = '';
+  messages.forEach((m, i) => {
+    const el = document.createElement('div');
+    el.className = 'feed-entry';
+    el.style.animationDelay = (i * 50) + 'ms';
+    el.innerHTML = `
+      <span class="feed-time">${m.time}</span>
+      <span class="feed-dot" style="background:${m.color}"></span>
+      <span class="feed-message">${m.msg}</span>
+    `;
+    entries.appendChild(el);
+  });
+}
+
+/* ====================== TOOLTIP ====================== */
+const tooltip = document.getElementById('tooltip');
+const tooltipTitle = document.getElementById('tooltipTitle');
+const tooltipText = document.getElementById('tooltipText');
+
+document.querySelectorAll('.sub-module[data-tooltip]').forEach(el => {
+  el.addEventListener('mouseenter', () => {
+    tooltipTitle.textContent = el.querySelector('.sub-name').textContent;
+    tooltipText.textContent = el.dataset.tooltip;
+    const rect = el.getBoundingClientRect();
+    let left = rect.right + 12;
+    let top = rect.top - 10;
+    if (left + 290 > window.innerWidth) left = rect.left - 292;
+    if (top + 120 > window.innerHeight) top = window.innerHeight - 130;
+    if (top < 10) top = 10;
+    tooltip.style.left = left + 'px';
+    tooltip.style.top = top + 'px';
+    tooltip.classList.add('show');
+  });
+  el.addEventListener('mouseleave', () => {
+    tooltip.classList.remove('show');
+  });
+});
+
+/* ====================== KEYBOARD NAV ====================== */
+function updateKbHighlight() {
+  document.querySelectorAll('.kb-focus').forEach(el => el.classList.remove('kb-focus'));
+  const mod = MODULES[kbModule];
+  const stepKey = mod.key === 'invention' ? 'inv' : mod.key;
+  const el = document.querySelector(`[data-step="${stepKey}-${kbStep}"]`);
+  if (el) {
+    el.classList.add('kb-focus');
+    el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }
+}
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowLeft') {
+    e.preventDefault();
+    kbModule = Math.max(0, kbModule - 1);
+    selectModule(kbModule);
+  } else if (e.key === 'ArrowRight') {
+    e.preventDefault();
+    kbModule = Math.min(MODULES.length - 1, kbModule + 1);
+    selectModule(kbModule);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    kbStep = Math.max(0, kbStep - 1);
+    activeStep = kbStep;
+    updateContent();
+    updateKbHighlight();
+  } else if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    const maxStep = MODULES[kbModule].steps.length - 1;
+    kbStep = Math.min(maxStep, kbStep + 1);
+    activeStep = kbStep;
+    updateContent();
+    updateKbHighlight();
+  }
+});
+
+/* ====================== BACKGROUND PARTICLES ====================== */
+const bgCanvas = document.getElementById('bgCanvas');
+const bgCtx = bgCanvas.getContext('2d');
+
+function resizeBgCanvas() {
+  bgCanvas.width = window.innerWidth;
+  bgCanvas.height = window.innerHeight;
+}
+resizeBgCanvas();
+window.addEventListener('resize', resizeBgCanvas);
+
+class AmbientParticle {
+  constructor() { this.reset(); }
+  reset() {
+    this.x = Math.random() * bgCanvas.width;
+    this.y = Math.random() * bgCanvas.height;
+    this.vx = (Math.random() - 0.5) * 0.3;
+    this.vy = (Math.random() - 0.5) * 0.3;
+    this.r = Math.random() * 1.5 + 0.5;
+    this.opacity = Math.random() * 0.15 + 0.03;
+    this.hue = [142, 271, 220, 40][Math.floor(Math.random() * 4)];
+  }
+  update() {
+    this.x += this.vx;
+    this.y += this.vy;
+    if (this.x < -20 || this.x > bgCanvas.width + 20 ||
+        this.y < -20 || this.y > bgCanvas.height + 20) {
+      this.reset();
+    }
+  }
+}
+const ambientParticles = Array.from({ length: 45 }, () => new AmbientParticle());
+
+function drawAmbient() {
+  bgCtx.clearRect(0, 0, bgCanvas.width, bgCanvas.height);
+
+  ambientParticles.forEach(p => {
+    p.update();
+    bgCtx.beginPath();
+    bgCtx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+    bgCtx.fillStyle = `hsla(${p.hue}, 60%, 65%, ${p.opacity})`;
+    bgCtx.fill();
+  });
+
+  // Connection lines
+  for (let i = 0; i < ambientParticles.length; i++) {
+    for (let j = i + 1; j < ambientParticles.length; j++) {
+      const a = ambientParticles[i];
+      const b = ambientParticles[j];
+      const dx = a.x - b.x;
+      const dy = a.y - b.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 150) {
+        const alpha = (1 - dist / 150) * 0.04;
+        bgCtx.beginPath();
+        bgCtx.moveTo(a.x, a.y);
+        bgCtx.lineTo(b.x, b.y);
+        bgCtx.strokeStyle = `rgba(148, 163, 184, ${alpha})`;
+        bgCtx.lineWidth = 0.5;
+        bgCtx.stroke();
+      }
+    }
+  }
+
+  requestAnimationFrame(drawAmbient);
+}
+drawAmbient();
+
+/* ====================== TREE CANVAS + MULTI-TARGET DOTS ====================== */
+const treeCanvas = document.getElementById('treeCanvas');
+const treeCtx = treeCanvas.getContext('2d');
+
+function resizeTreeCanvas() {
+  const main = document.getElementById('mainArea');
+  treeCanvas.width = main.scrollWidth;
+  treeCanvas.height = main.scrollHeight;
+  treeCanvas.style.width = main.scrollWidth + 'px';
+  treeCanvas.style.height = main.scrollHeight + 'px';
+}
+resizeTreeCanvas();
+window.addEventListener('resize', resizeTreeCanvas);
+
+class TreeDot {
+  constructor(path, color, speed, opacity) {
+    this.path = path;
+    this.color = color;
+    this.speed = speed;
+    this.opacity = opacity;
+    this.totalLen = 0;
+    this.segments = [];
+    for (let i = 1; i < path.length; i++) {
+      const dx = path[i].x - path[i - 1].x;
+      const dy = path[i].y - path[i - 1].y;
+      const len = Math.sqrt(dx * dx + dy * dy);
+      this.segments.push(len);
+      this.totalLen += len;
+    }
+    this.progress = Math.random() * this.totalLen;
+  }
+  update() {
+    this.progress += this.speed;
+    if (this.progress > this.totalLen) this.progress -= this.totalLen;
+  }
+  getPosition() {
+    let remaining = this.progress;
+    for (let i = 0; i < this.segments.length; i++) {
+      if (remaining <= this.segments[i]) {
+        const t = remaining / this.segments[i];
+        return {
+          x: this.path[i].x + (this.path[i + 1].x - this.path[i].x) * t,
+          y: this.path[i].y + (this.path[i + 1].y - this.path[i].y) * t
+        };
+      }
+      remaining -= this.segments[i];
+    }
+    return this.path[this.path.length - 1];
+  }
+}
+
+let treeDots = [];
+let depDots = [];
+
+/**
+ * MULTI-TARGET DOT BUILDER
+ * Finds ALL running sub-modules (.sub-module.active-step) and builds
+ * independent dot paths from the active module card down to EACH one.
+ * Also builds cross-column dependency dots.
+ */
+function buildTreeDots() {
+  treeDots = [];
+  depDots = [];
+
+  const main = document.getElementById('mainArea');
+  const mainRect = main.getBoundingClientRect();
+  const scrollLeft = main.scrollLeft;
+  const scrollTop = main.scrollTop;
+
+  const activeCard = document.querySelector('.module-card.active');
+  // Multi-target: find ALL running sub-modules (not just the first)
+  const allActiveSubs = document.querySelectorAll('.sub-module.active-step');
+
+  if (activeCard && allActiveSubs.length > 0) {
+    const cardRect = activeCard.getBoundingClientRect();
+    const startX = cardRect.left + cardRect.width / 2 - mainRect.left + scrollLeft;
+    const startY = cardRect.bottom - mainRect.top + scrollTop;
+    const color = MODULES[activeModule].color;
+
+    allActiveSubs.forEach((activeSub, targetIdx) => {
+      const subRect = activeSub.getBoundingClientRect();
+      const endX = subRect.left + 12 - mainRect.left + scrollLeft;
+      const endY = subRect.top + subRect.height / 2 - mainRect.top + scrollTop;
+
+      // Stagger the midY slightly per target to avoid perfect overlap
+      const midY = startY + (endY - startY) * (0.25 + targetIdx * 0.08);
+
+      const path = [
+        { x: startX, y: startY },
+        { x: startX, y: midY },
+        { x: endX, y: midY },
+        { x: endX, y: endY }
+      ];
+
+      // 3 dots per target path
+      for (let i = 0; i < 3; i++) {
+        treeDots.push(new TreeDot(path, color, 1.2 + targetIdx * 0.15, 0.65));
+      }
+    });
+  }
+
+  // Dependency dots: from hypo Review 3 to invention Strategy
+  const depSource = document.querySelector('[data-step="hypo-5"]');
+  const depTarget = document.querySelector('[data-step="inv-0"]');
+
+  if (depSource && depTarget && depSource.offsetParent && depTarget.offsetParent) {
+    const srcRect = depSource.getBoundingClientRect();
+    const tgtRect = depTarget.getBoundingClientRect();
+
+    const sx = srcRect.right - mainRect.left + scrollLeft;
+    const sy = srcRect.top + srcRect.height / 2 - mainRect.top + scrollTop;
+    const ex = tgtRect.left - mainRect.left + scrollLeft;
+    const ey = tgtRect.top + tgtRect.height / 2 - mainRect.top + scrollTop;
+    const mx = sx + (ex - sx) * 0.5;
+
+    const depPath = [
+      { x: sx, y: sy },
+      { x: mx, y: sy },
+      { x: mx, y: ey },
+      { x: ex, y: ey }
+    ];
+
+    for (let i = 0; i < 3; i++) {
+      depDots.push(new TreeDot(depPath, '#a78bfa', 0.8, 0.25));
+    }
+  }
+}
+
+function drawTreeDots() {
+  treeCtx.clearRect(0, 0, treeCanvas.width, treeCanvas.height);
+
+  // Draw multi-target dots (to ALL running sub-modules)
+  treeDots.forEach(dot => {
+    dot.update();
+    const pos = dot.getPosition();
+    // Core dot
+    treeCtx.beginPath();
+    treeCtx.arc(pos.x, pos.y, 1.8, 0, Math.PI * 2);
+    treeCtx.fillStyle = dot.color;
+    treeCtx.globalAlpha = dot.opacity;
+    treeCtx.fill();
+    // Glow halo
+    treeCtx.beginPath();
+    treeCtx.arc(pos.x, pos.y, 5, 0, Math.PI * 2);
+    treeCtx.fillStyle = dot.color;
+    treeCtx.globalAlpha = dot.opacity * 0.2;
+    treeCtx.fill();
+  });
+
+  // Dependency dots
+  depDots.forEach(dot => {
+    dot.update();
+    const pos = dot.getPosition();
+    treeCtx.beginPath();
+    treeCtx.arc(pos.x, pos.y, 1.5, 0, Math.PI * 2);
+    treeCtx.fillStyle = dot.color;
+    treeCtx.globalAlpha = dot.opacity;
+    treeCtx.fill();
+  });
+
+  treeCtx.globalAlpha = 1;
+  requestAnimationFrame(drawTreeDots);
+}
+
+function rebuildDots() {
+  resizeTreeCanvas();
+  buildTreeDots();
+}
+document.getElementById('mainArea').addEventListener('scroll', rebuildDots);
+window.addEventListener('resize', rebuildDots);
+
+setTimeout(() => {
+  rebuildDots();
+  drawTreeDots();
+}, 200);
+
+setInterval(rebuildDots, 1000);
+
+/* ====================== STAT BAR INIT ====================== */
+setTimeout(() => {
+  document.querySelectorAll('.stat-bar-fill').forEach(bar => {
+    bar.style.width = bar.dataset.width;
+  });
+}, 300);
+
+/* ====================== LIVE FEED SIMULATION ====================== */
+const LIVE_MESSAGES = [
+  { color: B, msg: '<em>Ablation Study</em> run 3 &mdash; curriculum ablation epoch 12/20' },
+  { color: B, msg: '<em>Review Paper</em> checked methodology section &mdash; 2 suggestions' },
+  { color: B, msg: '<em>Ablation Study</em> run 3 loss converging &mdash; 0.342' },
+  { color: B, msg: '<em>Review Paper</em> citation check &mdash; 21/23 verified' },
+  { color: B, msg: '<em>Ablation Study</em> run 3 done &mdash; acc 0.829' },
+  { color: B, msg: '<em>Review Paper</em> found inconsistency in Table 2 vs text' },
+  { color: B, msg: '<em>Ablation Study</em> starting run 4 &mdash; full model' },
+  { color: B, msg: '<em>Review Paper</em> pass 1 complete &mdash; 4 issues flagged' },
+  { color: B, msg: '<em>Ablation Study</em> run 4 training epoch 8/20' },
+  { color: G, msg: '<em>Ablation Study</em> all 4 runs complete' },
+  { color: B, msg: '<em>Cross-lingual Eval</em> started &mdash; 8 languages' },
+  { color: B, msg: '<em>Cross-lingual Eval</em> Swahili: BLEU 32.4, acc 0.821' },
+  { color: B, msg: '<em>Cross-lingual Eval</em> Vietnamese: BLEU 28.7' },
+];
+let liveIdx = 0;
+let liveTimer = null;
+
+function startLiveFeed() {
+  if (liveTimer) clearInterval(liveTimer);
+  liveTimer = setInterval(() => {
+    if (activeModule !== 2) return; // Only for invention module
+    if (liveIdx >= LIVE_MESSAGES.length) return;
+
+    const m = LIVE_MESSAGES[liveIdx++];
+    const entries = document.getElementById('feedEntries');
+    const now = new Date();
+    const mins = Math.floor((now.getTime() % 3600000) / 60000);
+    const secs = now.getSeconds();
+    const timeStr = String(mins).padStart(1, '0') + ':' + String(secs).padStart(2, '0');
+
+    const el = document.createElement('div');
+    el.className = 'feed-entry';
+    el.innerHTML = `
+      <span class="feed-time">${timeStr}</span>
+      <span class="feed-dot" style="background:${m.color}"></span>
+      <span class="feed-message">${m.msg}</span>
+    `;
+    entries.insertBefore(el, entries.firstChild);
+
+    // Keep feed to 15 entries max
+    while (entries.children.length > 15) {
+      entries.removeChild(entries.lastChild);
+    }
+  }, 8000);
+}
+startLiveFeed();
+
+/* ====================== INIT ====================== */
+toggleTrees('invention');
+updateKbHighlight();
+
+</script>
+</body>
+</html>
