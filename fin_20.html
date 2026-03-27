@@ -1,0 +1,1902 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Inventor — Final Dashboard</title>
+<style>
+/* ── Reset & Variables ─────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg-deep:     #0a0c12;
+  --bg-surface:  #10131c;
+  --bg-card:     rgba(18, 22, 34, 0.78);
+  --bg-card-solid: #121624;
+  --glass-border: rgba(255,255,255,0.06);
+  --glass-border-hi: rgba(255,255,255,0.10);
+  --text-main:   #dfe1e8;
+  --text-dim:    #6b7089;
+  --text-muted:  #3e4358;
+
+  --green:    #4ade80;
+  --green-dim: rgba(74,222,128,0.15);
+  --green-glow: rgba(74,222,128,0.35);
+  --purple:   #a78bfa;
+  --purple-dim: rgba(167,139,250,0.12);
+  --purple-glow: rgba(167,139,250,0.30);
+  --blue:     #60a5fa;
+  --blue-dim: rgba(96,165,250,0.12);
+  --blue-glow: rgba(96,165,250,0.30);
+  --orange:   #fb923c;
+  --orange-dim: rgba(251,146,60,0.08);
+  --orange-glow: rgba(251,146,60,0.25);
+
+  --sidebar-w-collapsed: 48px;
+  --sidebar-w-expanded: 240px;
+  --header-h: 44px;
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+html { font-size: 14px; }
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg-deep);
+  color: var(--text-main);
+  min-height: 100vh;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Ambient background particles canvas ───────────────── */
+#ambientCanvas {
+  position: fixed; top: 0; left: 0;
+  width: 100%; height: 100%;
+  pointer-events: none; z-index: 0;
+}
+
+/* ── Ambient radial glows ──────────────────────────────── */
+body::before {
+  content: '';
+  position: fixed; inset: 0;
+  background:
+    radial-gradient(ellipse 600px 400px at 15% 10%, rgba(96,165,250,0.035) 0%, transparent 70%),
+    radial-gradient(ellipse 500px 350px at 85% 15%, rgba(167,139,250,0.03) 0%, transparent 70%),
+    radial-gradient(ellipse 400px 400px at 50% 85%, rgba(52,211,153,0.02) 0%, transparent 70%);
+  pointer-events: none; z-index: 0;
+}
+
+/* ── SIDEBAR ───────────────────────────────────────────── */
+.sidebar {
+  position: fixed; top: 0; left: 0; bottom: 0;
+  width: var(--sidebar-w-collapsed);
+  background: rgba(12, 14, 22, 0.95);
+  backdrop-filter: blur(24px);
+  border-right: 1px solid var(--glass-border);
+  z-index: 100;
+  transition: width 0.35s var(--ease);
+  overflow: hidden;
+  display: flex; flex-direction: column;
+}
+.sidebar:hover { width: var(--sidebar-w-expanded); }
+.sidebar:hover .sidebar-label { opacity: 1; }
+.sidebar:hover .sidebar-stats { opacity: 1; max-height: 200px; }
+
+.sidebar-top {
+  height: var(--header-h);
+  display: flex; align-items: center;
+  padding: 0 12px; gap: 10px;
+  border-bottom: 1px solid var(--glass-border);
+  flex-shrink: 0;
+}
+
+.sidebar-ring-wrap {
+  width: 26px; height: 26px;
+  flex-shrink: 0; position: relative;
+}
+.sidebar-ring-wrap svg { width: 26px; height: 26px; }
+.sidebar-ring-bg { fill: none; stroke: rgba(255,255,255,0.06); stroke-width: 3; }
+.sidebar-ring-fg {
+  fill: none; stroke: var(--blue); stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dasharray: 69.12; /* 2 * pi * 11 */
+  stroke-dashoffset: 23.5; /* ~66% progress */
+  transform: rotate(-90deg);
+  transform-origin: center;
+  animation: ringPulse 3s ease-in-out infinite;
+}
+@keyframes ringPulse {
+  0%, 100% { filter: drop-shadow(0 0 2px rgba(96,165,250,0.4)); }
+  50%      { filter: drop-shadow(0 0 6px rgba(96,165,250,0.7)); }
+}
+
+.sidebar-title {
+  font-size: 13px; font-weight: 600;
+  color: var(--text-main);
+  white-space: nowrap;
+}
+
+.sidebar-label {
+  opacity: 0; transition: opacity 0.3s var(--ease);
+  white-space: nowrap;
+}
+
+.sidebar-nav {
+  flex: 1; padding: 12px 0;
+  display: flex; flex-direction: column; gap: 2px;
+}
+
+.sidebar-item {
+  display: flex; align-items: center; gap: 10px;
+  height: 38px; padding: 0 14px;
+  cursor: pointer; transition: background 0.2s;
+  position: relative;
+}
+.sidebar-item:hover { background: rgba(255,255,255,0.04); }
+.sidebar-item.active { background: rgba(96,165,250,0.08); }
+.sidebar-item.active::before {
+  content: ''; position: absolute;
+  left: 0; top: 6px; bottom: 6px; width: 2px;
+  background: var(--blue); border-radius: 0 1px 1px 0;
+}
+
+.sidebar-icon {
+  width: 20px; height: 20px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; flex-shrink: 0;
+}
+.si-green { color: var(--green); }
+.si-purple { color: var(--purple); }
+.si-blue { color: var(--blue); }
+.si-orange { color: var(--orange); }
+
+.sidebar-item-text {
+  font-size: 13px; color: var(--text-dim);
+  white-space: nowrap;
+}
+.sidebar-item.active .sidebar-item-text { color: var(--text-main); }
+
+.sidebar-stats {
+  padding: 0 14px 14px;
+  opacity: 0;
+  max-height: 0;
+  transition: opacity 0.3s var(--ease), max-height 0.35s var(--ease);
+  overflow: hidden;
+}
+.sidebar-stat-row {
+  display: flex; justify-content: space-between;
+  font-size: 11px; padding: 3px 0;
+}
+.sidebar-stat-label { color: var(--text-dim); }
+.sidebar-stat-value { color: var(--text-main); font-weight: 500; }
+
+/* ── HEADER ────────────────────────────────────────────── */
+.header {
+  position: fixed; top: 0; right: 0;
+  left: var(--sidebar-w-collapsed);
+  height: var(--header-h);
+  background: rgba(12, 14, 22, 0.88);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--glass-border);
+  z-index: 90;
+  display: flex; align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  transition: left 0.35s var(--ease);
+}
+.sidebar:hover ~ .main-wrap .header,
+.sidebar:hover ~ .header { left: var(--sidebar-w-expanded); }
+
+.breadcrumb {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; color: var(--text-dim);
+}
+.breadcrumb span { opacity: 0.5; }
+.breadcrumb .bc-active { color: var(--blue); opacity: 1; font-weight: 500; }
+
+.header-right {
+  display: flex; align-items: center; gap: 18px;
+  font-size: 12px; color: var(--text-dim);
+}
+.header-time { font-variant-numeric: tabular-nums; }
+.header-cost { color: var(--green); font-weight: 500; }
+
+/* ── MAIN WRAP ─────────────────────────────────────────── */
+.main-wrap {
+  margin-left: var(--sidebar-w-collapsed);
+  padding-top: var(--header-h);
+  min-height: 100vh;
+  position: relative; z-index: 1;
+  transition: margin-left 0.35s var(--ease);
+}
+.sidebar:hover ~ .main-wrap { margin-left: var(--sidebar-w-expanded); }
+
+.main-content {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 20px 28px 80px;
+}
+
+/* ── TOP CARDS ROW ─────────────────────────────────────── */
+.top-cards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.top-card {
+  background: var(--bg-card);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.25s, transform 0.25s var(--ease);
+  cursor: pointer;
+}
+.top-card:hover {
+  border-color: var(--glass-border-hi);
+  transform: translateY(-1px);
+}
+
+/* Shimmer overlay */
+.top-card::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(
+    110deg,
+    transparent 30%,
+    rgba(255,255,255,0.03) 45%,
+    transparent 60%
+  );
+  background-size: 250% 100%;
+  animation: shimmer 4s ease-in-out infinite;
+}
+@keyframes shimmer {
+  0%   { background-position: 250% 0; }
+  100% { background-position: -50% 0; }
+}
+
+.tc-header {
+  display: flex; align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.tc-label {
+  font-size: 11px; font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.tc-label-green  { color: var(--green); }
+.tc-label-purple { color: var(--purple); }
+.tc-label-blue   { color: var(--blue); }
+.tc-label-orange { color: var(--orange); }
+
+.tc-mini-ring { width: 28px; height: 28px; }
+.tc-mini-ring .ring-bg { fill: none; stroke: rgba(255,255,255,0.06); stroke-width: 3; }
+.tc-mini-ring .ring-fg { fill: none; stroke-width: 3; stroke-linecap: round; transform: rotate(-90deg); transform-origin: center; }
+
+.tc-body {
+  display: flex; align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+}
+.tc-value { font-size: 22px; font-weight: 600; color: var(--text-main); }
+.tc-sub { font-size: 11px; color: var(--text-dim); }
+
+/* Sparkline */
+.tc-sparkline {
+  width: 60px; height: 24px;
+  flex-shrink: 0;
+}
+.tc-sparkline polyline {
+  fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round;
+}
+
+/* ── 2-COLUMN DASHBOARD ───────────────────────────────── */
+.dashboard {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 20px;
+  align-items: start;
+}
+
+/* ── LEFT COLUMN ───────────────────────────────────────── */
+.left-col {
+  display: flex; flex-direction: column; gap: 0;
+}
+
+/* ── TREE VIEW ─────────────────────────────────────────── */
+.tree-section {
+  position: relative;
+}
+
+/* Module (level 1) */
+.tree-module {
+  position: relative;
+  margin-bottom: 2px;
+}
+
+.tree-module-header {
+  display: flex; align-items: center; gap: 10px;
+  height: 42px;
+  padding: 0 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.2s;
+  position: relative;
+  z-index: 2;
+}
+.tree-module-header:hover { background: rgba(255,255,255,0.03); }
+
+.tm-chevron {
+  width: 16px; height: 16px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9px; color: var(--text-dim);
+  transition: transform 0.25s var(--ease);
+  flex-shrink: 0;
+}
+.tree-module.expanded > .tree-module-header .tm-chevron { transform: rotate(90deg); }
+
+.tm-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%; flex-shrink: 0;
+}
+.dot-green  { background: var(--green);  box-shadow: 0 0 6px var(--green-glow); }
+.dot-purple { background: var(--purple); box-shadow: 0 0 6px var(--purple-glow); }
+.dot-blue   { background: var(--blue);   box-shadow: 0 0 6px var(--blue-glow); }
+.dot-orange { background: var(--orange); box-shadow: 0 0 6px var(--orange-glow); }
+
+.tm-label {
+  font-size: 14px; font-weight: 600;
+  color: var(--text-main); flex: 1;
+}
+
+.tm-badge {
+  font-size: 10px; font-weight: 500;
+  padding: 2px 8px; border-radius: 10px;
+  white-space: nowrap;
+}
+.badge-done    { background: var(--green-dim);  color: var(--green); }
+.badge-running { background: var(--blue-dim);   color: var(--blue); animation: badgePulse 2s ease-in-out infinite; }
+.badge-pending { background: rgba(255,255,255,0.04); color: var(--text-dim); }
+
+@keyframes badgePulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(96,165,250,0); }
+  50%      { box-shadow: 0 0 0 4px rgba(96,165,250,0.15); }
+}
+
+.tm-time {
+  font-size: 11px; color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Module children wrapper */
+.tree-module-children {
+  overflow: hidden;
+  max-height: 0;
+  transition: max-height 0.4s var(--ease);
+  position: relative;
+}
+.tree-module.expanded > .tree-module-children { max-height: 2000px; }
+
+/* Tree lines — 2px colored vertical lines */
+.tree-module-children::before {
+  content: '';
+  position: absolute;
+  left: 25px; top: 0; bottom: 12px;
+  width: 2px; border-radius: 1px;
+}
+.tree-module[data-color="green"]  > .tree-module-children::before { background: rgba(74,222,128,0.15); }
+.tree-module[data-color="purple"] > .tree-module-children::before { background: rgba(167,139,250,0.12); }
+.tree-module[data-color="blue"]   > .tree-module-children::before { background: rgba(96,165,250,0.12); }
+.tree-module[data-color="orange"] > .tree-module-children::before { background: rgba(251,146,60,0.10); }
+
+/* Active branch glow */
+.tree-module.active-branch > .tree-module-children::before {
+  animation: branchGlow 2.5s ease-in-out infinite;
+}
+.tree-module[data-color="green"].active-branch  > .tree-module-children::before { box-shadow: 0 0 6px var(--green-glow); }
+.tree-module[data-color="purple"].active-branch > .tree-module-children::before { box-shadow: 0 0 6px var(--purple-glow); }
+.tree-module[data-color="blue"].active-branch   > .tree-module-children::before { box-shadow: 0 0 6px var(--blue-glow); }
+.tree-module[data-color="orange"].active-branch > .tree-module-children::before { box-shadow: 0 0 6px var(--orange-glow); }
+
+@keyframes branchGlow {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.5; }
+}
+
+/* Colored section background tints */
+.tree-module[data-color="green"]  > .tree-module-children { background: rgba(74,222,128,0.015); border-radius: 0 0 8px 8px; }
+.tree-module[data-color="purple"] > .tree-module-children { background: rgba(167,139,250,0.012); border-radius: 0 0 8px 8px; }
+.tree-module[data-color="blue"]   > .tree-module-children { background: rgba(96,165,250,0.015); border-radius: 0 0 8px 8px; }
+.tree-module[data-color="orange"] > .tree-module-children { background: rgba(251,146,60,0.010); border-radius: 0 0 8px 8px; }
+
+/* Sub-module (level 2) */
+.tree-sub {
+  position: relative;
+  margin-left: 20px;
+}
+
+.tree-sub-header {
+  display: flex; align-items: center; gap: 8px;
+  height: 36px;
+  padding: 0 14px 0 22px;
+  cursor: pointer;
+  user-select: none;
+  border-radius: 6px;
+  transition: background 0.2s;
+  position: relative;
+}
+.tree-sub-header:hover { background: rgba(255,255,255,0.025); }
+
+.ts-chevron {
+  width: 14px; height: 14px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 8px; color: var(--text-muted);
+  transition: transform 0.25s var(--ease);
+  flex-shrink: 0;
+}
+.tree-sub.expanded > .tree-sub-header .ts-chevron { transform: rotate(90deg); }
+
+.ts-icon {
+  width: 16px; text-align: center; flex-shrink: 0;
+  font-size: 12px;
+}
+.ts-icon-done    { color: var(--green); }
+.ts-icon-running { color: var(--blue); animation: spinnerSpin 1.2s linear infinite; }
+.ts-icon-pending { color: var(--text-muted); }
+
+@keyframes spinnerSpin {
+  0%   { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.ts-label {
+  font-size: 13px; font-weight: 500;
+  color: var(--text-main); flex: 1;
+}
+.ts-label-pending { color: var(--text-dim); }
+
+/* Status badge pills on sub-modules */
+.ts-badge {
+  font-size: 9px; font-weight: 600;
+  padding: 1px 7px; border-radius: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.ts-badge-done    { background: var(--green-dim); color: var(--green); }
+.ts-badge-running { background: var(--blue-dim);  color: var(--blue); }
+.ts-badge-pending { background: rgba(255,255,255,0.03); color: var(--text-muted); }
+
+/* 3px progress bars on sub-modules */
+.ts-progress-wrap {
+  position: absolute;
+  bottom: 0; left: 22px; right: 14px;
+  height: 3px; border-radius: 1.5px;
+  background: rgba(255,255,255,0.04);
+  overflow: hidden;
+}
+.ts-progress-bar {
+  height: 100%; border-radius: 1.5px;
+  transition: width 0.6s var(--ease);
+}
+.ts-progress-green  { background: var(--green); }
+.ts-progress-purple { background: var(--purple); }
+.ts-progress-blue   { background: var(--blue); }
+.ts-progress-orange { background: var(--orange); }
+
+.ts-detail {
+  font-size: 11px; color: var(--text-dim);
+  white-space: nowrap;
+}
+
+/* Sub-module children */
+.tree-sub-children {
+  overflow: hidden;
+  max-height: 0;
+  transition: max-height 0.35s var(--ease);
+  margin-left: 20px;
+}
+.tree-sub.expanded > .tree-sub-children { max-height: 800px; }
+
+/* Tree-grow animation */
+.tree-sub-children .tree-item {
+  opacity: 0; transform: translateY(-6px);
+  transition: opacity 0.25s var(--ease), transform 0.25s var(--ease);
+}
+.tree-sub.expanded > .tree-sub-children .tree-item {
+  opacity: 1; transform: translateY(0);
+}
+.tree-sub.expanded > .tree-sub-children .tree-item:nth-child(1) { transition-delay: 0.04s; }
+.tree-sub.expanded > .tree-sub-children .tree-item:nth-child(2) { transition-delay: 0.08s; }
+.tree-sub.expanded > .tree-sub-children .tree-item:nth-child(3) { transition-delay: 0.12s; }
+.tree-sub.expanded > .tree-sub-children .tree-item:nth-child(4) { transition-delay: 0.16s; }
+.tree-sub.expanded > .tree-sub-children .tree-item:nth-child(5) { transition-delay: 0.20s; }
+
+/* Item (level 3) — checklist */
+.tree-item {
+  display: flex; align-items: center; gap: 8px;
+  height: 30px;
+  padding: 0 14px 0 28px;
+  font-size: 12px;
+  position: relative;
+}
+
+.ti-check {
+  width: 14px; height: 14px;
+  border-radius: 3px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  font-size: 9px;
+}
+.ti-check-done {
+  background: var(--green-dim);
+  color: var(--green);
+  border: 1px solid rgba(74,222,128,0.3);
+}
+.ti-check-running {
+  background: var(--blue-dim);
+  border: 1px solid rgba(96,165,250,0.3);
+  position: relative;
+}
+.ti-check-running::after {
+  content: '';
+  width: 8px; height: 8px;
+  border: 1.5px solid transparent;
+  border-top-color: var(--blue);
+  border-radius: 50%;
+  animation: spinnerSpin 0.8s linear infinite;
+}
+.ti-check-pending {
+  border: 1px solid rgba(255,255,255,0.08);
+  background: transparent;
+}
+
+.ti-label { color: var(--text-dim); flex: 1; }
+.ti-label-done { color: var(--text-main); text-decoration: none; }
+.ti-label-running { color: var(--blue); font-weight: 500; }
+
+.ti-meta {
+  font-size: 10px; color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── RIGHT COLUMN ──────────────────────────────────────── */
+.right-col {
+  display: flex; flex-direction: column; gap: 16px;
+}
+
+/* Stats panel */
+.stats-panel {
+  background: var(--bg-card);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  padding: 18px;
+  position: relative;
+  overflow: hidden;
+}
+.stats-panel::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(110deg, transparent 30%, rgba(255,255,255,0.02) 45%, transparent 60%);
+  background-size: 250% 100%;
+  animation: shimmer 5s ease-in-out infinite;
+}
+
+.stats-title {
+  font-size: 12px; font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  margin-bottom: 14px;
+}
+
+.stat-row {
+  display: flex; align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+}
+.stat-label { font-size: 12px; color: var(--text-dim); }
+.stat-value { font-size: 13px; font-weight: 600; color: var(--text-main); font-variant-numeric: tabular-nums; }
+
+.stat-bar-wrap {
+  height: 4px; border-radius: 2px;
+  background: rgba(255,255,255,0.04);
+  margin: 6px 0 10px; overflow: hidden;
+}
+.stat-bar {
+  height: 100%; border-radius: 2px;
+  animation: statFill 1.2s var(--ease) forwards;
+  width: 0;
+}
+@keyframes statFill {
+  to { width: var(--target-w); }
+}
+
+/* Summary panel */
+.summary-panel {
+  background: var(--bg-card);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  padding: 18px;
+}
+.summary-panel p {
+  font-size: 13px;
+  line-height: 1.7;
+  color: rgba(200,202,210,0.8);
+  margin-bottom: 10px;
+}
+.summary-panel p:last-child { margin-bottom: 0; }
+
+/* Live activity feed */
+.feed-panel {
+  background: var(--bg-card);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  padding: 18px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.feed-panel::-webkit-scrollbar { width: 4px; }
+.feed-panel::-webkit-scrollbar-track { background: transparent; }
+.feed-panel::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+
+.feed-title {
+  font-size: 12px; font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  margin-bottom: 12px;
+  display: flex; align-items: center; gap: 6px;
+}
+.feed-live-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  animation: liveDot 1.5s ease-in-out infinite;
+}
+@keyframes liveDot {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.3; }
+}
+
+.feed-item {
+  display: flex; gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid rgba(255,255,255,0.03);
+  animation: feedFadeIn 0.4s var(--ease);
+}
+.feed-item:first-of-type { border-top: none; }
+
+@keyframes feedFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.feed-time {
+  font-size: 10px; color: var(--text-muted);
+  min-width: 42px; flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  padding-top: 2px;
+}
+
+.feed-dot-col {
+  display: flex; flex-direction: column;
+  align-items: center; padding-top: 5px;
+}
+.feed-dot {
+  width: 6px; height: 6px;
+  border-radius: 50%; flex-shrink: 0;
+}
+.feed-dot-green  { background: var(--green); }
+.feed-dot-blue   { background: var(--blue); }
+.feed-dot-purple { background: var(--purple); }
+.feed-dot-orange { background: var(--orange); }
+
+.feed-text {
+  font-size: 12px; color: var(--text-dim);
+  line-height: 1.5;
+}
+.feed-text strong { color: var(--text-main); font-weight: 500; }
+
+/* ── TOOLTIP ───────────────────────────────────────────── */
+.tooltip {
+  position: fixed;
+  width: 280px;
+  background: rgba(16, 20, 32, 0.92);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--glass-border-hi);
+  border-radius: 10px;
+  padding: 14px 16px;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.2s, transform 0.2s;
+  z-index: 200;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+}
+.tooltip.visible { opacity: 1; transform: translateY(0); }
+.tooltip-title { font-size: 13px; font-weight: 600; color: var(--text-main); margin-bottom: 6px; }
+.tooltip-body { font-size: 11px; line-height: 1.6; color: var(--text-dim); }
+.tooltip-stat { display: flex; justify-content: space-between; font-size: 11px; padding: 2px 0; }
+.tooltip-stat-label { color: var(--text-dim); }
+.tooltip-stat-value { color: var(--text-main); font-weight: 500; }
+
+/* ── DEPENDENCY DOTS (canvas) ──────────────────────────── */
+#particleCanvas {
+  position: fixed; top: 0; left: 0;
+  width: 100%; height: 100%;
+  pointer-events: none; z-index: 50;
+}
+
+/* ── TREE PATH PARTICLES (canvas) ──────────────────────── */
+#treeParticleCanvas {
+  position: fixed; top: 0; left: 0;
+  width: 100%; height: 100%;
+  pointer-events: none; z-index: 50;
+}
+
+/* ── Responsive ────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .dashboard { grid-template-columns: 1fr; }
+  .top-cards { grid-template-columns: repeat(2, 1fr); }
+}
+</style>
+</head>
+<body>
+
+<!-- Ambient background particles -->
+<canvas id="ambientCanvas"></canvas>
+
+<!-- Tree-path particles -->
+<canvas id="treeParticleCanvas"></canvas>
+
+<!-- Dependency flow dots -->
+<canvas id="particleCanvas"></canvas>
+
+<!-- ═══ SIDEBAR ═══ -->
+<nav class="sidebar" id="sidebar">
+  <div class="sidebar-top">
+    <div class="sidebar-ring-wrap">
+      <svg viewBox="0 0 26 26">
+        <circle class="sidebar-ring-bg" cx="13" cy="13" r="11"/>
+        <circle class="sidebar-ring-fg" cx="13" cy="13" r="11"/>
+      </svg>
+    </div>
+    <span class="sidebar-title sidebar-label">AI Inventor</span>
+  </div>
+
+  <div class="sidebar-nav">
+    <div class="sidebar-item" data-mod="seed">
+      <span class="sidebar-icon si-green">&#9679;</span>
+      <span class="sidebar-item-text sidebar-label">Seed Hypotheses</span>
+    </div>
+    <div class="sidebar-item" data-mod="hypothesis">
+      <span class="sidebar-icon si-purple">&#9679;</span>
+      <span class="sidebar-item-text sidebar-label">Hypothesis Loop</span>
+    </div>
+    <div class="sidebar-item active" data-mod="invention">
+      <span class="sidebar-icon si-blue">&#9679;</span>
+      <span class="sidebar-item-text sidebar-label">Invention Loop</span>
+    </div>
+    <div class="sidebar-item" data-mod="paper">
+      <span class="sidebar-icon si-orange">&#9679;</span>
+      <span class="sidebar-item-text sidebar-label">Paper Generation</span>
+    </div>
+  </div>
+
+  <div class="sidebar-stats">
+    <div class="sidebar-stat-row">
+      <span class="sidebar-stat-label">Elapsed</span>
+      <span class="sidebar-stat-value" id="sidebarTime">1h 31m</span>
+    </div>
+    <div class="sidebar-stat-row">
+      <span class="sidebar-stat-label">Total Cost</span>
+      <span class="sidebar-stat-value">$25.41</span>
+    </div>
+    <div class="sidebar-stat-row">
+      <span class="sidebar-stat-label">API Calls</span>
+      <span class="sidebar-stat-value">847</span>
+    </div>
+    <div class="sidebar-stat-row">
+      <span class="sidebar-stat-label">Tokens In</span>
+      <span class="sidebar-stat-value">2.4M</span>
+    </div>
+    <div class="sidebar-stat-row">
+      <span class="sidebar-stat-label">Tokens Out</span>
+      <span class="sidebar-stat-value">318K</span>
+    </div>
+  </div>
+</nav>
+
+<!-- ═══ MAIN ═══ -->
+<div class="main-wrap">
+  <!-- Header -->
+  <header class="header">
+    <div class="breadcrumb">
+      <span>Pipeline</span> <span>/</span>
+      <span>Invention Loop</span> <span>/</span>
+      <span class="bc-active">Iteration 2 &mdash; Artifacts</span>
+    </div>
+    <div class="header-right">
+      <span class="header-time" id="headerTime">1h 31m 14s</span>
+      <span class="header-cost">$25.41</span>
+    </div>
+  </header>
+
+  <div class="main-content">
+    <!-- ═══ TOP CARDS ═══ -->
+    <div class="top-cards">
+      <!-- Seed card -->
+      <div class="top-card" data-tooltip="seed-card">
+        <div class="tc-header">
+          <span class="tc-label tc-label-green">Seed</span>
+          <svg class="tc-mini-ring" viewBox="0 0 28 28">
+            <circle class="ring-bg" cx="14" cy="14" r="11"/>
+            <circle class="ring-fg" cx="14" cy="14" r="11"
+              style="stroke:var(--green); stroke-dasharray:69.12; stroke-dashoffset:0; transform:rotate(-90deg); transform-origin:center;"/>
+          </svg>
+        </div>
+        <div class="tc-body">
+          <div>
+            <div class="tc-value">12</div>
+            <div class="tc-sub">hypotheses seeded</div>
+          </div>
+          <svg class="tc-sparkline" viewBox="0 0 60 24">
+            <polyline points="0,20 10,18 20,14 30,16 40,8 50,4 60,2" style="stroke:var(--green);"/>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Hypothesis card -->
+      <div class="top-card" data-tooltip="hypo-card">
+        <div class="tc-header">
+          <span class="tc-label tc-label-purple">Hypothesis</span>
+          <svg class="tc-mini-ring" viewBox="0 0 28 28">
+            <circle class="ring-bg" cx="14" cy="14" r="11"/>
+            <circle class="ring-fg" cx="14" cy="14" r="11"
+              style="stroke:var(--purple); stroke-dasharray:69.12; stroke-dashoffset:0; transform:rotate(-90deg); transform-origin:center;"/>
+          </svg>
+        </div>
+        <div class="tc-body">
+          <div>
+            <div class="tc-value">8.4</div>
+            <div class="tc-sub">score after 3 iters</div>
+          </div>
+          <svg class="tc-sparkline" viewBox="0 0 60 24">
+            <polyline points="0,20 20,14 40,6 60,2" style="stroke:var(--purple);"/>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Invention card -->
+      <div class="top-card" data-tooltip="inv-card">
+        <div class="tc-header">
+          <span class="tc-label tc-label-blue">Invention</span>
+          <svg class="tc-mini-ring" viewBox="0 0 28 28">
+            <circle class="ring-bg" cx="14" cy="14" r="11"/>
+            <circle class="ring-fg" cx="14" cy="14" r="11"
+              style="stroke:var(--blue); stroke-dasharray:69.12; stroke-dashoffset:23.5; transform:rotate(-90deg); transform-origin:center;"/>
+          </svg>
+        </div>
+        <div class="tc-body">
+          <div>
+            <div class="tc-value">66%</div>
+            <div class="tc-sub">iteration 2 of 3</div>
+          </div>
+          <svg class="tc-sparkline" viewBox="0 0 60 24">
+            <polyline points="0,22 15,18 25,12 35,14 45,8 55,10 60,6" style="stroke:var(--blue);"/>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Paper card -->
+      <div class="top-card" data-tooltip="paper-card">
+        <div class="tc-header">
+          <span class="tc-label tc-label-orange">Paper</span>
+          <svg class="tc-mini-ring" viewBox="0 0 28 28">
+            <circle class="ring-bg" cx="14" cy="14" r="11"/>
+            <circle class="ring-fg" cx="14" cy="14" r="11"
+              style="stroke:var(--orange); stroke-dasharray:69.12; stroke-dashoffset:69.12; transform:rotate(-90deg); transform-origin:center;"/>
+          </svg>
+        </div>
+        <div class="tc-body">
+          <div>
+            <div class="tc-value">&mdash;</div>
+            <div class="tc-sub">waiting on invention</div>
+          </div>
+          <svg class="tc-sparkline" viewBox="0 0 60 24">
+            <polyline points="0,22 60,22" style="stroke:var(--text-muted); stroke-dasharray:3,4;"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ 2-COL DASHBOARD ═══ -->
+    <div class="dashboard">
+      <!-- LEFT: Tree -->
+      <div class="left-col">
+        <div class="tree-section">
+
+          <!-- ── MODULE: Seed ── -->
+          <div class="tree-module expanded" data-color="green" data-mod="seed">
+            <div class="tree-module-header">
+              <span class="tm-chevron">&#9654;</span>
+              <span class="tm-dot dot-green"></span>
+              <span class="tm-label">Seed Hypotheses</span>
+              <span class="tm-badge badge-done">done</span>
+              <span class="tm-time">18m</span>
+            </div>
+            <div class="tree-module-children">
+
+              <div class="tree-sub expanded" data-tooltip="seed-collect">
+                <div class="tree-sub-header">
+                  <span class="ts-chevron">&#9654;</span>
+                  <span class="ts-icon ts-icon-done">&#10003;</span>
+                  <span class="ts-label">Paper Collection</span>
+                  <span class="ts-badge ts-badge-done">done</span>
+                  <span class="ts-detail">847 papers</span>
+                  <div class="ts-progress-wrap"><div class="ts-progress-bar ts-progress-green" style="width:100%;"></div></div>
+                </div>
+                <div class="tree-sub-children">
+                  <div class="tree-item">
+                    <span class="ti-check ti-check-done">&#10003;</span>
+                    <span class="ti-label ti-label-done">Semantic Scholar API crawl</span>
+                    <span class="ti-meta">4m</span>
+                  </div>
+                  <div class="tree-item">
+                    <span class="ti-check ti-check-done">&#10003;</span>
+                    <span class="ti-label ti-label-done">PDF extraction and chunking</span>
+                    <span class="ti-meta">6m</span>
+                  </div>
+                  <div class="tree-item">
+                    <span class="ti-check ti-check-done">&#10003;</span>
+                    <span class="ti-label ti-label-done">De-duplication (847 unique)</span>
+                    <span class="ti-meta">1m</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="tree-sub" data-tooltip="seed-kg">
+                <div class="tree-sub-header">
+                  <span class="ts-chevron">&#9654;</span>
+                  <span class="ts-icon ts-icon-done">&#10003;</span>
+                  <span class="ts-label">Knowledge Graph</span>
+                  <span class="ts-badge ts-badge-done">done</span>
+                  <span class="ts-detail">2,341 entities</span>
+                  <div class="ts-progress-wrap"><div class="ts-progress-bar ts-progress-green" style="width:100%;"></div></div>
+                </div>
+                <div class="tree-sub-children">
+                  <div class="tree-item">
+                    <span class="ti-check ti-check-done">&#10003;</span>
+                    <span class="ti-label ti-label-done">Entity extraction (methods, datasets)</span>
+                    <span class="ti-meta">3m</span>
+                  </div>
+                  <div class="tree-item">
+                    <span class="ti-check ti-check-done">&#10003;</span>
+                    <span class="ti-label ti-label-done">Relation linking &mdash; 5,890 edges</span>
+                    <span class="ti-meta">2m</span>
+                  </div>
+                  <div class="tree-item">
+                    <span class="ti-check ti-check-done">&#10003;</span>
+                    <span class="ti-label ti-label-done">Gap detection via structural holes</span>
+                    <span class="ti-meta">1m</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="tree-sub" data-tooltip="seed-rank">
+                <div class="tree-sub-header">
+                  <span class="ts-chevron">&#9654;</span>
+                  <span class="ts-icon ts-icon-done">&#10003;</span>
+                  <span class="ts-label">Gap Ranking</span>
+                  <span class="ts-badge ts-badge-done">done</span>
+                  <span class="ts-detail">12 gaps</span>
+                  <div class="ts-progress-wrap"><div class="ts-progress-bar ts-progress-green" style="width:100%;"></div></div>
+                </div>
+                <div class="tree-sub-children">
+                  <div class="tree-item">
+                    <span class="ti-check ti-check-done">&#10003;</span>
+                    <span class="ti-label ti-label-done">Novelty scoring</span>
+                    <span class="ti-meta">1m</span>
+                  </div>
+                  <div class="tree-item">
+                    <span class="ti-check ti-check-done">&#10003;</span>
+                    <span class="ti-label ti-label-done">Tractability assessment</span>
+                    <span class="ti-meta">1m</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="tree-sub" data-tooltip="seed-gen">
+                <div class="tree-sub-header">
+                  <span class="ts-chevron">&#9654;</span>
+                  <span class="ts-icon ts-icon-done">&#10003;</span>
+                  <span class="ts-label">Seed Generation</span>
+                  <span class="ts-badge ts-badge-done">done</span>
+                  <span class="ts-detail">12 seeds</span>
+                  <div class="ts-progress-wrap"><div class="ts-progress-bar ts-progress-green" style="width:100%;"></div></div>
+                </div>
+                <div class="tree-sub-children">
+                  <div class="tree-item">
+                    <span class="ti-check ti-check-done">&#10003;</span>
+                    <span class="ti-label ti-label-done">Hypothesis formulation per gap</span>
+                    <span class="ti-meta">2m</span>
+                  </div>
+                  <div class="tree-item">
+                    <span class="ti-check ti-check-done">&#10003;</span>
+                    <span class="ti-label ti-label-done">Initial feasibility check</span>
+                    <span class="ti-meta">1m</span>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- ── MODULE: Hypothesis ── -->
+          <div class="tree-module" data-color="purple" data-mod="hypothesis">
+            <div class="tree-module-header">
+              <span class="tm-chevron">&#9654;</span>
+              <span class="tm-dot dot-purple"></span>
+              <span class="tm-label">Hypothesis Loop</span>
+              <span class="tm-badge badge-done">done</span>
+              <span class="tm-time">31m</span>
+            </div>
+            <div class="tree-module-children">
+
+              <div class="tree-sub" data-tooltip="hypo-iter1">
+                <div class="tree-sub-header">
+                  <span class="ts-chevron">&#9654;</span>
+                  <span class="ts-icon ts-icon-done">&#10003;</span>
+                  <span class="ts-label">Iteration 1 &mdash; Score 6.2</span>
+                  <span class="ts-badge ts-badge-done">done</span>
+                  <div class="ts-progress-wrap"><div class="ts-progress-bar ts-progress-purple" style="width:100%;"></div></div>
+                </div>
+                <div class="tree-sub-children">
+                  <div class="tree-item">
+                    <span class="ti-check ti-check-done">&#10003;</span>
+                    <span class="ti-label ti-label-done">Review: lacks specificity in method</span>
+                    <span class="ti-meta">5m</span>
+                  </div>
+                  <div class="tree-item">
+                    <span class="ti-check ti-check-done">&#10003;</span>
+                    <span class="ti-label ti-label-done">Revision: added contrastive loss formulation</span>
+                    <span class="ti-meta">6m</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="tree-sub" data-tooltip="hypo-iter2">
+                <div class="tree-sub-header">
+                  <span class="ts-chevron">&#9654;</span>
+                  <span class="ts-icon ts-icon-done">&#10003;</span>
+                  <span class="ts-label">Iteration 2 &mdash; Score 7.8</span>
+                  <span class="ts-badge ts-badge-done">done</span>
+                  <div class="ts-progress-wrap"><div class="ts-progress-bar ts-progress-purple" style="width:100%;"></div></div>
+                </div>
+                <div class="tree-sub-children">
+                  <div class="tree-item">
+                    <span class="ti-check ti-check-done">&#10003;</span>
+                    <span class="ti-label ti-label-done">Review: needs stronger baseline justification</span>
+                    <span class="ti-meta">4m</span>
+                  </div>
+                  <div class="tree-item">
+                    <span class="ti-check ti-check-done">&#10003;</span>
+                    <span class="ti-label ti-label-done">Revision: cited 3 baselines, added expected gains</span>
+                    <span class="ti-meta">7m</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="tree-sub" data-tooltip="hypo-iter3">
+                <div class="tree-sub-header">
+                  <span class="ts-chevron">&#9654;</span>
+                  <span class="ts-icon ts-icon-done">&#10003;</span>
+                  <span class="ts-label">Iteration 3 &mdash; Score 8.4 (accepted)</span>
+                  <span class="ts-badge ts-badge-done">best</span>
+                  <div class="ts-progress-wrap"><div class="ts-progress-bar ts-progress-purple" style="width:100%;"></div></div>
+                </div>
+                <div class="tree-sub-children">
+                  <div class="tree-item">
+                    <span class="ti-check ti-check-done">&#10003;</span>
+                    <span class="ti-label ti-label-done">Review: minor clarity edits, threshold met</span>
+                    <span class="ti-meta">3m</span>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- ── MODULE: Invention (ACTIVE) ── -->
+          <div class="tree-module expanded active-branch" data-color="blue" data-mod="invention">
+            <div class="tree-module-header">
+              <span class="tm-chevron">&#9654;</span>
+              <span class="tm-dot dot-blue"></span>
+              <span class="tm-label">Invention Loop</span>
+              <span class="tm-badge badge-running">iter 2/3</span>
+              <span class="tm-time">42m</span>
+            </div>
+            <div class="tree-module-children">
+
+              <div class="tree-sub" data-tooltip="inv-strategy">
+                <div class="tree-sub-header">
+                  <span class="ts-chevron">&#9654;</span>
+                  <span class="ts-icon ts-icon-done">&#10003;</span>
+                  <span class="ts-label">Strategy</span>
+                  <span class="ts-badge ts-badge-done">done</span>
+                  <span class="ts-detail">contrastive alignment</span>
+                  <div class="ts-progress-wrap"><div class="ts-progress-bar ts-progress-blue" style="width:100%;"></div></div>
+                </div>
+                <div class="tree-sub-children">
+                  <div class="tree-item">
+                    <span class="ti-check ti-check-done">&#10003;</span>
+                    <span class="ti-label ti-label-done">Selected contrastive learning approach</span>
+                    <span class="ti-meta">2m</span>
+                  </div>
+                  <div class="tree-item">
+                    <span class="ti-check ti-check-done">&#10003;</span>
+                    <span class="ti-label ti-label-done">Defined alignment loss function</span>
+                    <span class="ti-meta">3m</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="tree-sub" data-tooltip="inv-plan">
+                <div class="tree-sub-header">
+                  <span class="ts-chevron">&#9654;</span>
+                  <span class="ts-icon ts-icon-done">&#10003;</span>
+                  <span class="ts-label">Plan</span>
+                  <span class="ts-badge ts-badge-done">done</span>
+                  <span class="ts-detail">5 artifacts planned</span>
+                  <div class="ts-progress-wrap"><div class="ts-progress-bar ts-progress-blue" style="width:100%;"></div></div>
+                </div>
+                <div class="tree-sub-children">
+                  <div class="tree-item">
+                    <span class="ti-check ti-check-done">&#10003;</span>
+                    <span class="ti-label ti-label-done">Baseline benchmark</span>
+                  </div>
+                  <div class="tree-item">
+                    <span class="ti-check ti-check-done">&#10003;</span>
+                    <span class="ti-label ti-label-done">Main experiment</span>
+                  </div>
+                  <div class="tree-item">
+                    <span class="ti-check ti-check-done">&#10003;</span>
+                    <span class="ti-label ti-label-done">Ablation study</span>
+                  </div>
+                  <div class="tree-item">
+                    <span class="ti-check ti-check-done">&#10003;</span>
+                    <span class="ti-label ti-label-done">Visualization suite</span>
+                  </div>
+                  <div class="tree-item">
+                    <span class="ti-check ti-check-done">&#10003;</span>
+                    <span class="ti-label ti-label-done">Supplementary analysis</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="tree-sub expanded" data-tooltip="inv-artifacts" id="activeSubModule">
+                <div class="tree-sub-header">
+                  <span class="ts-chevron">&#9654;</span>
+                  <span class="ts-icon ts-icon-running">&#9696;</span>
+                  <span class="ts-label">Artifacts</span>
+                  <span class="ts-badge ts-badge-running">3/5</span>
+                  <span class="ts-detail">ablation running</span>
+                  <div class="ts-progress-wrap"><div class="ts-progress-bar ts-progress-blue" style="width:60%;"></div></div>
+                </div>
+                <div class="tree-sub-children">
+                  <div class="tree-item">
+                    <span class="ti-check ti-check-done">&#10003;</span>
+                    <span class="ti-label ti-label-done">Baseline benchmark</span>
+                    <span class="ti-meta">+17.5% acc</span>
+                  </div>
+                  <div class="tree-item">
+                    <span class="ti-check ti-check-done">&#10003;</span>
+                    <span class="ti-label ti-label-done">Main experiment</span>
+                    <span class="ti-meta">complete</span>
+                  </div>
+                  <div class="tree-item">
+                    <span class="ti-check ti-check-done">&#10003;</span>
+                    <span class="ti-label ti-label-done">Visualization suite</span>
+                    <span class="ti-meta">4 figures</span>
+                  </div>
+                  <div class="tree-item" id="runningItem">
+                    <span class="ti-check ti-check-running"></span>
+                    <span class="ti-label ti-label-running">Ablation study</span>
+                    <span class="ti-meta" style="color:var(--blue);">running</span>
+                  </div>
+                  <div class="tree-item">
+                    <span class="ti-check ti-check-pending"></span>
+                    <span class="ti-label">Supplementary analysis</span>
+                    <span class="ti-meta">pending</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="tree-sub" data-tooltip="inv-paper">
+                <div class="tree-sub-header">
+                  <span class="ts-chevron">&#9654;</span>
+                  <span class="ts-icon ts-icon-pending">&#9675;</span>
+                  <span class="ts-label ts-label-pending">Paper Draft</span>
+                  <span class="ts-badge ts-badge-pending">pending</span>
+                  <div class="ts-progress-wrap"><div class="ts-progress-bar ts-progress-blue" style="width:0%;"></div></div>
+                </div>
+                <div class="tree-sub-children">
+                  <div class="tree-item">
+                    <span class="ti-check ti-check-pending"></span>
+                    <span class="ti-label">Generate paper text sections</span>
+                  </div>
+                  <div class="tree-item">
+                    <span class="ti-check ti-check-pending"></span>
+                    <span class="ti-label">Compile references</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="tree-sub" data-tooltip="inv-review">
+                <div class="tree-sub-header">
+                  <span class="ts-chevron">&#9654;</span>
+                  <span class="ts-icon ts-icon-pending">&#9675;</span>
+                  <span class="ts-label ts-label-pending">Review</span>
+                  <span class="ts-badge ts-badge-pending">pending</span>
+                  <div class="ts-progress-wrap"><div class="ts-progress-bar ts-progress-blue" style="width:0%;"></div></div>
+                </div>
+                <div class="tree-sub-children">
+                  <div class="tree-item">
+                    <span class="ti-check ti-check-pending"></span>
+                    <span class="ti-label">Automated review scoring</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="tree-sub" data-tooltip="inv-update">
+                <div class="tree-sub-header">
+                  <span class="ts-chevron">&#9654;</span>
+                  <span class="ts-icon ts-icon-pending">&#9675;</span>
+                  <span class="ts-label ts-label-pending">Update Hypothesis</span>
+                  <span class="ts-badge ts-badge-pending">pending</span>
+                  <div class="ts-progress-wrap"><div class="ts-progress-bar ts-progress-blue" style="width:0%;"></div></div>
+                </div>
+                <div class="tree-sub-children">
+                  <div class="tree-item">
+                    <span class="ti-check ti-check-pending"></span>
+                    <span class="ti-label">Apply review feedback to hypothesis</span>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- ── MODULE: Paper ── -->
+          <div class="tree-module" data-color="orange" data-mod="paper">
+            <div class="tree-module-header">
+              <span class="tm-chevron">&#9654;</span>
+              <span class="tm-dot dot-orange"></span>
+              <span class="tm-label">Paper Generation</span>
+              <span class="tm-badge badge-pending">pending</span>
+              <span class="tm-time">&mdash;</span>
+            </div>
+            <div class="tree-module-children">
+
+              <div class="tree-sub" data-tooltip="paper-demos">
+                <div class="tree-sub-header">
+                  <span class="ts-chevron">&#9654;</span>
+                  <span class="ts-icon ts-icon-pending">&#9675;</span>
+                  <span class="ts-label ts-label-pending">Artifact Demos</span>
+                  <span class="ts-badge ts-badge-pending">pending</span>
+                  <div class="ts-progress-wrap"><div class="ts-progress-bar ts-progress-orange" style="width:0%;"></div></div>
+                </div>
+                <div class="tree-sub-children">
+                  <div class="tree-item">
+                    <span class="ti-check ti-check-pending"></span>
+                    <span class="ti-label">Generate Python demo scripts</span>
+                  </div>
+                  <div class="tree-item">
+                    <span class="ti-check ti-check-pending"></span>
+                    <span class="ti-label">Render demo outputs</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="tree-sub" data-tooltip="paper-viz">
+                <div class="tree-sub-header">
+                  <span class="ts-chevron">&#9654;</span>
+                  <span class="ts-icon ts-icon-pending">&#9675;</span>
+                  <span class="ts-label ts-label-pending">Visualizations</span>
+                  <span class="ts-badge ts-badge-pending">pending</span>
+                  <div class="ts-progress-wrap"><div class="ts-progress-bar ts-progress-orange" style="width:0%;"></div></div>
+                </div>
+                <div class="tree-sub-children">
+                  <div class="tree-item">
+                    <span class="ti-check ti-check-pending"></span>
+                    <span class="ti-label">Generate figures and charts</span>
+                  </div>
+                  <div class="tree-item">
+                    <span class="ti-check ti-check-pending"></span>
+                    <span class="ti-label">Layout optimization</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="tree-sub" data-tooltip="paper-full">
+                <div class="tree-sub-header">
+                  <span class="ts-chevron">&#9654;</span>
+                  <span class="ts-icon ts-icon-pending">&#9675;</span>
+                  <span class="ts-label ts-label-pending">Full Paper</span>
+                  <span class="ts-badge ts-badge-pending">pending</span>
+                  <div class="ts-progress-wrap"><div class="ts-progress-bar ts-progress-orange" style="width:0%;"></div></div>
+                </div>
+                <div class="tree-sub-children">
+                  <div class="tree-item">
+                    <span class="ti-check ti-check-pending"></span>
+                    <span class="ti-label">LaTeX compilation</span>
+                  </div>
+                  <div class="tree-item">
+                    <span class="ti-check ti-check-pending"></span>
+                    <span class="ti-label">Bibliography generation</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="tree-sub" data-tooltip="paper-repo">
+                <div class="tree-sub-header">
+                  <span class="ts-chevron">&#9654;</span>
+                  <span class="ts-icon ts-icon-pending">&#9675;</span>
+                  <span class="ts-label ts-label-pending">Repository</span>
+                  <span class="ts-badge ts-badge-pending">pending</span>
+                  <div class="ts-progress-wrap"><div class="ts-progress-bar ts-progress-orange" style="width:0%;"></div></div>
+                </div>
+                <div class="tree-sub-children">
+                  <div class="tree-item">
+                    <span class="ti-check ti-check-pending"></span>
+                    <span class="ti-label">Package code and data</span>
+                  </div>
+                  <div class="tree-item">
+                    <span class="ti-check ti-check-pending"></span>
+                    <span class="ti-label">Generate README and docs</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="tree-sub" data-tooltip="paper-pdf">
+                <div class="tree-sub-header">
+                  <span class="ts-chevron">&#9654;</span>
+                  <span class="ts-icon ts-icon-pending">&#9675;</span>
+                  <span class="ts-label ts-label-pending">Final PDF</span>
+                  <span class="ts-badge ts-badge-pending">pending</span>
+                  <div class="ts-progress-wrap"><div class="ts-progress-bar ts-progress-orange" style="width:0%;"></div></div>
+                </div>
+                <div class="tree-sub-children">
+                  <div class="tree-item">
+                    <span class="ti-check ti-check-pending"></span>
+                    <span class="ti-label">Final render and quality check</span>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- RIGHT: Stats + Summary + Feed -->
+      <div class="right-col">
+
+        <!-- Summary -->
+        <div class="summary-panel">
+          <div class="stats-title">Current Status</div>
+          <p>
+            I am in the second iteration of the invention loop, generating research
+            artifacts for a contrastive alignment approach. The baseline benchmark showed
+            a promising 17.5% accuracy improvement over the prior state of the art.
+          </p>
+          <p>
+            Three of five artifacts are complete. The ablation study is currently running
+            to isolate the contribution of each component. Once that finishes, I will
+            generate the supplementary analysis and then draft the paper text.
+          </p>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats-panel">
+          <div class="stats-title">Pipeline Statistics</div>
+
+          <div class="stat-row">
+            <span class="stat-label">Elapsed Time</span>
+            <span class="stat-value" id="statTime">1h 31m</span>
+          </div>
+          <div class="stat-bar-wrap">
+            <div class="stat-bar" style="--target-w: 62%; background: var(--blue);"></div>
+          </div>
+
+          <div class="stat-row">
+            <span class="stat-label">Total Cost</span>
+            <span class="stat-value">$25.41</span>
+          </div>
+          <div class="stat-bar-wrap">
+            <div class="stat-bar" style="--target-w: 51%; background: var(--green);"></div>
+          </div>
+
+          <div class="stat-row">
+            <span class="stat-label">API Calls</span>
+            <span class="stat-value">847</span>
+          </div>
+          <div class="stat-bar-wrap">
+            <div class="stat-bar" style="--target-w: 70%; background: var(--purple);"></div>
+          </div>
+
+          <div class="stat-row">
+            <span class="stat-label">Input Tokens</span>
+            <span class="stat-value">2.4M</span>
+          </div>
+
+          <div class="stat-row">
+            <span class="stat-label">Output Tokens</span>
+            <span class="stat-value">318K</span>
+          </div>
+
+          <div class="stat-row">
+            <span class="stat-label">Hypothesis Score</span>
+            <span class="stat-value" style="color: var(--purple);">8.4 / 10</span>
+          </div>
+
+          <div class="stat-row">
+            <span class="stat-label">Accuracy Gain</span>
+            <span class="stat-value" style="color: var(--green);">+17.5%</span>
+          </div>
+        </div>
+
+        <!-- Live Feed -->
+        <div class="feed-panel">
+          <div class="feed-title">
+            <span class="feed-live-dot"></span>
+            Live Activity
+          </div>
+
+          <div class="feed-item">
+            <span class="feed-time">now</span>
+            <div class="feed-dot-col"><span class="feed-dot feed-dot-blue"></span></div>
+            <div class="feed-text"><strong>Ablation study</strong> &mdash; removing attention head 4, measuring accuracy drop on validation split</div>
+          </div>
+
+          <div class="feed-item">
+            <span class="feed-time">2m ago</span>
+            <div class="feed-dot-col"><span class="feed-dot feed-dot-blue"></span></div>
+            <div class="feed-text"><strong>Ablation study</strong> &mdash; baseline ablation started, 7 component groups queued</div>
+          </div>
+
+          <div class="feed-item">
+            <span class="feed-time">5m ago</span>
+            <div class="feed-dot-col"><span class="feed-dot feed-dot-blue"></span></div>
+            <div class="feed-text"><strong>Visualization suite</strong> completed &mdash; 4 figures (loss curve, attention maps, embedding TSNE, accuracy bar)</div>
+          </div>
+
+          <div class="feed-item">
+            <span class="feed-time">11m ago</span>
+            <div class="feed-dot-col"><span class="feed-dot feed-dot-blue"></span></div>
+            <div class="feed-text"><strong>Main experiment</strong> completed &mdash; contrastive model achieved 78.2% vs 60.7% baseline on test set</div>
+          </div>
+
+          <div class="feed-item">
+            <span class="feed-time">18m ago</span>
+            <div class="feed-dot-col"><span class="feed-dot feed-dot-blue"></span></div>
+            <div class="feed-text"><strong>Baseline benchmark</strong> completed &mdash; reproduced prior SOTA at 60.7% accuracy</div>
+          </div>
+
+          <div class="feed-item">
+            <span class="feed-time">24m ago</span>
+            <div class="feed-dot-col"><span class="feed-dot feed-dot-blue"></span></div>
+            <div class="feed-text"><strong>Strategy</strong> selected &mdash; contrastive alignment with multi-head attention gating</div>
+          </div>
+
+          <div class="feed-item">
+            <span class="feed-time">31m ago</span>
+            <div class="feed-dot-col"><span class="feed-dot feed-dot-purple"></span></div>
+            <div class="feed-text"><strong>Hypothesis loop</strong> converged &mdash; score 8.4, threshold 8.0 met after 3 iterations</div>
+          </div>
+
+          <div class="feed-item">
+            <span class="feed-time">42m ago</span>
+            <div class="feed-dot-col"><span class="feed-dot feed-dot-purple"></span></div>
+            <div class="feed-text"><strong>Iteration 2</strong> &mdash; revised hypothesis with 3 baseline citations, expected gains clarified</div>
+          </div>
+
+          <div class="feed-item">
+            <span class="feed-time">56m ago</span>
+            <div class="feed-dot-col"><span class="feed-dot feed-dot-purple"></span></div>
+            <div class="feed-text"><strong>Iteration 1</strong> &mdash; added contrastive loss formulation, specificity improved</div>
+          </div>
+
+          <div class="feed-item">
+            <span class="feed-time">1h 12m</span>
+            <div class="feed-dot-col"><span class="feed-dot feed-dot-green"></span></div>
+            <div class="feed-text"><strong>Seed complete</strong> &mdash; 12 hypotheses from 847 papers, top gap: cross-modal alignment in low-resource settings</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ TOOLTIP ═══ -->
+<div class="tooltip" id="tooltip">
+  <div class="tooltip-title" id="tooltipTitle"></div>
+  <div class="tooltip-body" id="tooltipBody"></div>
+</div>
+
+<script>
+(function() {
+  // ── TOOLTIP DATA ──────────────────────────────────────
+  const TOOLTIP_DATA = {
+    'seed-card': {
+      title: 'Seed Hypotheses',
+      body: '<div class="tooltip-stat"><span class="tooltip-stat-label">Papers Ingested</span><span class="tooltip-stat-value">847</span></div><div class="tooltip-stat"><span class="tooltip-stat-label">KG Entities</span><span class="tooltip-stat-value">2,341</span></div><div class="tooltip-stat"><span class="tooltip-stat-label">KG Edges</span><span class="tooltip-stat-value">5,890</span></div><div class="tooltip-stat"><span class="tooltip-stat-label">Gaps Found</span><span class="tooltip-stat-value">12</span></div><div class="tooltip-stat"><span class="tooltip-stat-label">Duration</span><span class="tooltip-stat-value">18m</span></div><div class="tooltip-stat"><span class="tooltip-stat-label">Cost</span><span class="tooltip-stat-value">$4.21</span></div>'
+    },
+    'hypo-card': {
+      title: 'Hypothesis Loop',
+      body: '<div class="tooltip-stat"><span class="tooltip-stat-label">Iterations</span><span class="tooltip-stat-value">3</span></div><div class="tooltip-stat"><span class="tooltip-stat-label">Start Score</span><span class="tooltip-stat-value">6.2</span></div><div class="tooltip-stat"><span class="tooltip-stat-label">Final Score</span><span class="tooltip-stat-value">8.4</span></div><div class="tooltip-stat"><span class="tooltip-stat-label">Threshold</span><span class="tooltip-stat-value">8.0</span></div><div class="tooltip-stat"><span class="tooltip-stat-label">Duration</span><span class="tooltip-stat-value">31m</span></div><div class="tooltip-stat"><span class="tooltip-stat-label">Cost</span><span class="tooltip-stat-value">$8.73</span></div>'
+    },
+    'inv-card': {
+      title: 'Invention Loop',
+      body: '<div class="tooltip-stat"><span class="tooltip-stat-label">Iteration</span><span class="tooltip-stat-value">2 of 3</span></div><div class="tooltip-stat"><span class="tooltip-stat-label">Artifacts Done</span><span class="tooltip-stat-value">3 / 5</span></div><div class="tooltip-stat"><span class="tooltip-stat-label">Accuracy Gain</span><span class="tooltip-stat-value">+17.5%</span></div><div class="tooltip-stat"><span class="tooltip-stat-label">Duration</span><span class="tooltip-stat-value">42m</span></div><div class="tooltip-stat"><span class="tooltip-stat-label">Cost</span><span class="tooltip-stat-value">$12.47</span></div>'
+    },
+    'paper-card': {
+      title: 'Paper Generation',
+      body: 'Waiting for invention loop to complete. This stage will compile all artifacts, generate LaTeX, produce visualizations, and assemble the final PDF with repository.'
+    },
+    'seed-collect': {
+      title: 'Paper Collection',
+      body: 'Crawled Semantic Scholar for 847 relevant papers. Applied PDF extraction, chunking, and de-duplication. Average paper length: 8.2 pages.'
+    },
+    'seed-kg': {
+      title: 'Knowledge Graph',
+      body: 'Built entity-relation graph with 2,341 entities (methods, datasets, metrics) and 5,890 edges. Used structural hole analysis to detect research gaps.'
+    },
+    'seed-rank': {
+      title: 'Gap Ranking',
+      body: 'Scored 12 research gaps on novelty and tractability. Top gap: cross-modal alignment in low-resource settings (novelty: 9.1, tractability: 7.8).'
+    },
+    'seed-gen': {
+      title: 'Seed Generation',
+      body: 'Formulated 12 seed hypotheses, one per identified gap. Each passed initial feasibility screening for experimental testability.'
+    },
+    'hypo-iter1': {
+      title: 'Iteration 1 (Score 6.2)',
+      body: 'Review identified lack of specificity in the method section. Revision added the contrastive loss formulation with mathematical definitions.'
+    },
+    'hypo-iter2': {
+      title: 'Iteration 2 (Score 7.8)',
+      body: 'Review flagged weak baseline justification. Revision cited 3 competitive baselines and quantified expected accuracy improvements.'
+    },
+    'hypo-iter3': {
+      title: 'Iteration 3 (Score 8.4)',
+      body: 'Minor clarity edits applied. Score 8.4 exceeded the 8.0 acceptance threshold. Hypothesis locked for invention loop.'
+    },
+    'inv-strategy': {
+      title: 'Strategy Selection',
+      body: 'Selected contrastive alignment with multi-head attention gating. Approach leverages cross-modal representations through learned projection heads.'
+    },
+    'inv-plan': {
+      title: 'Artifact Plan',
+      body: '5 artifacts planned: baseline benchmark, main experiment, ablation study, visualization suite, and supplementary analysis.'
+    },
+    'inv-artifacts': {
+      title: 'Artifact Generation',
+      body: '<div class="tooltip-stat"><span class="tooltip-stat-label">Baseline</span><span class="tooltip-stat-value">60.7% acc</span></div><div class="tooltip-stat"><span class="tooltip-stat-label">Main Exp</span><span class="tooltip-stat-value">78.2% acc</span></div><div class="tooltip-stat"><span class="tooltip-stat-label">Viz Suite</span><span class="tooltip-stat-value">4 figures</span></div><div class="tooltip-stat"><span class="tooltip-stat-label">Ablation</span><span class="tooltip-stat-value">running...</span></div><div class="tooltip-stat"><span class="tooltip-stat-label">Supplement</span><span class="tooltip-stat-value">pending</span></div>'
+    },
+    'inv-paper': { title: 'Paper Draft', body: 'Pending. Will generate all paper sections from completed artifacts and hypothesis.' },
+    'inv-review': { title: 'Review', body: 'Pending. Automated review agent will score the draft and identify weaknesses.' },
+    'inv-update': { title: 'Update Hypothesis', body: 'Pending. Review feedback will be applied to refine the hypothesis for the next iteration.' },
+    'paper-demos': { title: 'Artifact Demos', body: 'Pending. Will generate runnable Python demo scripts for each artifact.' },
+    'paper-viz': { title: 'Visualizations', body: 'Pending. Publication-quality figures and charts from experimental data.' },
+    'paper-full': { title: 'Full Paper', body: 'Pending. LaTeX compilation with all sections, figures, and bibliography.' },
+    'paper-repo': { title: 'Repository', body: 'Pending. Packaged code, data, and documentation for reproducibility.' },
+    'paper-pdf': { title: 'Final PDF', body: 'Pending. Final rendered PDF with quality validation checks.' }
+  };
+
+  // ── TOOLTIP LOGIC ──────────────────────────────────────
+  const tooltip = document.getElementById('tooltip');
+  const tooltipTitle = document.getElementById('tooltipTitle');
+  const tooltipBody = document.getElementById('tooltipBody');
+  let tooltipTarget = null;
+
+  function showTooltip(el, key) {
+    const data = TOOLTIP_DATA[key];
+    if (!data) return;
+    tooltipTitle.textContent = data.title;
+    tooltipBody.innerHTML = data.body;
+    tooltipTarget = el;
+    positionTooltip(el);
+    tooltip.classList.add('visible');
+  }
+
+  function positionTooltip(el) {
+    const rect = el.getBoundingClientRect();
+    let x = rect.right + 12;
+    let y = rect.top;
+    if (x + 292 > window.innerWidth) { x = rect.left - 292; }
+    if (y + 200 > window.innerHeight) { y = window.innerHeight - 210; }
+    if (y < 8) y = 8;
+    tooltip.style.left = x + 'px';
+    tooltip.style.top = y + 'px';
+  }
+
+  function hideTooltip() {
+    tooltip.classList.remove('visible');
+    tooltipTarget = null;
+  }
+
+  document.querySelectorAll('[data-tooltip]').forEach(el => {
+    el.addEventListener('mouseenter', () => showTooltip(el, el.dataset.tooltip));
+    el.addEventListener('mouseleave', hideTooltip);
+  });
+
+  // ── TREE EXPAND/COLLAPSE ───────────────────────────────
+  document.querySelectorAll('.tree-module-header').forEach(header => {
+    header.addEventListener('click', () => {
+      header.parentElement.classList.toggle('expanded');
+    });
+  });
+
+  document.querySelectorAll('.tree-sub-header').forEach(header => {
+    header.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const sub = header.parentElement;
+      const children = sub.querySelector('.tree-sub-children');
+      if (!children || children.children.length === 0) return;
+      sub.classList.toggle('expanded');
+    });
+  });
+
+  // ── SIDEBAR NAV ────────────────────────────────────────
+  document.querySelectorAll('.sidebar-item').forEach(item => {
+    item.addEventListener('click', () => {
+      document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
+      item.classList.add('active');
+      const mod = item.dataset.mod;
+      const target = document.querySelector(`.tree-module[data-mod="${mod}"]`);
+      if (target) {
+        target.classList.add('expanded');
+        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+  });
+
+  // ── LIVE CLOCK ─────────────────────────────────────────
+  let elapsed = 91 * 60 + 14; // 1h 31m 14s
+  function updateClock() {
+    elapsed++;
+    const h = Math.floor(elapsed / 3600);
+    const m = Math.floor((elapsed % 3600) / 60);
+    const s = elapsed % 60;
+    const hms = `${h}h ${String(m).padStart(2,'0')}m ${String(s).padStart(2,'0')}s`;
+    const hm = `${h}h ${String(m).padStart(2,'0')}m`;
+    document.getElementById('headerTime').textContent = hms;
+    document.getElementById('statTime').textContent = hm;
+    document.getElementById('sidebarTime').textContent = hm;
+  }
+  setInterval(updateClock, 1000);
+
+  // ── AMBIENT BACKGROUND PARTICLES ───────────────────────
+  const ambientCanvas = document.getElementById('ambientCanvas');
+  const ambCtx = ambientCanvas.getContext('2d');
+  let ambientParticles = [];
+
+  function resizeAmbient() {
+    ambientCanvas.width = window.innerWidth;
+    ambientCanvas.height = window.innerHeight;
+  }
+  resizeAmbient();
+  window.addEventListener('resize', resizeAmbient);
+
+  function initAmbientParticles() {
+    ambientParticles = [];
+    const count = 40;
+    for (let i = 0; i < count; i++) {
+      ambientParticles.push({
+        x: Math.random() * ambientCanvas.width,
+        y: Math.random() * ambientCanvas.height,
+        vx: (Math.random() - 0.5) * 0.15,
+        vy: (Math.random() - 0.5) * 0.12,
+        r: Math.random() * 1.5 + 0.5,
+        alpha: Math.random() * 0.15 + 0.03,
+        color: ['96,165,250', '167,139,250', '74,222,128', '251,146,60'][Math.floor(Math.random() * 4)]
+      });
+    }
+  }
+  initAmbientParticles();
+
+  function drawAmbient() {
+    ambCtx.clearRect(0, 0, ambientCanvas.width, ambientCanvas.height);
+    for (const p of ambientParticles) {
+      p.x += p.vx;
+      p.y += p.vy;
+      if (p.x < -10) p.x = ambientCanvas.width + 10;
+      if (p.x > ambientCanvas.width + 10) p.x = -10;
+      if (p.y < -10) p.y = ambientCanvas.height + 10;
+      if (p.y > ambientCanvas.height + 10) p.y = -10;
+
+      ambCtx.beginPath();
+      ambCtx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ambCtx.fillStyle = `rgba(${p.color}, ${p.alpha})`;
+      ambCtx.fill();
+    }
+    requestAnimationFrame(drawAmbient);
+  }
+  drawAmbient();
+
+  // ── TREE-PATH PARTICLES ────────────────────────────────
+  const treeCanvas = document.getElementById('treeParticleCanvas');
+  const treeCtx = treeCanvas.getContext('2d');
+  let treePathParticles = [];
+
+  function resizeTreeCanvas() {
+    treeCanvas.width = window.innerWidth;
+    treeCanvas.height = window.innerHeight;
+  }
+  resizeTreeCanvas();
+  window.addEventListener('resize', resizeTreeCanvas);
+
+  function spawnTreeParticle() {
+    // Particles flow along the active branch tree line
+    const activeBranch = document.querySelector('.tree-module.active-branch.expanded > .tree-module-children');
+    if (!activeBranch) return;
+    const rect = activeBranch.getBoundingClientRect();
+    // The vertical line is at left: 25px within children
+    const lineX = rect.left + 25 + 1; // center of 2px line
+    const startY = rect.top;
+    const endY = rect.bottom - 12;
+    if (endY <= startY) return;
+
+    treePathParticles.push({
+      x: lineX,
+      y: startY,
+      targetY: endY,
+      speed: 0.8 + Math.random() * 0.5,
+      r: 1.5 + Math.random(),
+      alpha: 0.6,
+      color: '96,165,250'
+    });
+  }
+
+  function drawTreeParticles() {
+    treeCtx.clearRect(0, 0, treeCanvas.width, treeCanvas.height);
+
+    for (let i = treePathParticles.length - 1; i >= 0; i--) {
+      const p = treePathParticles[i];
+      p.y += p.speed;
+      if (p.y > p.targetY) {
+        p.alpha -= 0.04;
+        if (p.alpha <= 0) { treePathParticles.splice(i, 1); continue; }
+      }
+      treeCtx.beginPath();
+      treeCtx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      treeCtx.fillStyle = `rgba(${p.color}, ${p.alpha})`;
+      treeCtx.fill();
+
+      // Glow
+      treeCtx.beginPath();
+      treeCtx.arc(p.x, p.y, p.r * 3, 0, Math.PI * 2);
+      treeCtx.fillStyle = `rgba(${p.color}, ${p.alpha * 0.2})`;
+      treeCtx.fill();
+    }
+    requestAnimationFrame(drawTreeParticles);
+  }
+  drawTreeParticles();
+  setInterval(spawnTreeParticle, 600);
+
+  // ── DEPENDENCY FLOW DOTS ───────────────────────────────
+  const depCanvas = document.getElementById('particleCanvas');
+  const depCtx = depCanvas.getContext('2d');
+  let depParticles = [];
+
+  function resizeDepCanvas() {
+    depCanvas.width = window.innerWidth;
+    depCanvas.height = window.innerHeight;
+  }
+  resizeDepCanvas();
+  window.addEventListener('resize', resizeDepCanvas);
+
+  // Dependency pairs: from sub-module -> to sub-module (using data-tooltip as IDs)
+  const DEPS = [
+    ['seed-kg', 'seed-rank'],
+    ['seed-rank', 'seed-gen'],
+    ['hypo-iter1', 'hypo-iter2'],
+    ['hypo-iter2', 'hypo-iter3'],
+    ['inv-strategy', 'inv-plan'],
+    ['inv-plan', 'inv-artifacts']
+  ];
+
+  function spawnDepParticle() {
+    const pair = DEPS[Math.floor(Math.random() * DEPS.length)];
+    const fromEl = document.querySelector(`[data-tooltip="${pair[0]}"]`);
+    const toEl = document.querySelector(`[data-tooltip="${pair[1]}"]`);
+    if (!fromEl || !toEl) return;
+
+    const fromRect = fromEl.getBoundingClientRect();
+    const toRect = toEl.getBoundingClientRect();
+
+    // Only show if both visible on screen
+    if (fromRect.height === 0 || toRect.height === 0) return;
+
+    const fromX = fromRect.right - 10;
+    const fromY = fromRect.top + fromRect.height / 2;
+    const toX = toRect.left + 30;
+    const toY = toRect.top + toRect.height / 2;
+
+    depParticles.push({
+      x: fromX, y: fromY,
+      tx: toX, ty: toY,
+      progress: 0,
+      speed: 0.008 + Math.random() * 0.006,
+      r: 1.2 + Math.random() * 0.8,
+      alpha: 0.4,
+      color: '96,165,250'
+    });
+  }
+
+  function drawDepParticles() {
+    depCtx.clearRect(0, 0, depCanvas.width, depCanvas.height);
+
+    for (let i = depParticles.length - 1; i >= 0; i--) {
+      const p = depParticles[i];
+      p.progress += p.speed;
+      if (p.progress >= 1) { depParticles.splice(i, 1); continue; }
+
+      // Bezier curve interpolation
+      const t = p.progress;
+      const midX = (p.x + p.tx) / 2;
+      const midY = Math.min(p.y, p.ty) - 20;
+      const cx = (1 - t) * (1 - t) * p.x + 2 * (1 - t) * t * midX + t * t * p.tx;
+      const cy = (1 - t) * (1 - t) * p.y + 2 * (1 - t) * t * midY + t * t * p.ty;
+
+      const alpha = p.alpha * (1 - Math.abs(t - 0.5) * 1.2);
+
+      depCtx.beginPath();
+      depCtx.arc(cx, cy, p.r, 0, Math.PI * 2);
+      depCtx.fillStyle = `rgba(${p.color}, ${Math.max(0, alpha)})`;
+      depCtx.fill();
+
+      // Trail glow
+      depCtx.beginPath();
+      depCtx.arc(cx, cy, p.r * 2.5, 0, Math.PI * 2);
+      depCtx.fillStyle = `rgba(${p.color}, ${Math.max(0, alpha * 0.15)})`;
+      depCtx.fill();
+    }
+    requestAnimationFrame(drawDepParticles);
+  }
+  drawDepParticles();
+  setInterval(spawnDepParticle, 800);
+
+  // ── STAT BAR FILL ANIMATION TRIGGER ────────────────────
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.style.width = getComputedStyle(entry.target).getPropertyValue('--target-w');
+      }
+    });
+  }, { threshold: 0.3 });
+
+  document.querySelectorAll('.stat-bar').forEach(bar => observer.observe(bar));
+
+  // ── FEED AUTO-SCROLL (keep latest visible) ─────────────
+  const feedPanel = document.querySelector('.feed-panel');
+  if (feedPanel) {
+    feedPanel.scrollTop = 0;
+  }
+
+})();
+</script>
+</body>
+</html>
