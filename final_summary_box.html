@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Summary Box</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #06090f;
+  --surface-card: rgba(12,18,32,.85);
+  --border: rgba(148,163,184,.08);
+  --border-hi: rgba(148,163,184,.16);
+  --text: #f1f5f9;
+  --text-dim: #94a3b8;
+  --text-muted: #64748b;
+  --text-faint: #475569;
+
+  --purple: #a78bfa; --purple-dim: rgba(167,139,250,.12);
+  --blue: #60a5fa;   --blue-dim: rgba(96,165,250,.12);
+  --orange: #fb923c; --orange-dim: rgba(251,146,60,.12);
+  --green: #34d399;  --green-dim: rgba(52,211,153,.12);
+  --red: #f87171;    --red-dim: rgba(248,113,113,.12);
+  --cyan: #22d3ee;   --cyan-dim: rgba(34,211,238,.12);
+
+  --radius: 12px;
+  --radius-sm: 8px;
+  font-size: 14px;
+}
+
+html, body { height: 100%; }
+body {
+  background: var(--bg); color: var(--text-dim);
+  font-family: 'Inter', -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* ===== SUMMARY CONTAINER ===== */
+.summary-container {
+  width: 420px;
+  background: var(--surface-card);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px 16px;
+  overflow: hidden;
+  position: relative;
+}
+.summary-container::before {
+  content: ''; position: absolute; top: 0; left: 20px; right: 20px; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(96,165,250,.2), transparent);
+}
+
+/* ===== PROGRESS BAR — thick, shimmer + edge pulse ===== */
+.progress-bar {
+  height: 4px; background: rgba(148,163,184,.06);
+  border-radius: 3px; overflow: hidden; margin-bottom: 14px;
+  position: relative;
+}
+.progress-fill {
+  height: 100%; border-radius: 3px;
+  position: relative; overflow: hidden;
+  transition: width .6s;
+}
+.progress-fill::after {
+  content: ''; position: absolute; top: 0; left: -100%; width: 50%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.25), rgba(255,255,255,.4), rgba(255,255,255,.25), transparent);
+  animation: shimmer 2.5s ease-in-out infinite;
+}
+@keyframes shimmer { 0%{left:-100%} 60%{left:180%} 100%{left:180%} }
+.progress-fill::before {
+  content: ''; position: absolute; right: -2px; top: 50%; transform: translateY(-50%);
+  width: 8px; height: 8px; border-radius: 50%;
+  animation: edgePulse 1.5s ease-in-out infinite;
+}
+@keyframes edgePulse { 0%,100%{opacity:.4;transform:translateY(-50%) scale(.8)} 50%{opacity:1;transform:translateY(-50%) scale(1.2)} }
+
+/* ===== SUMMARY TEXT ===== */
+.summary-text {
+  font-size: 13px; color: var(--text-dim); line-height: 1.65;
+  font-style: italic; margin-bottom: 14px;
+}
+
+/* ===== TODO LIST ===== */
+.todo-list { display: flex; flex-direction: column; gap: 2px; }
+.todo-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 0; font-size: 12px;
+}
+.todo-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.todo-dot.done { background: var(--green); opacity: .7; }
+.todo-dot.run  { background: var(--blue); animation: dotPulse 2s ease-in-out infinite; }
+.todo-dot.up   { background: transparent; border: 1.5px solid var(--text-faint); opacity: .4; }
+@keyframes dotPulse { 0%,100%{transform:scale(1)} 50%{transform:scale(1.4)} }
+.todo-text { flex: 1; }
+.todo-text.done { color: var(--text-muted); text-decoration: line-through; text-decoration-color: rgba(148,163,184,.25); }
+.todo-text.run  { color: var(--text); }
+.todo-text.up   { color: var(--text-muted); }
+
+/* ===== DOT PROGRESS ===== */
+.dot-progress { display: flex; gap: 3px; margin-top: 12px; }
+.dot-progress .dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  transition: all .3s;
+}
+</style>
+</head>
+<body>
+
+<div class="summary-container" id="box"></div>
+
+<script>
+/* ── Config: pass module color to style the bar ── */
+const MODULE_COLOR = '#60a5fa';
+const MODULE_FADE = 'rgba(96,165,250,.4)';
+
+/* ── Demo data (real from pipeline) ── */
+const SUMMARY = "I'm running ablation studies on hypotheses 4-6 while main experiments continue for hypothesis 7's nano-scale thermal transport model with gradient checkpointing.";
+
+const TODOS = [
+  { status: 'done', text: 'Build knowledge graph (14.3k triples)' },
+  { status: 'done', text: 'Identify research gaps (23 found)' },
+  { status: 'done', text: 'Generate and rank seed hypotheses' },
+  { status: 'run',  text: 'Run simulations for hypotheses 4-7' },
+  { status: 'run',  text: 'Ablation studies on completed sims' },
+  { status: 'up',   text: 'Analyze results and effect sizes' },
+  { status: 'up',   text: 'Draft paper text with citations' },
+];
+
+/* ── Render ── */
+const done = TODOS.filter(t => t.status === 'done').length;
+const run = TODOS.filter(t => t.status === 'run').length;
+const pct = Math.round((done + run * 0.5) / TODOS.length * 100);
+
+const box = document.getElementById('box');
+box.innerHTML =
+  `<div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:linear-gradient(90deg,${MODULE_COLOR},${MODULE_FADE})"></div></div>` +
+  `<div class="summary-text">${SUMMARY}</div>` +
+  `<div class="todo-list">${TODOS.map(t =>
+    `<div class="todo-item"><div class="todo-dot ${t.status}"></div><span class="todo-text ${t.status}">${t.text}</span></div>`
+  ).join('')}</div>` +
+  `<div class="dot-progress">${TODOS.map(t => {
+    const c = t.status === 'done' ? 'var(--green)' : t.status === 'run' ? 'var(--blue)' : 'rgba(148,163,184,.1)';
+    return `<span class="dot" style="background:${c}"></span>`;
+  }).join('')}</div>`;
+</script>
+</body>
+</html>
