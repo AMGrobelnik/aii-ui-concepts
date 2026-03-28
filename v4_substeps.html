@@ -222,6 +222,24 @@ body {
   60% { transform: scale(1.2); }
   100% { transform: scale(1); }
 }
+
+/* Sparkline tooltip */
+.spark-tip {
+  position:absolute; top:-30px; padding:3px 8px; border-radius:6px;
+  background:#fff; border:1px solid #e5e7eb;
+  font-size:11px; font-weight:500; color:#111827; white-space:nowrap;
+  pointer-events:none; opacity:0; transition:opacity .1s;
+  transform:translateX(-50%); box-shadow:0 2px 8px rgba(0,0,0,.1);
+  z-index:20; line-height:1.4;
+}
+.spark-tip.vis { opacity:1; }
+.spark-dot {
+  position:absolute; width:7px; height:7px; border-radius:50%;
+  pointer-events:none; opacity:0; transition:opacity .1s;
+  transform:translate(-3.5px,-3.5px); border:2px solid #fff;
+  box-shadow:0 0 4px rgba(0,0,0,.15); z-index:20;
+}
+.spark-dot.vis { opacity:1; }
 </style>
 </head>
 <body>
@@ -355,7 +373,10 @@ function buildCard(card) {
   var h = '<div class="'+cardCls(card)+'" data-color="'+card.color+'">';
   h += accentLine();
   h += '<div class="mc-header">' + iconHTML(card) + '<div class="mc-title-area"><div class="mc-title">' + card.label + '</div><div class="mc-subtitle">Module</div></div>' + ringHTML(card) + '</div>';
-  h += '<div style="height:28px;margin-bottom:10px">' + buildSparkline(card.sparkline, c.main, 200, 28) + '</div>';
+  h += '<div class="spark-wrap" style="position:relative;height:28px;margin-bottom:10px;background:#f4f4f5;border-radius:6px;padding:2px 6px;cursor:crosshair">';
+  h += '<span style="position:absolute;top:2px;left:6px;font-size:9px;color:#9ca3af;z-index:1">tok/s</span>';
+  h += buildSparkline(card.sparkline, c.main, 200, 24);
+  h += '</div>';
   h += progressBar(card.progress);
   h += '<div style="display:flex;align-items:center;font-size:11px;color:#9ca3af"><span>' + card.time + '</span><span style="margin-left:auto;font-weight:600;color:var(--text-sub)">' + card.cost + '</span></div>';
   h += '</div>';
@@ -1599,8 +1620,9 @@ function initDotAnimations() {
       if (!treePanel) return null;
       var parentRect = parent.getBoundingClientRect();
       var tpRect = treePanel.getBoundingClientRect();
-      // Trunk line is typically ~10px into the tree panel's padded content
-      return tpRect.left + 40 - parentRect.left;
+      // padding-left positions the content; trunk is ~10px into the content area
+      var padLeft = parseFloat(window.getComputedStyle(treePanel).paddingLeft) || 0;
+      return tpRect.left + padLeft + 10 - parentRect.left;
     }
 
     function spawnDot(src, tgt, trunkX) {
@@ -1695,6 +1717,31 @@ function initDotAnimations() {
 // INIT
 // =====================================================================
 buildPage();
+
+// Sparkline hover tooltips
+var tokData = {purple:[120,340,580,620,710,780,850,900,940,960], blue:[80,180,290,380,450,520,570,600,620,640], orange:[0,0,0,0,0,0,0,0,0,0]};
+var timeLbls = ['14:02','14:08','14:14','14:20','14:26','14:32','14:38','14:44','14:50','14:56'];
+document.querySelectorAll('.spark-wrap').forEach(function(el) {
+  var tip = document.createElement('div'); tip.className = 'spark-tip'; el.appendChild(tip);
+  var dot = document.createElement('div'); dot.className = 'spark-dot'; el.appendChild(dot);
+  var card = el.closest('.mod-card');
+  var col = card ? card.dataset.color : 'blue';
+  var hex = col==='purple'?'#a78bfa':col==='blue'?'#60a5fa':'#fb923c';
+  var toks = tokData[col] || tokData.blue;
+  dot.style.background = hex;
+  el.addEventListener('mousemove', function(e) {
+    var r = el.getBoundingClientRect(), x = e.clientX - r.left;
+    var pct = Math.max(0, Math.min(1, x / r.width));
+    var idx = Math.min(toks.length-1, Math.floor(pct * toks.length));
+    var val = toks[idx], t = timeLbls[idx] || '';
+    tip.innerHTML = val > 0 ? '<b>'+val+' tokens/s</b><br><span style="color:#9ca3af;font-size:10px">'+t+'</span>' : '--';
+    tip.style.left = x + 'px'; tip.classList.add('vis');
+    var max = Math.max.apply(null, toks.concat([1]));
+    var yPct = 1 - val / max;
+    dot.style.left = x + 'px'; dot.style.top = (4 + yPct * (r.height - 8)) + 'px'; dot.classList.add('vis');
+  });
+  el.addEventListener('mouseleave', function() { tip.classList.remove('vis'); dot.classList.remove('vis'); });
+});
 </script>
 
 </body>
