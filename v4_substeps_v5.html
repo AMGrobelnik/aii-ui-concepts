@@ -1517,7 +1517,7 @@ var VARIANTS = [
           h += '<span style="font-size:11.5px;color:'+(s.state==='active'?'#111827':'#9ca3af')+';font-weight:'+(s.state==='active'?'600':'400')+'">' + s.label + '</span>';
           // Tooltip
           h += '<div class="sub-tip" style="position:absolute;left:calc(100% + 12px);top:50%;transform:translateY(4px);margin-top:-24px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:8px 12px;box-shadow:0 4px 12px rgba(0,0,0,0.08);width:240px;pointer-events:none;opacity:0;transition:all .2s;z-index:20">';
-          h += '<div style="font-size:11px;font-weight:600;color:#111827;margin-bottom:3px">' + s.label + '</div>';
+          h += '<div style="font-size:11px;font-weight:600;color:#111827;white-space:nowrap;margin-bottom:3px">' + s.label + '</div>';
           h += '<div style="font-size:10px;color:#6b7280;line-height:1.5">' + det + '</div>';
           h += '</div>';
           h += '</div>';
@@ -1620,51 +1620,63 @@ function initDotAnimations() {
       if (!treePanel) return null;
       var parentRect = parent.getBoundingClientRect();
       
-      // Find dots for Y positions and target
-      var allDots = treePanel.querySelectorAll('[style*="border-radius:50%"]');
-      var dotList = [];
-      allDots.forEach(function(d) {
-        var dr = d.getBoundingClientRect();
-        if (dr.width < 3 || dr.width > 15) return;
-        var text = d.parentElement ? d.parentElement.textContent.trim().substring(0, 20) : '';
-        dotList.push({ x: dr.left + dr.width/2 - parentRect.left, y: dr.top + dr.height/2 - parentRect.top, text: text });
+      // Find the actual LINE elements (vertical and horizontal connectors)
+      var vertLines = [];
+      var horizLines = [];
+      treePanel.querySelectorAll('div[style*="position:absolute"]').forEach(function(el) {
+        var r = el.getBoundingClientRect();
+        if (r.width <= 3 && r.height > 10) {
+          vertLines.push({ x: r.left + r.width/2 - parentRect.left, top: r.top - parentRect.top, bot: r.bottom - parentRect.top, cls: el.className });
+        } else if (r.height <= 3 && r.width > 5) {
+          horizLines.push({ y: Math.round(r.top - parentRect.top), left: r.left - parentRect.left, right: r.right - parentRect.left });
+        }
       });
-      var round7 = dotList.find(function(d) { return d.text.indexOf('Round 7') >= 0; });
-      var createArt = dotList.find(function(d) { return d.text.indexOf('Create Artifacts') >= 0; });
-      if (!round7 || !createArt || dotList.length === 0) return null;
       
-      // Find the actual trunk LINE position (the vertical line element)
-      // Main trunk is drawn with position:absolute, its left edge IS the line
-      var tpRect = treePanel.getBoundingClientRect();
-      var padLeft = parseFloat(getComputedStyle(treePanel).paddingLeft) || 0;
-      // The trunk container has padding-left:20px, trunk line is at left:8px within it
-      // So trunk line absolute X = treePanel.left + padLeft + 8 + 1 (half of 2px width)
-      var trunkLineX = tpRect.left + padLeft + 14 + 1 - parentRect.left;
+      // Main trunk = longest vertical line
+      vertLines.sort(function(a,b) { return (b.bot-b.top) - (a.bot-a.top); });
+      var mainTrunk = vertLines[0];
+      // Sub-trunk = line with class sub-trunk-line, or second longest
+      var subTrunk = vertLines.find(function(l) { return l.cls && l.cls.indexOf('sub-trunk') >= 0; }) || vertLines[1];
       
-      // Sub-trunk line: find .sub-trunk-line element
-      var subTrunkEl = treePanel.querySelector('.sub-trunk-line');
-      var subTrunkX = trunkLineX; // fallback
-      if (subTrunkEl) {
-        var stRect = subTrunkEl.getBoundingClientRect();
-        subTrunkX = stRect.left + 1 - parentRect.left;
-      }
+      if (!mainTrunk || !subTrunk) return null;
+      
+      // Find Round 7 and Create Artifacts Y positions from horizontal branches
+      // Round 7 branch: horizontal line at the main trunk X going right, around y=259
+      var r7Branch = horizLines.find(function(h) { return Math.abs(h.left - mainTrunk.x) < 8 && h.y > mainTrunk.top + 50; });
+      // Create Artifacts branch: horizontal line at sub-trunk X, 3rd one down
+      var subBranches = horizLines.filter(function(h) { return Math.abs(h.left - subTrunk.x) < 8; }).sort(function(a,b){return a.y-b.y;});
+      var caBranch = subBranches[2]; // 3rd = Create Artifacts (after Plan Approach, Plan Artifacts)
+      
+      if (!r7Branch || !caBranch) return null;
       
       return {
-        trunkX: trunkLineX,
-        trunkTopY: dotList[0].y,
-        round7: { x: round7.x, y: round7.y },
-        subTrunkX: subTrunkX,
-        target: { x: createArt.x, y: createArt.y }
+        // Exact line positions for dot travel
+        mainTrunkX: mainTrunk.x,
+        mainTrunkTop: mainTrunk.top,
+        r7Y: r7Branch.y,
+        r7BranchRight: r7Branch.right,
+        subTrunkX: subTrunk.x,
+        subTrunkTop: subTrunk.top,
+        caY: caBranch.y,
+        caBranchRight: caBranch.right,
       };
     }
 
     function spawnDot(src, tp) {
+      // Path follows exact line positions:
+      // 1) card bottom -> main trunk line (converge to x=mainTrunkX)
+      // 2) down main trunk to R7 branch Y
+      // 3) right along R7 branch to sub-trunk X
+      // 4) down sub-trunk to Create Artifacts branch Y
+      // 5) right along CA branch to end
       dots.push({
         sx: src.x, sy: src.y,
-        trunkX: tp.trunkX, trunkTopY: tp.trunkTopY,
-        r7y: tp.round7.y,
-        stx: tp.subTrunkX,
-        tx: tp.target.x, ty: tp.target.y,
+        // waypoints on the actual lines
+        p1x: tp.mainTrunkX, p1y: tp.mainTrunkTop,   // trunk top
+        p2x: tp.mainTrunkX, p2y: tp.r7Y,             // R7 level on trunk
+        p3x: tp.subTrunkX,  p3y: tp.r7Y,             // R7 branch end / sub-trunk top
+        p4x: tp.subTrunkX,  p4y: tp.caY,             // CA level on sub-trunk
+        p5x: tp.caBranchRight, p5y: tp.caY,           // CA branch end
         progress: 0, speed: 0.004 + Math.random() * 0.002,
         r: 1.5 + Math.random() * 1, trail: [],
       });
@@ -1683,32 +1695,30 @@ function initDotAnimations() {
       dots.forEach(function(d) {
         d.progress += d.speed;
         var t = d.progress;
-        // 5 segments following tree lines exactly:
-        // 1) card center -> trunk top  2) down trunk -> R7  3) right branch -> sub-trunk
-        // 4) down sub-trunk -> target Y  5) right -> target dot
-        var l1 = Math.sqrt(Math.pow(d.trunkX-d.sx,2)+Math.pow(d.trunkTopY-d.sy,2));
-        var l2 = Math.abs(d.r7y - d.trunkTopY);
-        var l3 = Math.abs(d.stx - d.trunkX);
-        var l4 = Math.abs(d.ty - d.r7y);
-        var l5 = Math.abs(d.tx - d.stx);
+        // 5 segments on the lines
+        var l1 = Math.sqrt(Math.pow(d.p1x-d.sx,2)+Math.pow(d.p1y-d.sy,2));
+        var l2 = Math.abs(d.p2y - d.p1y);
+        var l3 = Math.abs(d.p3x - d.p2x);
+        var l4 = Math.abs(d.p4y - d.p3y);
+        var l5 = Math.abs(d.p5x - d.p4x);
         var total = l1+l2+l3+l4+l5; if(total<1) total=1;
         var f1=l1/total, f2=(l1+l2)/total, f3=(l1+l2+l3)/total, f4=(l1+l2+l3+l4)/total;
         var x, y;
         if (t <= f1) {
           var p = f1>0 ? t/f1 : 0;
-          x = d.sx+(d.trunkX-d.sx)*p; y = d.sy+(d.trunkTopY-d.sy)*p;
+          x = d.sx+(d.p1x-d.sx)*p; y = d.sy+(d.p1y-d.sy)*p;
         } else if (t <= f2) {
           var p = (t-f1)/(f2-f1);
-          x = d.trunkX; y = d.trunkTopY+(d.r7y-d.trunkTopY)*p;
+          x = d.p2x; y = d.p1y+(d.p2y-d.p1y)*p;
         } else if (t <= f3) {
           var p = (t-f2)/(f3-f2);
-          x = d.trunkX+(d.stx-d.trunkX)*p; y = d.r7y;
+          x = d.p2x+(d.p3x-d.p2x)*p; y = d.p2y;
         } else if (t <= f4) {
           var p = (t-f3)/(f4-f3);
-          x = d.stx; y = d.r7y+(d.ty-d.r7y)*p;
+          x = d.p3x; y = d.p3y+(d.p4y-d.p3y)*p;
         } else {
           var p = (t-f4)/(1-f4);
-          x = d.stx+(d.tx-d.stx)*p; y = d.ty;
+          x = d.p4x+(d.p5x-d.p4x)*p; y = d.p4y;
         }
 
         d.trail.push({ x: x, y: y });
