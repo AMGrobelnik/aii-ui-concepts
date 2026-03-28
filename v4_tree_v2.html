@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tree Fix</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',sans-serif;background:#fafafa;color:#111827;padding:24px 32px}
+
+/* Cards in 3-col grid */
+.cards-row{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:0}
+.card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px 18px;text-align:center;font-size:13px;font-weight:600;color:#6b7280}
+.card.active{border-color:#60a5fa;color:#111827}
+
+/* Tree area: same 3-col grid so it aligns under the middle card */
+.tree-area{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.tree-col{padding-top:8px}
+
+/* Tree structure */
+.tree{position:relative;padding-left:40px}
+
+/* Main trunk */
+.trunk{position:absolute;left:5px;top:8px;bottom:8px;width:2px;background:linear-gradient(180deg,#60a5fa,rgba(96,165,250,.15));border-radius:1px}
+
+/* Round row */
+.round{position:relative;display:flex;align-items:center;gap:10px;height:36px}
+
+/* Horizontal branch: trunk → dot. Must TOUCH the dot.
+   Trunk center at 6px. Dot left edge at padding 40px. Width = 40-6 = 34px */
+.round::before{
+  content:'';position:absolute;
+  left:-34px;top:calc(50% - 1px);
+  width:34px;height:2px;
+  background:rgba(96,165,250,.25);border-radius:1px;
+}
+
+.dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;position:relative;z-index:2;background:#fff}
+.dot.done{background:#4ade80}
+.dot.active{background:#60a5fa}
+.dot.pending{border:1.5px solid #d1d5db}
+
+.label{font-size:13px;white-space:nowrap}
+.label.active{font-weight:600;color:#111827}
+.label.done{color:#6b7280}
+.label.pending{color:#9ca3af}
+
+/* Sub-steps container */
+.subs{position:relative;padding-left:30px}
+
+/* Sub-trunk: drops from Round 7 dot center.
+   Round dot center = padding(40) + 5 = 45px from .tree
+   .subs left edge = 40px from .tree (same as rounds)
+   Sub-trunk relative to .subs = 45 - 40 = 5px, minus 1px for line center = 4px */
+.sub-trunk{position:absolute;left:4px;top:0;bottom:14px;width:2px;background:rgba(96,165,250,.15);border-radius:1px}
+
+/* Sub-step row */
+.sub{position:relative;display:flex;align-items:center;gap:8px;height:32px}
+
+/* Horizontal branch: sub-trunk → sub-dot. Must TOUCH the dot.
+   Sub-trunk center at 5px. Sub-dot left edge at padding 30px. Width = 30-5 = 25px */
+.sub::before{
+  content:'';position:absolute;
+  left:-25px;top:calc(50% - 1px);
+  width:25px;height:1.5px;
+  background:rgba(96,165,250,.15);border-radius:1px;
+}
+
+.sub-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;position:relative;z-index:2;background:#fff}
+.sub-dot.done{background:#4ade80;opacity:.6}
+.sub-dot.active{background:#60a5fa}
+.sub-dot.pending{border:1.5px solid #d1d5db}
+
+.sub-label{font-size:12px;white-space:nowrap}
+.sub-label.active{font-weight:600;color:#111827}
+.sub-label.done{color:#9ca3af}
+.sub-label.pending{color:#d1d5db}
+
+.ellipsis{height:28px;display:flex;align-items:center;padding-left:4px;font-size:12px;color:#d1d5db}
+
+.ghost-chev{opacity:0;transition:opacity .2s;color:#9ca3af;margin-left:auto}
+.round:hover .ghost-chev{opacity:.4}
+
+/* Dot animation layer */
+#dotLayer{position:fixed;inset:0;pointer-events:none;z-index:100}
+.fly-dot{position:absolute;top:0;left:0;width:7px;height:7px;border-radius:50%;background:#60a5fa;box-shadow:0 0 8px #60a5fa,0 0 16px rgba(96,165,250,.3);opacity:0;will-change:transform,opacity}
+</style>
+</head>
+<body>
+
+<div class="cards-row">
+  <div class="card">Create Hypothesis</div>
+  <div class="card active" id="activeCard">Test Ideas</div>
+  <div class="card" style="opacity:.4">Report Results</div>
+</div>
+
+<div class="tree-area">
+  <div></div><!-- empty col 1 -->
+  <div class="tree-col">
+    <div class="tree">
+      <div class="trunk"></div>
+
+      <div class="round">
+        <div class="dot done"></div>
+        <span class="label done">Round 5</span>
+        <span class="ghost-chev">›</span>
+      </div>
+
+      <div class="round">
+        <div class="dot done"></div>
+        <span class="label done">Round 6</span>
+        <span class="ghost-chev">›</span>
+      </div>
+
+      <div class="round">
+        <div class="dot active"></div>
+        <span class="label active">Round 7</span>
+      </div>
+
+      <div class="subs">
+        <div class="sub-trunk"></div>
+        <div class="sub"><div class="sub-dot done"></div><span class="sub-label done">Plan Approach</span></div>
+        <div class="sub"><div class="sub-dot done"></div><span class="sub-label done">Plan Artifacts</span></div>
+        <div class="sub" id="activeStep"><div class="sub-dot active"></div><span class="sub-label active">Create Artifacts</span><span style="font-size:11px;color:#60a5fa;letter-spacing:2px;margin-left:4px">····</span></div>
+        <div class="sub"><div class="sub-dot pending"></div><span class="sub-label pending">Write Paper</span></div>
+        <div class="ellipsis">···</div>
+      </div>
+
+      <div class="round">
+        <div class="dot pending"></div>
+        <span class="label pending">Round 8</span>
+      </div>
+    </div>
+  </div>
+  <div></div><!-- empty col 3 -->
+</div>
+
+<div id="dotLayer"></div>
+
+<script>
+// Animated dots traveling along tree lines
+var dotLayer = document.getElementById('dotLayer');
+var activeDots = [];
+
+function getPath() {
+  var card = document.getElementById('activeCard');
+  var target = document.getElementById('activeStep');
+  var trunk = document.querySelector('.trunk');
+  var subTrunk = document.querySelector('.sub-trunk');
+  if (!card || !target || !trunk || !subTrunk) return null;
+
+  var cr = card.getBoundingClientRect();
+  var tr = target.querySelector('.sub-dot').getBoundingClientRect();
+  var tkr = trunk.getBoundingClientRect();
+  var str = subTrunk.getBoundingClientRect();
+
+  // Round 7 dot
+  var r7dot = document.querySelectorAll('.dot')[2]; // 3rd dot = Round 7
+  var r7r = r7dot.getBoundingClientRect();
+
+  return {
+    // Start: bottom center of active card
+    sx: cr.left + cr.width / 2,
+    sy: cr.bottom,
+    // Waypoint 1: top of trunk line
+    t1x: tkr.left + tkr.width / 2,
+    t1y: tkr.top,
+    // Waypoint 2: trunk at Round 7's Y (where branch goes right)
+    t2y: r7r.top + r7r.height / 2,
+    // Waypoint 3: Round 7 dot center (end of horizontal branch)
+    r7x: r7r.left + r7r.width / 2,
+    r7y: r7r.top + r7r.height / 2,
+    // Waypoint 4: sub-trunk at target Y
+    stx: str.left + str.width / 2,
+    // Waypoint 5: target dot center
+    tx: tr.left + tr.width / 2,
+    ty: tr.top + tr.height / 2,
+  };
+}
+
+function spawnDot() {
+  if (activeDots.length >= 6) return;
+  var dot = document.createElement('div');
+  dot.className = 'fly-dot';
+  dotLayer.appendChild(dot);
+  activeDots.push({ el: dot, startTime: performance.now() });
+}
+
+function animate(now) {
+  var path = getPath();
+  if (path) {
+    // 5-segment path along the lines:
+    // 1: card bottom → trunk top (converge)
+    // 2: down trunk to Round 7 branch Y
+    // 3: right along branch to Round 7 dot
+    // 4: down sub-trunk to Create Artifacts Y
+    // 5: right along branch to Create Artifacts dot
+    var l1 = Math.sqrt(Math.pow(path.t1x - path.sx, 2) + Math.pow(path.t1y - path.sy, 2));
+    var l2 = Math.abs(path.t2y - path.t1y);
+    var l3 = Math.abs(path.r7x - path.t1x);
+    var l4 = Math.abs(path.ty - path.r7y);
+    var l5 = Math.abs(path.tx - path.stx);
+    var total = l1 + l2 + l3 + l4 + l5;
+    if (total < 1) total = 1;
+    var f1 = l1/total, f2 = (l1+l2)/total, f3 = (l1+l2+l3)/total, f4 = (l1+l2+l3+l4)/total;
+
+    var DURATION = 2500;
+
+    for (var i = activeDots.length - 1; i >= 0; i--) {
+      var d = activeDots[i];
+      var t = Math.min((now - d.startTime) / DURATION, 1);
+      var x, y;
+
+      if (t <= f1) {
+        var p = f1 > 0 ? t / f1 : 0;
+        x = path.sx + (path.t1x - path.sx) * p;
+        y = path.sy + (path.t1y - path.sy) * p;
+      } else if (t <= f2) {
+        var p = (t - f1) / (f2 - f1);
+        x = path.t1x;
+        y = path.t1y + (path.t2y - path.t1y) * p;
+      } else if (t <= f3) {
+        var p = (t - f2) / (f3 - f2);
+        x = path.t1x + (path.r7x - path.t1x) * p;
+        y = path.t2y;
+      } else if (t <= f4) {
+        var p = (t - f3) / (f4 - f3);
+        x = path.stx;
+        y = path.r7y + (path.ty - path.r7y) * p;
+      } else {
+        var p = (t - f4) / (1 - f4);
+        x = path.stx + (path.tx - path.stx) * p;
+        y = path.ty;
+      }
+
+      var opacity = 1;
+      if (t < 0.05) opacity = t / 0.05;
+      if (t > 0.9) opacity = (1 - t) / 0.1;
+
+      d.el.style.transform = 'translate(' + (x - 2.5) + 'px,' + (y - 2.5) + 'px)';
+      d.el.style.opacity = opacity * 0.9;
+
+      if (t >= 1) {
+        d.el.remove();
+        activeDots.splice(i, 1);
+      }
+    }
+  }
+  requestAnimationFrame(animate);
+}
+
+// Spawn dots continuously
+setInterval(function() { spawnDot(); }, 800);
+setTimeout(spawnDot, 300);
+requestAnimationFrame(animate);
+</script>
+
+</body>
+</html>
