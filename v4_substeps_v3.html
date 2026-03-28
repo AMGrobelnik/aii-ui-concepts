@@ -1614,27 +1614,59 @@ function initDotAnimations() {
       };
     }
 
-    function getTrunkX() {
+    function getTreePositions() {
+      // Find exact positions of the trunk line and round dots
       var section = canvas.closest('.variant-section');
       var treePanel = section.querySelector('.tree-panel');
       if (!treePanel) return null;
       var parentRect = parent.getBoundingClientRect();
-      var tpRect = treePanel.getBoundingClientRect();
-      // padding-left positions the content; trunk is ~10px into the content area
-      var padLeft = parseFloat(window.getComputedStyle(treePanel).paddingLeft) || 0;
-      return tpRect.left + padLeft + 10 - parentRect.left;
+
+      // Find all status dots in the tree (round-level dots are the trunk line)
+      var allDots = treePanel.querySelectorAll('[style*="border-radius:50%"]');
+      var roundDots = []; // top-level round dots (on the trunk)
+      var subDots = [];   // sub-step dots (indented)
+
+      allDots.forEach(function(d) {
+        var dr = d.getBoundingClientRect();
+        if (dr.width < 3 || dr.width > 15) return;
+        var cx = dr.left + dr.width / 2 - parentRect.left;
+        var cy = dr.top + dr.height / 2 - parentRect.top;
+        // Round dots are at smaller X, sub-step dots at larger X
+        if (cx < 670) {
+          roundDots.push({x: cx, y: cy});
+        } else {
+          subDots.push({x: cx, y: cy});
+        }
+      });
+
+      if (roundDots.length === 0) return null;
+
+      // Trunk X = center of the first round dot
+      var trunkX = roundDots[0].x;
+      // First round Y = top of trunk
+      var trunkTopY = roundDots[0].y;
+
+      return {
+        trunkX: trunkX,
+        trunkTopY: trunkTopY,
+        roundDots: roundDots,
+        subDots: subDots,
+      };
     }
 
-    function spawnDot(src, tgt, trunkX) {
-      // 3-segment path: card center → trunk X → down trunk → right to target
-      var tx = trunkX || src.x;
+    function spawnDot(src, tgt, tp) {
+      // Exact path along tree lines:
+      // 1) Card bottom center → straight down to trunk top
+      // 2) Down the trunk to target's Y level
+      // 3) Right along the branch to the target dot
       dots.push({
-        sx: src.x, sy: src.y,   // start: card bottom center
-        tx: tx,                   // trunk X position
-        ty: tgt.y,               // target Y (same as end Y)
-        ex: tgt.x, ey: tgt.y,   // end: active substep
+        sx: src.x, sy: src.y,       // start: card bottom center
+        trunkX: tp.trunkX,           // trunk line X
+        trunkTopY: tp.trunkTopY,     // where trunk starts
+        ty: tgt.y,                   // target Y
+        ex: tgt.x, ey: tgt.y,       // end: active substep dot
         progress: 0,
-        speed: 0.006 + Math.random() * 0.004,
+        speed: 0.005 + Math.random() * 0.003,
         r: 1.5 + Math.random() * 1,
         trail: [],
       });
@@ -1645,12 +1677,12 @@ function initDotAnimations() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       var src = getSource();
       var tgt = getTarget();
-      var trunkX = getTrunkX();
+      var tp = getTreePositions();
 
-      if (src && tgt && trunkX) {
+      if (src && tgt && tp) {
         spawnTimer++;
-        if (spawnTimer % 20 === 0) {
-          spawnDot(src, tgt, trunkX);
+        if (spawnTimer % 22 === 0) {
+          spawnDot(src, tgt, tp);
         }
       }
 
@@ -1659,23 +1691,29 @@ function initDotAnimations() {
         d.progress += d.speed;
         var t = d.progress;
 
-        // 3-segment: down to trunk (0-0.15), down trunk (0.15-0.7), right to target (0.7-1.0)
+        // Calculate total path length for proportional timing
+        var leg1 = Math.abs(d.trunkTopY - d.sy); // card to trunk top
+        var leg2 = Math.abs(d.ty - d.trunkTopY);  // down trunk
+        var leg3 = Math.abs(d.ex - d.trunkX);     // branch right
+        var total = leg1 + leg2 + leg3;
+        if (total < 1) total = 1;
+        var f1 = leg1 / total, f2 = (leg1 + leg2) / total;
+
         var x, y;
-        var seg1 = 0.15, seg2 = 0.70;
-        if (t <= seg1) {
-          // Segment 1: card center → trunk X (diagonal down-left/right)
-          var p = t / seg1;
-          x = d.sx + (d.tx - d.sx) * p;
-          y = d.sy + 20 * p;
-        } else if (t <= seg2) {
-          // Segment 2: down the trunk line
-          var p = (t - seg1) / (seg2 - seg1);
-          x = d.tx;
-          y = d.sy + 20 + (d.ty - d.sy - 20) * p;
+        if (t <= f1) {
+          // Segment 1: card center → trunk top (straight down, converging to trunkX)
+          var p = t / f1;
+          x = d.sx + (d.trunkX - d.sx) * p;
+          y = d.sy + (d.trunkTopY - d.sy) * p;
+        } else if (t <= f2) {
+          // Segment 2: straight down the trunk line
+          var p = (t - f1) / (f2 - f1);
+          x = d.trunkX;
+          y = d.trunkTopY + (d.ty - d.trunkTopY) * p;
         } else {
-          // Segment 3: right to target
-          var p = (t - seg2) / (1 - seg2);
-          x = d.tx + (d.ex - d.tx) * p;
+          // Segment 3: right along the branch to target
+          var p = (t - f2) / (1 - f2);
+          x = d.trunkX + (d.ex - d.trunkX) * p;
           y = d.ty;
         }
 
