@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Activity Feed</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: linear-gradient(135deg, #f8f4ef 0%, #eee8e0 30%, #e8e0f0 60%, #dde8f8 100%);
+  --surface-card: rgba(255,253,250,.7);
+  --border: rgba(0,0,0,.06);
+  --border-hi: rgba(0,0,0,.1);
+  --text: #1a1a2e;
+  --text-dim: #4a4a5a;
+  --text-muted: #6b7280;
+  --text-faint: #9ca3af;
+
+  --purple: #7c5cfc; --purple-dim: rgba(124,92,252,.1);
+  --blue: #3b82f6;   --blue-dim: rgba(59,130,246,.1);
+  --orange: #f59e0b; --orange-dim: rgba(245,158,11,.1);
+  --green: #10b981;  --green-dim: rgba(16,185,129,.1);
+  --red: #ef4444;    --red-dim: rgba(239,68,68,.1);
+  --cyan: #06b6d4;   --cyan-dim: rgba(6,182,212,.1);
+
+  --radius: 12px;
+  --radius-sm: 8px;
+  font-size: 14px;
+}
+
+html, body { height: 100%; }
+body {
+  background: var(--bg); color: var(--text-dim);
+  font-family: 'Inter', -apple-system, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  display: flex; align-items: center; justify-content: center;
+  min-height: 100vh;
+}
+
+/* ===== FEED CONTAINER ===== */
+.feed-container {
+  width: 420px;
+  background: var(--surface-card);
+  backdrop-filter: blur(16px) saturate(1.2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  position: relative;
+  box-shadow: 0 1px 3px rgba(0,0,0,.04);
+}
+.feed-container::before {
+  content: ''; position: absolute; top: 0; left: 20px; right: 20px; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(16,185,129,.15), transparent);
+}
+
+/* ===== HEADER ===== */
+.feed-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--border);
+}
+.feed-title {
+  font-size: 10px; color: var(--text-faint); text-transform: uppercase;
+  letter-spacing: .6px; font-weight: 600;
+}
+.live-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 8px; font-weight: 800; color: var(--red);
+  background: var(--red-dim); padding: 2px 8px 2px 6px;
+  border-radius: 4px; letter-spacing: .6px; text-transform: uppercase;
+}
+.live-dot {
+  width: 5px; height: 5px; border-radius: 50%; background: var(--red);
+  animation: blink 1.3s ease-in-out infinite;
+}
+@keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: .2; } }
+
+/* ===== FEED LIST ===== */
+.feed-list {
+  padding: 8px;
+  max-height: 400px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 3px;
+}
+.feed-list::-webkit-scrollbar { width: 3px; }
+.feed-list::-webkit-scrollbar-track { background: transparent; }
+.feed-list::-webkit-scrollbar-thumb { background: rgba(0,0,0,.1); border-radius: 2px; }
+
+/* ===== FEED ROW ===== */
+.feed-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px; border-radius: 6px; font-size: 11.5px;
+  transition: all .15s;
+}
+.feed-row:hover { background: rgba(0,0,0,.03); }
+
+/* Time */
+.feed-time {
+  font-size: 9px; color: var(--text-faint);
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 500; flex-shrink: 0;
+}
+
+/* Type pill — rounded, with subtle glow */
+.feed-pill {
+  font-size: 8px; font-weight: 700;
+  padding: 2px 8px; border-radius: 10px;
+  text-transform: uppercase; letter-spacing: .2px;
+  flex-shrink: 0;
+  transition: all .15s;
+}
+.feed-row:hover .feed-pill {
+  filter: brightness(1.3);
+  transform: scale(1.04);
+}
+
+/* Summary text */
+.feed-text {
+  color: var(--text-dim); flex: 1; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+</style>
+</head>
+<body>
+
+<div class="feed-container">
+  <div class="feed-header">
+    <span class="feed-title">Activity</span>
+    <span class="live-badge"><span class="live-dot"></span> LIVE</span>
+  </div>
+  <div class="feed-list" id="feedList"></div>
+</div>
+
+<script>
+/* ── Category config ── */
+const CATEGORIES = {
+  tool:     { color: '#2563eb', bg: 'rgba(59,130,246,.1)',  glow: 'rgba(59,130,246,.2)',  label: 'tool' },
+  result:   { color: '#7c3aed', bg: 'rgba(124,58,237,.1)', glow: 'rgba(124,58,237,.2)', label: 'result' },
+  progress: { color: '#059669', bg: 'rgba(16,185,129,.1)',  glow: 'rgba(16,185,129,.2)',  label: 'prog' },
+  metric:   { color: '#0891b2', bg: 'rgba(6,182,212,.1)',  glow: 'rgba(6,182,212,.2)',  label: 'metric' },
+  warning:  { color: '#d97706', bg: 'rgba(245,158,11,.1)',  glow: 'rgba(245,158,11,.2)',  label: 'warn' },
+  thinking: { color: '#7c3aed', bg: 'rgba(124,58,237,.1)', glow: 'rgba(124,58,237,.2)', label: 'think' },
+};
+
+/* ── Render a feed item ── */
+function renderEvent(time, category, text) {
+  const cat = CATEGORIES[category] || CATEGORIES.progress;
+  const row = document.createElement('div');
+  row.className = 'feed-row';
+  row.innerHTML =
+    `<span class="feed-time">${time}</span>` +
+    `<span class="feed-pill" style="background:${cat.bg};color:${cat.color};box-shadow:0 0 6px ${cat.glow}">${cat.label}</span>` +
+    `<span class="feed-text">${text}</span>`;
+  return row;
+}
+
+/* ── Demo data (real summaries from pipeline) ── */
+const DEMO = [
+  { time: '12:04', cat: 'tool',     text: 'Add head_direction_ratio to regression subset' },
+  { time: '12:03', cat: 'thinking', text: 'Use absolute paths, inspect full data' },
+  { time: '12:02', cat: 'tool',     text: 'Read grammar, build treebank set and genre map' },
+  { time: '12:01', cat: 'result',   text: 'Saved 58KB report, increased to 185KB' },
+  { time: '11:58', cat: 'metric',   text: 'Track 95k context usage for exp_id3_it2__opus' },
+  { time: '11:55', cat: 'result',   text: 'Completed 7 turns, 393.8K\u219217.5K, $0.99' },
+  { time: '11:51', cat: 'warning',  text: 'Remind 112.7 minutes left to finish tasks' },
+  { time: '11:47', cat: 'warning',  text: 'Retry paper text after timeout, fork resume' },
+  { time: '11:42', cat: 'result',   text: 'Created pyproject.toml for exp_id1_it2__opus' },
+  { time: '11:38', cat: 'progress', text: 'Split script into 4 sections, add 4 markdowns' },
+];
+
+const list = document.getElementById('feedList');
+DEMO.forEach(e => list.appendChild(renderEvent(e.time, e.cat, e.text)));
+</script>
+</body>
+</html>
