@@ -1593,18 +1593,28 @@ function initDotAnimations() {
       };
     }
 
-    function spawnDot(src, tgt) {
-      // L-shaped path: go down from source, then across to target
-      var midY = tgt.y;
+    function getTrunkX() {
+      var section = canvas.closest('.variant-section');
+      var treePanel = section.querySelector('.tree-panel');
+      if (!treePanel) return null;
+      var parentRect = parent.getBoundingClientRect();
+      var tpRect = treePanel.getBoundingClientRect();
+      // Trunk line is typically ~10px into the tree panel's padded content
+      return tpRect.left + 40 - parentRect.left;
+    }
+
+    function spawnDot(src, tgt, trunkX) {
+      // 3-segment path: card center → trunk X → down trunk → right to target
+      var tx = trunkX || src.x;
       dots.push({
-        sx: src.x, sy: src.y,
-        mx: src.x, my: midY,  // middle point (bottom of vertical)
-        tx: tgt.x, ty: tgt.y,
+        sx: src.x, sy: src.y,   // start: card bottom center
+        tx: tx,                   // trunk X position
+        ty: tgt.y,               // target Y (same as end Y)
+        ex: tgt.x, ey: tgt.y,   // end: active substep
         progress: 0,
-        speed: 0.008 + Math.random() * 0.005,
+        speed: 0.006 + Math.random() * 0.004,
         r: 1.5 + Math.random() * 1,
         trail: [],
-        phase: 0, // 0 = going down, 1 = going across
       });
     }
 
@@ -1613,14 +1623,12 @@ function initDotAnimations() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       var src = getSource();
       var tgt = getTarget();
+      var trunkX = getTrunkX();
 
-      if (src && tgt) {
+      if (src && tgt && trunkX) {
         spawnTimer++;
-        if (spawnTimer % 18 === 0) {
-          spawnDot(
-            { x: src.x + (Math.random() - 0.5) * 20, y: src.y },
-            { x: tgt.x + (Math.random() - 0.5) * 4, y: tgt.y + (Math.random() - 0.5) * 4 }
-          );
+        if (spawnTimer % 20 === 0) {
+          spawnDot(src, tgt, trunkX);
         }
       }
 
@@ -1629,18 +1637,24 @@ function initDotAnimations() {
         d.progress += d.speed;
         var t = d.progress;
 
-        // L-shaped: first half goes down, second half goes right
+        // 3-segment: down to trunk (0-0.15), down trunk (0.15-0.7), right to target (0.7-1.0)
         var x, y;
-        if (t < 0.5) {
-          // Vertical segment
-          var segT = t / 0.5;
-          x = d.sx + (Math.random() - 0.5) * 0.5;
-          y = d.sy + (d.my - d.sy) * segT;
+        var seg1 = 0.15, seg2 = 0.70;
+        if (t <= seg1) {
+          // Segment 1: card center → trunk X (diagonal down-left/right)
+          var p = t / seg1;
+          x = d.sx + (d.tx - d.sx) * p;
+          y = d.sy + 20 * p;
+        } else if (t <= seg2) {
+          // Segment 2: down the trunk line
+          var p = (t - seg1) / (seg2 - seg1);
+          x = d.tx;
+          y = d.sy + 20 + (d.ty - d.sy - 20) * p;
         } else {
-          // Horizontal segment
-          var segT2 = (t - 0.5) / 0.5;
-          x = d.mx + (d.tx - d.mx) * segT2;
-          y = d.my + (d.ty - d.my) * segT2 + (Math.random() - 0.5) * 0.5;
+          // Segment 3: right to target
+          var p = (t - seg2) / (1 - seg2);
+          x = d.tx + (d.ex - d.tx) * p;
+          y = d.ty;
         }
 
         d.trail.push({ x: x, y: y });
