@@ -1,0 +1,1044 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Substep Tree Variants v8 — 10 Visual Designs</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #fafafa;
+  --card-bg: #ffffff;
+  --border: #e5e7eb;
+  --shadow: 0 1px 3px rgba(0,0,0,0.06);
+  --text-title: #111827;
+  --text-sub: #6b7280;
+  --text-faint: #9ca3af;
+  --graph-bg: #f4f4f5;
+
+  --purple: #a78bfa;
+  --purple-dim: rgba(167,139,250,.10);
+  --purple-glow: rgba(167,139,250,.18);
+  --blue: #60a5fa;
+  --blue-dim: rgba(96,165,250,.10);
+  --blue-glow: rgba(96,165,250,.18);
+  --orange: #fb923c;
+  --orange-dim: rgba(251,146,60,.10);
+  --orange-glow: rgba(251,146,60,.18);
+  --green: #4ade80;
+  --green-dim: rgba(74,222,128,.10);
+
+  --radius: 12px;
+  --ease: cubic-bezier(.4,0,.2,1);
+}
+
+html { scroll-behavior: smooth; }
+body {
+  background: var(--bg);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  color: var(--text-sub);
+  -webkit-font-smoothing: antialiased;
+  padding: 0;
+}
+
+/* ===== PAGE HEADER ===== */
+.page-header {
+  position: sticky; top: 0; z-index: 100;
+  background: rgba(250,250,250,.88);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+  padding: 14px 32px;
+  display: flex; align-items: center; gap: 16px;
+}
+.page-header h1 {
+  font-size: 16px; font-weight: 800; color: var(--text-title);
+  letter-spacing: -.3px;
+}
+.page-header .count {
+  font-size: 11px; font-weight: 600; color: var(--text-faint);
+  background: #f4f4f5; padding: 2px 8px; border-radius: 4px;
+}
+.page-header .spacer { flex: 1; }
+.page-header .legend {
+  display: flex; gap: 12px; font-size: 10px; color: var(--text-faint);
+}
+.page-header .legend span {
+  display: flex; align-items: center; gap: 4px;
+}
+.page-header .legend .dot {
+  width: 8px; height: 8px; border-radius: 50%;
+}
+
+/* ===== TOC ===== */
+.toc {
+  padding: 16px 32px 8px;
+  display: flex; flex-wrap: wrap; gap: 6px;
+}
+.toc a {
+  font-size: 10px; font-weight: 600; color: var(--text-faint);
+  text-decoration: none; padding: 3px 8px; border-radius: 4px;
+  background: #f4f4f5; border: 1px solid transparent;
+  transition: all .15s;
+}
+.toc a:hover {
+  color: var(--text-title); border-color: var(--border);
+  background: #fff;
+}
+
+/* ===== ROW SECTION ===== */
+.variant-section {
+  padding: 24px 32px 8px;
+}
+.variant-label {
+  font-size: 12px; font-weight: 700; color: var(--text-title);
+  margin-bottom: 4px; display: flex; align-items: center; gap: 8px;
+}
+.variant-label .num {
+  font-size: 10px; font-weight: 700; color: #fff;
+  background: var(--text-faint); padding: 1px 6px; border-radius: 4px;
+  min-width: 22px; text-align: center;
+}
+.variant-desc {
+  font-size: 11px; color: var(--text-faint); margin-bottom: 12px;
+}
+
+/* ===== 3-CARD ROW ===== */
+.cards-row {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 16px; margin-bottom: 0;
+}
+
+/* ===== BASE MODULE CARD ===== */
+.mod-card {
+  position: relative; cursor: default;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 18px 20px 16px;
+  overflow: hidden;
+  transition: all .25s var(--ease);
+}
+.mod-card:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+.mod-card.active { border-color: rgba(96,165,250,.35); box-shadow: var(--shadow), 0 0 0 3px rgba(96,165,250,.08); }
+.mod-card.pending-dim { opacity: 0.4; }
+
+/* Shimmer */
+.mod-card::after {
+  content: ''; position: absolute; top: 0; left: -120%; width: 70%; height: 100%;
+  background: linear-gradient(100deg, transparent, rgba(0,0,0,0.01), rgba(0,0,0,0.02), rgba(0,0,0,0.01), transparent);
+  transform: skewX(-18deg); pointer-events: none;
+}
+.mod-card.active::after { animation: shimmerSweep 3.5s ease-in-out infinite; }
+@keyframes shimmerSweep { 0% { left: -120%; } 50% { left: 170%; } 100% { left: 170%; } }
+
+/* Top accent line */
+.mod-card .accent-line {
+  position: absolute; top: 0; left: 16px; right: 16px; height: 2px;
+  border-radius: 0 0 2px 2px; opacity: .7;
+}
+.mod-card[data-color="purple"] .accent-line { background: linear-gradient(90deg, transparent, var(--purple), transparent); }
+.mod-card[data-color="blue"] .accent-line   { background: linear-gradient(90deg, transparent, var(--blue), transparent); }
+.mod-card[data-color="orange"] .accent-line { background: linear-gradient(90deg, transparent, var(--orange), transparent); }
+
+/* Header */
+.mc-header { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.mc-icon {
+  width: 36px; height: 36px; border-radius: 10px;
+  display: grid; place-items: center; font-size: 16px; flex-shrink: 0;
+}
+.mod-card[data-color="purple"] .mc-icon { background: var(--purple-dim); color: var(--purple); }
+.mod-card[data-color="blue"] .mc-icon   { background: var(--blue-dim); color: var(--blue); }
+.mod-card[data-color="orange"] .mc-icon { background: var(--orange-dim); color: var(--orange); }
+
+.mc-title-area { flex: 1; min-width: 0; }
+.mc-title { font-size: 14px; font-weight: 700; color: var(--text-title); margin-bottom: 2px; }
+.mc-subtitle { font-size: 11px; color: var(--text-sub); }
+
+/* Sparkline */
+.sparkline-path { fill: none; stroke-width: 1.5; stroke-linecap: round; opacity: .7; }
+.sparkline-area { opacity: .06; }
+
+/* Progress bar */
+.mc-progress { height: 3px; border-radius: 2px; background: #f0f0f1; overflow: hidden; margin-bottom: 10px; }
+.mc-progress-fill { height: 100%; border-radius: 2px; transition: width .8s var(--ease); }
+.mod-card[data-color="purple"] .mc-progress-fill { background: linear-gradient(90deg, var(--purple), rgba(167,139,250,.5)); }
+.mod-card[data-color="blue"] .mc-progress-fill   { background: linear-gradient(90deg, var(--blue), rgba(96,165,250,.5)); }
+.mod-card[data-color="orange"] .mc-progress-fill { background: linear-gradient(90deg, var(--orange), rgba(251,146,60,.5)); }
+
+/* Ring spin-pause */
+@keyframes ringSpinShow {
+  0%   { transform: rotate(0deg); }
+  16%  { transform: rotate(360deg); }
+  33%  { transform: rotate(720deg); }
+  50%  { transform: rotate(1080deg); }
+  52%  { transform: rotate(1080deg); }
+  100% { transform: rotate(1080deg); }
+}
+.ring-spin-wrap { animation: ringSpinShow 4s ease-in-out infinite; }
+
+/* ===== SUBSTEP TREE ===== */
+.tree-panel {
+  margin-top: 0;
+  padding: 12px 0 20px;
+  position: relative;
+}
+
+/* Dot canvas per variant */
+.dot-canvas {
+  position: absolute; inset: 0; pointer-events: none; z-index: 10;
+}
+
+/* ===== CHEVRON BOUNCE ===== */
+@keyframes chevBounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(2px); }
+}
+
+/* ===== PULSING DOT ===== */
+@keyframes dotPulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(96,165,250,.3); }
+  50% { transform: scale(1.25); box-shadow: 0 0 0 4px rgba(96,165,250,.08); }
+}
+@keyframes dotPulseGreen {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
+
+/* Spinner animation */
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Shimmer on active row */
+@keyframes rowShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Checkbox check animation */
+@keyframes checkPop {
+  0% { transform: scale(0); }
+  60% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
+/* Sparkline tooltip */
+.spark-tip {
+  position:absolute; top:-30px; padding:3px 8px; border-radius:6px;
+  background:#fff; border:1px solid #e5e7eb;
+  font-size:11px; font-weight:500; color:#111827; white-space:nowrap;
+  pointer-events:none; opacity:0; transition:opacity .1s;
+  transform:translateX(-50%); box-shadow:0 2px 8px rgba(0,0,0,.1);
+  z-index:20; line-height:1.4;
+}
+.spark-tip.vis { opacity:1; }
+.spark-dot {
+  position:absolute; width:7px; height:7px; border-radius:50%;
+  pointer-events:none; opacity:0; transition:opacity .1s;
+  transform:translate(-3.5px,-3.5px); border:2px solid #fff;
+  box-shadow:0 0 4px rgba(0,0,0,.15); z-index:20;
+}
+.spark-dot.vis { opacity:1; }
+</style>
+</head>
+<body>
+
+<!-- PAGE HEADER -->
+<div class="page-header">
+  <h1>Substep Tree v8</h1>
+  <span class="count">10 variants</span>
+  <div class="spacer"></div>
+  <div class="legend">
+    <span><span class="dot" style="background:var(--green)"></span> Done</span>
+    <span><span class="dot" style="background:var(--blue)"></span> Active</span>
+    <span><span class="dot" style="background:var(--text-faint)"></span> Pending</span>
+  </div>
+</div>
+
+<!-- TOC -->
+<div class="toc" id="toc"></div>
+
+<!-- ROWS RENDERED BY JS -->
+<div id="rows"></div>
+
+<div style="height:48px"></div>
+
+<script>
+// =====================================================================
+// DATA
+// =====================================================================
+var CARDS = [
+  { label: 'Create Hypothesis', color: 'purple', status: 'done',    progress: 100, tokens: '112k', time: '6m 38s', cost: '$1.24', sparkline: [12,28,45,52,68,74,82,88,95,100] },
+  { label: 'Test Ideas',        color: 'blue',   status: 'running', progress: 58,  tokens: '172k', time: '1hr 12m', cost: '$2.63', sparkline: [5,14,22,30,38,44,50,54,57,58] },
+  { label: 'Disseminate Results',color: 'orange', status: 'pending', progress: 0,   tokens: '0',    time: '--',      cost: '--',    sparkline: [0,0,0,0,0,0,0,0,0,0] },
+];
+
+var COLOR_MAP = {
+  purple: { main: '#a78bfa', dim: 'rgba(167,139,250,.10)', glow: 'rgba(167,139,250,.18)' },
+  blue:   { main: '#60a5fa', dim: 'rgba(96,165,250,.10)',  glow: 'rgba(96,165,250,.18)' },
+  orange: { main: '#fb923c', dim: 'rgba(251,146,60,.10)',  glow: 'rgba(251,146,60,.18)' },
+};
+
+// Sub-step tree data for the active module (Test Ideas / blue)
+var ROUNDS = [
+  { label: 'Round 5', state: 'done',    collapsed: true },
+  { label: 'Round 6', state: 'done',    collapsed: true },
+  { label: 'Round 7', state: 'active',  collapsed: false, subs: [
+    { label: 'Plan Approach',    state: 'done' },
+    { label: 'Plan Artifacts',   state: 'done' },
+    { label: 'Create Artifacts', state: 'active' },
+    { label: 'Write Paper',     state: 'pending' },
+  ]},
+  { label: 'Round 8', state: 'pending', collapsed: true },
+];
+
+var ICON_TYPES = { purple: 'lightbulb', blue: 'flask', orange: 'document' };
+
+// =====================================================================
+// SVG ICONS
+// =====================================================================
+function svgIcon(color, type, size) {
+  size = size || 18;
+  var s = 'none', w = '1.5';
+  if (type === 'lightbulb') {
+    return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 24 24" fill="'+s+'" stroke="'+color+'" stroke-width="'+w+'" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/></svg>';
+  }
+  if (type === 'flask') {
+    return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 24 24" fill="'+s+'" stroke="'+color+'" stroke-width="'+w+'" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6"/><path d="M10 3v6.5L4.5 19a1.5 1.5 0 0 0 1.3 2.2h12.4a1.5 1.5 0 0 0 1.3-2.2L14 9.5V3"/><path d="M8.5 14h7"/></svg>';
+  }
+  if (type === 'document') {
+    return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 24 24" fill="'+s+'" stroke="'+color+'" stroke-width="'+w+'" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/><path d="M14 2v6h6"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg>';
+  }
+  return '';
+}
+
+// =====================================================================
+// SPARKLINE BUILDER
+// =====================================================================
+function buildSparkline(data, color, w, h) {
+  w = w || 200; h = h || 28;
+  var padX = 2, padTop = 4, padBot = 4;
+  var max = Math.max.apply(null, data.concat([1]));
+  var pts = data.map(function(v, i) {
+    var x = padX + (i / (data.length - 1)) * (w - padX * 2);
+    var y = padTop + (1 - v / max) * (h - padTop - padBot);
+    return x + ',' + y;
+  });
+  var linePath = 'M' + pts.join(' L');
+  var areaPath = linePath + ' L' + (w - padX) + ',' + (h - padBot) + ' L' + padX + ',' + (h - padBot) + ' Z';
+  return '<svg viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none">' +
+    '<path class="sparkline-area" d="' + areaPath + '" fill="' + color + '"/>' +
+    '<path class="sparkline-path" d="' + linePath + '" stroke="' + color + '"/>' +
+    '</svg>';
+}
+
+// =====================================================================
+// RING GAUGE
+// =====================================================================
+function buildRingGauge(pct, color, status) {
+  var size = 44, r = (size - 6) / 2, c = Math.PI * 2 * r;
+  var offset = c - (pct / 100) * c;
+  var cx = size / 2, cy = size / 2;
+  var isActive = (status === 'running' && pct > 0 && pct < 100);
+  var svg = '<svg width="' + size + '" height="' + size + '" viewBox="0 0 ' + size + ' ' + size + '">';
+  svg += '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="#f0f0f1" stroke-width="3"/>';
+  svg += '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + color + '" stroke-width="3" stroke-linecap="round" stroke-dasharray="' + c + '" stroke-dashoffset="' + offset + '" transform="rotate(-90 ' + cx + ' ' + cy + ')"/>';
+  svg += '</svg>';
+  var wrapClass = isActive ? 'ring-spin-wrap' : '';
+  var html = '<div style="position:relative;width:' + size + 'px;height:' + size + 'px">';
+  html += '<div class="' + wrapClass + '" style="width:' + size + 'px;height:' + size + 'px">' + svg + '</div>';
+  html += '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#111827;font-family:Inter,sans-serif;pointer-events:none">' + pct + '%</div>';
+  html += '</div>';
+  return html;
+}
+
+// =====================================================================
+// HELPERS
+// =====================================================================
+function pendingCls(card) { return card.status === 'pending' ? ' pending-dim' : ''; }
+function activeCls(card) { return card.status === 'running' ? ' active' : ''; }
+function cardCls(card) { return 'mod-card' + activeCls(card) + pendingCls(card); }
+function iconHTML(card) {
+  return '<div class="mc-icon">' + svgIcon(COLOR_MAP[card.color].main, ICON_TYPES[card.color], 18) + '</div>';
+}
+function ringHTML(card) {
+  return '<div style="flex-shrink:0">' + buildRingGauge(card.progress, COLOR_MAP[card.color].main, card.status) + '</div>';
+}
+function accentLine() { return '<div class="accent-line"></div>'; }
+function progressBar(pct) { return '<div class="mc-progress"><div class="mc-progress-fill" style="width:'+pct+'%"></div></div>'; }
+
+function buildCard(card) {
+  var c = COLOR_MAP[card.color];
+  var h = '<div class="'+cardCls(card)+'" data-color="'+card.color+'">';
+  h += accentLine();
+  h += '<div class="mc-header">' + iconHTML(card) + '<div class="mc-title-area"><div class="mc-title">' + card.label + '</div><div class="mc-subtitle">Module</div></div>' + ringHTML(card) + '</div>';
+  h += '<div class="spark-wrap" style="position:relative;height:28px;margin-bottom:10px;cursor:crosshair">';
+  h += '<span style="position:absolute;top:2px;left:6px;font-size:9px;color:#9ca3af;z-index:1">tok/s</span>';
+  h += buildSparkline(card.sparkline, c.main, 200, 24);
+  h += '</div>';
+  h += progressBar(card.progress);
+  h += '<div style="display:flex;align-items:center;font-size:11px;color:#9ca3af"><span>' + card.time + '</span><span style="margin-left:auto;font-weight:600;color:var(--text-sub)">' + card.cost + '</span></div>';
+  h += '</div>';
+  return h;
+}
+
+function buildCardsRow() {
+  var h = '<div class="cards-row">';
+  CARDS.forEach(function(c) { h += buildCard(c); });
+  h += '</div>';
+  return h;
+}
+
+// Status dot HTML
+function statusDot(state, size, color) {
+  size = size || 8; color = color || '#60a5fa';
+  if (state === 'done') return '<div style="width:'+size+'px;height:'+size+'px;border-radius:50%;background:#4ade80;flex-shrink:0;position:relative;z-index:2"></div>';
+  if (state === 'active') return '<div style="width:'+size+'px;height:'+size+'px;border-radius:50%;background:'+color+';flex-shrink:0;animation:dotPulse 2s ease-in-out infinite;position:relative;z-index:2"></div>';
+  return '<div style="width:'+size+'px;height:'+size+'px;border-radius:50%;border:1.5px solid #d1d5db;flex-shrink:0;position:relative;z-index:2"></div>';
+}
+
+// Ghost chevron (appears on hover for collapsed rounds)
+function ghostChevron() {
+  return '<svg width="10" height="6" viewBox="0 0 10 6" style="opacity:0;transition:opacity .2s;flex-shrink:0" class="ghost-chev"><path d="M1 1 L5 5 L9 1" fill="none" stroke="#9ca3af" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+}
+
+// Hover handlers for ghost chevrons
+function hoverIn() { return 'onmouseenter="this.querySelector(\'.ghost-chev\')&&(this.querySelector(\'.ghost-chev\').style.opacity=\'0.5\')" onmouseleave="this.querySelector(\'.ghost-chev\')&&(this.querySelector(\'.ghost-chev\').style.opacity=\'0\')"'; }
+
+// =====================================================================
+// BASE TREE RENDERER (Variant 1 structure, used as foundation)
+// =====================================================================
+// Constants: trunk at left:24px center means left:23px with 2px width
+// Dot center at 24px matches trunk center at 24px (left:23px + 1px)
+// Sub-trunk: same X as main trunk (24px) via margin/padding adjustments
+
+// =====================================================================
+// 10 VARIANT RENDERERS
+// =====================================================================
+var VARIANTS = [
+
+// 1 ---------------------------------------------------------------
+{
+  name: 'Base (v7 variant 1 exact copy)',
+  desc: 'Vertical trunk line + horizontal branches + dots, lines through dot centers, dots on top of lines',
+  render: function(id) {
+    var h = '<div class="tree-panel" style="padding-left:calc(33.33% + 8px);max-width:33.33%">';
+    h += '<div style="position:relative;padding-left:20px">';
+    // vertical trunk at left:24px center (23px left + 2px width = center at 24px)
+    h += '<div style="position:absolute;left:24px;top:0;bottom:20px;width:2px;background:linear-gradient(180deg,#60a5fa,rgba(96,165,250,.15));border-radius:1px"></div>';
+    ROUNDS.forEach(function(r) {
+      var isExp = !r.collapsed && r.subs;
+      h += '<div style="position:relative;display:flex;align-items:center;gap:10px;height:36px;cursor:pointer" '+hoverIn()+'>';
+      h += '<div style="display:none"></div>';
+      h += statusDot(r.state, 10);
+      h += '<span style="font-size:12.5px;white-space:nowrap;font-weight:'+(r.state==='active'?'600':'400')+';color:'+(r.state==='active'?'#111827':r.state==='done'?'#6b7280':'#9ca3af')+'">' + r.label + '</span>';
+      if (r.collapsed) h += ghostChevron();
+      h += '</div>';
+      if (isExp) {
+        h += '<div style="position:relative;padding-left:30px;margin-left:-2px">';
+        h += '<div class="sub-trunk-line" style="position:absolute;left:6px;top:0;bottom:18px;width:1.5px;background:rgba(96,165,250,.15);border-radius:1px"></div>';
+        r.subs.forEach(function(s) {
+          h += '<div style="position:relative;display:flex;align-items:center;gap:8px;height:32px">';
+          h += '<div style="position:absolute;left:-24px;top:50%;width:24px;height:1.5px;background:rgba(96,165,250,.15);border-radius:1px"></div>';
+          h += statusDot(s.state, 7);
+          h += '<span style="font-size:11.5px;white-space:nowrap;color:'+(s.state==='active'?'#111827':s.state==='done'?'#9ca3af':'#d1d5db')+';font-weight:'+(s.state==='active'?'600':'400')+'">' + s.label + '</span>';
+          h += '</div>';
+        });
+        h += '<div style="height:28px;display:flex;align-items:center;padding-left:17px;font-size:11px;color:#d1d5db">...</div>';
+        h += '</div>';
+      }
+    });
+    h += '</div></div>';
+    return h;
+  }
+},
+
+// 2 ---------------------------------------------------------------
+{
+  name: 'Thicker trunk line (3px)',
+  desc: 'Bold 3px trunk and 2px branches for high contrast, same layout',
+  render: function(id) {
+    var h = '<div class="tree-panel" style="padding-left:calc(33.33% + 8px);max-width:33.33%">';
+    h += '<div style="position:relative;padding-left:20px">';
+    h += '<div style="position:absolute;left:23.5px;top:0;bottom:20px;width:3px;background:linear-gradient(180deg,#60a5fa,rgba(96,165,250,.2));border-radius:2px"></div>';
+    ROUNDS.forEach(function(r) {
+      var isExp = !r.collapsed && r.subs;
+      h += '<div style="position:relative;display:flex;align-items:center;gap:10px;height:36px;cursor:pointer" '+hoverIn()+'>';
+      h += '<div style="display:none"></div>';
+      h += statusDot(r.state, 10);
+      h += '<span style="font-size:12.5px;white-space:nowrap;font-weight:'+(r.state==='active'?'600':'400')+';color:'+(r.state==='active'?'#111827':r.state==='done'?'#6b7280':'#9ca3af')+'">' + r.label + '</span>';
+      if (r.collapsed) h += ghostChevron();
+      h += '</div>';
+      if (isExp) {
+        h += '<div style="position:relative;padding-left:30px;margin-left:-2px">';
+        h += '<div class="sub-trunk-line" style="position:absolute;left:5.5px;top:0;bottom:18px;width:2.5px;background:rgba(96,165,250,.2);border-radius:1px"></div>';
+        r.subs.forEach(function(s) {
+          h += '<div style="position:relative;display:flex;align-items:center;gap:8px;height:32px">';
+          h += '<div style="position:absolute;left:-24px;top:50%;width:24px;height:2px;background:rgba(96,165,250,.2);border-radius:1px"></div>';
+          h += statusDot(s.state, 7);
+          h += '<span style="font-size:11.5px;white-space:nowrap;color:'+(s.state==='active'?'#111827':s.state==='done'?'#9ca3af':'#d1d5db')+';font-weight:'+(s.state==='active'?'600':'400')+'">' + s.label + '</span>';
+          h += '</div>';
+        });
+        h += '<div style="height:28px;display:flex;align-items:center;padding-left:17px;font-size:11px;color:#d1d5db">...</div>';
+        h += '</div>';
+      }
+    });
+    h += '</div></div>';
+    return h;
+  }
+},
+
+// 3 ---------------------------------------------------------------
+{
+  name: 'Gradient trunk line (blue to transparent)',
+  desc: 'Trunk fades from solid blue at top to fully transparent at bottom',
+  render: function(id) {
+    var h = '<div class="tree-panel" style="padding-left:calc(33.33% + 8px);max-width:33.33%">';
+    h += '<div style="position:relative;padding-left:20px">';
+    h += '<div style="position:absolute;left:24px;top:0;bottom:20px;width:2px;background:linear-gradient(180deg,#60a5fa 0%,rgba(96,165,250,.6) 30%,rgba(96,165,250,.25) 60%,rgba(96,165,250,.02) 100%);border-radius:1px"></div>';
+    ROUNDS.forEach(function(r) {
+      var isExp = !r.collapsed && r.subs;
+      h += '<div style="position:relative;display:flex;align-items:center;gap:10px;height:36px;cursor:pointer" '+hoverIn()+'>';
+      h += '<div style="display:none"></div>';
+      h += statusDot(r.state, 10);
+      h += '<span style="font-size:12.5px;white-space:nowrap;font-weight:'+(r.state==='active'?'600':'400')+';color:'+(r.state==='active'?'#111827':r.state==='done'?'#6b7280':'#9ca3af')+'">' + r.label + '</span>';
+      if (r.collapsed) h += ghostChevron();
+      h += '</div>';
+      if (isExp) {
+        h += '<div style="position:relative;padding-left:30px;margin-left:-2px">';
+        h += '<div class="sub-trunk-line" style="position:absolute;left:6px;top:0;bottom:18px;width:1.5px;background:linear-gradient(180deg,rgba(96,165,250,.25) 0%,rgba(96,165,250,.06) 100%);border-radius:1px"></div>';
+        r.subs.forEach(function(s) {
+          h += '<div style="position:relative;display:flex;align-items:center;gap:8px;height:32px">';
+          h += '<div style="position:absolute;left:-24px;top:50%;width:24px;height:1.5px;background:rgba(96,165,250,.12);border-radius:1px"></div>';
+          h += statusDot(s.state, 7);
+          h += '<span style="font-size:11.5px;white-space:nowrap;color:'+(s.state==='active'?'#111827':s.state==='done'?'#9ca3af':'#d1d5db')+';font-weight:'+(s.state==='active'?'600':'400')+'">' + s.label + '</span>';
+          h += '</div>';
+        });
+        h += '<div style="height:28px;display:flex;align-items:center;padding-left:17px;font-size:11px;color:#d1d5db">...</div>';
+        h += '</div>';
+      }
+    });
+    h += '</div></div>';
+    return h;
+  }
+},
+
+// 4 ---------------------------------------------------------------
+{
+  name: 'Active sub-step with light blue background',
+  desc: 'Active sub-step row gets a subtle blue highlight bar behind it',
+  render: function(id) {
+    var h = '<div class="tree-panel" style="padding-left:calc(33.33% + 8px);max-width:33.33%">';
+    h += '<div style="position:relative;padding-left:20px">';
+    h += '<div style="position:absolute;left:24px;top:0;bottom:20px;width:2px;background:linear-gradient(180deg,#60a5fa,rgba(96,165,250,.15));border-radius:1px"></div>';
+    ROUNDS.forEach(function(r) {
+      var isExp = !r.collapsed && r.subs;
+      h += '<div style="position:relative;display:flex;align-items:center;gap:10px;height:36px;cursor:pointer" '+hoverIn()+'>';
+      h += '<div style="display:none"></div>';
+      h += statusDot(r.state, 10);
+      h += '<span style="font-size:12.5px;white-space:nowrap;font-weight:'+(r.state==='active'?'600':'400')+';color:'+(r.state==='active'?'#111827':r.state==='done'?'#6b7280':'#9ca3af')+'">' + r.label + '</span>';
+      if (r.collapsed) h += ghostChevron();
+      h += '</div>';
+      if (isExp) {
+        h += '<div style="position:relative;padding-left:30px;margin-left:-2px">';
+        h += '<div class="sub-trunk-line" style="position:absolute;left:6px;top:0;bottom:18px;width:1.5px;background:rgba(96,165,250,.15);border-radius:1px"></div>';
+        r.subs.forEach(function(s) {
+          var activeBg = s.state === 'active' ? 'background:rgba(96,165,250,.07);border-radius:6px;margin-left:-8px;padding-left:8px;margin-right:-8px;padding-right:8px;' : '';
+          h += '<div style="position:relative;display:flex;align-items:center;gap:8px;height:32px;'+activeBg+'">';
+          h += '<div style="position:absolute;left:'+(s.state==='active'?'-16px':'-24px')+';top:50%;width:'+(s.state==='active'?'16px':'24px')+';height:1.5px;background:rgba(96,165,250,'+(s.state==='active'?'.25':'.15')+');border-radius:1px"></div>';
+          h += statusDot(s.state, 7);
+          h += '<span style="font-size:11.5px;white-space:nowrap;color:'+(s.state==='active'?'#111827':s.state==='done'?'#9ca3af':'#d1d5db')+';font-weight:'+(s.state==='active'?'600':'400')+'">' + s.label + '</span>';
+          h += '</div>';
+        });
+        h += '<div style="height:28px;display:flex;align-items:center;padding-left:17px;font-size:11px;color:#d1d5db">...</div>';
+        h += '</div>';
+      }
+    });
+    h += '</div></div>';
+    return h;
+  }
+},
+
+// 5 ---------------------------------------------------------------
+{
+  name: 'Status badges (Done/Running pills) instead of dots',
+  desc: 'Colored pill badges replace status dots for explicit state labels',
+  render: function(id) {
+    function badge(state, isRound) {
+      var sz = isRound ? '9px' : '8px';
+      var pad = isRound ? '2px 8px' : '2px 7px';
+      if (state === 'done') return '<span style="font-size:'+sz+';font-weight:700;padding:'+pad+';border-radius:10px;background:rgba(74,222,128,.1);color:#4ade80;text-transform:uppercase;letter-spacing:.3px;flex-shrink:0;white-space:nowrap">Done</span>';
+      if (state === 'active') return '<span style="font-size:'+sz+';font-weight:700;padding:'+pad+';border-radius:10px;background:rgba(96,165,250,.1);color:#60a5fa;text-transform:uppercase;letter-spacing:.3px;flex-shrink:0;white-space:nowrap">Running</span>';
+      return '<span style="font-size:'+sz+';font-weight:700;padding:'+pad+';border-radius:10px;background:#f4f4f5;color:#9ca3af;text-transform:uppercase;letter-spacing:.3px;flex-shrink:0;white-space:nowrap">Pending</span>';
+    }
+    var h = '<div class="tree-panel" style="padding-left:calc(33.33% + 8px);max-width:38%">';
+    h += '<div style="position:relative;padding-left:20px">';
+    h += '<div style="position:absolute;left:24px;top:0;bottom:20px;width:2px;background:linear-gradient(180deg,#60a5fa,rgba(96,165,250,.15));border-radius:1px"></div>';
+    ROUNDS.forEach(function(r) {
+      var isExp = !r.collapsed && r.subs;
+      h += '<div style="position:relative;display:flex;align-items:center;gap:10px;height:36px;cursor:pointer" '+hoverIn()+'>';
+      h += '<div style="display:none"></div>';
+      h += statusDot(r.state, 10);
+      h += '<span style="font-size:12.5px;white-space:nowrap;font-weight:'+(r.state==='active'?'600':'400')+';color:'+(r.state==='active'?'#111827':r.state==='done'?'#6b7280':'#9ca3af')+';flex:1">' + r.label + '</span>';
+      h += badge(r.state, true);
+      if (r.collapsed) h += ghostChevron();
+      h += '</div>';
+      if (isExp) {
+        h += '<div style="position:relative;padding-left:30px;margin-left:-2px">';
+        h += '<div class="sub-trunk-line" style="position:absolute;left:6px;top:0;bottom:18px;width:1.5px;background:rgba(96,165,250,.15);border-radius:1px"></div>';
+        r.subs.forEach(function(s) {
+          h += '<div style="position:relative;display:flex;align-items:center;gap:8px;height:32px">';
+          h += '<div style="position:absolute;left:-24px;top:50%;width:24px;height:1.5px;background:rgba(96,165,250,.15);border-radius:1px"></div>';
+          h += statusDot(s.state, 7);
+          h += '<span style="font-size:11.5px;white-space:nowrap;color:'+(s.state==='active'?'#111827':s.state==='done'?'#9ca3af':'#d1d5db')+';font-weight:'+(s.state==='active'?'600':'400')+';flex:1">' + s.label + '</span>';
+          h += badge(s.state, false);
+          h += '</div>';
+        });
+        h += '<div style="height:28px;display:flex;align-items:center;padding-left:17px;font-size:11px;color:#d1d5db">...</div>';
+        h += '</div>';
+      }
+    });
+    h += '</div></div>';
+    return h;
+  }
+},
+
+// 6 ---------------------------------------------------------------
+{
+  name: 'Rounded L-bend connectors (curved corners)',
+  desc: 'Curved border-radius at trunk-to-branch junctions instead of sharp 90-degree bends',
+  render: function(id) {
+    var h = '<div class="tree-panel" style="padding-left:calc(33.33% + 8px);max-width:33.33%">';
+    h += '<div style="position:relative;padding-left:20px">';
+    h += '<div style="position:absolute;left:24px;top:0;bottom:20px;width:2px;background:linear-gradient(180deg,#60a5fa,rgba(96,165,250,.15));border-radius:1px"></div>';
+    ROUNDS.forEach(function(r) {
+      var isExp = !r.collapsed && r.subs;
+      h += '<div style="position:relative;display:flex;align-items:center;gap:10px;height:36px;cursor:pointer" '+hoverIn()+'>';
+      // Rounded L-bend connector from trunk to dot
+      h += '<div style="position:absolute;left:5px;top:calc(50% - 5px);width:14px;height:10px;border-left:2px solid rgba(96,165,250,.25);border-bottom:2px solid rgba(96,165,250,.25);border-radius:0 0 0 8px"></div>';
+      h += statusDot(r.state, 10);
+      h += '<span style="font-size:12.5px;white-space:nowrap;font-weight:'+(r.state==='active'?'600':'400')+';color:'+(r.state==='active'?'#111827':r.state==='done'?'#6b7280':'#9ca3af')+'">' + r.label + '</span>';
+      if (r.collapsed) h += ghostChevron();
+      h += '</div>';
+      if (isExp) {
+        h += '<div style="position:relative;padding-left:30px;margin-left:-2px">';
+        h += '<div class="sub-trunk-line" style="position:absolute;left:6px;top:0;bottom:18px;width:1.5px;background:rgba(96,165,250,.15);border-radius:1px"></div>';
+        r.subs.forEach(function(s) {
+          h += '<div style="position:relative;display:flex;align-items:center;gap:8px;height:32px">';
+          // Rounded L-bend for sub-steps
+          h += '<div style="position:absolute;left:-22px;top:calc(50% - 4px);width:18px;height:8px;border-left:1.5px solid rgba(96,165,250,.15);border-bottom:1.5px solid rgba(96,165,250,.15);border-radius:0 0 0 6px"></div>';
+          h += statusDot(s.state, 7);
+          h += '<span style="font-size:11.5px;white-space:nowrap;color:'+(s.state==='active'?'#111827':s.state==='done'?'#9ca3af':'#d1d5db')+';font-weight:'+(s.state==='active'?'600':'400')+'">' + s.label + '</span>';
+          h += '</div>';
+        });
+        h += '<div style="height:28px;display:flex;align-items:center;padding-left:17px;font-size:11px;color:#d1d5db">...</div>';
+        h += '</div>';
+      }
+    });
+    h += '</div></div>';
+    return h;
+  }
+},
+
+// 7 ---------------------------------------------------------------
+{
+  name: 'SVG icons (checkmark/spinner/circle) instead of dots',
+  desc: 'SVG check for done, spinning arc for active, empty circle for pending',
+  render: function(id) {
+    function stIcon(state, size) {
+      size = size || 14;
+      var r = (size - 2) / 2;
+      if (state === 'done') return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 '+size+' '+size+'" style="flex-shrink:0;position:relative;z-index:2"><circle cx="'+(size/2)+'" cy="'+(size/2)+'" r="'+r+'" fill="rgba(74,222,128,.12)"/><path d="M'+(size*.28)+' '+(size*.5)+' L'+(size*.43)+' '+(size*.65)+' L'+(size*.72)+' '+(size*.35)+'" fill="none" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+      if (state === 'active') return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 '+size+' '+size+'" style="flex-shrink:0;animation:spin 1s linear infinite;position:relative;z-index:2"><circle cx="'+(size/2)+'" cy="'+(size/2)+'" r="'+r+'" fill="none" stroke="#f0f0f1" stroke-width="1.5"/><path d="M'+(size/2)+' '+(size/2-r)+' A'+r+' '+r+' 0 0 1 '+(size/2+r)+' '+(size/2)+'" fill="none" stroke="#60a5fa" stroke-width="1.5" stroke-linecap="round"/></svg>';
+      return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 '+size+' '+size+'" style="flex-shrink:0;position:relative;z-index:2"><circle cx="'+(size/2)+'" cy="'+(size/2)+'" r="'+r+'" fill="none" stroke="#d1d5db" stroke-width="1.5"/></svg>';
+    }
+    var h = '<div class="tree-panel" style="padding-left:calc(33.33% + 8px);max-width:33.33%">';
+    h += '<div style="position:relative;padding-left:20px">';
+    h += '<div style="position:absolute;left:24px;top:0;bottom:20px;width:2px;background:linear-gradient(180deg,#60a5fa,rgba(96,165,250,.15));border-radius:1px"></div>';
+    ROUNDS.forEach(function(r) {
+      var isExp = !r.collapsed && r.subs;
+      h += '<div style="position:relative;display:flex;align-items:center;gap:10px;height:36px;cursor:pointer" '+hoverIn()+'>';
+      h += '<div style="display:none"></div>';
+      h += stIcon(r.state, 14);
+      h += '<span style="font-size:12.5px;white-space:nowrap;font-weight:'+(r.state==='active'?'600':'400')+';color:'+(r.state==='active'?'#111827':r.state==='done'?'#6b7280':'#9ca3af')+'">' + r.label + '</span>';
+      if (r.collapsed) h += ghostChevron();
+      h += '</div>';
+      if (isExp) {
+        h += '<div style="position:relative;padding-left:30px;margin-left:-2px">';
+        h += '<div class="sub-trunk-line" style="position:absolute;left:6px;top:0;bottom:18px;width:1.5px;background:rgba(96,165,250,.15);border-radius:1px"></div>';
+        r.subs.forEach(function(s) {
+          h += '<div style="position:relative;display:flex;align-items:center;gap:8px;height:32px">';
+          h += '<div style="position:absolute;left:-24px;top:50%;width:24px;height:1.5px;background:rgba(96,165,250,.15);border-radius:1px"></div>';
+          h += stIcon(s.state, 12);
+          h += '<span style="font-size:11.5px;white-space:nowrap;color:'+(s.state==='active'?'#111827':s.state==='done'?'#9ca3af':'#d1d5db')+';font-weight:'+(s.state==='active'?'600':'400')+'">' + s.label + '</span>';
+          h += '</div>';
+        });
+        h += '<div style="height:28px;display:flex;align-items:center;padding-left:21px;font-size:11px;color:#d1d5db">...</div>';
+        h += '</div>';
+      }
+    });
+    h += '</div></div>';
+    return h;
+  }
+},
+
+// 8 ---------------------------------------------------------------
+{
+  name: 'Duration labels next to each item',
+  desc: 'Right-aligned duration text ("8m", "6m", etc.) shown for every round and sub-step',
+  render: function(id) {
+    var durations = { 'Round 5': '4m', 'Round 6': '5m', 'Round 7': '8m', 'Round 8': '--' };
+    var subDurations = { 'Plan Approach': '2m', 'Plan Artifacts': '2m', 'Create Artifacts': '5m', 'Write Paper': '--' };
+    var h = '<div class="tree-panel" style="padding-left:calc(33.33% + 8px);max-width:36%">';
+    h += '<div style="position:relative;padding-left:20px">';
+    h += '<div style="position:absolute;left:24px;top:0;bottom:20px;width:2px;background:linear-gradient(180deg,#60a5fa,rgba(96,165,250,.15));border-radius:1px"></div>';
+    ROUNDS.forEach(function(r) {
+      var isExp = !r.collapsed && r.subs;
+      h += '<div style="position:relative;display:flex;align-items:center;gap:10px;height:36px;cursor:pointer" '+hoverIn()+'>';
+      h += '<div style="display:none"></div>';
+      h += statusDot(r.state, 10);
+      h += '<span style="font-size:12.5px;white-space:nowrap;font-weight:'+(r.state==='active'?'600':'400')+';color:'+(r.state==='active'?'#111827':r.state==='done'?'#6b7280':'#9ca3af')+';flex:1">' + r.label + '</span>';
+      h += '<span style="font-size:10px;color:#9ca3af;font-variant-numeric:tabular-nums;white-space:nowrap">'+(durations[r.label]||'')+'</span>';
+      if (r.collapsed) h += ghostChevron();
+      h += '</div>';
+      if (isExp) {
+        h += '<div style="position:relative;padding-left:30px;margin-left:-2px">';
+        h += '<div class="sub-trunk-line" style="position:absolute;left:6px;top:0;bottom:18px;width:1.5px;background:rgba(96,165,250,.15);border-radius:1px"></div>';
+        r.subs.forEach(function(s) {
+          h += '<div style="position:relative;display:flex;align-items:center;gap:8px;height:32px">';
+          h += '<div style="position:absolute;left:-24px;top:50%;width:24px;height:1.5px;background:rgba(96,165,250,.15);border-radius:1px"></div>';
+          h += statusDot(s.state, 7);
+          h += '<span style="font-size:11.5px;white-space:nowrap;color:'+(s.state==='active'?'#111827':s.state==='done'?'#9ca3af':'#d1d5db')+';font-weight:'+(s.state==='active'?'600':'400')+';flex:1">' + s.label + '</span>';
+          h += '<span style="font-size:9px;color:#d1d5db;font-variant-numeric:tabular-nums;white-space:nowrap">'+(subDurations[s.label]||'')+'</span>';
+          h += '</div>';
+        });
+        h += '<div style="height:28px;display:flex;align-items:center;padding-left:17px;font-size:11px;color:#d1d5db">...</div>';
+        h += '</div>';
+      }
+    });
+    h += '</div></div>';
+    return h;
+  }
+},
+
+// 9 ---------------------------------------------------------------
+{
+  name: 'Active step has a left color stripe accent',
+  desc: 'Active sub-step gets a 3px blue left border stripe for emphasis',
+  render: function(id) {
+    var h = '<div class="tree-panel" style="padding-left:calc(33.33% + 8px);max-width:33.33%">';
+    h += '<div style="position:relative;padding-left:20px">';
+    h += '<div style="position:absolute;left:24px;top:0;bottom:20px;width:2px;background:linear-gradient(180deg,#60a5fa,rgba(96,165,250,.15));border-radius:1px"></div>';
+    ROUNDS.forEach(function(r) {
+      var isExp = !r.collapsed && r.subs;
+      h += '<div style="position:relative;display:flex;align-items:center;gap:10px;height:36px;cursor:pointer" '+hoverIn()+'>';
+      h += '<div style="display:none"></div>';
+      h += statusDot(r.state, 10);
+      h += '<span style="font-size:12.5px;white-space:nowrap;font-weight:'+(r.state==='active'?'600':'400')+';color:'+(r.state==='active'?'#111827':r.state==='done'?'#6b7280':'#9ca3af')+'">' + r.label + '</span>';
+      if (r.collapsed) h += ghostChevron();
+      h += '</div>';
+      if (isExp) {
+        h += '<div style="position:relative;padding-left:30px;margin-left:-2px">';
+        h += '<div class="sub-trunk-line" style="position:absolute;left:6px;top:0;bottom:18px;width:1.5px;background:rgba(96,165,250,.15);border-radius:1px"></div>';
+        r.subs.forEach(function(s) {
+          var stripe = s.state === 'active' ? 'border-left:3px solid #60a5fa;padding-left:10px;margin-left:-3px;' : '';
+          h += '<div style="position:relative;display:flex;align-items:center;gap:8px;height:32px;'+stripe+'">';
+          if (s.state !== 'active') {
+            h += '<div style="position:absolute;left:-24px;top:50%;width:24px;height:1.5px;background:rgba(96,165,250,.15);border-radius:1px"></div>';
+          } else {
+            h += '<div style="position:absolute;left:-21px;top:50%;width:21px;height:1.5px;background:rgba(96,165,250,.25);border-radius:1px"></div>';
+          }
+          h += statusDot(s.state, 7);
+          h += '<span style="font-size:11.5px;white-space:nowrap;color:'+(s.state==='active'?'#111827':s.state==='done'?'#9ca3af':'#d1d5db')+';font-weight:'+(s.state==='active'?'600':'400')+'">' + s.label + '</span>';
+          h += '</div>';
+        });
+        h += '<div style="height:28px;display:flex;align-items:center;padding-left:17px;font-size:11px;color:#d1d5db">...</div>';
+        h += '</div>';
+      }
+    });
+    h += '</div></div>';
+    return h;
+  }
+},
+
+// 10 ---------------------------------------------------------------
+{
+  name: '"..." replaced with a subtle fade gradient',
+  desc: 'Instead of literal "..." text, last row fades out with a gradient overlay',
+  render: function(id) {
+    var h = '<div class="tree-panel" style="padding-left:calc(33.33% + 8px);max-width:33.33%">';
+    h += '<div style="position:relative;padding-left:20px">';
+    h += '<div style="position:absolute;left:24px;top:0;bottom:20px;width:2px;background:linear-gradient(180deg,#60a5fa,rgba(96,165,250,.15));border-radius:1px"></div>';
+    ROUNDS.forEach(function(r) {
+      var isExp = !r.collapsed && r.subs;
+      h += '<div style="position:relative;display:flex;align-items:center;gap:10px;height:36px;cursor:pointer" '+hoverIn()+'>';
+      h += '<div style="display:none"></div>';
+      h += statusDot(r.state, 10);
+      h += '<span style="font-size:12.5px;white-space:nowrap;font-weight:'+(r.state==='active'?'600':'400')+';color:'+(r.state==='active'?'#111827':r.state==='done'?'#6b7280':'#9ca3af')+'">' + r.label + '</span>';
+      if (r.collapsed) h += ghostChevron();
+      h += '</div>';
+      if (isExp) {
+        h += '<div style="position:relative;padding-left:30px;margin-left:-2px">';
+        h += '<div class="sub-trunk-line" style="position:absolute;left:6px;top:0;bottom:18px;width:1.5px;background:rgba(96,165,250,.15);border-radius:1px"></div>';
+        r.subs.forEach(function(s) {
+          h += '<div style="position:relative;display:flex;align-items:center;gap:8px;height:32px">';
+          h += '<div style="position:absolute;left:-24px;top:50%;width:24px;height:1.5px;background:rgba(96,165,250,.15);border-radius:1px"></div>';
+          h += statusDot(s.state, 7);
+          h += '<span style="font-size:11.5px;white-space:nowrap;color:'+(s.state==='active'?'#111827':s.state==='done'?'#9ca3af':'#d1d5db')+';font-weight:'+(s.state==='active'?'600':'400')+'">' + s.label + '</span>';
+          h += '</div>';
+        });
+        // Fade gradient instead of "..."
+        h += '<div style="position:relative;height:28px;overflow:hidden">';
+        h += '<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(250,250,250,0) 0%,rgba(250,250,250,.85) 50%,rgba(250,250,250,1) 100%);pointer-events:none;z-index:3"></div>';
+        h += '<div style="display:flex;align-items:center;padding-left:17px;font-size:11px;color:#d1d5db;opacity:.4">Review Results, Iterate Design, Final Check</div>';
+        h += '</div>';
+        h += '</div>';
+      }
+    });
+    h += '</div></div>';
+    return h;
+  }
+},
+
+]; // end VARIANTS
+
+// =====================================================================
+// BUILD PAGE
+// =====================================================================
+function buildPage() {
+  // TOC
+  var tocHtml = '';
+  VARIANTS.forEach(function(v, i) {
+    tocHtml += '<a href="#v' + (i+1) + '">' + (i+1) + '. ' + v.name + '</a>';
+  });
+  document.getElementById('toc').innerHTML = tocHtml;
+
+  // Rows
+  var rowsHtml = '';
+  VARIANTS.forEach(function(v, i) {
+    var vid = 'v' + (i+1);
+    rowsHtml += '<div class="variant-section" id="' + vid + '">';
+    rowsHtml += '<div class="variant-label"><span class="num">' + (i+1) + '</span>' + v.name + '</div>';
+    rowsHtml += '<div class="variant-desc">' + v.desc + '</div>';
+    rowsHtml += '<div style="position:relative">';
+    // Dot canvas for all 10 variants
+    rowsHtml += '<canvas class="dot-canvas" data-variant="' + vid + '"></canvas>';
+    rowsHtml += buildCardsRow();
+    rowsHtml += v.render(vid);
+    rowsHtml += '</div>';
+    rowsHtml += '</div>';
+  });
+  document.getElementById('rows').innerHTML = rowsHtml;
+
+  // Initialize dot animations
+  initDotAnimations();
+}
+
+// =====================================================================
+// L-SHAPED DOT ANIMATION (all variants)
+// =====================================================================
+function initDotAnimations() {
+  var canvases = document.querySelectorAll('.dot-canvas');
+  canvases.forEach(function(canvas) {
+    var ctx = canvas.getContext('2d');
+    var parent = canvas.parentElement;
+    var dots = [];
+
+    function resize() {
+      var rect = parent.getBoundingClientRect();
+      canvas.width = rect.width;
+      canvas.height = rect.height;
+    }
+    resize();
+    window.addEventListener('resize', resize);
+
+    function getSource() {
+      var section = canvas.closest('.variant-section');
+      var activeCard = section.querySelector('.mod-card.active');
+      if (!activeCard) return null;
+      var parentRect = parent.getBoundingClientRect();
+      var cardRect = activeCard.getBoundingClientRect();
+      return {
+        x: cardRect.left + cardRect.width / 2 - parentRect.left,
+        y: cardRect.bottom - parentRect.top
+      };
+    }
+
+    function getTarget() {
+      var section = canvas.closest('.variant-section');
+      var treePanel = section.querySelector('.tree-panel');
+      if (!treePanel) return null;
+      var activeDots = treePanel.querySelectorAll('[style*="animation:dotPulse"]');
+      var target = activeDots.length > 1 ? activeDots[activeDots.length - 1] : activeDots[0];
+      if (!target) {
+        // For variant 7, find the spinning SVG icon instead
+        var spinners = treePanel.querySelectorAll('[style*="animation:spin"]');
+        target = spinners.length > 1 ? spinners[spinners.length - 1] : spinners[0];
+      }
+      if (!target) return null;
+      var parentRect = parent.getBoundingClientRect();
+      var dotRect = target.getBoundingClientRect();
+      return {
+        x: dotRect.left + dotRect.width / 2 - parentRect.left,
+        y: dotRect.top + dotRect.height / 2 - parentRect.top
+      };
+    }
+
+    function getTreePath() {
+      var section = canvas.closest('.variant-section');
+      var treePanel = section.querySelector('.tree-panel');
+      if (!treePanel) return null;
+      var parentRect = parent.getBoundingClientRect();
+
+      var vertLines = [];
+      var horizLines = [];
+      treePanel.querySelectorAll('div[style*="position:absolute"]').forEach(function(el) {
+        var r = el.getBoundingClientRect();
+        if (r.width <= 4 && r.height > 10) {
+          vertLines.push({ x: r.left + r.width/2 - parentRect.left, top: r.top - parentRect.top, bot: r.bottom - parentRect.top, cls: el.className });
+        } else if (r.height <= 4 && r.width > 5) {
+          horizLines.push({ y: Math.round(r.top - parentRect.top), left: r.left - parentRect.left, right: r.right - parentRect.left });
+        }
+      });
+
+      vertLines.sort(function(a,b) { return (b.bot-b.top) - (a.bot-a.top); });
+      var mainTrunk = vertLines[0];
+      var subTrunk = vertLines.find(function(l) { return l.cls && l.cls.indexOf('sub-trunk') >= 0; }) || vertLines[1];
+
+      if (!mainTrunk || !subTrunk) return null;
+
+      var r7Branch = horizLines.find(function(h) { return Math.abs(h.left - mainTrunk.x) < 8 && h.y > mainTrunk.top + 50; });
+      var subBranches = horizLines.filter(function(h) { return Math.abs(h.left - subTrunk.x) < 8; }).sort(function(a,b){return a.y-b.y;});
+      var caBranch = subBranches[2];
+
+      if (!r7Branch || !caBranch) return null;
+
+      return {
+        mainTrunkX: mainTrunk.x,
+        mainTrunkTop: mainTrunk.top,
+        r7Y: r7Branch.y,
+        r7BranchRight: r7Branch.right,
+        subTrunkX: subTrunk.x,
+        subTrunkTop: subTrunk.top,
+        caY: caBranch.y,
+        caBranchRight: caBranch.right,
+      };
+    }
+
+    function spawnDot(src, tp) {
+      dots.push({
+        sx: tp.mainTrunkX, sy: tp.mainTrunkTop,
+        p1x: tp.mainTrunkX, p1y: tp.mainTrunkTop,
+        p2x: tp.mainTrunkX, p2y: tp.r7Y,
+        p3x: tp.subTrunkX,  p3y: tp.r7Y,
+        p4x: tp.subTrunkX,  p4y: tp.caY,
+        p5x: tp.caBranchRight, p5y: tp.caY,
+        progress: 0, speed: 0.004 + Math.random() * 0.002,
+        r: 1.5 + Math.random() * 1, trail: [],
+      });
+    }
+
+    var spawnTimer = 0;
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      var src = getSource();
+      var tp = getTreePath();
+      if (src && tp) {
+        spawnTimer++;
+        if (spawnTimer % 24 === 0) spawnDot(src, tp);
+      }
+      dots = dots.filter(function(d) { return d.progress <= 1; });
+      dots.forEach(function(d) {
+        d.progress += d.speed;
+        var t = d.progress;
+        var l1 = Math.sqrt(Math.pow(d.p1x-d.sx,2)+Math.pow(d.p1y-d.sy,2));
+        var l2 = Math.abs(d.p2y - d.p1y);
+        var l3 = Math.abs(d.p3x - d.p2x);
+        var l4 = Math.abs(d.p4y - d.p3y);
+        var l5 = Math.abs(d.p5x - d.p4x);
+        var total = l1+l2+l3+l4+l5; if(total<1) total=1;
+        var f1=l1/total, f2=(l1+l2)/total, f3=(l1+l2+l3)/total, f4=(l1+l2+l3+l4)/total;
+        var x, y;
+        if (t <= f1) {
+          var p = f1>0 ? t/f1 : 0;
+          x = d.sx+(d.p1x-d.sx)*p; y = d.sy+(d.p1y-d.sy)*p;
+        } else if (t <= f2) {
+          var p = (t-f1)/(f2-f1);
+          x = d.p2x; y = d.p1y+(d.p2y-d.p1y)*p;
+        } else if (t <= f3) {
+          var p = (t-f2)/(f3-f2);
+          x = d.p2x+(d.p3x-d.p2x)*p; y = d.p2y;
+        } else if (t <= f4) {
+          var p = (t-f3)/(f4-f3);
+          x = d.p3x; y = d.p3y+(d.p4y-d.p3y)*p;
+        } else {
+          var p = (t-f4)/(1-f4);
+          x = d.p4x+(d.p5x-d.p4x)*p; y = d.p4y;
+        }
+
+        d.trail.push({ x: x, y: y });
+        d.trail.push({ x: x, y: y });
+        if (d.trail.length > 6) d.trail.shift();
+
+        for (var i = 0; i < d.trail.length - 1; i++) {
+          var alpha = (i / d.trail.length) * 0.25;
+          ctx.beginPath();
+          ctx.moveTo(d.trail[i].x, d.trail[i].y);
+          ctx.lineTo(d.trail[i + 1].x, d.trail[i + 1].y);
+          ctx.strokeStyle = 'rgba(96,165,250,' + alpha + ')';
+          ctx.lineWidth = d.r * 0.5;
+          ctx.stroke();
+        }
+
+        var alpha2 = t < 0.1 ? t * 10 : t > 0.9 ? (1 - t) * 10 : 1;
+        ctx.beginPath();
+        ctx.arc(x, y, d.r, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(96,165,250,' + (alpha2 * 0.7) + ')';
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.arc(x, y, d.r * 2.5, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(96,165,250,' + (alpha2 * 0.15) + ')';
+        ctx.fill();
+      });
+
+      requestAnimationFrame(draw);
+    }
+    draw();
+  });
+}
+
+// =====================================================================
+// INIT
+// =====================================================================
+buildPage();
+
+// Sparkline hover tooltips
+var tokData = {purple:[120,340,580,620,710,780,850,900,940,960], blue:[80,180,290,380,450,520,570,600,620,640], orange:[0,0,0,0,0,0,0,0,0,0]};
+var timeLbls = ['14:02','14:08','14:14','14:20','14:26','14:32','14:38','14:44','14:50','14:56'];
+document.querySelectorAll('.spark-wrap').forEach(function(el) {
+  var tip = document.createElement('div'); tip.className = 'spark-tip'; el.appendChild(tip);
+  var dot = document.createElement('div'); dot.className = 'spark-dot'; el.appendChild(dot);
+  var card = el.closest('.mod-card');
+  var col = card ? card.dataset.color : 'blue';
+  var hex = col==='purple'?'#a78bfa':col==='blue'?'#60a5fa':'#fb923c';
+  var toks = tokData[col] || tokData.blue;
+  dot.style.background = hex;
+  el.addEventListener('mousemove', function(e) {
+    var r = el.getBoundingClientRect(), x = e.clientX - r.left;
+    var pct = Math.max(0, Math.min(1, x / r.width));
+    var idx = Math.min(toks.length-1, Math.floor(pct * toks.length));
+    var val = toks[idx], t = timeLbls[idx] || '';
+    tip.innerHTML = val > 0 ? '<b>'+val+' tokens/s</b><br><span style="color:#9ca3af;font-size:10px">'+t+'</span>' : '--';
+    tip.style.left = x + 'px'; tip.classList.add('vis');
+    var max = Math.max.apply(null, toks.concat([1]));
+    var yPct = 1 - val / max;
+    dot.style.left = x + 'px'; dot.style.top = (4 + yPct * (r.height - 8)) + 'px'; dot.classList.add('vis');
+  });
+  el.addEventListener('mouseleave', function() { tip.classList.remove('vis'); dot.classList.remove('vis'); });
+});
+</script>
+
+</body>
+</html>
