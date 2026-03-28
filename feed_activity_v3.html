@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Activity Feed v3 — RSS-style with Breadcrumbs</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg: #06090f;
+  --surface: rgba(15,23,42,.72);
+  --surface-hi: rgba(30,41,59,.65);
+  --surface-card: rgba(12,18,32,.85);
+  --border: rgba(148,163,184,.08);
+  --border-hi: rgba(148,163,184,.16);
+  --text: #f1f5f9;
+  --text-dim: #94a3b8;
+  --text-muted: #64748b;
+  --text-faint: #475569;
+
+  --purple: #a78bfa; --purple-dim: rgba(167,139,250,.12);
+  --blue: #60a5fa;   --blue-dim: rgba(96,165,250,.12);
+  --orange: #fb923c; --orange-dim: rgba(251,146,60,.12);
+  --green: #34d399;  --green-dim: rgba(52,211,153,.12);
+  --red: #f87171;    --red-dim: rgba(248,113,113,.12);
+  --cyan: #22d3ee;   --cyan-dim: rgba(34,211,238,.12);
+
+  --radius: 12px;
+  --radius-sm: 8px;
+  --ease: cubic-bezier(.4,0,.2,1);
+  font-size: 14px;
+}
+
+html, body { height: 100%; }
+body {
+  background: var(--bg);
+  color: var(--text-dim);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  overflow-y: auto;
+}
+
+.page-header {
+  padding: 32px 40px 24px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(6,9,15,.8);
+  backdrop-filter: blur(16px);
+  position: sticky; top: 0; z-index: 50;
+}
+.page-title { font-size: 18px; font-weight: 800; color: var(--text); letter-spacing: -.3px; margin-bottom: 4px; }
+.page-sub { font-size: 12px; color: var(--text-muted); }
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px;
+  padding: 32px 40px;
+  max-width: 1400px;
+}
+
+.variant {
+  background: var(--surface-card);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+  position: relative;
+  transition: border-color .2s;
+}
+.variant:hover { border-color: var(--border-hi); }
+.variant::before {
+  content: ''; position: absolute; top: 0; left: 20px; right: 20px; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(52,211,153,.2), transparent);
+}
+
+.variant-label {
+  padding: 14px 20px 10px;
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .7px; color: var(--text-faint);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 8px;
+}
+.variant-label .num {
+  width: 18px; height: 18px; border-radius: 5px;
+  background: var(--green-dim); color: var(--green);
+  display: grid; place-items: center; font-size: 9px; font-weight: 800;
+}
+.variant-body { padding: 16px 20px 20px; }
+
+/* Shared */
+.feed-header {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
+}
+.feed-title {
+  font-size: 10px; color: var(--text-faint); text-transform: uppercase;
+  letter-spacing: .6px; font-weight: 600;
+}
+.live-badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 8px; font-weight: 800; color: var(--red);
+  background: var(--red-dim); padding: 2px 8px 2px 6px;
+  border-radius: 4px; letter-spacing: .6px; text-transform: uppercase;
+}
+.live-dot {
+  width: 5px; height: 5px; border-radius: 50%; background: var(--red);
+  animation: blink 1.3s ease-in-out infinite;
+}
+@keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: .2; } }
+.feed-count { margin-left: auto; font-size: 10px; color: var(--text-faint); }
+.feed-scroll { max-height: 400px; overflow-y: auto; }
+.feed-scroll::-webkit-scrollbar { width: 3px; }
+.feed-scroll::-webkit-scrollbar-track { background: transparent; }
+.feed-scroll::-webkit-scrollbar-thumb { background: rgba(148,163,184,.15); border-radius: 2px; }
+
+/* ============================================================
+   SHARED — Breadcrumb path styling
+   ============================================================ */
+.crumb {
+  display: flex; align-items: center; gap: 0;
+  font-size: 9px; color: var(--text-faint);
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 500; flex-wrap: nowrap;
+  overflow: hidden;
+}
+.crumb-seg {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.crumb-sep {
+  margin: 0 3px; color: var(--text-faint); opacity: .4;
+  flex-shrink: 0; font-size: 8px;
+}
+.crumb-type {
+  font-weight: 700;
+}
+
+/* ============================================================
+   V1 — RSS Classic: crumb path row 1, summary row 2
+   ============================================================ */
+.v1-list { display: flex; flex-direction: column; gap: 1px; }
+.v1-event {
+  padding: 7px 10px; border-radius: 6px;
+  transition: background .12s;
+  border-left: 2px solid transparent;
+}
+.v1-event:hover { background: rgba(255,255,255,.02); }
+.v1-event.is-new { border-left-color: var(--blue); background: rgba(96,165,250,.015); }
+.v1-row1 {
+  display: flex; align-items: center; gap: 0; margin-bottom: 3px;
+}
+.v1-time {
+  font-size: 9px; color: var(--text-faint); font-family: 'JetBrains Mono', monospace;
+  margin-right: 8px; flex-shrink: 0;
+}
+.v1-row2 { font-size: 11.5px; color: var(--text-dim); padding-left: 0; line-height: 1.4; }
+.v1-event.is-new .v1-row2 { color: var(--text); }
+
+/* ============================================================
+   V2 — Slash path: module/task/tool as breadcrumb, summary below
+   ============================================================ */
+.v2-list { display: flex; flex-direction: column; gap: 2px; }
+.v2-event {
+  padding: 7px 10px; border-radius: 6px;
+  transition: background .12s;
+}
+.v2-event:hover { background: rgba(255,255,255,.02); }
+.v2-row1 {
+  display: flex; align-items: center; margin-bottom: 3px;
+}
+.v2-path {
+  font-size: 9px; font-family: 'JetBrains Mono', monospace;
+  color: var(--text-faint); display: flex; align-items: center;
+}
+.v2-path span { white-space: nowrap; }
+.v2-path .sep { margin: 0 2px; opacity: .35; }
+.v2-path .highlight { color: var(--text-muted); font-weight: 600; }
+.v2-time {
+  margin-left: auto; font-size: 9px; color: var(--text-faint);
+  font-family: 'JetBrains Mono', monospace; flex-shrink: 0;
+}
+.v2-row2 { font-size: 11.5px; color: var(--text-dim); line-height: 1.4; }
+
+/* ============================================================
+   V3 — Chevron crumbs: type › task › module with colored type
+   ============================================================ */
+.v3-list { display: flex; flex-direction: column; gap: 2px; }
+.v3-event {
+  padding: 7px 10px; border-radius: 6px;
+  transition: background .12s;
+}
+.v3-event:hover { background: rgba(255,255,255,.02); }
+.v3-row1 {
+  display: flex; align-items: center; gap: 0; margin-bottom: 3px;
+}
+.v3-crumb {
+  display: flex; align-items: center; font-size: 9px;
+  font-family: 'JetBrains Mono', monospace;
+}
+.v3-crumb .seg { white-space: nowrap; color: var(--text-faint); }
+.v3-crumb .seg:first-child { font-weight: 700; }
+.v3-crumb .chev { margin: 0 4px; font-size: 7px; color: var(--text-faint); opacity: .4; }
+.v3-time {
+  margin-left: auto; font-size: 9px; color: var(--text-faint);
+  font-family: 'JetBrains Mono', monospace; flex-shrink: 0;
+}
+.v3-row2 { font-size: 11.5px; color: var(--text-dim); line-height: 1.4; }
+
+/* ============================================================
+   V4 — Dot + colored type pill, rest as flat crumb, summary below
+   ============================================================ */
+.v4-list { display: flex; flex-direction: column; gap: 3px; }
+.v4-event {
+  padding: 7px 10px; border-radius: 6px;
+  transition: background .12s;
+}
+.v4-event:hover { background: rgba(255,255,255,.02); }
+.v4-row1 {
+  display: flex; align-items: center; gap: 6px; margin-bottom: 3px;
+}
+.v4-type-pill {
+  font-size: 7px; font-weight: 800; padding: 1px 5px; border-radius: 3px;
+  text-transform: uppercase; letter-spacing: .3px; flex-shrink: 0;
+}
+.v4-flat-crumb {
+  font-size: 9px; color: var(--text-faint); font-family: 'JetBrains Mono', monospace;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.v4-time {
+  margin-left: auto; font-size: 9px; color: var(--text-faint);
+  font-family: 'JetBrains Mono', monospace; flex-shrink: 0;
+}
+.v4-row2 { font-size: 11.5px; color: var(--text-dim); line-height: 1.4; }
+
+/* ============================================================
+   V5 — Left accent + stacked: module path as muted row 1, summary row 2
+   ============================================================ */
+.v5-list { display: flex; flex-direction: column; gap: 3px; }
+.v5-event {
+  padding: 7px 10px 7px 12px; border-radius: 6px;
+  border-left: 2px solid transparent;
+  transition: all .12s;
+}
+.v5-event:hover { background: rgba(255,255,255,.02); }
+.v5-row1 {
+  display: flex; align-items: center; gap: 0; margin-bottom: 3px;
+}
+.v5-breadcrumb {
+  font-size: 9px; font-family: 'JetBrains Mono', monospace;
+  color: var(--text-faint); display: flex; align-items: center;
+}
+.v5-breadcrumb .seg { white-space: nowrap; }
+.v5-breadcrumb .dot { width: 3px; height: 3px; border-radius: 50%; background: var(--text-faint); margin: 0 5px; opacity: .4; flex-shrink: 0; }
+.v5-time {
+  margin-left: auto; font-size: 9px; color: var(--text-faint);
+  font-family: 'JetBrains Mono', monospace; flex-shrink: 0;
+}
+.v5-row2 { font-size: 11.5px; color: var(--text-dim); line-height: 1.4; }
+
+/* ============================================================
+   V6 — Card with crumb header bar, summary body
+   ============================================================ */
+.v6-list { display: flex; flex-direction: column; gap: 5px; }
+.v6-card {
+  border-radius: 6px; overflow: hidden;
+  background: rgba(255,255,255,.012);
+  border: 1px solid var(--border);
+  transition: border-color .12s;
+}
+.v6-card:hover { border-color: var(--border-hi); }
+.v6-card.is-new { border-color: rgba(96,165,250,.12); }
+.v6-bar {
+  padding: 5px 10px;
+  background: rgba(255,255,255,.015);
+  border-bottom: 1px solid rgba(255,255,255,.02);
+  display: flex; align-items: center; gap: 0;
+}
+.v6-path {
+  font-size: 8.5px; font-family: 'JetBrains Mono', monospace;
+  color: var(--text-faint); display: flex; align-items: center;
+}
+.v6-path .seg { white-space: nowrap; }
+.v6-path .sep { margin: 0 3px; opacity: .35; font-size: 7px; }
+.v6-path .first { font-weight: 700; }
+.v6-time {
+  margin-left: auto; font-size: 8.5px; color: var(--text-faint);
+  font-family: 'JetBrains Mono', monospace; flex-shrink: 0;
+}
+.v6-body { padding: 6px 10px 7px; font-size: 11.5px; color: var(--text-dim); line-height: 1.4; }
+.v6-card.is-new .v6-body { color: var(--text); }
+
+/* ============================================================
+   V7 — Reverse crumb: top-level first, narrowing down
+   ============================================================ */
+.v7-list { display: flex; flex-direction: column; gap: 2px; }
+.v7-event {
+  padding: 7px 10px; border-radius: 6px;
+  transition: background .12s;
+}
+.v7-event:hover { background: rgba(255,255,255,.02); }
+.v7-row1 {
+  display: flex; align-items: center; gap: 0; margin-bottom: 3px;
+}
+.v7-breadcrumb {
+  font-size: 9px; font-family: 'JetBrains Mono', monospace;
+  color: var(--text-faint); display: flex; align-items: center;
+}
+.v7-breadcrumb .seg { white-space: nowrap; }
+.v7-breadcrumb .seg:last-child { color: var(--text-muted); font-weight: 600; }
+.v7-breadcrumb .arr { margin: 0 3px; font-size: 8px; opacity: .4; }
+.v7-time {
+  margin-left: auto; font-size: 9px; color: var(--text-faint);
+  font-family: 'JetBrains Mono', monospace; flex-shrink: 0;
+}
+.v7-row2 { font-size: 11.5px; color: var(--text-dim); line-height: 1.4; }
+
+/* ============================================================
+   V8 — Inline crumb in summary: tool/type bold inline
+   ============================================================ */
+.v8-list { display: flex; flex-direction: column; gap: 1px; }
+.v8-event {
+  padding: 6px 10px; border-radius: 5px;
+  transition: background .12s;
+}
+.v8-event:hover { background: rgba(255,255,255,.02); }
+.v8-row1 {
+  font-size: 11.5px; color: var(--text-dim); line-height: 1.4;
+  margin-bottom: 2px;
+}
+.v8-row1 .verb { font-weight: 600; color: var(--text); }
+.v8-row2 {
+  font-size: 9px; font-family: 'JetBrains Mono', monospace;
+  color: var(--text-faint); display: flex; align-items: center; gap: 6px;
+}
+.v8-row2 .time { flex-shrink: 0; }
+.v8-row2 .path { opacity: .7; }
+
+/* ============================================================
+   V9 — Timeline with crumb labels on the line
+   ============================================================ */
+.v9-timeline { position: relative; padding-left: 22px; }
+.v9-timeline::before {
+  content: ''; position: absolute; left: 6px; top: 6px; bottom: 6px;
+  width: 1.5px; border-radius: 1px;
+  background: linear-gradient(180deg, var(--green), rgba(52,211,153,.05));
+}
+.v9-event {
+  position: relative; padding: 5px 0;
+}
+.v9-event::before {
+  content: ''; position: absolute; left: -17px; top: 11px;
+  width: 7px; height: 7px; border-radius: 50%;
+  border: 1.5px solid var(--bg);
+}
+.v9-event.done::before { background: var(--green); }
+.v9-event.running::before { background: var(--blue); }
+.v9-event.warn::before { background: var(--orange); }
+.v9-event.info::before { background: var(--cyan); }
+.v9-event.thinking::before { background: var(--purple); }
+.v9-row1 {
+  display: flex; align-items: center; margin-bottom: 2px;
+}
+.v9-breadcrumb {
+  font-size: 9px; font-family: 'JetBrains Mono', monospace;
+  color: var(--text-faint); display: flex; align-items: center;
+}
+.v9-breadcrumb .seg { white-space: nowrap; }
+.v9-breadcrumb .sep { margin: 0 3px; opacity: .35; font-size: 7px; }
+.v9-breadcrumb .seg:first-child { font-weight: 700; }
+.v9-time {
+  margin-left: auto; font-size: 9px; color: var(--text-faint);
+  font-family: 'JetBrains Mono', monospace; flex-shrink: 0;
+}
+.v9-row2 { font-size: 11px; color: var(--text-dim); line-height: 1.4; }
+
+/* ============================================================
+   V10 — Compact two-line with fading crumb
+   ============================================================ */
+.v10-list { display: flex; flex-direction: column; gap: 1px; }
+.v10-event {
+  padding: 5px 10px; border-radius: 5px;
+  transition: background .12s;
+}
+.v10-event:hover { background: rgba(255,255,255,.02); }
+.v10-row1 {
+  display: flex; align-items: center; gap: 6px; margin-bottom: 2px;
+}
+.v10-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+.v10-summary { font-size: 11.5px; color: var(--text-dim); flex: 1; }
+.v10-event.is-new .v10-summary { color: var(--text); font-weight: 500; }
+.v10-time {
+  font-size: 9px; color: var(--text-faint); font-family: 'JetBrains Mono', monospace;
+  flex-shrink: 0;
+}
+.v10-row2 {
+  padding-left: 11px;
+  font-size: 8.5px; font-family: 'JetBrains Mono', monospace;
+  color: var(--text-faint); opacity: .5;
+  display: flex; align-items: center;
+}
+.v10-event:hover .v10-row2 { opacity: .8; }
+.v10-row2 .seg { white-space: nowrap; }
+.v10-row2 .sep { margin: 0 3px; font-size: 7px; }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <div class="page-title">Activity Feed v3 — RSS-style Breadcrumbs</div>
+  <div class="page-sub">Agent 3 — Feeds & Panels | 10 variants with real summaries (30-50ch) and module hierarchy breadcrumbs</div>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<script>
+/* Real summaries from gpt-oss-20b + real hierarchy from pipeline telemetry */
+const EVENTS = [
+  { time: '12:04', type: 'tool_call', module: 'GEN_ART', task: 'eval_id3_it3__opus', tool: 'Edit', cat: 'tool', status: 'running', text: 'Add head_direction_ratio to regression subset', isNew: true },
+  { time: '12:03', type: 'thinking', module: 'GEN_ART', task: 'eval_id3_it3__opus', tool: '', cat: 'thinking', status: 'running', text: 'Use absolute paths, inspect full data', isNew: true },
+  { time: '12:02', type: 'tool_result', module: 'GEN_PLAN', task: 'plan_exp_id3_it2__opus', tool: 'Read', cat: 'tool', status: 'done', text: 'Read grammar, build treebank set and genre map', isNew: false },
+  { time: '12:01', type: 'response', module: '2A_GEN_ARTIFACT_DEMOS', task: 'demo_eval_id1_it3__opus', tool: '', cat: 'result', status: 'done', text: 'Saved 58KB report, increased to 185KB', isNew: false },
+  { time: '11:58', type: 'context_usage', module: 'GEN_ART', task: 'exp_id3_it2__opus', tool: '', cat: 'metric', status: 'running', text: 'Track 95k context usage for exp_id3_it2__opus', isNew: false },
+  { time: '11:55', type: 'summary', module: 'GEN_STRAT', task: 'strat_it3__opus', tool: '', cat: 'result', status: 'done', text: 'Completed 7 turns, 393.8K\u219217.5K, 5 reads, $0.99', isNew: false },
+  { time: '11:51', type: 'hook', module: 'REVIEW_PAPER', task: 'rev_paper_it2__opus', tool: '', cat: 'warning', status: 'warn', text: 'Remind 112.7 minutes left to finish tasks', isNew: false },
+  { time: '11:47', type: 'retry', module: 'GEN_PAPER_TEXT', task: 'paper_text_it2__opus', tool: '', cat: 'warning', status: 'warn', text: 'Retry paper text after timeout, fork resume', isNew: false },
+  { time: '11:42', type: 'tool_result', module: 'GEN_ART', task: 'exp_id1_it2__opus', tool: 'Write', cat: 'result', status: 'done', text: 'Created pyproject.toml for exp_id1_it2__opus', isNew: false },
+  { time: '11:38', type: 'system_prompt', module: '2A_GEN_ARTIFACT_DEMOS', task: 'demo_exp_id3_it2__opus', tool: '', cat: 'progress', status: 'done', text: 'Split script into 4 sections, add 4 markdowns', isNew: false },
+];
+
+const CAT = {
+  tool:     { bg: 'var(--blue-dim)', color: 'var(--blue)', label: 'TOOL' },
+  progress: { bg: 'var(--green-dim)', color: 'var(--green)', label: 'PROG' },
+  result:   { bg: 'var(--purple-dim)', color: 'var(--purple)', label: 'RSLT' },
+  metric:   { bg: 'var(--cyan-dim)', color: 'var(--cyan)', label: 'METR' },
+  warning:  { bg: 'var(--orange-dim)', color: 'var(--orange)', label: 'WARN' },
+  thinking: { bg: 'rgba(167,139,250,.08)', color: 'var(--purple)', label: 'THINK' },
+};
+
+const STATUS_C = {
+  done: 'var(--green)', running: 'var(--blue)', warn: 'var(--orange)',
+  info: 'var(--cyan)', thinking: 'var(--purple)',
+};
+
+/* Build breadcrumb segments: type → task → module (leaf to root) */
+function crumbSegs(e) {
+  const segs = [];
+  if (e.tool) segs.push(e.tool);
+  segs.push(e.type);
+  if (e.task) segs.push(e.task);
+  if (e.module) segs.push(e.module);
+  return segs;
+}
+
+/* Reverse: module → task → type → tool (root to leaf) */
+function crumbSegsReverse(e) {
+  return crumbSegs(e).slice().reverse();
+}
+
+function header() {
+  return `<div class="feed-header">
+    <span class="feed-title">Activity Feed</span>
+    <span class="live-badge"><span class="live-dot"></span> LIVE</span>
+    <span class="feed-count">${EVENTS.length}</span>
+  </div>`;
+}
+
+/* V1 — RSS Classic: leaf-to-root crumb */
+function v1() {
+  return header() + `<div class="feed-scroll"><div class="v1-list">
+    ${EVENTS.map(e => {
+      const segs = crumbSegs(e);
+      return `<div class="v1-event ${e.isNew ? 'is-new' : ''}">
+        <div class="v1-row1">
+          <span class="v1-time">${e.time}</span>
+          <div class="crumb">${segs.map((s,i) =>
+            `<span class="crumb-seg ${i===0?'crumb-type':''}" style="${i===0?'color:'+CAT[e.cat].color:''}">${s}</span>${i<segs.length-1?'<span class="crumb-sep">\u203a</span>':''}`
+          ).join('')}</div>
+        </div>
+        <div class="v1-row2">${e.text}</div>
+      </div>`;
+    }).join('')}
+  </div></div>`;
+}
+
+/* V2 — Slash path */
+function v2() {
+  return header() + `<div class="feed-scroll"><div class="v2-list">
+    ${EVENTS.map(e => {
+      const segs = crumbSegsReverse(e);
+      return `<div class="v2-event">
+        <div class="v2-row1">
+          <div class="v2-path">${segs.map((s,i) =>
+            `<span class="${i===segs.length-1?'highlight':''}">${s}</span>${i<segs.length-1?'<span class="sep">/</span>':''}`
+          ).join('')}</div>
+          <span class="v2-time">${e.time}</span>
+        </div>
+        <div class="v2-row2">${e.text}</div>
+      </div>`;
+    }).join('')}
+  </div></div>`;
+}
+
+/* V3 — Chevron crumbs (root to leaf, last bold) */
+function v3() {
+  return header() + `<div class="feed-scroll"><div class="v3-list">
+    ${EVENTS.map(e => {
+      const segs = crumbSegsReverse(e);
+      return `<div class="v3-event">
+        <div class="v3-row1">
+          <div class="v3-crumb">${segs.map((s,i) =>
+            `<span class="seg">${s}</span>${i<segs.length-1?'<span class="chev">\u203a</span>':''}`
+          ).join('')}</div>
+          <span class="v3-time">${e.time}</span>
+        </div>
+        <div class="v3-row2">${e.text}</div>
+      </div>`;
+    }).join('')}
+  </div></div>`;
+}
+
+/* V4 — Type pill + flat crumb */
+function v4() {
+  return header() + `<div class="feed-scroll"><div class="v4-list">
+    ${EVENTS.map(e => {
+      const c = CAT[e.cat];
+      const path = [e.module, e.task, e.tool].filter(Boolean).join(' \u203a ');
+      return `<div class="v4-event">
+        <div class="v4-row1">
+          <span class="v4-type-pill" style="background:${c.bg};color:${c.color}">${c.label}</span>
+          <span class="v4-flat-crumb">${path}</span>
+          <span class="v4-time">${e.time}</span>
+        </div>
+        <div class="v4-row2">${e.text}</div>
+      </div>`;
+    }).join('')}
+  </div></div>`;
+}
+
+/* V5 — Dot separator crumb + accent */
+function v5() {
+  return header() + `<div class="feed-scroll"><div class="v5-list">
+    ${EVENTS.map(e => {
+      const c = CAT[e.cat];
+      const segs = [e.type, e.task, e.module].filter(Boolean);
+      return `<div class="v5-event" style="border-left-color:${c.color}">
+        <div class="v5-row1">
+          <div class="v5-breadcrumb">${segs.map((s,i) =>
+            `<span class="seg">${s}</span>${i<segs.length-1?'<span class="dot"></span>':''}`
+          ).join('')}</div>
+          <span class="v5-time">${e.time}</span>
+        </div>
+        <div class="v5-row2">${e.text}</div>
+      </div>`;
+    }).join('')}
+  </div></div>`;
+}
+
+/* V6 — Card with crumb header bar */
+function v6() {
+  return header() + `<div class="feed-scroll"><div class="v6-list">
+    ${EVENTS.map(e => {
+      const segs = crumbSegsReverse(e);
+      return `<div class="v6-card ${e.isNew ? 'is-new' : ''}">
+        <div class="v6-bar">
+          <div class="v6-path">${segs.map((s,i) =>
+            `<span class="seg ${i===0?'first':''}">${s}</span>${i<segs.length-1?'<span class="sep">\u203a</span>':''}`
+          ).join('')}</div>
+          <span class="v6-time">${e.time}</span>
+        </div>
+        <div class="v6-body">${e.text}</div>
+      </div>`;
+    }).join('')}
+  </div></div>`;
+}
+
+/* V7 — Reverse crumb (root first, leaf last bold) */
+function v7() {
+  return header() + `<div class="feed-scroll"><div class="v7-list">
+    ${EVENTS.map(e => {
+      const segs = crumbSegsReverse(e);
+      return `<div class="v7-event">
+        <div class="v7-row1">
+          <div class="v7-breadcrumb">${segs.map((s,i) =>
+            `<span class="seg">${s}</span>${i<segs.length-1?'<span class="arr">\u2192</span>':''}`
+          ).join('')}</div>
+          <span class="v7-time">${e.time}</span>
+        </div>
+        <div class="v7-row2">${e.text}</div>
+      </div>`;
+    }).join('')}
+  </div></div>`;
+}
+
+/* V8 — Summary first, crumb path as metadata row */
+function v8() {
+  return header() + `<div class="feed-scroll"><div class="v8-list">
+    ${EVENTS.map(e => {
+      const path = [e.module, e.task, e.tool].filter(Boolean).join(' / ');
+      return `<div class="v8-event">
+        <div class="v8-row1">${e.text}</div>
+        <div class="v8-row2">
+          <span class="time">${e.time}</span>
+          <span class="path">${path}</span>
+        </div>
+      </div>`;
+    }).join('')}
+  </div></div>`;
+}
+
+/* V9 — Timeline with crumb on branch */
+function v9() {
+  return header() + `<div class="feed-scroll"><div class="v9-timeline">
+    ${EVENTS.map(e => {
+      const segs = crumbSegsReverse(e);
+      const st = e.cat === 'warning' ? 'warn' : e.cat === 'thinking' ? 'thinking' : e.status;
+      return `<div class="v9-event ${st}">
+        <div class="v9-row1">
+          <div class="v9-breadcrumb">${segs.map((s,i) =>
+            `<span class="seg">${s}</span>${i<segs.length-1?'<span class="sep">\u203a</span>':''}`
+          ).join('')}</div>
+          <span class="v9-time">${e.time}</span>
+        </div>
+        <div class="v9-row2">${e.text}</div>
+      </div>`;
+    }).join('')}
+  </div></div>`;
+}
+
+/* V10 — Compact: summary + dot, fading crumb below */
+function v10() {
+  return header() + `<div class="feed-scroll"><div class="v10-list">
+    ${EVENTS.map(e => {
+      const segs = crumbSegsReverse(e);
+      return `<div class="v10-event ${e.isNew ? 'is-new' : ''}">
+        <div class="v10-row1">
+          <div class="v10-dot" style="background:${STATUS_C[e.status]}"></div>
+          <span class="v10-summary">${e.text}</span>
+          <span class="v10-time">${e.time}</span>
+        </div>
+        <div class="v10-row2">${segs.map((s,i) =>
+          `<span class="seg">${s}</span>${i<segs.length-1?'<span class="sep">\u203a</span>':''}`
+        ).join('')}</div>
+      </div>`;
+    }).join('')}
+  </div></div>`;
+}
+
+const VARIANTS = [
+  { num: 1, name: 'RSS Classic — leaf\u2192root crumb, blue accent on new', render: v1 },
+  { num: 2, name: 'Slash Path — MODULE/task/tool, last segment bold', render: v2 },
+  { num: 3, name: 'Chevron — root \u203a task \u203a leaf, last bold', render: v3 },
+  { num: 4, name: 'Type Pill — colored category + flat crumb path', render: v4 },
+  { num: 5, name: 'Dot Separator — type \u00b7 task \u00b7 module, left accent', render: v5 },
+  { num: 6, name: 'Card Header — crumb bar on top, summary in body', render: v6 },
+  { num: 7, name: 'Arrow Path — MODULE \u2192 task \u2192 tool, last bold', render: v7 },
+  { num: 8, name: 'Summary First — text row 1, crumb + time row 2', render: v8 },
+  { num: 9, name: 'Timeline — vertical line, crumb on branches', render: v9 },
+  { num: 10, name: 'Compact — dot + summary, fading crumb below', render: v10 },
+];
+
+const grid = document.getElementById('grid');
+VARIANTS.forEach(v => {
+  const el = document.createElement('div');
+  el.className = 'variant';
+  el.innerHTML = `
+    <div class="variant-label"><span class="num">${v.num}</span> ${v.name}</div>
+    <div class="variant-body">${v.render()}</div>
+  `;
+  grid.appendChild(el);
+});
+</script>
+</body>
+</html>
