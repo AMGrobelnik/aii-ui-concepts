@@ -606,8 +606,25 @@
     nav.appendChild(link(opts.indexHref || 'index.html', 'index'));
     nav.appendChild(el('span', 'reviewbar-sep', '·'));
     nav.appendChild(link(opts.next, 'next →'));
+    nav.appendChild(el('span', 'reviewbar-keys', 'arrow keys'));
     bar.appendChild(nav);
+    bindArrowKeys(opts.prev, opts.next);
     return bar;
+  }
+
+  /* Left/Right arrow keys move between pages. Ignored while typing in a
+     field or when a modifier is held, so text editing and browser
+     shortcuts keep working. */
+  function bindArrowKeys(prev, next) {
+    document.addEventListener('keydown', function (e) {
+      if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+      var t = e.target;
+      if (t && t.closest && t.closest('[role="slider"]')) return;
+      var tag = t && t.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (t && t.isContentEditable)) return;
+      if (e.key === 'ArrowRight' && next) { e.preventDefault(); location.href = next; }
+      if (e.key === 'ArrowLeft' && prev) { e.preventDefault(); location.href = prev; }
+    });
   }
 
   /* renderShell(rootEl, opts) -> the scrolling .center element */
