@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Details view — seven ways to group the stream</title>
+<link rel="stylesheet" href="shared/tokens.css">
+<link rel="stylesheet" href="shared/chrome.css">
+<style>
+  html, body { height: auto; }
+  body { background: var(--surface); }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 40px 24px 80px; }
+  h1 { font-size: 20px; font-weight: 600; color: var(--ink-900); letter-spacing: -.01em; }
+  .intro { margin-top: 10px; max-width: 70ch; font-size: 14px; line-height: 1.55; color: var(--ink-700); }
+  .intro + .intro { margin-top: 8px; }
+  .jump { margin-top: 14px; font-size: 13px; color: var(--ink-600); }
+
+  h2 { margin-top: 40px; font-size: 14px; font-weight: 600; color: var(--ink-900); }
+  .sub { margin-top: 4px; max-width: 70ch; font-size: 13px; color: var(--ink-600); }
+
+  .list { margin-top: 14px; border-top: 1px solid var(--hair); }
+  .item {
+    display: grid;
+    grid-template-columns: 22px minmax(0, 1fr) 190px 210px;
+    gap: 16px;
+    align-items: baseline;
+    padding: 13px 4px;
+    border-bottom: 1px solid var(--hair);
+    color: inherit;
+    text-decoration: none;
+  }
+  .item:hover { background: var(--ground); text-decoration: none; }
+  .item:hover .name { color: var(--azure); }
+  .num { font-family: var(--font-mono); font-size: 11px; color: var(--ink-400); }
+  .name { font-size: 13px; font-weight: 500; color: var(--ink-900); }
+  .file { font-family: var(--font-mono); font-size: 11px; color: var(--ink-400); margin-left: 8px; font-weight: 400; }
+  .premise { margin-top: 3px; font-size: 13px; line-height: 1.45; color: var(--ink-600); }
+  .cost { font-size: 12px; color: var(--ink-600); }
+  .cost .k { display: block; font-size: 8px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-400); margin-bottom: 2px; }
+  .vote { font-size: 12px; color: var(--ink-400); }
+  .vote .v { display: block; font-size: 12px; font-weight: 500; }
+  .vote .v.like { color: var(--ok); }
+  .vote .v.dislike { color: var(--danger); }
+  .vote .v.unsure { color: var(--warn); }
+  .vote .n { display: block; margin-top: 3px; color: var(--ink-600); line-height: 1.4; }
+
+  .actions { margin-top: 28px; display: flex; align-items: center; gap: 10px; }
+  .btn {
+    height: 28px; padding: 0 12px;
+    border: 1px solid var(--hair-dark); border-radius: var(--radius-sm);
+    background: var(--surface); font-size: 12px; color: var(--ink-700);
+  }
+  .btn:hover { background: var(--ground); }
+  .btn-primary { border-color: var(--brand); color: #fff; background: var(--brand); }
+  .btn-primary:hover { background: #0b8177; }
+  .status { font-size: 12px; color: var(--ink-400); }
+  .copybox { position: absolute; left: -9999px; top: 0; }
+
+  @media (max-width: 820px) {
+    .item { grid-template-columns: 22px minmax(0, 1fr); }
+    .cost, .vote { grid-column: 2; }
+  }
+</style>
+</head>
+<body data-page="index" data-feedback="off">
+<main class="wrap">
+  <h1>Details view — seven ways to group the stream</h1>
+
+  <p class="intro">
+    The Details page shows one flat, chronological list of events: a tinted
+    type circle, a fifty-character AI summary, a chevron that expands the raw
+    tool input and output. A substep like Evaluation 1 is about 165 of those
+    rows; a whole run is 13,557 events and the feed caps at the latest 500.
+    The question these seven mockups exist to settle is whether there should
+    be <strong>one level of grouping between the substep and the row</strong>,
+    and if so, what it should be.
+  </p>
+  <p class="intro">
+    Every page shows the same run, the same substep and the same numbers, so
+    only the grouping differs. Two summarizers already exist and are free to
+    reuse: the per-message label (50 characters, a few seconds behind the
+    event) and the interim narrative (two paragraphs every two minutes,
+    currently shown only on Overview). Where a variant needs something new,
+    the build cost column says so. Leave a verdict and a note on each page;
+    they are collected back here.
+  </p>
+  <p class="jump">Jump to <a href="#other-screens">Other screens</a>.</p>
+
+  <h2>The seven variants</h2>
+  <p class="sub">In review order. Variant 0 is the control: today's page, reproduced.</p>
+  <div class="list" id="list-details"></div>
+
+  <section id="other-screens">
+    <h2>Other screens — five pages for three gaps</h2>
+    <p class="sub">
+      A finished run's outputs are three icon links in the topbar and nothing
+      answers what the run produced, cost and took; pipeline progress is drawn
+      three unrelated ways and a failed module looks like one that never
+      started; the only runs index is two unbounded flat sidebar lists.
+    </p>
+    <div class="list" id="list-other"></div>
+  </section>
+
+  <div class="actions">
+    <button type="button" class="btn btn-primary" id="copy-all">Copy all feedback</button>
+    <button type="button" class="btn" id="clear-all">Clear all</button>
+    <span class="status" id="status" role="status" aria-live="polite"></span>
+  </div>
+</main>
+
+<script src="shared/data.js"></script>
+<script src="shared/chrome.js"></script>
+<script src="shared/feedback.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  var DETAILS = [
+    ['0', 'Today (control)', '0-baseline.html', 'details/0-baseline',
+     'The current flat feed reproduced exactly, so the other six have something to beat.',
+     'none — this is today'],
+    ['1', 'Agent turns', '1-turns.html', 'details/1-turns',
+     'Group rows under the agent turn that produced them, with identical consecutive rows folded into one.',
+     'none — the data already has turns'],
+    ['2', 'AI chapters', '2-chapters.html', 'details/2-chapters',
+     'A windowed summarizer names six chapters over the same events, each with a gist and outcome chips.',
+     'new: windowed summarizer'],
+    ['3', 'Narrative and evidence', '3-notebook.html', 'details/3-notebook',
+     'Show the two-minute interim narratives already written for Overview, each over the events that back it.',
+     'none — reuses the narratives'],
+    ['4', 'Fold levels and minimap', '4-outline.html', 'details/4-outline',
+     'Treat the feed like source code: three fold levels and a minimap of the whole substep down the edge.',
+     'new: fold control and minimap'],
+    ['5', 'Lanes over time', '5-timeline.html', 'details/5-timeline',
+     'A timeline the width of the substep with Agent, Tools, Files and Errors lanes, brushed to scope the rows.',
+     'new: timeline and brush'],
+    ['6', 'Decisions and artefacts', '6-decisions.html', 'details/6-decisions',
+     'Only the seven turning points and what each produced; the process sits behind one quiet link.',
+     'new: decision extraction'],
+    ['7', 'Row anatomy', '7-rows.html', 'details/7-rows',
+     'Three treatments of the same twelve rows, so row detail can be judged apart from grouping.',
+     'none — styling only']
+  ];
+
+  var OTHER = [
+    ['A', 'Completed run — reading order', 'other/summary-a.html', 'other/summary-a',
+     'One 760 px column read top to bottom: verdict, hypothesis before and after, results, outputs, cost and time.',
+     'new page, existing data'],
+    ['B', 'Completed run — dossier', 'other/summary-b.html', 'other/summary-b',
+     'The paper front page on the left to read, a fixed facts rail on the right to act from.',
+     'new page, existing data'],
+    ['C', 'Pipeline progress — rail', 'other/progress-a.html', 'other/progress-a',
+     'One vertical rail with seven distinct module states; the failed module expands to its error and its retry.',
+     'new component, existing data'],
+    ['D', 'Pipeline progress — rounds grid', 'other/progress-b.html', 'other/progress-b',
+     'Rounds as rows, the six modules as columns, so the iteration reads left to right.',
+     'new component, existing data'],
+    ['E', 'Runs index', 'other/runs-index.html', 'other/runs-index',
+     'A real runs page: grouped dense table, filters, sortable columns, prompt box moved into a dialog.',
+     'new page and query']
+  ];
+
+  var fb = window.AII && window.AII.feedback;
+  var ALL = DETAILS.concat(OTHER);
+  if (fb) fb.setOrder(ALL.map(function (r) { return r[3]; }));
+
+  function excerpt(s, n) {
+    s = String(s || '').replace(/\s+/g, ' ').trim();
+    return s.length > n ? s.slice(0, n - 1) + '…' : s;
+  }
+
+  function render(hostId, rows) {
+    var host = document.getElementById(hostId);
+    var all = fb ? fb.getAll() : {};
+    host.innerHTML = '';
+    rows.forEach(function (r) {
+      var entry = all[r[3]] || {};
+      var a = document.createElement('a');
+      a.className = 'item';
+      a.href = r[2];
+
+      var num = document.createElement('div');
+      num.className = 'num';
+      num.textContent = r[0];
+
+      var mid = document.createElement('div');
+      var name = document.createElement('div');
+      name.className = 'name';
+      name.textContent = r[1];
+      var file = document.createElement('span');
+      file.className = 'file';
+      file.textContent = r[2];
+      name.appendChild(file);
+      var prem = document.createElement('div');
+      prem.className = 'premise';
+      prem.textContent = r[4];
+      mid.appendChild(name);
+      mid.appendChild(prem);
+
+      var cost = document.createElement('div');
+      cost.className = 'cost';
+      cost.innerHTML = '<span class="k">Build cost</span>';
+      cost.appendChild(document.createTextNode(r[5]));
+
+      var vote = document.createElement('div');
+      vote.className = 'vote';
+      var v = document.createElement('span');
+      v.className = 'v ' + (entry.vote || '');
+      v.textContent = entry.vote || 'no verdict yet';
+      if (!entry.vote) v.style.color = 'var(--ink-400)';
+      vote.appendChild(v);
+      if (entry.note) {
+        var n = document.createElement('span');
+        n.className = 'n';
+        n.textContent = excerpt(entry.note, 90);
+        vote.appendChild(n);
+      }
+
+      a.appendChild(num);
+      a.appendChild(mid);
+      a.appendChild(cost);
+      a.appendChild(vote);
+      host.appendChild(a);
+    });
+  }
+
+  function paint() {
+    render('list-details', DETAILS);
+    render('list-other', OTHER);
+  }
+
+  var status = document.getElementById('status');
+  var statusTimer = null;
+  function say(msg) {
+    status.textContent = msg;
+    if (statusTimer) clearTimeout(statusTimer);
+    statusTimer = setTimeout(function () { status.textContent = ''; }, 2400);
+  }
+
+  function fallbackCopy(text) {
+    var ta = document.createElement('textarea');
+    ta.className = 'copybox';
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    var ok = false;
+    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    document.body.removeChild(ta);
+    return ok;
+  }
+
+  document.getElementById('copy-all').addEventListener('click', function () {
+    var text = fb ? fb.exportText() : '';
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () {
+        say('Copied');
+      }, function () {
+        say(fallbackCopy(text) ? 'Copied' : 'Copy failed — select the text manually');
+      });
+    } else {
+      say(fallbackCopy(text) ? 'Copied' : 'Copy failed — select the text manually');
+    }
+  });
+
+  document.getElementById('clear-all').addEventListener('click', function () {
+    if (!window.confirm('Delete every stored vote and note for these mockups?')) return;
+    if (fb) fb.clearAll();
+    paint();
+    say('Cleared');
+  });
+
+  paint();
+  window.addEventListener('storage', paint);
+  window.addEventListener('pageshow', paint);
+})();
+</script>
+</body>
+</html>

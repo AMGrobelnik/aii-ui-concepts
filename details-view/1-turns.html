@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Details view — Variant 1: agent turns</title>
+<link rel="stylesheet" href="shared/tokens.css">
+<link rel="stylesheet" href="shared/chrome.css">
+<style>
+  /* Variant 1 adds ONE layer over the shared rows: the agent turn.
+     Hierarchy is a 2 px accent spine on the header, a hairline gutter down
+     the turn's rows, and 20 px of indentation. No cards, no shadows. */
+
+  /* --- toolbar: fold all / unfold all / errors only --- */
+  .tools {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 8px 10px;
+  }
+  .tools-count {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 11px;
+    color: var(--ink-400);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .tool-btn {
+    flex: 0 0 auto;
+    height: 22px;
+    padding: 0 8px;
+    border: 1px solid var(--hair-dark);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    font-size: 11px;
+    color: var(--ink-600);
+    white-space: nowrap;
+  }
+  .tool-btn:hover { background: var(--ground); color: var(--ink-900); }
+  .tool-sep { flex: 0 0 1px; width: 1px; height: 14px; background: var(--hair); }
+  .tool-btn[aria-pressed="true"] {
+    border-color: var(--azure);
+    background: rgba(37, 99, 235, .08);
+    color: var(--azure);
+    font-weight: 500;
+  }
+  /* the scope tail is redundant with the right panel; drop it when the
+     centre column gets narrow rather than ellipsising the count */
+  @media (max-width: 1400px) { .tools-scope { display: none; } }
+  /* the intent is the point of the header, so give it the room back on a
+     narrow centre column: "6 events" abbreviates rather than the line
+     losing a field */
+  .turn-meta .abbr { display: none; }
+  @media (max-width: 1400px) {
+    .turn-meta .word { display: none; }
+    .turn-meta .abbr { display: inline; }
+  }
+  .filter-note {
+    padding: 0 8px 8px;
+    font-size: 11px;
+    color: var(--ink-400);
+  }
+
+  /* --- the turn --- */
+  .turns { display: flex; flex-direction: column; }
+  .turn + .turn { border-top: 1px solid var(--hair-light); }
+
+  .turn-head {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    height: 32px;
+    padding: 0 8px 0 0;
+    background: var(--surface);
+    text-align: left;
+    border-bottom: 1px solid transparent;
+  }
+  .turn-head:hover { background: var(--ground); }
+  .turn.is-open > .turn-head { border-bottom-color: var(--hair-light); }
+
+  .turn-spine {
+    flex: 0 0 2px;
+    width: 2px;
+    align-self: stretch;
+    border-radius: 1px;
+    background: var(--mod-orange);
+  }
+  .turn.has-error .turn-spine { background: var(--danger); }
+
+  .turn-ord {
+    flex: 0 0 auto;
+    min-width: 18px;
+    font-size: 11px;
+    color: var(--ink-400);
+  }
+  .turn.is-open .turn-ord { color: var(--ink-600); }
+  .turn-intent {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 13px;
+    color: var(--ink-900);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .turn-meta {
+    flex: 0 0 auto;
+    font-size: 11px;
+    color: var(--ink-400);
+    white-space: nowrap;
+  }
+  .turn-meta .err { color: var(--danger); }
+  .turn-chev { flex: 0 0 auto; display: flex; color: var(--ink-200); }
+  .turn-chev svg { transition: transform 120ms ease; }
+  .turn.is-open .turn-chev svg { transform: rotate(90deg); }
+  .turn.is-open .turn-chev { color: var(--ink-400); }
+
+  /* rows sit 20 px in, behind a hairline gutter that continues the spine */
+  .turn-rows {
+    margin: 2px 0 8px 11px;
+    padding-left: 9px;
+    border-left: 1px solid var(--hair);
+  }
+
+  /* --- folded run of identical rows --- */
+  .row-fold .row-sum { color: var(--ink-600); }
+  .fold-more { color: var(--ink-400); }
+  .row-plus {
+    flex: 0 0 auto;
+    display: flex;
+    margin-top: 5px;
+    color: var(--ink-400);
+  }
+  .fold-rows {
+    margin-left: 20px;
+    padding-left: 8px;
+    border-left: 1px solid var(--hair-light);
+  }
+</style>
+</head>
+<body data-page="details/1-turns">
+<div id="app"></div>
+
+<script src="shared/data.js"></script>
+<script src="shared/chrome.js"></script>
+<script src="shared/feedback.js"></script>
+<script>
+(function () {
+  'use strict';
+  var AII = window.AII;
+  var el = AII.el;
+  var esc = AII.escapeHtml;
+
+  var center = AII.renderShell(document.getElementById('app'), {
+    title: 'Details view',
+    variant: 'Variant 1 of 7 — agent turns',
+    blurb: 'The same rows, grouped under the turn that produced them; identical runs fold to one line.',
+    prev: '0-baseline.html',
+    next: '2-chapters.html',
+    activeTab: 'Details'
+  });
+
+  var sub = AII.SUBSTEP || {};
+  var turns = (sub.turns || []).slice();
+
+  /* Open by default: the last two turns (the live ones), every turn holding
+     an ERROR, and — so the page can be read top-down — the first turn plus
+     the two turns that carry a folded run. */
+  var OPEN_BY_DEFAULT = { 1: 1, 4: 1, 7: 1, 9: 1, 10: 1, 14: 1, 21: 1, 22: 1 };
+  var PROBLEM = { ERROR: 1, WARNING: 1, RETRY: 1 };
+
+  function typeOf(ev) { return String((ev && ev.type) || '').toUpperCase(); }
+  function money(n) { return '$' + (Number(n) || 0).toFixed(2); }
+
+  /* ---- group a turn's events into runs of identical consecutive rows ----
+     Only two shapes fold: a run whose summaries are all the same (the six
+     evaluator SKILL calls), and a TODO list, which is one action written as
+     three lines. Anything else keeps its own row, so no number is hidden. */
+  function groupRuns(events) {
+    var out = [];
+    var i = 0;
+    while (i < events.length) {
+      var run = [events[i]];
+      var j = i + 1;
+      while (j < events.length && typeOf(events[j]) === typeOf(events[i])) {
+        run.push(events[j]);
+        j++;
+      }
+      var same = run.every(function (e) { return e.summary === run[0].summary; });
+      var foldable = run.length >= 3 && (same || typeOf(run[0]) === 'TODO');
+      if (foldable) out.push({ fold: true, run: run, same: same });
+      else run.forEach(function (e) { out.push({ fold: false, ev: e }); });
+      i = j;
+    }
+    return out;
+  }
+
+  /* A folded run reuses the row anatomy: same circle, same 8 px label (with
+     the count), same summary line — the chevron becomes a plus. */
+  function buildFold(group) {
+    var run = group.run;
+    var type = typeOf(run[0]);
+    var color = AII.rowColor(type);
+    var wrap = el('div', 'fold');
+
+    var item = el('div', 'row-item');
+    var btn = el('button', 'row row-fold');
+    btn.type = 'button';
+    btn.setAttribute('aria-expanded', 'false');
+    var extra = group.same
+      ? ''
+      : '<span class="fold-more"> · +' + (run.length - 1) + ' more</span>';
+    btn.innerHTML =
+      '<span class="row-ico" style="background:' + AII.tint(color) + ';color:' + color + '">' +
+        AII.icon(AII.rowIcon(type), 12) +
+      '</span>' +
+      '<span class="row-main">' +
+        '<span class="row-type" style="color:' + color + '">' + esc(type) + ' &times;' + run.length + '</span>' +
+        '<span class="row-sum">' + esc(run[0].summary || '') + extra + '</span>' +
+      '</span>' +
+      '<span class="row-plus">' + AII.icon('plus', 12) + '</span>';
+    item.appendChild(btn);
+    wrap.appendChild(item);
+
+    var rows = el('div', 'fold-rows');
+    rows.hidden = true;
+    var built = run.map(function (ev) {
+      var r = AII.buildRow(ev, {});
+      rows.appendChild(r);
+      return { item: r, ev: ev };
+    });
+    wrap.appendChild(rows);
+
+    var plus = btn.querySelector('.row-plus');
+    function set(open) {
+      rows.hidden = !open;
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      plus.innerHTML = AII.icon(open ? 'minus' : 'plus', 12);
+    }
+    btn.addEventListener('click', function () { set(rows.hidden); });
+    return { node: wrap, rows: built, foldItem: item, setOpen: set };
+  }
+
+  /* ---- one turn ---- */
+  function buildTurn(turn) {
+    var events = turn.events || [];
+    var hasError = events.some(function (e) { return typeOf(e) === 'ERROR'; });
+    var hasProblem = events.some(function (e) { return PROBLEM[typeOf(e)]; });
+
+    var wrap = el('div', 'turn' + (hasError ? ' has-error' : ''));
+    var head = el('button', 'turn-head');
+    head.type = 'button';
+    head.setAttribute('aria-expanded', 'false');
+    head.innerHTML =
+      '<span class="turn-spine"></span>' +
+      '<span class="turn-ord mono">t' + turn.n + '</span>' +
+      '<span class="turn-intent">' + esc(turn.intent || '') + '</span>' +
+      '<span class="turn-meta mono">' + esc(turn.t0) + ' · ' + events.length +
+        '<span class="word"> events</span><span class="abbr"> ev</span> · ' + money(turn.usd) +
+        (hasError ? ' · <span class="err">1 error</span>' : '') + '</span>' +
+      '<span class="turn-chev">' + AII.icon('chevron-right', 12) + '</span>';
+    wrap.appendChild(head);
+
+    var rowsWrap = el('div', 'turn-rows');
+    rowsWrap.hidden = true;
+    var rows = [];
+    var folds = [];
+    groupRuns(events).forEach(function (g) {
+      if (g.fold) {
+        var f = buildFold(g);
+        rowsWrap.appendChild(f.node);
+        folds.push(f);
+        rows = rows.concat(f.rows);
+      } else {
+        var item = AII.buildRow(g.ev, {});
+        rowsWrap.appendChild(item);
+        rows.push({ item: item, ev: g.ev });
+      }
+    });
+    wrap.appendChild(rowsWrap);
+
+    function setOpen(open) {
+      rowsWrap.hidden = !open;
+      wrap.classList.toggle('is-open', open);
+      head.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+    head.addEventListener('click', function () { setOpen(rowsWrap.hidden); });
+
+    return {
+      node: wrap, setOpen: setOpen, rows: rows, folds: folds,
+      hasProblem: hasProblem, defaultOpen: !!OPEN_BY_DEFAULT[turn.n]
+    };
+  }
+
+  /* ---- toolbar ---- */
+  var totalEvents = turns.reduce(function (a, t) { return a + (t.events || []).length; }, 0);
+
+  var tools = el('div', 'tools');
+  var count = el('div', 'tools-count');
+  count.appendChild(el('span', null,
+    totalEvents + ' events in ' + turns.length + ' turns'));
+  count.appendChild(el('span', 'tools-scope', ' · Evaluation 1 · Round 2'));
+  tools.appendChild(count);
+
+  function toolButton(label) {
+    var b = el('button', 'tool-btn', label);
+    b.type = 'button';
+    return b;
+  }
+  var foldAll = toolButton('Fold all');
+  var unfoldAll = toolButton('Unfold all');
+  var errorsOnly = toolButton('Errors only');
+  errorsOnly.setAttribute('aria-pressed', 'false');
+  tools.appendChild(foldAll);
+  tools.appendChild(unfoldAll);
+  tools.appendChild(el('span', 'tool-sep'));
+  tools.appendChild(errorsOnly);
+  center.appendChild(tools);
+
+  var note = el('div', 'filter-note');
+  note.hidden = true;
+  center.appendChild(note);
+
+  var list = el('div', 'turns');
+  var built = turns.map(function (t) {
+    var b = buildTurn(t);
+    list.appendChild(b.node);
+    return b;
+  });
+  center.appendChild(list);
+
+  built.forEach(function (b) { if (b.defaultOpen) b.setOpen(true); });
+
+  foldAll.addEventListener('click', function () {
+    built.forEach(function (b) { b.setOpen(false); });
+  });
+  unfoldAll.addEventListener('click', function () {
+    built.forEach(function (b) { b.setOpen(true); });
+  });
+
+  var problemCounts = { ERROR: 0, WARNING: 0, RETRY: 0 };
+  built.forEach(function (b) {
+    b.rows.forEach(function (r) {
+      var k = typeOf(r.ev);
+      if (problemCounts[k] != null) problemCounts[k]++;
+    });
+  });
+  var problemTurns = built.filter(function (b) { return b.hasProblem; }).length;
+  note.textContent = 'Errors only · ' + problemTurns + ' turns · ' +
+    problemCounts.ERROR + ' error · ' + problemCounts.WARNING + ' warning · ' +
+    problemCounts.RETRY + ' retry';
+
+  var filtering = false;
+  errorsOnly.addEventListener('click', function () {
+    filtering = !filtering;
+    errorsOnly.setAttribute('aria-pressed', filtering ? 'true' : 'false');
+    note.hidden = !filtering;
+    built.forEach(function (b) {
+      b.node.hidden = filtering && !b.hasProblem;
+      b.folds.forEach(function (f) { f.foldItem.hidden = filtering; });
+      b.rows.forEach(function (r) {
+        r.item.hidden = filtering && !PROBLEM[typeOf(r.ev)];
+      });
+      b.setOpen(filtering ? b.hasProblem : b.defaultOpen);
+    });
+  });
+})();
+</script>
+</body>
+</html>

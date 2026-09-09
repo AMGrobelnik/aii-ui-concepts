@@ -1,0 +1,437 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Details view — Variant 5: lanes over time</title>
+<link rel="stylesheet" href="shared/tokens.css">
+<link rel="stylesheet" href="shared/chrome.css">
+<style>
+  /* Variant 5 — a timeline of the substep sits above the feed and scopes it.
+     The rows underneath are the shared row anatomy, unchanged, plus the
+     mono timestamp they already carry in every other variant. */
+
+  .tl-block {
+    position: sticky;
+    top: -16px;                 /* the center's own 16 px padding */
+    z-index: 2;
+    background: var(--surface);
+    padding: 4px 0 8px;
+    border-bottom: 1px solid var(--hair);
+    margin-bottom: 10px;
+  }
+  .tl-svg { width: 100%; }
+
+  /* lanes and axis */
+  .tl-lane-k { font-size: 11px; fill: var(--ink-600); }
+  .tl-rail { stroke: var(--ink-100); stroke-width: 1; }
+  .tl-axis { stroke: var(--ink-200); stroke-width: 1; }
+  .tl-axis-t { stroke: var(--ink-200); stroke-width: 1; }
+  .tl-axis-k {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    fill: var(--ink-400);
+  }
+
+  /* agent turns */
+  .tl-turn rect { fill: var(--ink-100); stroke: rgba(0, 0, 0, .10); stroke-width: 1; }
+  .tl-turn { cursor: pointer; }
+  .tl-turn:hover rect { fill: var(--ink-200); }
+  .tl-turn.is-on rect { fill: rgba(37, 99, 235, .18); stroke: rgba(37, 99, 235, .45); }
+  .tl-turn:focus-visible { outline: 2px solid var(--azure); outline-offset: 1px; }
+
+  /* brush */
+  .tl-brush { fill: rgba(37, 99, 235, .10); stroke: rgba(37, 99, 235, .38); stroke-width: 1; }
+  .tl-handle {
+    fill: rgba(37, 99, 235, .22);
+    stroke: rgba(37, 99, 235, .55);
+    stroke-width: 1;
+    cursor: ew-resize;
+  }
+  .tl-handle:hover { fill: rgba(37, 99, 235, .38); }
+  .tl-handle:focus-visible { outline: 2px solid var(--azure); outline-offset: 1px; }
+
+  /* caption under the timeline */
+  .tl-cap {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    padding: 8px 2px 0;
+  }
+  .tl-cap-main {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 13px;
+    color: var(--ink-900);
+    font-weight: 500;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .tl-cap-main .rng { font-family: var(--font-mono); font-weight: 400; }
+  .tl-cap-side {
+    flex: 0 0 auto;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-400);
+  }
+  .tl-hint {
+    padding: 6px 2px 2px;
+    font-size: 11px;
+    color: var(--ink-400);
+  }
+  .tl-empty { padding: 20px 8px; font-size: 13px; color: var(--ink-400); }
+</style>
+</head>
+<body data-page="details/5-timeline">
+<div id="app"></div>
+
+<script src="shared/data.js"></script>
+<script src="shared/chrome.js"></script>
+<script src="shared/feedback.js"></script>
+<script>
+(function () {
+  'use strict';
+  var AII = window.AII;
+
+  var center = AII.renderShell(document.getElementById('app'), {
+    title: 'Details view',
+    variant: 'Variant 5 of 7 — lanes over time',
+    blurb: 'Where the time and the money went: four lanes across the substep, brushed to scope the rows below.',
+    prev: '4-outline.html',
+    next: '6-decisions.html',
+    activeTab: 'Details'
+  });
+
+  var SUB = AII.SUBSTEP || {};
+  var TURNS = SUB.turns || [];
+
+  /* ---------------------------------------------------------------
+     1. Time helpers — the data carries m:ss strings, the SVG needs px
+     --------------------------------------------------------------- */
+
+  function secs(s) {
+    var p = String(s == null ? '0:00' : s).split(':');
+    var m = parseInt(p[0], 10) || 0;
+    var q = parseInt(p[1], 10) || 0;
+    return m * 60 + q;
+  }
+  function fmt(sec) {
+    sec = Math.max(0, Math.round(sec));
+    return Math.floor(sec / 60) + ':' + ('0' + (sec % 60)).slice(-2);
+  }
+
+  /* ---------------------------------------------------------------
+     2. Model
+     --------------------------------------------------------------- */
+
+  var ALL = [];
+  var turns = TURNS.map(function (t, ti) {
+    var evs = (t.events || []).map(function (e) {
+      var c = Object.assign({}, e);
+      c.turn = ti + 1;
+      c.index = ALL.length;
+      c.sec = secs(e.t);
+      ALL.push(c);
+      return c;
+    });
+    var t0 = secs(t.t0);
+    return {
+      n: t.n || (ti + 1), intent: t.intent || '',
+      t0: t0, t1: t0 + secs(t.dur || '0:00'),
+      usd: typeof t.usd === 'number' ? t.usd : 0,
+      evs: evs
+    };
+  });
+  var TOTAL = secs(SUB.duration && /^\d+:\d\d$/.test(SUB.duration) ? SUB.duration : '5:12') ||
+    (turns.length ? turns[turns.length - 1].t1 : 312);
+  if (turns.length) TOTAL = Math.max(TOTAL, turns[turns.length - 1].t1);
+
+  var TOOL_T = { TOOL: 1, TERMINAL: 1, READ: 1, FIND: 1, SEARCH: 1, SKILL: 1, TODO: 1 };
+  var FILE_T = { WRITE: 1, EDIT: 1 };
+  var ERR_T = { ERROR: 1, WARNING: 1, RETRY: 1 };
+
+  /* first token on the raw input line that looks like a path */
+  function fileOf(ev) {
+    var first = String(ev.input || '').split('\n')[0];
+    var toks = first.split(/\s+/);
+    for (var i = toks.length - 1; i >= 0; i--) {
+      if (/[\w-]\.[a-z]{2,5}$/i.test(toks[i]) || /\/[\w.-]+$/.test(toks[i])) return toks[i];
+    }
+    return ev.summary || String(ev.type);
+  }
+
+  /* ---------------------------------------------------------------
+     3. Timeline
+     --------------------------------------------------------------- */
+
+  var block = AII.el('div', 'tl-block');
+  var svgBox = AII.el('div', 'tl-svg');
+  block.appendChild(svgBox);
+
+  var cap = AII.el('div', 'tl-cap');
+  var capMain = AII.el('div', 'tl-cap-main');
+  var capSide = AII.el('div', 'tl-cap-side');
+  cap.appendChild(capMain);
+  cap.appendChild(capSide);
+  block.appendChild(cap);
+  center.appendChild(block);
+
+  var hint = AII.el('div', 'tl-hint',
+    'Drag either brush edge, or click a turn block, to change the range.');
+  center.appendChild(hint);
+
+  var list = AII.el('div', 'feed-list');
+  center.appendChild(list);
+
+  var LANES = ['Agent', 'Tools', 'Files', 'Errors'];
+  var H = 120, PAD_L = 58, PAD_R = 14, TOP = 8, LANE = 20;
+  var AXIS_Y = 96;
+  var laneY = function (i) { return TOP + i * LANE + LANE / 2; };
+
+  var W = 600, x0 = PAD_L, x1 = W - PAD_R;
+  function X(sec) { return x0 + (sec / TOTAL) * (x1 - x0); }
+  function T(px) { return Math.max(0, Math.min(TOTAL, (px - x0) / (x1 - x0) * TOTAL)); }
+
+  var brush = [130, 215];          /* 2:10 – 3:35, the range SPEC opens on */
+
+  var svg = null, brushRect = null, handles = [];
+
+  function draw() {
+    W = Math.max(320, svgBox.clientWidth || 600);
+    x1 = W - PAD_R;
+    var s = '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + ' ' + H +
+      '" role="img" aria-label="Timeline of Evaluation 1 — agent turns, tools, files and errors across 5 m 12 s">';
+
+    /* lane labels + rails */
+    LANES.forEach(function (name, i) {
+      var y = laneY(i);
+      s += '<text class="tl-lane-k" x="' + (PAD_L - 10) + '" y="' + (y + 4) +
+        '" text-anchor="end">' + name + '</text>';
+      s += '<line class="tl-rail" x1="' + x0 + '" y1="' + (y + .5) + '" x2="' + x1 +
+        '" y2="' + (y + .5) + '"/>';
+    });
+
+    /* agent turns */
+    turns.forEach(function (t) {
+      var bx = X(t.t0), bw = Math.max(3, X(t.t1) - X(t.t0) - 1);
+      var lbl = 't' + t.n + ' · ' + fmt(t.t0) + ' – ' + fmt(t.t1) + ' · ' +
+        t.evs.length + ' events · $' + t.usd.toFixed(2);
+      s += '<g class="tl-turn" data-turn="' + t.n + '" tabindex="0" role="button" ' +
+        'aria-label="' + AII.escapeHtml(lbl + ' — ' + t.intent) + '">' +
+        '<title>' + AII.escapeHtml(lbl + '\n' + t.intent) + '</title>' +
+        '<rect x="' + bx.toFixed(1) + '" y="' + (laneY(0) - 7) + '" width="' + bw.toFixed(1) +
+        '" height="14" rx="1"/></g>';
+    });
+
+    /* tools, files, errors */
+    ALL.forEach(function (ev) {
+      var type = String(ev.type).toUpperCase();
+      var x = X(ev.sec), col = AII.rowColor(type);
+      var tip = AII.escapeHtml(type.toLowerCase() + ' · ' + fmt(ev.sec) +
+        (ev.summary ? ' · ' + ev.summary : ''));
+      if (TOOL_T[type]) {
+        var h = (type === 'TERMINAL' || type === 'TOOL') ? 12 : (type === 'SKILL' || type === 'TODO' ? 10 : 8);
+        s += '<rect x="' + (x - 1).toFixed(1) + '" y="' + (laneY(1) - h / 2) + '" width="2" height="' +
+          h + '" fill="' + col + '" opacity=".85"><title>' + tip + '</title></rect>';
+      } else if (FILE_T[type]) {
+        var f = AII.escapeHtml(fileOf(ev) + ' · ' + fmt(ev.sec));
+        s += '<rect x="' + (x - 3).toFixed(1) + '" y="' + (laneY(2) - 3) + '" width="6" height="6" ' +
+          (type === 'WRITE' ? 'fill="' + col + '"' : 'fill="#ffffff" stroke="' + col + '" stroke-width="1"') +
+          '><title>' + f + '</title></rect>';
+      } else if (ERR_T[type]) {
+        var y = laneY(3);
+        if (type === 'RETRY') {
+          s += '<rect x="' + (x - 1).toFixed(1) + '" y="' + (y - 4) + '" width="2" height="8" fill="' +
+            col + '"><title>' + tip + '</title></rect>';
+        } else {
+          var r = type === 'ERROR' ? 5.5 : 4;
+          s += '<path d="M' + x.toFixed(1) + ' ' + (y - r) + 'L' + (x + r).toFixed(1) + ' ' + y +
+            'L' + x.toFixed(1) + ' ' + (y + r) + 'L' + (x - r).toFixed(1) + ' ' + y + 'Z" fill="' +
+            col + '"><title>' + tip + '</title></path>';
+        }
+      }
+    });
+
+    /* the steering message, drawn across every lane */
+    ALL.forEach(function (ev) {
+      if (String(ev.type).toUpperCase() !== 'USER') return;
+      var x = Math.round(X(ev.sec)) + .5;
+      s += '<g><title>' + AII.escapeHtml('steer · ' + fmt(ev.sec) + ' · ' + ev.summary) + '</title>' +
+        '<line x1="' + x + '" y1="' + TOP + '" x2="' + x + '" y2="' + (TOP + 4 * LANE) +
+        '" stroke="#0d9488" stroke-width="1"/>' +
+        '<path d="M' + x + ' ' + TOP + 'L' + (x + 11) + ' ' + (TOP + 3.5) + 'L' + x + ' ' +
+        (TOP + 7) + 'Z" fill="#0d9488"/></g>';
+    });
+
+    /* axis */
+    s += '<line class="tl-axis" x1="' + x0 + '" y1="' + (AXIS_Y + .5) + '" x2="' + x1 +
+      '" y2="' + (AXIS_Y + .5) + '"/>';
+    for (var t = 0; t <= TOTAL; t += 60) {
+      var tx = Math.round(X(t)) + .5;
+      s += '<line class="tl-axis-t" x1="' + tx + '" y1="' + AXIS_Y + '" x2="' + tx +
+        '" y2="' + (AXIS_Y + 4) + '"/>';
+      s += '<text class="tl-axis-k" x="' + tx + '" y="' + (AXIS_Y + 16) + '" text-anchor="' +
+        (t === 0 ? 'start' : 'middle') + '">' + fmt(t) + '</text>';
+    }
+
+    /* brush last, so it tints the marks it covers */
+    s += '<rect class="tl-brush" x="0" y="' + (TOP - 2) + '" width="10" height="' +
+      (4 * LANE + 4) + '"/>';
+    ['start', 'end'].forEach(function (which, i) {
+      s += '<rect class="tl-handle" data-h="' + i + '" tabindex="0" role="slider" ' +
+        'aria-label="Range ' + which + '" aria-valuemin="0" aria-valuemax="' + TOTAL +
+        '" aria-valuenow="0" x="0" y="' + (TOP - 2) + '" width="6" height="' +
+        (4 * LANE + 4) + '" rx="1"/>';
+    });
+    s += '</svg>';
+
+    svgBox.innerHTML = s;
+    svg = svgBox.querySelector('svg');
+    brushRect = svg.querySelector('.tl-brush');
+    handles = [].slice.call(svg.querySelectorAll('.tl-handle'));
+    wire();
+    paintBrush();
+  }
+
+  function paintBrush() {
+    if (!brushRect) return;
+    var a = X(brush[0]), b = X(brush[1]);
+    brushRect.setAttribute('x', a.toFixed(1));
+    brushRect.setAttribute('width', Math.max(2, b - a).toFixed(1));
+    handles[0].setAttribute('x', (a - 3).toFixed(1));
+    handles[0].setAttribute('aria-valuenow', Math.round(brush[0]));
+    handles[0].setAttribute('aria-valuetext', fmt(brush[0]));
+    handles[1].setAttribute('x', (b - 3).toFixed(1));
+    handles[1].setAttribute('aria-valuenow', Math.round(brush[1]));
+    handles[1].setAttribute('aria-valuetext', fmt(brush[1]));
+    [].slice.call(svg.querySelectorAll('.tl-turn')).forEach(function (g) {
+      var t = turns[parseInt(g.getAttribute('data-turn'), 10) - 1];
+      g.classList.toggle('is-on', !!t && t.t1 > brush[0] && t.t0 < brush[1]);
+    });
+  }
+
+  /* ---------------------------------------------------------------
+     4. Rows for the brushed range
+     --------------------------------------------------------------- */
+
+  var firstPaint = true;
+
+  function inRange(ev) {
+    if (ev.sec < brush[0]) return false;
+    return brush[1] >= TOTAL ? ev.sec <= brush[1] : ev.sec < brush[1];
+  }
+
+  function renderCaption() {
+    var evs = ALL.filter(inRange);
+    var nT = turns.filter(function (t) {
+      return t.evs.some(inRange);
+    }).length;
+    var usd = evs.reduce(function (a, e) { return a + (e.usd || 0); }, 0);
+    capMain.innerHTML = '<span class="rng">' + fmt(brush[0]) + ' – ' + fmt(brush[1]) +
+      '</span> · ' + nT + ' turn' + (nT === 1 ? '' : 's') + ' · ' + evs.length + ' event' +
+      (evs.length === 1 ? '' : 's');
+    capSide.textContent = '$' + usd.toFixed(2) + ' of $' +
+      (SUB.cost != null ? Number(SUB.cost).toFixed(2) : '1.22');
+    return evs;
+  }
+
+  function renderRows() {
+    var evs = renderCaption();
+    list.innerHTML = '';
+    if (!evs.length) {
+      list.appendChild(AII.el('div', 'tl-empty',
+        'No events in this range — widen the brush or pick another turn.'));
+      return;
+    }
+    var errAt = -1;
+    evs.forEach(function (ev, i) {
+      if (errAt < 0 && String(ev.type).toUpperCase() === 'ERROR') errAt = i;
+    });
+    evs.forEach(function (ev, i) {
+      list.appendChild(AII.buildRow(ev, { meta: ev.t, open: firstPaint && i === errAt }));
+    });
+    firstPaint = false;
+  }
+
+  /* ---------------------------------------------------------------
+     5. Interaction — click a turn, drag a handle, or use the arrows
+     --------------------------------------------------------------- */
+
+  function setBrush(a, b, rows) {
+    var lo = Math.max(0, Math.min(a, b));
+    var hi = Math.min(TOTAL, Math.max(a, b));
+    if (hi - lo < 4) hi = Math.min(TOTAL, lo + 4);
+    brush = [lo, hi];
+    paintBrush();
+    if (rows) renderRows(); else renderCaption();
+  }
+
+  function pickTurn(g) {
+    var t = turns[parseInt(g.getAttribute('data-turn'), 10) - 1];
+    if (!t) return;
+    setBrush(t.t0, t.t1, true);
+  }
+
+  function wire() {
+    [].slice.call(svg.querySelectorAll('.tl-turn')).forEach(function (g) {
+      g.addEventListener('click', function () { pickTurn(g); });
+      g.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+          e.preventDefault();
+          pickTurn(g);
+        }
+      });
+    });
+
+    handles.forEach(function (h, i) {
+      h.addEventListener('pointerdown', function (e) {
+        e.preventDefault();
+        h.setPointerCapture(e.pointerId);
+        var box = svg.getBoundingClientRect();
+        function moveTo(ev) {
+          var sec = T(ev.clientX - box.left);
+          var next = brush.slice();
+          next[i] = sec;
+          setBrush(next[0], next[1], false);
+        }
+        function up(ev) {
+          h.releasePointerCapture(e.pointerId);
+          h.removeEventListener('pointermove', moveTo);
+          h.removeEventListener('pointerup', up);
+          moveTo(ev);
+          renderRows();
+        }
+        h.addEventListener('pointermove', moveTo);
+        h.addEventListener('pointerup', up);
+      });
+      h.addEventListener('keydown', function (e) {
+        var step = e.shiftKey ? 30 : 5, next = brush.slice(), used = true;
+        if (e.key === 'ArrowLeft') next[i] -= step;
+        else if (e.key === 'ArrowRight') next[i] += step;
+        else if (e.key === 'Home') next[i] = 0;
+        else if (e.key === 'End') next[i] = TOTAL;
+        else used = false;
+        if (!used) return;
+        e.preventDefault();
+        setBrush(next[0], next[1], true);
+      });
+    });
+  }
+
+  /* ---------------------------------------------------------------
+     6. Go
+     --------------------------------------------------------------- */
+
+  draw();
+  renderRows();
+
+  var rid = 0;
+  window.addEventListener('resize', function () {
+    window.clearTimeout(rid);
+    rid = window.setTimeout(function () { draw(); }, 80);
+  });
+})();
+</script>
+</body>
+</html>

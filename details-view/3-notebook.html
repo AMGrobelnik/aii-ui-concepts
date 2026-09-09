@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Details view — Variant 3: narrative and evidence</title>
+<link rel="stylesheet" href="shared/tokens.css">
+<link rel="stylesheet" href="shared/chrome.css">
+<style>
+  /* Variant 3: the centre reads like a lab notebook. Prose first, the
+     events that back it directly under, reachable one tick at a time.
+     Nothing here is newly generated — these are the interim narratives the
+     Overview tab already receives every two minutes. */
+
+  .nb-note {
+    padding: 0 8px 12px;
+    font-size: 11px;
+    color: var(--ink-400);
+    border-bottom: 1px solid var(--hair);
+  }
+
+  .nb { padding: 20px 8px 4px; }
+  .nb + .nb { border-top: 1px solid var(--hair-light); }
+
+  .nb-time {
+    font-size: 11px;
+    color: var(--ink-400);
+    letter-spacing: .02em;
+  }
+
+  .nb-prose {
+    max-width: 62ch;
+    margin-top: 8px;
+    font-family: var(--font-serif);
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--ink-900);
+  }
+  .nb-prose p + p { margin-top: 12px; }
+
+  /* --- evidence strip --- */
+  .nb-ev { margin-top: 18px; }
+
+  .dens {
+    position: relative;
+    height: 12px;
+    border-bottom: 1px solid var(--hair);
+  }
+  .dens-tick {
+    position: absolute;
+    bottom: 0;
+    width: 3px;
+    height: 7px;
+    padding: 0;
+    border: 0;
+    border-radius: 1px 1px 0 0;
+    transform: translateX(-1px);
+  }
+  .dens-tick.is-tall { height: 12px; }
+  /* an event whose summary has not arrived yet is drawn in the same grey
+     as the skeleton bar that stands in for its text */
+  .dens-tick.is-waiting { background: var(--ink-100); }
+  .dens-tick:hover { box-shadow: 0 0 0 1px var(--ink-400); }
+  .dens-tick.is-on { box-shadow: 0 0 0 1px var(--ink-900); }
+  .dens-tick:focus-visible { outline-offset: 1px; }
+
+  .nb-evfoot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+    margin-top: 10px;
+  }
+  .nb-show {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 24px;
+    padding: 0 9px;
+    border: 1px solid var(--hair-dark);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    font-size: 12px;
+    color: var(--ink-600);
+  }
+  .nb-show:hover { background: var(--ground); color: var(--ink-900); }
+  .nb-show svg { transition: transform 120ms ease; }
+  .nb-show[aria-expanded="true"] svg { transform: rotate(90deg); }
+  .nb-hint { font-size: 11px; color: var(--ink-400); }
+  .nb-rows { margin-top: 8px; }
+  .nb-rows .row { padding-left: 0; }
+  .nb-rows .row-body { padding-left: 34px; }
+
+  /* a tick click opens its row, scrolls to it and flashes it once */
+  @keyframes nb-flash {
+    from { background: rgba(37, 99, 235, .16); }
+    to   { background: transparent; }
+  }
+  .is-flash > .row { animation: nb-flash 900ms ease-out; }
+</style>
+</head>
+<body data-page="details/3-notebook">
+<div id="app"></div>
+
+<script src="shared/data.js"></script>
+<script src="shared/chrome.js"></script>
+<script src="shared/feedback.js"></script>
+<script>
+(function () {
+  'use strict';
+  var AII = window.AII;
+  var el = AII.el;
+
+  var center = AII.renderShell(document.getElementById('app'), {
+    title: 'Details view',
+    variant: 'Variant 3 of 7 — narrative and evidence',
+    blurb: 'The two-minute interim narratives, each over the events that back it; a tick opens its row.',
+    prev: '2-chapters.html',
+    next: '4-outline.html',
+    activeTab: 'Details'
+  });
+
+  var events = AII.flattenSubstep(AII.SUBSTEP);
+  var narratives = AII.NARRATIVES || [];
+  var reduced = window.matchMedia &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* the second narrative's evidence is expanded */
+  var OPEN_BY_DEFAULT = { 1: 1 };
+
+  function seconds(t) {
+    var p = String(t == null ? '' : t).split(':');
+    if (p.length < 2) return 0;
+    return (parseInt(p[0], 10) || 0) * 60 + (parseInt(p[1], 10) || 0);
+  }
+  function clock(t) {
+    var s = seconds(t);
+    var m = Math.floor(s / 60);
+    var r = s % 60;
+    return (m < 10 ? '0' : '') + m + ':' + (r < 10 ? '0' : '') + r;
+  }
+  function typeOf(ev) { return String((ev && ev.type) || '').toUpperCase(); }
+
+  var note = el('div', 'nb-note',
+    'Narratives are the ones already written every 2 minutes for the Overview tab.');
+  center.appendChild(note);
+
+  function buildEntry(nar, idx) {
+    var range = nar.eventRange || nar.range || [0, -1];
+    var rows = events.slice(range[0], range[1] + 1);
+    /* The bar spans the events it actually holds, not the nominal clock
+       window: the narrative windows and the event ranges do not line up to
+       the second, and clamping either way piles ticks on an edge. */
+    var stamps = rows.map(function (e) { return seconds(e.t); });
+    var from = stamps.length ? Math.min.apply(null, stamps) : seconds(nar.from);
+    var to = stamps.length ? Math.max.apply(null, stamps) : seconds(nar.to);
+    var span = Math.max(1, to - from);
+    var errors = rows.filter(function (e) { return typeOf(e) === 'ERROR'; }).length;
+    var waiting = rows.filter(function (e) { return !e.summary; }).length;
+
+    var art = el('article', 'nb');
+    art.appendChild(el('div', 'nb-time mono', clock(nar.from) + ' – ' + clock(nar.to)));
+
+    var prose = el('div', 'nb-prose');
+    (nar.paragraphs || []).forEach(function (p) { prose.appendChild(el('p', null, p)); });
+    art.appendChild(prose);
+
+    var ev = el('div', 'nb-ev');
+
+    /* density bar: one 3 px tick per event, placed by its own timestamp */
+    var dens = el('div', 'dens');
+    dens.setAttribute('role', 'group');
+    dens.setAttribute('aria-label',
+      'Events between ' + clock(nar.from) + ' and ' + clock(nar.to));
+    art.appendChild(ev);
+
+    var list = el('div', 'nb-rows feed-list');
+    list.hidden = true;
+    var items = rows.map(function (e) {
+      var item = AII.buildRow(e, { meta: e.t });
+      list.appendChild(item);
+      return item;
+    });
+
+    var show = el('button', 'nb-show');
+    show.type = 'button';
+    show.setAttribute('aria-expanded', 'false');
+    show.appendChild(el('span', null, rows.length + ' events'));
+    var chev = el('span', null);
+    chev.innerHTML = AII.icon('chevron-right', 12);
+    show.appendChild(chev);
+
+    function setOpen(open) {
+      list.hidden = !open;
+      show.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+    show.addEventListener('click', function () { setOpen(list.hidden); });
+
+    var flashTimer = null;
+    var current = null;
+    function openRow(i, tick) {
+      setOpen(true);
+      var item = items[i];
+      if (!item) return;
+      if (item.setOpen) item.setOpen(true);
+      if (current) current.classList.remove('is-on');
+      current = tick;
+      if (tick) tick.classList.add('is-on');
+      item.scrollIntoView({ block: 'center', behavior: reduced ? 'auto' : 'smooth' });
+      item.classList.remove('is-flash');
+      /* restart the animation on a second click of the same tick */
+      void item.offsetWidth;
+      item.classList.add('is-flash');
+      window.clearTimeout(flashTimer);
+      flashTimer = window.setTimeout(function () {
+        item.classList.remove('is-flash');
+      }, 1000);
+    }
+
+    rows.forEach(function (e, i) {
+      var type = typeOf(e);
+      var tall = type === 'ERROR';
+      var t = el('button', 'dens-tick' + (tall ? ' is-tall' : ''));
+      t.type = 'button';
+      var color = AII.rowColor(type);
+      if (!e.summary) t.classList.add('is-waiting');
+      else t.style.background = tall ? color : color + 'a6';
+      var pct = Math.max(0, Math.min(100, ((seconds(e.t) - from) / span) * 100));
+      t.style.left = pct + '%';
+      var label = e.t + ' · ' + type + (e.summary ? ' · ' + e.summary : ' · summary pending');
+      t.title = label;
+      t.setAttribute('aria-label', label);
+      t.addEventListener('click', function () { openRow(i, t); });
+      dens.appendChild(t);
+    });
+    ev.appendChild(dens);
+
+    var foot = el('div', 'nb-evfoot');
+    foot.appendChild(show);
+    var hint = 'One tick per event' + (errors ? ', the error taller in red' : '') +
+      (waiting ? ', ' + waiting + ' still waiting for a summary' : '') +
+      ' · click a tick to open its row';
+    foot.appendChild(el('span', 'nb-hint', hint));
+    ev.appendChild(foot);
+    ev.appendChild(list);
+
+    if (OPEN_BY_DEFAULT[idx]) setOpen(true);
+    return art;
+  }
+
+  narratives.forEach(function (n, i) { center.appendChild(buildEntry(n, i)); });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,525 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Details view — Variant 4: fold levels and minimap</title>
+<link rel="stylesheet" href="shared/tokens.css">
+<link rel="stylesheet" href="shared/chrome.css">
+<style>
+  /* Variant 4 — the center becomes two columns: the outline, and a minimap
+     of the WHOLE substep that stays put while the outline scrolls under it.
+     Everything else (rows, shell, tree, composer) is the shared chrome. */
+
+  .center.has-minimap {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    /* buy back width for the minimap without shrinking the row anatomy */
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .ol-main { flex: 1 1 auto; min-width: 0; }
+
+  /* --- toolbar: the fold-level control --- */
+
+  .ol-bar {
+    position: sticky;
+    top: -16px;                 /* the center's own 16 px padding */
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0 10px;
+    background: var(--surface);
+  }
+  .ol-bar-k { font-size: 11px; color: var(--ink-400); white-space: nowrap; }
+  .seg {
+    display: inline-flex;
+    border: 1px solid var(--hair-dark);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    background: var(--surface);
+  }
+  .seg-btn {
+    height: 24px;
+    padding: 0 9px;
+    font-size: 12px;
+    color: var(--ink-600);
+    white-space: nowrap;
+  }
+  .seg-btn + .seg-btn { border-left: 1px solid var(--hair); }
+  .seg-btn:hover { background: var(--ground); color: var(--ink-900); }
+  .seg-btn.is-on { background: var(--ink-100); color: var(--ink-900); font-weight: 500; }
+  .seg-n { font-family: var(--font-mono); color: var(--ink-400); margin-right: 2px; }
+  .seg-btn.is-on .seg-n { color: var(--ink-900); }
+  .ol-count {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-400);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* --- the outline itself: one 2 px spine per turn, rows indented --- */
+
+  .turn { border-left: 2px solid var(--ink-200); margin-bottom: 2px; }
+  .turn-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    height: 28px;
+    padding: 0 6px 0 8px;
+    text-align: left;
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  }
+  .turn-head:hover { background: var(--ground); }
+  .turn-ord {
+    flex: 0 0 auto;
+    min-width: 18px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-400);
+  }
+  .turn-caret { flex: 0 0 12px; display: flex; color: var(--ink-400); }
+  .turn-caret svg { transition: transform 120ms ease; }
+  .turn-intent {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 13px;
+    color: var(--ink-900);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .turn-meta {
+    flex: 0 0 auto;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-400);
+    white-space: nowrap;
+  }
+  .turn-meta .err { color: var(--danger); }
+  .turn.is-open > .turn-head > .turn-intent { font-weight: 500; }
+  .turn-rows { padding: 2px 0 8px; }
+
+  /* --- keyboard status line, parked above the composer --- */
+
+  .ol-hint {
+    position: sticky;
+    bottom: -10px;
+    z-index: 3;
+    margin-top: 16px;
+    padding: 6px 2px;
+    background: var(--surface);
+    border-top: 1px solid var(--hair);
+    font-size: 11px;
+    color: var(--ink-400);
+  }
+  .ol-hint kbd {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-600);
+  }
+  .ol-hint .sep { padding: 0 6px; color: var(--ink-200); }
+
+  /* --- minimap: 120 px, docked at the right edge of the center --- */
+
+  .mini {
+    flex: 0 0 120px;
+    width: 120px;
+    position: sticky;
+    top: 0;
+  }
+  .mini-cap {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--ink-400);
+    padding: 0 0 6px 11px;
+    white-space: nowrap;
+  }
+  .mini-btn {
+    display: block;
+    width: 120px;
+    padding: 0;
+    border-left: 1px solid var(--hair);
+    cursor: pointer;
+  }
+  .mini-btn svg { display: block; }
+
+  /* under ~1360 px the row summaries need every pixel the meta can give up */
+  @media (max-width: 1360px) {
+    .ol-count { display: none; }
+    .turn-meta .m-usd,
+    .turn-meta .m-ev { display: none; }
+    .center.has-minimap { padding-left: 12px; padding-right: 12px; }
+  }
+</style>
+</head>
+<body data-page="details/4-outline">
+<div id="app"></div>
+
+<script src="shared/data.js"></script>
+<script src="shared/chrome.js"></script>
+<script src="shared/feedback.js"></script>
+<script>
+(function () {
+  'use strict';
+  var AII = window.AII;
+
+  var center = AII.renderShell(document.getElementById('app'), {
+    title: 'Details view',
+    variant: 'Variant 4 of 7 — fold levels and minimap',
+    blurb: 'Read the substep like source code: three fold levels over the same rows, and a minimap of the whole substep down the right edge.',
+    prev: '3-notebook.html',
+    next: '5-timeline.html',
+    activeTab: 'Details'
+  });
+  center.classList.add('has-minimap');
+
+  var SUB = AII.SUBSTEP || {};
+  var TURNS = (SUB.turns || []);
+  var ACCENT = AII.MODULE_ACCENT;
+
+  /* ---------------------------------------------------------------
+     1. Model — turns, each owning a contiguous slice of the events
+     --------------------------------------------------------------- */
+
+  var ALL = [];
+  var blocks = TURNS.map(function (t, ti) {
+    var evs = (t.events || []).map(function (e) {
+      var c = Object.assign({}, e);
+      c.turn = ti + 1;
+      c.index = ALL.length;
+      ALL.push(c);
+      return c;
+    });
+    return {
+      n: t.n || (ti + 1),
+      intent: t.intent || '',
+      dur: t.dur || '',
+      usd: typeof t.usd === 'number' ? t.usd : 0,
+      evs: evs,
+      errors: evs.filter(function (e) { return String(e.type).toUpperCase() === 'ERROR'; }).length,
+      i0: evs.length ? evs[0].index : ALL.length,
+      i1: evs.length ? evs[evs.length - 1].index : ALL.length,
+      open: false
+    };
+  });
+  var N = ALL.length || 1;
+  var USER_AT = ALL.filter(function (e) { return String(e.type).toUpperCase() === 'USER'; })
+                   .map(function (e) { return e.index; });
+
+  /* ---------------------------------------------------------------
+     2. Outline column
+     --------------------------------------------------------------- */
+
+  var main = AII.el('div', 'ol-main');
+
+  var bar = AII.el('div', 'ol-bar');
+  bar.appendChild(AII.el('span', 'ol-bar-k', 'Fold level'));
+  var seg = AII.el('div', 'seg');
+  seg.setAttribute('role', 'group');
+  seg.setAttribute('aria-label', 'Fold level');
+  var LEVELS = [[1, 'turns'], [2, 'rows'], [3, 'raw']];
+  var segBtns = LEVELS.map(function (lv) {
+    var b = AII.el('button', 'seg-btn');
+    b.type = 'button';
+    b.innerHTML = '<span class="seg-n">' + lv[0] + '</span> ' + lv[1];
+    b.setAttribute('aria-pressed', 'false');
+    b.addEventListener('click', function () { setLevel(lv[0]); });
+    seg.appendChild(b);
+    return b;
+  });
+  bar.appendChild(seg);
+  var count = AII.el('div', 'ol-count', blocks.length + ' turns · ' + N + ' events');
+  bar.appendChild(count);
+  main.appendChild(bar);
+
+  var body = AII.el('div', 'ol-body');
+  main.appendChild(body);
+
+  var dirty = true;
+  function markDirty() { dirty = true; schedule(); }
+
+  blocks.forEach(function (b) {
+    b.el = AII.el('div', 'turn');
+    b.el.style.borderLeftColor = ACCENT;
+
+    b.head = AII.el('button', 'turn-head');
+    b.head.type = 'button';
+    b.head.appendChild(AII.el('span', 'turn-ord mono', 't' + b.n));
+    b.caret = AII.el('span', 'turn-caret');
+    b.caret.innerHTML = AII.icon('chevron-right', 12);
+    b.head.appendChild(b.caret);
+    b.head.appendChild(AII.el('span', 'turn-intent', b.intent));
+    var meta = AII.el('span', 'turn-meta');
+    meta.innerHTML = AII.escapeHtml(b.dur) +
+      '<span class="m-ev"> · ' + b.evs.length + ' events</span>' +
+      '<span class="m-usd"> · $' + b.usd.toFixed(2) + '</span>' +
+      (b.errors ? ' · <span class="err">' + b.errors + ' error</span>' : '');
+    b.head.appendChild(meta);
+    b.head.setAttribute('aria-expanded', 'false');
+    b.head.addEventListener('click', function () { setOpen(b, !b.open); });
+    b.el.appendChild(b.head);
+
+    b.rowsWrap = AII.el('div', 'turn-rows');
+    b.rowItems = b.evs.map(function (ev) {
+      return AII.buildRow(ev, { meta: ev.t, indent: 20, onToggle: markDirty });
+    });
+    b.rowItems.forEach(function (it) { b.rowsWrap.appendChild(it); });
+    b.rowsWrap.hidden = true;
+    b.el.appendChild(b.rowsWrap);
+    body.appendChild(b.el);
+  });
+
+  var hint = AII.el('div', 'ol-hint');
+  hint.innerHTML =
+    '<kbd>j</kbd> / <kbd>k</kbd> rows<span class="sep">·</span>' +
+    '<kbd>z</kbd> fold<span class="sep">·</span>' +
+    '<kbd>&#9166;</kbd> raw';
+  main.appendChild(hint);
+  center.appendChild(main);
+
+  function setOpen(b, open) {
+    if (b.open === open) return;
+    b.open = open;
+    b.rowsWrap.hidden = !open;
+    b.el.classList.toggle('is-open', open);
+    b.head.setAttribute('aria-expanded', open ? 'true' : 'false');
+    b.caret.innerHTML = AII.icon(open ? 'chevron-down' : 'chevron-right', 12);
+    markDirty();
+  }
+
+  var level = 2;
+  function setLevel(lv) {
+    level = lv;
+    segBtns.forEach(function (b, i) {
+      var on = LEVELS[i][0] === lv;
+      b.classList.toggle('is-on', on);
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+    blocks.forEach(function (b) {
+      setOpen(b, lv >= 2);
+      b.rowItems.forEach(function (it) { it.setOpen(lv >= 3); });
+    });
+    markDirty();
+  }
+
+  /* ---------------------------------------------------------------
+     3. Minimap — one line per event, for the whole substep
+     --------------------------------------------------------------- */
+
+  var mini = AII.el('div', 'mini');
+  mini.appendChild(AII.el('div', 'mini-cap', N + ' events'));
+  var miniBtn = AII.el('button', 'mini-btn');
+  miniBtn.type = 'button';
+  miniBtn.setAttribute('aria-label',
+    'Minimap of all ' + N + ' events — click to jump to that point in the substep');
+  mini.appendChild(miniBtn);
+  center.appendChild(mini);
+
+  var PAD = 10;
+  var miniH = 400, miniStep = 2;
+  var viewRect = null;
+
+  function yOf(i) { return PAD + i * miniStep; }
+
+  function drawMini() {
+    miniH = Math.max(200, center.clientHeight - 104);
+    miniStep = (miniH - PAD * 2) / N;
+    var W = 119;
+    var s = '<svg width="' + W + '" height="' + miniH + '" viewBox="0 0 ' + W + ' ' + miniH +
+      '" shape-rendering="crispEdges" aria-hidden="true" focusable="false">';
+
+    /* turn boundaries first, so the event lines sit on top of them */
+    blocks.forEach(function (b, i) {
+      if (!i) return;
+      var y = Math.round(yOf(b.i0)) + 0.5;
+      s += '<line x1="0" y1="' + y + '" x2="' + W + '" y2="' + y +
+        '" stroke="rgba(0,0,0,.06)" stroke-width="1"/>';
+    });
+
+    ALL.forEach(function (ev, i) {
+      var type = String(ev.type).toUpperCase();
+      var y = yOf(i);
+      if (type === 'ERROR') {
+        s += '<rect x="8" y="' + (y - 1).toFixed(1) + '" width="' + (W - 12) +
+          '" height="4" fill="#dc2626"/>';
+      } else if (type === 'USER') {
+        s += '<rect x="8" y="' + (y - 1).toFixed(1) + '" width="' + (W - 12) +
+          '" height="4" fill="#0d9488"/>' +
+          '<path d="M0 ' + (y - 4).toFixed(1) + ' L7 ' + (y + 1).toFixed(1) +
+          ' L0 ' + (y + 6).toFixed(1) + ' Z" fill="#0d9488"/>';
+      } else {
+        s += '<rect x="12" y="' + y.toFixed(1) + '" width="' + (W - 24) +
+          '" height="2" fill="' + AII.rowColor(type) + '" opacity=".8"/>';
+      }
+    });
+
+    s += '<rect id="mini-view" x="1.5" y="0" width="' + (W - 3) + '" height="10" ' +
+      'fill="rgba(37,99,235,.10)" stroke="rgba(37,99,235,.38)" stroke-width="1"/>';
+    s += '</svg>';
+    miniBtn.innerHTML = s;
+    viewRect = miniBtn.querySelector('#mini-view');
+    dirty = true;
+  }
+
+  /* geometry of every visible block, in center-content coordinates */
+  var anchors = [];
+  function measure() {
+    var cr = center.getBoundingClientRect();
+    var st = center.scrollTop;
+    anchors = [];
+    blocks.forEach(function (b) {
+      var r = b.head.getBoundingClientRect();
+      var top = r.top - cr.top + st;
+      anchors.push({ top: top, bot: top + r.height, i0: b.i0, i1: b.open ? b.i0 : b.i1, el: b.head });
+      if (!b.open) return;
+      b.rowItems.forEach(function (it, k) {
+        var rr = it.getBoundingClientRect();
+        var t2 = rr.top - cr.top + st;
+        anchors.push({ top: t2, bot: t2 + rr.height, i0: b.i0 + k, i1: b.i0 + k, el: it });
+      });
+    });
+    dirty = false;
+  }
+
+  function updateView() {
+    if (dirty) measure();
+    if (!viewRect || !anchors.length) return;
+    var a = center.scrollTop + bar.getBoundingClientRect().height;
+    var z = center.scrollTop + center.clientHeight - hint.getBoundingClientRect().height - 16;
+    var lo = null, hi = null;
+    for (var i = 0; i < anchors.length; i++) {
+      var an = anchors[i];
+      if (an.bot <= a || an.top >= z) continue;
+      if (lo === null || an.i0 < lo) lo = an.i0;
+      if (hi === null || an.i1 > hi) hi = an.i1;
+    }
+    if (lo === null) return;
+    var y = yOf(lo) - 2;
+    var h = Math.max(6, yOf(hi + 1) - yOf(lo) + 4);
+    viewRect.setAttribute('y', y.toFixed(1));
+    viewRect.setAttribute('height', Math.min(h, miniH - y).toFixed(1));
+  }
+
+  var queued = false;
+  function schedule() {
+    if (queued) return;
+    queued = true;
+    window.requestAnimationFrame(function () { queued = false; updateView(); });
+  }
+  center.addEventListener('scroll', schedule, { passive: true });
+  window.addEventListener('resize', function () { drawMini(); schedule(); });
+
+  miniBtn.addEventListener('click', function (e) {
+    if (!e.detail) return;               /* keyboard activation carries no point */
+    var r = miniBtn.getBoundingClientRect();
+    var idx = Math.round((e.clientY - r.top - PAD) / miniStep);
+    idx = Math.max(0, Math.min(N - 1, idx));
+    if (dirty) measure();
+    var target = null;
+    for (var i = 0; i < anchors.length; i++) {
+      if (idx >= anchors[i].i0 && idx <= anchors[i].i1) { target = anchors[i]; break; }
+    }
+    if (target) center.scrollTop = Math.max(0, target.top - 24);
+    schedule();
+  });
+
+  /* ---------------------------------------------------------------
+     4. Keyboard: j / k move, z folds, Enter opens the raw body
+     --------------------------------------------------------------- */
+
+  function stops() {
+    var out = [];
+    blocks.forEach(function (b) {
+      out.push(b.head);
+      if (!b.open) return;
+      b.rowItems.forEach(function (it) {
+        var btn = it.querySelector('.row');
+        if (btn) out.push(btn);
+      });
+    });
+    return out;
+  }
+  function blockOf(node) {
+    for (var i = 0; i < blocks.length; i++) {
+      if (blocks[i].el.contains(node)) return blocks[i];
+    }
+    return null;
+  }
+  function firstVisibleBlock() {
+    if (dirty) measure();
+    var top = center.scrollTop;
+    for (var i = 0; i < blocks.length; i++) {
+      var r = blocks[i].el.getBoundingClientRect();
+      var cr = center.getBoundingClientRect();
+      if (r.bottom - cr.top + top > top) return blocks[i];
+    }
+    return blocks[0];
+  }
+  function move(delta) {
+    var list = stops();
+    var at = list.indexOf(document.activeElement);
+    if (at < 0) {
+      /* nothing focused yet — start from the first stop inside the viewport */
+      if (dirty) measure();
+      var top = center.scrollTop;
+      at = 0;
+      for (var i = 0; i < anchors.length; i++) {
+        if (anchors[i].bot > top) {
+          var el = anchors[i].el;
+          var cand = el.classList.contains('turn-head') ? el : el.querySelector('.row');
+          var k = list.indexOf(cand);
+          if (k >= 0) { at = k; break; }
+        }
+      }
+      delta = 0;
+    }
+    var next = Math.max(0, Math.min(list.length - 1, at + delta));
+    list[next].focus();
+    schedule();
+  }
+
+  document.addEventListener('keydown', function (e) {
+    var t = e.target;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+    if (e.key === 'j') { e.preventDefault(); move(1); }
+    else if (e.key === 'k') { e.preventDefault(); move(-1); }
+    else if (e.key === 'z') {
+      var b = blockOf(document.activeElement) || firstVisibleBlock();
+      if (!b) return;
+      e.preventDefault();
+      var wasRow = !b.head.contains(document.activeElement);
+      setOpen(b, !b.open);
+      if (!b.open && wasRow) b.head.focus();
+      schedule();
+    }
+  });
+
+  /* ---------------------------------------------------------------
+     5. Opening state — level 2, t1–t3 folded, viewport over t6–t8
+     --------------------------------------------------------------- */
+
+  setLevel(2);
+  [0, 1, 2].forEach(function (i) { if (blocks[i]) setOpen(blocks[i], false); });
+  for (var i = 14; i < blocks.length; i++) setOpen(blocks[i], false);
+
+  drawMini();
+  measure();
+  if (blocks[5]) {
+    var r5 = blocks[5].el.getBoundingClientRect();
+    var top5 = r5.top - center.getBoundingClientRect().top + center.scrollTop;
+    center.scrollTop = Math.max(0, top5 - bar.getBoundingClientRect().height - 8);
+  }
+  measure();
+  updateView();
+})();
+</script>
+</body>
+</html>

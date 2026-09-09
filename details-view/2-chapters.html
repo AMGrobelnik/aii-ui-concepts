@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Details view — Variant 2: AI chapters</title>
+<link rel="stylesheet" href="shared/tokens.css">
+<link rel="stylesheet" href="shared/chrome.css">
+<style>
+  /* Variant 2: a windowed summarizer names six chapters over the same 165
+     rows. The chapter is a spine and a gutter, not a card — the rows keep
+     today's anatomy and gain a right-aligned mono timestamp. */
+
+  .chaps { display: flex; flex-direction: column; }
+
+  .chap {
+    display: grid;
+    grid-template-columns: 3px minmax(0, 1fr);
+    column-gap: 13px;
+    padding: 14px 8px 16px 0;
+  }
+  .chap + .chap { border-top: 1px solid var(--hair-light); }
+  .chap-spine {
+    border-radius: 2px;
+    background: var(--mod-orange);
+  }
+  .chap.is-pending .chap-spine { background: var(--ink-100); }
+  .chap-body { min-width: 0; }
+
+  /* header: label (+ chips right of it), gist under */
+  .chap-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 4px 14px;
+    width: 100%;
+    padding: 0;
+    text-align: left;
+  }
+  .chap-head:hover .chap-label { color: var(--azure); }
+  .chap-title { flex: 1 1 250px; min-width: 0; }
+  .chap-label {
+    display: block;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.35;
+    color: var(--ink-900);
+  }
+  .chap-gist {
+    display: block;
+    margin-top: 2px;
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--ink-600);
+  }
+  .chap-chips {
+    flex: 0 1 auto;
+    margin-left: auto;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 5px;
+    padding-top: 1px;
+  }
+  .chip {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1;
+    padding: 4px 6px;
+    border: 1px solid var(--hair-dark);
+    border-radius: var(--radius-sm);
+    color: var(--ink-600);
+    white-space: nowrap;
+  }
+
+  /* pending chapter: skeleton where the label will be */
+  .chap-skeleton {
+    display: block;
+    width: 44%;
+    max-width: 260px;
+    height: 9px;
+    margin: 4px 0 3px;
+    border-radius: 999px;
+    background: var(--ink-100);
+  }
+  .chap-writing { font-size: 13px; color: var(--ink-400); }
+
+  /* one-line facts + the control that reveals the rows */
+  .chap-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+    margin-top: 9px;
+  }
+  .chap-meta {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-400);
+  }
+  .chap-meta .err { color: var(--danger); }
+  .chap-show {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 24px;
+    padding: 0 9px;
+    border: 1px solid var(--hair-dark);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    font-size: 12px;
+    color: var(--ink-600);
+  }
+  .chap-show:hover { background: var(--ground); color: var(--ink-900); }
+  .chap-show svg { transition: transform 120ms ease; }
+  .chap-show[aria-expanded="true"] svg { transform: rotate(90deg); }
+
+  .chap-rows { margin-top: 8px; }
+  /* the rows sit in the chapter's gutter, so pull them back to the row grid */
+  .chap-rows .row { padding-left: 0; }
+  .chap-rows .row-body { padding-left: 34px; }
+</style>
+</head>
+<body data-page="details/2-chapters">
+<div id="app"></div>
+
+<script src="shared/data.js"></script>
+<script src="shared/chrome.js"></script>
+<script src="shared/feedback.js"></script>
+<script>
+(function () {
+  'use strict';
+  var AII = window.AII;
+  var el = AII.el;
+
+  var center = AII.renderShell(document.getElementById('app'), {
+    title: 'Details view',
+    variant: 'Variant 2 of 7 — AI chapters',
+    blurb: 'A windowed summarizer names six chapters over the same events, each with a gist and its outcomes.',
+    prev: '1-turns.html',
+    next: '3-notebook.html',
+    activeTab: 'Details'
+  });
+
+  var events = AII.flattenSubstep(AII.SUBSTEP);
+  var chapters = AII.CHAPTERS || [];
+
+  /* first chapter open to show the rows; third open so the ERROR is visible */
+  var OPEN_BY_DEFAULT = { 0: 1, 2: 1 };
+
+  var head = el('div', 'feed-note');
+  head.textContent = chapters.length + ' chapters over ' + events.length +
+    ' events · Evaluation 1 · Round 2';
+  center.appendChild(head);
+
+  function money(n) { return '$' + (Number(n) || 0).toFixed(2); }
+  function plural(n, word) { return n + ' ' + word + (n === 1 ? '' : 's'); }
+
+  function buildChapter(ch, idx) {
+    var range = ch.eventRange || ch.range || [0, -1];
+    var rows = events.slice(range[0], range[1] + 1);
+    var count = ch.events || rows.length;
+    var pending = !!ch.pending;
+
+    var sec = el('section', 'chap' + (pending ? ' is-pending' : ''));
+    sec.appendChild(el('span', 'chap-spine'));
+    var body = el('div', 'chap-body');
+    sec.appendChild(body);
+
+    /* ---- header ---- */
+    var title = el('span', 'chap-title');
+    if (pending) {
+      title.appendChild(el('span', 'chap-skeleton'));
+      title.appendChild(el('span', 'chap-writing', 'Writing chapter…'));
+    } else {
+      title.appendChild(el('span', 'chap-label', ch.label));
+      title.appendChild(el('span', 'chap-gist', ch.gist));
+    }
+
+    var chips = el('span', 'chap-chips');
+    (ch.outcomes || []).forEach(function (o) { chips.appendChild(el('span', 'chip', o)); });
+
+    var header;
+    if (pending) {
+      /* nothing to expand from a header that has no label yet */
+      header = el('div', 'chap-head');
+    } else {
+      header = el('button', 'chap-head');
+      header.type = 'button';
+      header.setAttribute('aria-expanded', 'false');
+    }
+    header.appendChild(title);
+    if (chips.childNodes.length) header.appendChild(chips);
+    body.appendChild(header);
+
+    /* ---- facts line + reveal control ---- */
+    var foot = el('div', 'chap-foot');
+    var meta = el('div', 'chap-meta');
+    meta.innerHTML = count + ' events · ' + AII.escapeHtml(ch.dur) + ' · ' + money(ch.cost) +
+      (ch.errors ? ' · <span class="err">' + plural(ch.errors, 'error') + '</span>' : '') +
+      (ch.warnings ? ' · ' + plural(ch.warnings, 'warning') : '');
+    foot.appendChild(meta);
+
+    var show = el('button', 'chap-show');
+    show.type = 'button';
+    show.setAttribute('aria-expanded', 'false');
+    var showLabel = el('span', null, 'Show ' + count + ' events');
+    show.appendChild(showLabel);
+    var chev = el('span', 'chap-chev');
+    chev.innerHTML = AII.icon('chevron-right', 12);
+    show.appendChild(chev);
+    foot.appendChild(show);
+    body.appendChild(foot);
+
+    /* ---- rows: today's anatomy plus a mono timestamp ---- */
+    var list = el('div', 'chap-rows feed-list');
+    list.hidden = true;
+    rows.forEach(function (ev) { list.appendChild(AII.buildRow(ev, { meta: ev.t })); });
+    body.appendChild(list);
+
+    function setOpen(open) {
+      list.hidden = !open;
+      show.setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (header.tagName === 'BUTTON') {
+        header.setAttribute('aria-expanded', open ? 'true' : 'false');
+      }
+      showLabel.textContent = (open ? 'Hide ' : 'Show ') + count + ' events';
+    }
+    show.addEventListener('click', function () { setOpen(list.hidden); });
+    if (header.tagName === 'BUTTON') {
+      header.addEventListener('click', function () { setOpen(list.hidden); });
+    }
+    if (OPEN_BY_DEFAULT[idx]) setOpen(true);
+    return sec;
+  }
+
+  var wrap = el('div', 'chaps');
+  chapters.forEach(function (ch, i) { wrap.appendChild(buildChapter(ch, i)); });
+  center.appendChild(wrap);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Other screens — Pipeline progress, variant B (rounds grid)</title>
+<link rel="stylesheet" href="../shared/tokens.css">
+<link rel="stylesheet" href="../shared/chrome.css">
+<style>
+  .pb { padding: 4px 0 180px; }
+
+  .pb-lead {
+    font-size: 12px;
+    color: var(--ink-600);
+    margin-bottom: 14px;
+  }
+
+  /* the full-width rows share the grid's label column so everything lines up */
+  .row-full {
+    display: grid;
+    grid-template-columns: 104px minmax(0, 1fr);
+    gap: 6px;
+    align-items: stretch;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: 104px repeat(6, minmax(0, 1fr));
+    gap: 6px;
+    align-items: stretch;
+    margin: 6px 0;
+  }
+
+  .col-h {
+    font-size: 12px;
+    color: var(--ink-600);
+    padding: 0 2px 2px;
+    align-self: end;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .row-k { padding: 8px 4px 0; }
+  .row-k-name { font-size: 13px; font-weight: 600; color: var(--ink-900); }
+  .row-k-meta {
+    display: block;
+    margin-top: 1px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-400);
+  }
+
+  .cell {
+    display: block;
+    width: 100%;
+    min-height: 56px;
+    padding: 0;
+    text-align: left;
+    border: 1px solid var(--hair);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+    overflow: hidden;
+  }
+  .cell:hover { background: var(--ground); }
+  .cell-band { display: block; height: 2px; background: var(--ink-100); }
+  .cell-in { display: block; padding: 6px 8px 7px; }
+  .cell-meta {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--ink-400);
+  }
+  .cell-out {
+    display: block;
+    margin-top: 3px;
+    font-size: 12px;
+    line-height: 1.3;
+    color: var(--ink-600);
+  }
+  .cell-bad { color: var(--danger); }
+
+  /* the five substeps of Create Artifacts */
+  .chips { display: flex; gap: 3px; margin-top: 5px; }
+  .chip {
+    flex: 1 1 0;
+    height: 8px;
+    border: 1px solid var(--hair);
+    border-left: 2px solid var(--ok);
+    border-radius: 1px;
+    background: var(--surface);
+  }
+  .chip.is-skipped { border-style: dashed; border-left-color: var(--ink-200); }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 14px;
+    margin-top: 16px;
+    padding-top: 10px;
+    border-top: 1px solid var(--hair);
+    font-size: 11px;
+    color: var(--ink-400);
+  }
+  .lg { display: inline-flex; align-items: center; gap: 5px; }
+  .lg-sw { width: 12px; height: 2px; border-radius: 1px; }
+</style>
+</head>
+<body data-page="other/progress-b">
+<div id="app"></div>
+
+<script src="../shared/data.js"></script>
+<script src="../shared/chrome.js"></script>
+<script src="../shared/feedback.js"></script>
+<script>
+(function () {
+  'use strict';
+  var AII = window.AII;
+  var el = AII.el, esc = AII.escapeHtml;
+
+  var center = AII.renderShell(document.getElementById('app'), {
+    finished: true,
+    title: 'Other screens · Pipeline progress',
+    variant: 'Variant B — rounds grid',
+    blurb: 'The same pipeline as a grid, so the two rounds can be read against each other.',
+    prev: 'progress-a.html',
+    next: 'runs-index.html',
+    indexHref: '../index.html',
+    activeTab: 'Overview',
+    hideLeft: true,
+    hideRight: true,
+    hideComposer: true
+  });
+
+  var BAND = {
+    done: 'var(--ok)',
+    failed: 'var(--danger)',
+    retried: 'var(--danger)',
+    skipped: 'var(--ink-200)',
+    waiting: 'var(--brand)',
+    'not-started': 'var(--ink-100)'
+  };
+  var STATE_WORD = {
+    done: 'done', failed: 'failed', retried: 'retried after a failure',
+    skipped: 'skipped', waiting: 'waiting on human', 'not-started': 'not started'
+  };
+
+  function stateOf(n) {
+    var s = String(n.status || 'done').toLowerCase();
+    if (s === 'not_started' || s === 'pending') return 'not-started';
+    return BAND[s] ? s : 'done';
+  }
+  function money(v) { return typeof v === 'number' ? '$' + v.toFixed(2) : String(v || ''); }
+
+  /* find the tree nodes this page draws */
+  var byName = {};
+  AII.PHASES.forEach(function (p) { byName[p.name] = p; });
+  var rounds = (byName['Test Idea'].children || []).filter(function (c) { return c.kind === 'round'; });
+  var MODULES = ['Create Strategy', 'Create Plan', 'Create Artifacts',
+                 'Write Paper', 'Review Paper', 'Update Idea'];
+
+  /* one plausible summarizer line per cell, consistent with the run's numbers */
+  var OUTCOME = {
+    'Round 1': {
+      'Create Strategy': '2 baselines, 1 ablation',
+      'Create Plan': '3 experiments, 500 items',
+      'Create Artifacts': 'Baseline EM 71.2 on 500',
+      'Write Paper': 'Draft: 9 pages',
+      'Review Paper': 'Asked for length buckets',
+      'Update Idea': 'Narrowed to >8k contexts'
+    },
+    'Round 2': {
+      'Create Strategy': 'Bucket by prompt length',
+      'Create Plan': '3 length bins, 500 items',
+      'Create Artifacts': 'EM 74.9, 16.2 chunks',
+      'Write Paper': 'failed, retried in 4 m 02 s',
+      'Review Paper': 'Accepted with two notes',
+      'Update Idea': 'Gain holds above 8k only'
+    }
+  };
+
+  function cell(node, outcome) {
+    var state = stateOf(node);
+    var b = el('button', 'cell');
+    b.type = 'button';
+    b.title = node.name + ' — ' + STATE_WORD[state] +
+      (node.duration ? ', ' + node.duration : '');
+
+    var band = el('span', 'cell-band');
+    band.style.background = BAND[state];
+    b.appendChild(band);
+
+    var inner = el('span', 'cell-in');
+    inner.appendChild(el('span', 'cell-meta mono',
+      state === 'skipped' ? 'skipped' : node.duration + '  ' + money(node.cost)));
+
+    /* only Create Artifacts fans out, and it shows its five substeps as chips */
+    if (node.name === 'Create Artifacts' && node.children && node.children.length) {
+      var chips = el('span', 'chips');
+      node.children.forEach(function (s) {
+        var st = stateOf(s);
+        var chip = el('span', 'chip' + (st === 'skipped' ? ' is-skipped' : ''));
+        chip.style.borderLeftColor = BAND[st];
+        chip.title = s.name + ' — ' + STATE_WORD[st] +
+          (st === 'skipped' ? '' : ', ' + s.duration);
+        chips.appendChild(chip);
+      });
+      inner.appendChild(chips);
+    }
+
+    var out = el('span', 'cell-out');
+    if (outcome && outcome.indexOf('failed') === 0) {
+      out.innerHTML = '<span class="cell-bad">failed</span>' + esc(outcome.slice(6));
+    } else {
+      out.textContent = outcome || '';
+    }
+    inner.appendChild(out);
+    b.appendChild(inner);
+    return b;
+  }
+
+  var pb = el('div', 'pb');
+  center.appendChild(pb);
+  pb.appendChild(el('p', 'pb-lead',
+    'Every module of the run, with the two rounds on top of each other. ' +
+    'Read a row left to right for one iteration, a column down for what a ' +
+    'second round changed.'));
+
+  /* ---- Create Idea, full width above the grid ---- */
+  function fullRow(node, outcome) {
+    var r = el('div', 'row-full');
+    var k = el('div', 'row-k');
+    k.appendChild(el('span', 'row-k-name', node.name));
+    k.appendChild(el('span', 'row-k-meta', node.duration));
+    k.appendChild(el('span', 'row-k-meta', money(node.cost)));
+    r.appendChild(k);
+    r.appendChild(cell(node, outcome));
+    pb.appendChild(r);
+  }
+
+  fullRow(byName['Create Idea'],
+    'Hypothesis: sparse pre-filtering lifts long-context exact match');
+
+  /* ---- the rounds grid ---- */
+  var grid = el('div', 'grid');
+  grid.appendChild(el('div'));           /* corner above the round labels */
+  MODULES.forEach(function (m) { grid.appendChild(el('div', 'col-h', m)); });
+
+  rounds.forEach(function (r) {
+    var k = el('div', 'row-k');
+    k.appendChild(el('span', 'row-k-name', r.name));
+    k.appendChild(el('span', 'row-k-meta', r.duration));
+    k.appendChild(el('span', 'row-k-meta', money(r.cost)));
+    grid.appendChild(k);
+
+    MODULES.forEach(function (name) {
+      var node = (r.children || []).filter(function (c) { return c.name === name; })[0];
+      if (!node) { grid.appendChild(el('div')); return; }
+      grid.appendChild(cell(node, (OUTCOME[r.name] || {})[name]));
+    });
+  });
+  pb.appendChild(grid);
+
+  /* ---- Report Results, full width below ---- */
+  fullRow(byName['Report Results'],
+    'Published a 14-page paper, a 31-file repository and a demo');
+
+  /* ---- legend ---- */
+  var legend = el('div', 'legend');
+  [['done', 'done'], ['retried', 'failed, then retried'], ['skipped', 'skipped'],
+   ['waiting', 'waiting on human'], ['not-started', 'not started']]
+    .forEach(function (s) {
+      var item = el('span', 'lg');
+      var sw = el('span', 'lg-sw');
+      sw.style.background = BAND[s[0]];
+      item.appendChild(sw);
+      item.appendChild(el('span', null, s[1]));
+      legend.appendChild(item);
+    });
+  pb.appendChild(legend);
+})();
+</script>
+</body>
+</html>
